@@ -1,0 +1,17 @@
+{
+  "name": "agroflow-admin",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AgroFlow Admin Dashboard — TypeScript + Vite (vanilla, no framework)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

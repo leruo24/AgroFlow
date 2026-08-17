@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AgroFlow — Administration Console</title>
+  <meta name="description" content="AgroFlow platform administration console." />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="leaf">🌱</span>
+        <div>
+          <h1>AgroFlow</h1>
+          <div class="sub">Administration</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav"></nav>
+      <div class="side-foot">
+        <b>Platform status</b>
+        All core services operational
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="header">
+        <div class="header-l">
+          <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation">☰</button>
+          <h2 id="headerTitle">Dashboard</h2>
+        </div>
+        <div class="header-r">
+          <input id="headerSearch" class="search" type="text" placeholder="Search this page…" />
+          <div class="status-chip"><span class="dot pulse-dot"></span>All systems operational</div>
+          <button id="avatarBtn" class="avatar" title="Aisha Patel" aria-label="Account menu">AP</button>
+          <div id="avatarMenu" class="menu">
+            <div class="menu-head">
+              <b>Aisha Patel</b>
+              <span>Platform Administrator</span>
+            </div>
+            <a href="#settings">Profile</a>
+            <a href="#settings">Settings</a>
+            <button id="logoutBtn">Sign out</button>
+          </div>
+        </div>
+      </header>
+
+      <section id="content" class="content"></section>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

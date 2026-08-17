@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Adjust to match your installed .NET SDK if different -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <StartupObject>AgroFlow.Presentation.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Postgres provider for the Supabase backend. Confirmed current stable: 10.0.3 -->
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+
+</Project>
