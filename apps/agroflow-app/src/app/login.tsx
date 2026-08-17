@@ -1,0 +1,685 @@
+import {
+  router,
+} from 'expo-router';
+
+import {
+  useMemo,
+  useState,
+} from 'react';
+
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+
+import {
+  SafeAreaView,
+} from 'react-native-safe-area-context';
+
+import type {
+  AppColors,
+} from '@/constants/colors';
+
+import {
+  useAuth,
+} from '@/context/AuthContext';
+
+import {
+  useTheme,
+} from '@/context/ThemeContext';
+
+export default function LoginScreen() {
+  const {
+    signIn,
+  } = useAuth();
+
+  const {
+    colors,
+  } = useTheme();
+//styles are created using the useMemo hook to ensure that they are only recalculated when the colors object changes. This optimizes performance by preventing unnecessary re-renders and style recalculations when the theme colors remain the same.
+  const styles =
+    useMemo(
+      () =>
+        createStyles(
+          colors
+        ),
+      [
+        colors,
+      ]
+    );
+
+  const [
+    email,
+    setEmail,
+  ] =
+    useState('');
+
+  const [
+    password,
+    setPassword,
+  ] =
+    useState('');
+
+  const [
+    showPassword,
+    setShowPassword,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState('');
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(false);
+
+  async function handleLogin() {
+    setError('');
+
+    const cleanedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    if (
+      !cleanedEmail
+    ) {
+      setError(
+        'Please enter your email address.'
+      );
+
+      return;
+    }
+
+    const emailIsValid =//email validation using a regular expression to check if the cleaned email input matches the standard email format. If the email is not valid, an error message is set to inform the user.
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        cleanedEmail
+      );
+
+    if (
+      !emailIsValid
+    ) {
+      setError(
+        'Please enter a valid email address.'
+      );
+
+      return;
+    }
+
+    if (
+      !password.trim()
+    ) {
+      setError(
+        'Please enter your password.'
+      );
+
+      return;
+    }
+
+    try {//authentication process by calling the signIn function from the AuthContext with the cleaned email and password. If the sign-in is successful, the user is authenticated and redirected to the appropriate screen. If an error occurs during sign-in, an error message is displayed to inform the user.
+      setLoading(//try is attempt authentication, if it fails, catch will handle the error and display a message to the user. Finally, loading state is set to false to indicate that the authentication process has completed.
+        true
+      );
+
+      await signIn(
+        cleanedEmail,
+        password
+      );
+    } catch (
+      caughtError: unknown
+    ) {
+      if (
+        caughtError instanceof
+        Error
+      ) {
+        setError(
+          caughtError.message
+        );
+      } else {
+        setError(
+          'Unable to sign in. Please try again.'
+        );
+      }
+    } finally {
+      setLoading(
+        false
+      );
+    }
+  }
+
+  function handleForgotPassword() {
+    router.push(
+      '/forgot-password'
+    );
+  }
+
+  return (
+    <SafeAreaView
+      style={
+        styles.safeArea
+      }
+      edges={[
+        'top',
+        'bottom',
+      ]}
+    >
+      <KeyboardAvoidingView
+        style={
+          styles.keyboardView
+        }
+        behavior={
+          Platform.OS ===
+          'ios'
+            ? 'padding'
+            : undefined
+        }
+      >
+        <ScrollView
+          contentContainerStyle={
+            styles.scrollContent
+          }
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          <View
+            style={
+              styles.container
+            }
+          >
+            <View
+              style={
+                styles.brand
+              }
+            >
+              <View
+                style={
+                  styles.brandMark
+                }
+              />
+
+              <View>
+                <Text
+                  style={
+                    styles.brandName
+                  }
+                >
+                  AgroFlow
+                </Text>
+
+                <Text
+                  style={
+                    styles.brandSubtitle
+                  }
+                >
+                  Smart Irrigation
+                </Text>
+              </View>
+            </View>
+
+            <View
+              style={
+                styles.heading
+              }
+            >
+              <Text
+                style={
+                  styles.title
+                }
+              >
+                Sign In
+              </Text>
+
+              <Text
+                style={
+                  styles.description
+                }
+              >
+                Enter your AgroFlow account details.
+              </Text>
+            </View>
+
+            {error ? (
+              <View
+                style={
+                  styles.errorBox
+                }
+              >
+                <Text
+                  style={
+                    styles.errorText
+                  }
+                >
+                  {
+                    error
+                  }
+                </Text>
+              </View>
+            ) : null}
+
+            <View
+              style={
+                styles.form
+              }
+            >
+              <View
+                style={
+                  styles.inputGroup
+                }
+              >
+                <Text
+                  style={
+                    styles.inputLabel
+                  }
+                >
+                  Email Address
+                </Text>
+
+                <TextInput
+                  value={
+                    email
+                  }
+                  onChangeText={
+                    (
+                      value
+                    ) => {
+                      setEmail(
+                        value
+                      );
+
+                      if (
+                        error
+                      ) {
+                        setError('');
+                      }
+                    }
+                  }
+                  placeholder="farmer@example.com"
+                  placeholderTextColor={
+                    colors.textMuted
+                  }
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={
+                    false
+                  }
+                  returnKeyType="next"
+                  style={
+                    styles.input
+                  }
+                />
+              </View>
+
+              <View
+                style={
+                  styles.inputGroup
+                }
+              >
+                <View
+                  style={
+                    styles.passwordLabelRow
+                  }
+                >
+                  <Text
+                    style={
+                      styles.inputLabel
+                    }
+                  >
+                    Password
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={
+                      handleForgotPassword
+                    }
+                    activeOpacity={
+                      0.7
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.forgotText
+                      }
+                    >
+                      Forgot password?
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View
+                  style={
+                    styles.passwordInput
+                  }
+                >
+                  <TextInput
+                    value={
+                      password
+                    }
+                    onChangeText={
+                      (
+                        value
+                      ) => {
+                        setPassword(
+                          value
+                        );
+
+                        if (
+                          error
+                        ) {
+                          setError('');
+                        }
+                      }
+                    }
+                    placeholder="Enter your password"
+                    placeholderTextColor={
+                      colors.textMuted
+                    }
+                    secureTextEntry={
+                      !showPassword
+                    }
+                    autoCapitalize="none"
+                    autoCorrect={
+                      false
+                    }
+                    returnKeyType="done"
+                    onSubmitEditing={
+                      handleLogin
+                    }
+                    style={
+                      styles.passwordTextInput
+                    }
+                  />
+
+                  <TouchableOpacity
+                    style={
+                      styles.showButton
+                    }
+                    onPress={() =>
+                      setShowPassword(
+                        (
+                          current
+                        ) =>
+                          !current
+                      )
+                    }
+                    activeOpacity={
+                      0.7
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.showButtonText
+                      }
+                    >
+                      {showPassword
+                        ? 'Hide'
+                        : 'Show'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.loginButton,
+
+                  loading &&
+                    styles.loginButtonDisabled,
+                ]}
+                activeOpacity={
+                  0.75
+                }
+                disabled={
+                  loading
+                }
+                onPress={
+                  handleLogin
+                }
+              >
+                <Text
+                  style={
+                    styles.loginButtonText
+                  }
+                >
+                  {loading
+                    ? 'Signing In...'
+                    : 'Sign In'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text
+              style={
+                styles.footer
+              }
+            >
+              AgroFlow Smart Irrigation System
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+function createStyles(
+  colors: AppColors
+) {
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor:
+        colors.background,
+    },
+
+    keyboardView: {
+      flex: 1,
+      backgroundColor:
+        colors.background,
+    },
+
+    scrollContent: {
+      flexGrow: 1,
+    },
+
+    container: {
+      flex: 1,
+      minHeight: 650,
+      paddingHorizontal: 20,
+      paddingTop: 24,
+      paddingBottom: 24,
+      backgroundColor:
+        colors.background,
+    },
+
+    brand: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 55,
+    },
+
+    brandMark: {
+      width: 13,
+      height: 28,
+      marginRight: 9,
+      backgroundColor:
+        colors.primary,
+    },
+
+    brandName: {
+      fontSize: 22,
+      fontWeight: '700',
+      color:
+        colors.text,
+    },
+
+    brandSubtitle: {
+      marginTop: 1,
+      fontSize: 9,
+      color:
+        colors.text,
+    },
+
+    heading: {
+      marginBottom: 22,
+    },
+
+    title: {
+      fontSize: 28,
+      fontWeight: '700',
+      color:
+        colors.text,
+    },
+
+    description: {
+      marginTop: 5,
+      fontSize: 13,
+      color:
+        colors.text,
+    },
+
+    errorBox: {
+      marginBottom: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      backgroundColor:
+        colors.errorBackground,
+      borderWidth: 1,
+      borderColor:
+        colors.error,
+    },
+
+    errorText: {
+      fontSize: 11,
+      lineHeight: 16,
+      color:
+        colors.error,
+    },
+
+    form: {
+      padding: 16,
+      backgroundColor:
+        colors.surface,
+      borderWidth: 1,
+      borderColor:
+        colors.border,
+    },
+
+    inputGroup: {
+      marginBottom: 18,
+    },
+
+    inputLabel: {
+      marginBottom: 7,
+      fontSize: 11,
+      fontWeight: '600',
+      color:
+        colors.text,
+    },
+
+    passwordLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+
+    forgotText: {
+      marginBottom: 7,
+      fontSize: 10,
+      fontWeight: '600',
+      color:
+        colors.primaryDark,
+    },
+
+    input: {
+      height: 46,
+      paddingHorizontal: 12,
+      backgroundColor:
+        colors.background,
+      borderWidth: 1,
+      borderColor:
+        colors.border,
+      fontSize: 12,
+      color:
+        colors.text,
+    },
+
+    passwordInput: {
+      height: 46,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor:
+        colors.background,
+      borderWidth: 1,
+      borderColor:
+        colors.border,
+    },
+
+    passwordTextInput: {
+      flex: 1,
+      height: '100%',
+      paddingHorizontal: 12,
+      fontSize: 12,
+      color:
+        colors.text,
+    },
+
+    showButton: {
+      height: '100%',
+      paddingHorizontal: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    showButtonText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color:
+        colors.primaryDark,
+    },
+
+    loginButton: {
+      height: 46,
+      marginTop: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor:
+        colors.primary,
+      borderWidth: 1,
+      borderColor:
+        colors.primaryDark,
+    },
+
+    loginButtonDisabled: {
+      opacity: 0.55,
+    },
+
+    loginButtonText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color:
+        colors.white,
+    },
+
+    footer: {
+      marginTop: 'auto',
+      paddingTop: 30,
+      textAlign: 'center',
+      fontSize: 9,
+      color:
+        colors.text,
+    },
+  });
+}
