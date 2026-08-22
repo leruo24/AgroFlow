@@ -5,6 +5,7 @@ import {
 } from 'expo-router';
 
 import {
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -32,9 +33,18 @@ import {//gives access to shared agroflowdata
   useAgroFlow,
 } from '@/context/AgroFlowContext';
 
+import type {
+  HistoryEntry,
+  Zone,
+} from '@/context/AgroFlowContext';
+
 import {//provides light theme/dark theme colors
   useTheme,
 } from '@/context/ThemeContext';
+
+import {
+  supabase,
+} from '@/services/supabaseClient';
 
 export default function ZoneControlScreen() {
   const {//retrieves the zone ID from the URL parameters using the useLocalSearchParams hook, which is used to identify the specific irrigation zone to display and control
@@ -63,6 +73,10 @@ export default function ZoneControlScreen() {
 
   const {//gets data from agroflow context
     zones,
+    zonesLoading,
+    zonesError,
+    refreshZones,
+    history,
     startIrrigation,
     stopIrrigation,
     enableManualOverride,
@@ -94,6 +108,18 @@ export default function ZoneControlScreen() {
   ] =
     useState('20');
 
+  const [//local state for the "start irrigation" duration prompt
+    startModalVisible,
+    setStartModalVisible,
+  ] =
+    useState(false);
+
+  const [
+    startDurationMinutes,
+    setStartDurationMinutes,
+  ] =
+    useState('');
+
   const routeId =
     Array.isArray(
       id
@@ -109,6 +135,242 @@ export default function ZoneControlScreen() {
         item.id ===
         routeId
     );
+
+  // Live-updating sensor values for THIS zone, seeded from whatever
+  // zone_latest_reading returned and then kept fresh by the realtime
+  // subscription below. Every hook in this component must run
+  // unconditionally on every render (zones now load asynchronously, so
+  // `zone` can be undefined on an early render and defined on a later one -
+  // putting hooks after the "zone not found" early return used to work only
+  // because mock zones were always synchronously present).
+  const [
+    liveReadings,
+    setLiveReadings,
+  ] =
+    useState({
+      moisture:
+        zone?.sensors.soilMoisture
+          .value ??
+        0,
+
+      temperature:
+        zone?.sensors
+          .temperatureHumidity
+          .temperature ??
+        0,
+
+      humidity:
+        zone?.sensors
+          .temperatureHumidity
+          .humidity ??
+        0,
+    });
+
+  useEffect(() => {//re-seeds the live readings whenever the fetched zone data for this dbZoneId changes (e.g. on first load, or if this screen is reused for a different zone without unmounting)
+    if (
+      !zone
+    ) {
+      return;
+    }
+
+    setLiveReadings({
+      moisture:
+        zone.sensors
+          .soilMoisture
+          .value,
+
+      temperature:
+        zone.sensors
+          .temperatureHumidity
+          .temperature,
+
+      humidity:
+        zone.sensors
+          .temperatureHumidity
+          .humidity,
+    });
+  }, [
+    zone?.dbZoneId,
+  ]);
+
+  useEffect(() => {//subscribes to new sensor_reading rows for this zone so the display updates live, no polling/refresh needed. Cleaned up on unmount (or when dbZoneId changes) so navigating away doesn't leak the connection.
+    if (
+      zone?.dbZoneId ==
+      null
+    ) {
+      return;
+    }
+
+    const channel =
+      supabase
+        .channel(
+          `sensor_reading:zone:${zone.dbZoneId}`
+        )
+        .on(
+          'postgres_changes',
+          {
+            event:
+              'INSERT',
+            schema:
+              'public',
+            table:
+              'sensor_reading',
+            filter:
+              `zone_id=eq.${zone.dbZoneId}`,
+          },
+          (
+            payload
+          ) => {
+            const row =
+              payload.new as {
+                sensor_type: string;
+                value: number;
+              };
+
+            setLiveReadings(
+              (
+                current
+              ) => {
+                if (
+                  row.sensor_type ===
+                  'SoilMoisture'
+                ) {
+                  return {
+                    ...current,
+                    moisture:
+                      row.value,
+                  };
+                }
+
+                if (
+                  row.sensor_type ===
+                  'Temperature'
+                ) {
+                  return {
+                    ...current,
+                    temperature:
+                      row.value,
+                  };
+                }
+
+                if (
+                  row.sensor_type ===
+                  'Humidity'
+                ) {
+                  return {
+                    ...current,
+                    humidity:
+                      row.value,
+                  };
+                }
+
+                return current;
+              }
+            );
+          }
+        )
+        .subscribe();
+
+    return () => {
+      supabase.removeChannel(
+        channel
+      );
+    };
+  }, [
+    zone?.dbZoneId,
+  ]);
+
+  const irrigationStatusMessage =
+    useMemo(
+      () =>
+        zone
+          ? getIrrigationStatusMessage(
+              zone,
+              history
+            )
+          : '',
+      [
+        zone,
+        history,
+      ]
+    );
+
+  if (
+    zonesLoading
+  ) {
+    return (
+      <SafeAreaView
+        style={
+          styles.container
+        }
+      >
+        <View
+          style={
+            styles.notFound
+          }
+        >
+          <Text
+            style={
+              styles.notFoundTitle
+            }
+          >
+            Loading zone…
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (
+    zonesError
+  ) {
+    return (
+      <SafeAreaView
+        style={
+          styles.container
+        }
+      >
+        <View
+          style={
+            styles.notFound
+          }
+        >
+          <Text
+            style={
+              styles.notFoundTitle
+            }
+          >
+            Unable to load zones
+          </Text>
+
+          <Text
+            style={
+              styles.notFoundText
+            }
+          >
+            Check your connection and try again.
+          </Text>
+
+          <TouchableOpacity
+            style={
+              styles.primaryButton
+            }
+            onPress={
+              refreshZones
+            }
+          >
+            <Text
+              style={
+                styles.primaryButtonText
+              }
+            >
+              Retry
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (
     !zone
@@ -250,26 +512,57 @@ export default function ZoneControlScreen() {
   }
 
   function handleStart() {
-    Alert.alert(
-      'Start Irrigation?',
-      `Start irrigation for ${selectedZone.name}?`,
-      [
-        {
-          text:
-            'Cancel',
-          style:
-            'cancel',
-        },
-        {
-          text:
-            'Start',
-          onPress:
-            () =>
-              startIrrigation(
-                selectedZone.id
-              ),
-        },
-      ]
+    setStartDurationMinutes(
+      ''
+    );
+
+    setStartModalVisible(
+      true
+    );
+  }
+
+  function confirmStart() {
+    const trimmed =
+      startDurationMinutes.trim();
+
+    let durationMinutes: number | null =
+      null;
+
+    if (
+      trimmed !==
+        ''
+    ) {
+      const parsed =
+        Number(
+          trimmed
+        );
+
+      if (
+        !Number.isFinite(
+          parsed
+        ) ||
+        parsed <=
+          0
+      ) {
+        Alert.alert(
+          'Invalid Duration',
+          'Enter a whole number of minutes, or leave it blank to run until you stop it manually.'
+        );
+
+        return;
+      }
+
+      durationMinutes =
+        parsed;
+    }
+
+    setStartModalVisible(
+      false
+    );
+
+    startIrrigation(
+      selectedZone.id,
+      durationMinutes
     );
   }
 
@@ -521,6 +814,22 @@ export default function ZoneControlScreen() {
           </View>
         </View>
 
+        <View
+          style={
+            styles.statusMessageCard
+          }
+        >
+          <Text
+            style={
+              styles.statusMessageText
+            }
+          >
+            {
+              irrigationStatusMessage
+            }
+          </Text>
+        </View>
+
         <Text
           style={
             styles.sectionTitle
@@ -545,7 +854,7 @@ export default function ZoneControlScreen() {
               }
             >
               {
-                soil.value
+                liveReadings.moisture
               }
               {
                 soil.unit
@@ -582,7 +891,7 @@ export default function ZoneControlScreen() {
               }
             >
               {
-                environment.temperature
+                liveReadings.temperature
               }
               {
                 environment.temperatureUnit
@@ -609,7 +918,7 @@ export default function ZoneControlScreen() {
               }
             >
               {
-                environment.humidity
+                liveReadings.humidity
               }
               {
                 environment.humidityUnit
@@ -1294,8 +1603,260 @@ export default function ZoneControlScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={
+          startModalVisible
+        }
+        transparent
+        animationType="fade"
+        onRequestClose={() =>
+          setStartModalVisible(
+            false
+          )
+        }
+      >
+        <View
+          style={
+            styles.modalOverlay
+          }
+        >
+          <View
+            style={
+              styles.modalCard
+            }
+          >
+            <View
+              style={
+                styles.modalHeader
+              }
+            >
+              <Text
+                style={
+                  styles.modalTitle
+                }
+              >
+                Start Irrigation
+              </Text>
+
+              <TouchableOpacity
+                onPress={() =>
+                  setStartModalVisible(
+                    false
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.closeText
+                  }
+                >
+                  ×
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text
+              style={
+                styles.inputLabel
+              }
+            >
+              Duration (minutes, optional)
+            </Text>
+
+            <TextInput
+              value={
+                startDurationMinutes
+              }
+              onChangeText={
+                setStartDurationMinutes
+              }
+              placeholder="Leave blank to run until stopped"
+              placeholderTextColor={
+                colors.textMuted
+              }
+              keyboardType="number-pad"
+              style={
+                styles.input
+              }
+            />
+
+            <Text
+              style={
+                styles.modalNote
+              }
+            >
+              Leave this blank to run the pump until you stop it manually. Enter a number of minutes to have it stop automatically.
+            </Text>
+
+            <TouchableOpacity
+              style={
+                styles.primaryButton
+              }
+              onPress={
+                confirmStart
+              }
+            >
+              <Text
+                style={
+                  styles.primaryButtonText
+                }
+              >
+                Start Irrigation
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={
+                styles.cancelButton
+              }
+              onPress={() =>
+                setStartModalVisible(
+                  false
+                )
+              }
+            >
+              <Text
+                style={
+                  styles.cancelButtonText
+                }
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
+}
+
+// No relative-time library/utility exists anywhere in the app yet (checked
+// both apps' dependencies and lib/format.ts on the dashboard side), so this
+// is a small local helper rather than a new dependency.
+function formatRelativeTime(
+  isoTimestamp: string
+): string {
+  const then =
+    new Date(
+      isoTimestamp
+    ).getTime();
+
+  if (
+    Number.isNaN(
+      then
+    )
+  ) {
+    return 'a while ago';
+  }
+
+  const diffMs =
+    Date.now() -
+    then;
+
+  const diffMinutes =
+    Math.round(
+      diffMs /
+        60000
+    );
+
+  if (
+    diffMinutes <
+      1
+  ) {
+    return 'just now';
+  }
+
+  if (
+    diffMinutes <
+      60
+  ) {
+    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+  }
+
+  const diffHours =
+    Math.round(
+      diffMinutes /
+        60
+    );
+
+  if (
+    diffHours <
+      24
+  ) {
+    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  }
+
+  const diffDays =
+    Math.round(
+      diffHours /
+        24
+    );
+
+  if (
+    diffDays <
+      30
+  ) {
+    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+  }
+
+  return new Date(
+    isoTimestamp
+  ).toLocaleDateString(
+    'en-ZA'
+  );
+}
+
+// Priority order for the zone's irrigation status message:
+//   1. Active/enabled schedule -> summarise the schedule (as already shown
+//      in the Automatic Schedule card below).
+//   2. No schedule, but a recent manually-triggered irrigation event exists
+//      for this zone -> "last done manually {relative time}".
+//   3. Neither -> "No irrigation activity yet".
+//
+// The real backend concept here is a recent irrigation_event row with
+// trigger_source = 'manual' for this zone, but the app has no live Supabase
+// queries anywhere yet (everything, including the schedule card this
+// reuses, runs on the local `history`/mock zone state) - so this reads from
+// the same `history` log the rest of the app already uses for "what
+// happened for this zone", filtered to farmer-triggered irrigation entries.
+// Swap this for a real irrigation_event query once zones/history come from
+// Supabase instead of mock data.
+function getIrrigationStatusMessage(
+  zone: Zone,
+  history: HistoryEntry[]
+): string {
+  if (
+    zone.irrigation
+      .schedule.enabled
+  ) {
+    const schedule =
+      zone.irrigation
+        .schedule;
+
+    return `Scheduled: ${schedule.days.join(', ')} at ${schedule.startTime} (${schedule.durationMinutes} min)`;
+  }
+
+  const lastManualEntry =
+    history.find(
+      (
+        entry
+      ) =>
+        entry.zone ===
+          zone.name &&
+        entry.type ===
+          'irrigation' &&
+        entry.source ===
+          'Farmer'
+    );
+
+  if (
+    lastManualEntry
+  ) {
+    return `No irrigation schedule loaded — last done manually ${formatRelativeTime(lastManualEntry.timestamp)}`;
+  }
+
+  return 'No irrigation activity yet';
 }
 
 function InfoRow({
@@ -1432,6 +1993,24 @@ function createStyles(//receives color info and creates screen styles
       fontSize: 12,
       color:
         colors.text,
+    },
+
+    statusMessageCard: {
+      marginTop: 14,
+      padding: 12,
+      backgroundColor:
+        colors.lightBlue,
+      borderWidth: 1,
+      borderColor:
+        colors.weatherBorder,
+    },
+
+    statusMessageText: {
+      fontSize: 12,
+      fontWeight: '600',
+      lineHeight: 18,
+      color:
+        colors.primaryDark,
     },
 
     sectionTitle: {

@@ -66,6 +66,9 @@ export default function HomeScreen() {
 
   const {
     zones,
+    zonesLoading,
+    zonesError,
+    refreshZones,
     alerts,
   } = useAgroFlow();
 
@@ -719,11 +722,7 @@ export default function HomeScreen() {
           Farm Status
         </Text>
 
-        <View
-          style={
-            styles.statusGrid
-          }
-        >
+        {zonesLoading ? (
           <View
             style={
               styles.statusCard
@@ -731,24 +730,13 @@ export default function HomeScreen() {
           >
             <Text
               style={
-                styles.statusValue
-              }
-            >
-              {
-                averageMoisture
-              }
-              %
-            </Text>
-
-            <Text
-              style={
                 styles.statusLabel
               }
             >
-              Avg Soil Moisture
+              Loading zone data…
             </Text>
           </View>
-
+        ) : zonesError ? (
           <View
             style={
               styles.statusCard
@@ -756,72 +744,140 @@ export default function HomeScreen() {
           >
             <Text
               style={
-                styles.statusValue
-              }
-            >
-              {
-                activeZones
-              }
-            </Text>
-
-            <Text
-              style={
                 styles.statusLabel
               }
             >
-              Active Zones
+              Unable to load zones
             </Text>
-          </View>
 
+            <TouchableOpacity
+              onPress={
+                refreshZones
+              }
+              activeOpacity={
+                0.7
+              }
+            >
+              <Text
+                style={[
+                  styles.statusLabel,
+                  {
+                    marginTop: 6,
+                    fontWeight: '700',
+                    color:
+                      colors.primary,
+                  },
+                ]}
+              >
+                Retry
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
           <View
             style={
-              styles.statusCard
+              styles.statusGrid
             }
           >
-            <Text
+            <View
               style={
-                styles.statusValue
+                styles.statusCard
               }
             >
-              {
-                waterUsedToday.toLocaleString()
-              }
-              {' L'}
-            </Text>
+              <Text
+                style={
+                  styles.statusValue
+                }
+              >
+                {
+                  averageMoisture
+                }
+                %
+              </Text>
 
-            <Text
+              <Text
+                style={
+                  styles.statusLabel
+                }
+              >
+                Avg Soil Moisture
+              </Text>
+            </View>
+
+            <View
               style={
-                styles.statusLabel
+                styles.statusCard
               }
             >
-              Water Used Today
-            </Text>
+              <Text
+                style={
+                  styles.statusValue
+                }
+              >
+                {
+                  activeZones
+                }
+              </Text>
+
+              <Text
+                style={
+                  styles.statusLabel
+                }
+              >
+                Active Zones
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.statusCard
+              }
+            >
+              <Text
+                style={
+                  styles.statusValue
+                }
+              >
+                {
+                  waterUsedToday.toLocaleString()
+                }
+                {' L'}
+              </Text>
+
+              <Text
+                style={
+                  styles.statusLabel
+                }
+              >
+                Water Used Today
+              </Text>
+            </View>
+
+            <View
+              style={
+                styles.statusCard
+              }
+            >
+              <Text
+                style={
+                  styles.statusValue
+                }
+              >
+                {
+                  alerts.length
+                }
+              </Text>
+
+              <Text
+                style={
+                  styles.statusLabel
+                }
+              >
+                Active Alerts
+              </Text>
+            </View>
           </View>
-
-          <View
-            style={
-              styles.statusCard
-            }
-          >
-            <Text
-              style={
-                styles.statusValue
-              }
-            >
-              {
-                alerts.length
-              }
-            </Text>
-
-            <Text
-              style={
-                styles.statusLabel
-              }
-            >
-              Active Alerts
-            </Text>
-          </View>
-        </View>
+        )}
 
         <Text
           style={
