@@ -3,6 +3,7 @@
 import { api } from "@/data/api";
 import { toast } from "@/lib/toast";
 import { openDrawer } from "@/lib/drawer";
+import { createFarmer, inviteFarmer } from "@/services/agroFlowApi";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
 import {
@@ -322,6 +323,54 @@ async function handleAction(el: HTMLElement): Promise<void> {
         ],
         confirmLabel: "Create account",
         onConfirm: (v) => toast(`Account for ${v["name"] || "user"} created (demo).`, "success"),
+      });
+
+    /* farmer onboarding — real calls to AgroFlow.Api, not demo/mock like the
+       rest of this file. Requires an admin to be signed in via Supabase Auth
+       (no login flow exists in this dashboard yet - see agroFlowApi.ts). */
+    case "create-farmer-direct":
+      return openDrawer({
+        title: "Create farmer account",
+        subtitle: "Admin sets the email and a temporary password directly.",
+        fields: [
+          { label: "Full name", value: "", editable: true, name: "name" },
+          { label: "Email", value: "", editable: true, name: "email" },
+          { label: "Temporary password", value: "", editable: true, name: "password" },
+          { label: "Farm ID", value: "", editable: true, name: "farmId" },
+        ],
+        confirmLabel: "Create account",
+        onConfirm: (v) => {
+          void createFarmer({
+            name: v["name"],
+            email: v["email"] ?? "",
+            temporaryPassword: v["password"] ?? "",
+            farmId: Number(v["farmId"]) || 0,
+          })
+            .then(() => toast(`Farmer account created for ${v["email"]}.`, "success"))
+            .catch((err) =>
+              toast(err instanceof Error ? err.message : "Failed to create farmer account.", "warn"));
+        },
+      });
+    case "invite-farmer":
+      return openDrawer({
+        title: "Invite farmer",
+        subtitle: "Sends a one-time Supabase Auth magic link — the farmer sets their own password.",
+        fields: [
+          { label: "Full name", value: "", editable: true, name: "name" },
+          { label: "Email", value: "", editable: true, name: "email" },
+          { label: "Farm ID", value: "", editable: true, name: "farmId" },
+        ],
+        confirmLabel: "Send invite",
+        onConfirm: (v) => {
+          void inviteFarmer({
+            name: v["name"],
+            email: v["email"] ?? "",
+            farmId: Number(v["farmId"]) || 0,
+          })
+            .then(() => toast(`Invite sent to ${v["email"]}.`, "success"))
+            .catch((err) =>
+              toast(err instanceof Error ? err.message : "Failed to send invite.", "warn"));
+        },
       });
 
     /* farms */

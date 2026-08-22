@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string;
   /** Supabase anon/publishable key. */
   readonly VITE_SUPABASE_ANON_KEY: string;
+  /** Base URL of the AgroFlow.Api host (api/AgroFlow.Api), no trailing slash. */
+  readonly VITE_AGROFLOW_API_BASE: string;
 }
 
 interface ImportMeta {
