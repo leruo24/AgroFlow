@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same version as data/AgroFlow.csproj - direct Postgres access, matching
+         the existing Npgsql-based data-access pattern rather than introducing a
+         Supabase REST/HTTP client. AddNpgsqlDataSource (used in Program.cs) lives
+         in the separate DependencyInjection package, not the core driver. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
+    <PackageReference Include="MQTTnet" Version="5.2.0.1603" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reuses Zone.cs etc. as-is. data/AgroFlow.csproj is an Exe (console demo
+         project, untouched), not a class library - referencing it from another
+         project still works fine in .NET, it just means AgroFlow.dll/exe rides
+         along in this project's output folder as an unused runtime dependency. -->
+    <ProjectReference Include="../../data/AgroFlow.csproj" />
+  </ItemGroup>
+
+</Project>
