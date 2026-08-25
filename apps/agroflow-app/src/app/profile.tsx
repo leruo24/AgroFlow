@@ -32,12 +32,72 @@ import {
 } from '@/context/AuthContext';
 
 import {
+  useAgroFlow,
+} from '@/context/AgroFlowContext';
+
+import {
   useTheme,
 } from '@/context/ThemeContext';
 
 import {
-  mockFarm,
-} from '@/data/mockFarm';
+  supabase,
+} from '@/lib/supabase';
+
+type ProfileRecord = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  phone: string | null;
+};
+
+type SavedProfile = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  role: string;
+};
+
+function splitFullName(
+  fullName: string
+) {
+  const parts =
+    fullName
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+  return {
+    firstName:
+      parts[0] ?? '',
+    lastName:
+      parts.slice(1).join(' '),
+  };
+}
+
+function createInitials(
+  firstName: string,
+  lastName: string
+) {
+  const initials =
+    `${firstName.charAt(0)}${lastName.charAt(0)}`
+      .toUpperCase();
+
+  return initials || 'AF';
+}
+
+function formatRole(
+  role: string
+) {
+  if (
+    !role
+  ) {
+    return 'Farmer';
+  }
+
+  return `${role.charAt(0).toUpperCase()}${role.slice(1).toLowerCase()}`;
+}
 
 export default function ProfileScreen() {
   const {
@@ -45,6 +105,12 @@ export default function ProfileScreen() {
     updateProfile,
     signOut,
   } = useAuth();
+
+  const {
+    farm,
+    isFarmLoading,
+    farmError,
+  } = useAgroFlow();
 
   const {
     colors,
@@ -96,30 +162,189 @@ export default function ProfileScreen() {
     setPhone,
   ] =
     useState('');
-//load user profile data into the form fields when the component mounts or when the user object changes. The useEffect hook checks if the user object is available, and if so, it sets the state variables for first name, last name, email, and phone with the corresponding values from the user object. This ensures that the form fields are pre-populated with the user's current profile information.
+
+  const [
+    savedProfile,
+    setSavedProfile,
+  ] =
+    useState<
+      SavedProfile | null
+    >(null);
+
+  const [
+    profileLoading,
+    setProfileLoading,
+  ] =
+    useState(true);
+
+  const [
+    profileError,
+    setProfileError,
+  ] =
+    useState('');
+
+//load the signed-in user's public profile from Supabase. The auth user ID and profile ID are the same, so only the current user's row is requested. If the database request fails, the auth metadata is used as a safe fallback so that the screen remains usable.
   useEffect(
     () => {
       if (
         !user
       ) {
+        setProfileLoading(
+          false
+        );
+
         return;
       }
 
-      setFirstName(
-        user.firstName
-      );
+      const authUser =
+        user!;
 
-      setLastName(
-        user.lastName
-      );
+      let isMounted =
+        true;
 
-      setEmail(
-        user.email
-      );
+      async function loadProfile() {
+        try {
+          setProfileLoading(
+            true
+          );
 
-      setPhone(
-        user.phone
-      );
+          setProfileError('');
+
+          const {
+            data,
+            error,
+          } =
+            await supabase
+              .from(
+                'profile'
+              )
+              .select(
+                'id, name, email, role, phone'
+              )
+              .eq(
+                'id',
+                authUser.id
+              )
+              .single();
+
+          if (
+            error
+          ) {
+            throw error;
+          }
+
+          if (
+            !isMounted
+          ) {
+            return;
+          }
+
+          const profile =
+            data as ProfileRecord;
+
+          const names =
+            splitFullName(
+              profile.name
+            );
+
+          const loadedProfile: SavedProfile =
+            {
+              ...names,
+              email:
+                profile.email,
+              phone:
+                profile.phone ?? '',
+              role:
+                profile.role,
+            };
+
+          setFirstName(
+            loadedProfile.firstName
+          );
+
+          setLastName(
+            loadedProfile.lastName
+          );
+
+          setEmail(
+            loadedProfile.email
+          );
+
+          setPhone(
+            loadedProfile.phone
+          );
+
+          setSavedProfile(
+            loadedProfile
+          );
+        } catch (
+          error: unknown
+        ) {
+          if (
+            !isMounted
+          ) {
+            return;
+          }
+
+          console.log(
+            'Profile load error:',
+            error
+          );
+
+          const fallbackProfile: SavedProfile =
+            {
+              firstName:
+                authUser.firstName,
+              lastName:
+                authUser.lastName,
+              email:
+                authUser.email,
+              phone:
+                authUser.phone,
+              role:
+                authUser.role,
+            };
+
+          setFirstName(
+            fallbackProfile.firstName
+          );
+
+          setLastName(
+            fallbackProfile.lastName
+          );
+
+          setEmail(
+            fallbackProfile.email
+          );
+
+          setPhone(
+            fallbackProfile.phone
+          );
+
+          setSavedProfile(
+            fallbackProfile
+          );
+
+          setProfileError(
+            'Could not load the latest profile information.'
+          );
+        } finally {
+          if (
+            isMounted
+          ) {
+            setProfileLoading(
+              false
+            );
+          }
+        }
+      }
+
+      void loadProfile();
+
+      return () => {
+        isMounted =
+          false;
+      };
     },
     [
       user,
@@ -135,21 +360,57 @@ export default function ProfileScreen() {
   const currentUser =
     user;
 
+  const displayedFirstName =
+    savedProfile?.firstName ??
+    currentUser.firstName;
+
+  const displayedLastName =
+    savedProfile?.lastName ??
+    currentUser.lastName;
+
+  const displayedEmail =
+    savedProfile?.email ??
+    currentUser.email;
+
+  const displayedPhone =
+    savedProfile?.phone ??
+    currentUser.phone;
+
+  const displayedRole =
+    formatRole(
+      savedProfile?.role ??
+        currentUser.role
+    );
+
+  const displayedName =
+    [
+      displayedFirstName,
+      displayedLastName,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+  const displayedInitials =
+    createInitials(
+      displayedFirstName,
+      displayedLastName
+    );
+
   function resetForm() {
     setFirstName(
-      currentUser.firstName
+      displayedFirstName
     );
 
     setLastName(
-      currentUser.lastName
+      displayedLastName
     );
 
     setEmail(
-      currentUser.email
+      displayedEmail
     );
 
     setPhone(
-      currentUser.phone
+      displayedPhone
     );
   }
 
@@ -169,57 +430,63 @@ export default function ProfileScreen() {
       lastName.trim();
 
     const cleanEmail =
-      email
-        .trim()
-        .toLowerCase();
+      displayedEmail;
 
     const cleanPhone =
       phone.trim();
 
     if (
-      !cleanFirstName ||
-      !cleanLastName
+      !cleanFirstName
     ) {
       Alert.alert(
         'Name Required',
-        'Enter both your first name and last name.'
+        'Enter your first name.'
       );
 
       return;
     }
 
-    if (
-      !cleanEmail
-    ) {
-      Alert.alert(
-        'Email Required',
-        'Enter your email address.'
-      );
-
-      return;
-    }
-//validating the email format using a regular expression. The regex checks if the cleaned email input matches the standard email format. If the email is not valid, an alert is displayed to inform the user to enter a valid email address.
-    const emailIsValid =
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        cleanEmail
-      );
-
-    if (
-      !emailIsValid
-    ) {
-      Alert.alert(
-        'Invalid Email',
-        'Enter a valid email address.'
-      );
-
-      return;
-    }
+    const fullName =
+      [
+        cleanFirstName,
+        cleanLastName,
+      ]
+        .filter(Boolean)
+        .join(' ');
 
     try {
       setSaving(
         true
       );
-//updating the user's profile by calling the updateProfile function from the AuthContext with the cleaned input values. If the update is successful, a success alert is shown. If an error occurs during the update, an error alert is displayed to inform the user.
+//save the editable fields to the public profile row. Email and role are deliberately excluded, so this screen cannot change either protected field. Auth metadata is then refreshed so the rest of the app immediately shows the new name, phone, and initials.
+      const {
+        error: databaseError,
+      } =
+        await supabase
+          .from(
+            'profile'
+          )
+          .update({
+            name:
+              fullName,
+            phone:
+              cleanPhone,
+          })
+          .eq(
+            'id',
+            currentUser.id
+          )
+          .select(
+            'id'
+          )
+          .single();
+
+      if (
+        databaseError
+      ) {
+        throw databaseError;
+      }
+
       await updateProfile({
         firstName:
           cleanFirstName,
@@ -233,6 +500,22 @@ export default function ProfileScreen() {
         phone:
           cleanPhone,
       });
+
+      setSavedProfile({
+        firstName:
+          cleanFirstName,
+        lastName:
+          cleanLastName,
+        email:
+          cleanEmail,
+        phone:
+          cleanPhone,
+        role:
+          savedProfile?.role ??
+          currentUser.role,
+      });
+
+      setProfileError('');
 
       setEditing(
         false
@@ -339,9 +622,12 @@ export default function ProfileScreen() {
 
           {!editing ? (
             <TouchableOpacity
-              style={
-                styles.editButton
-              }
+              style={[
+                styles.editButton,
+
+                profileLoading &&
+                  styles.disabledButton,
+              ]}
               onPress={() =>
                 setEditing(
                   true
@@ -349,6 +635,9 @@ export default function ProfileScreen() {
               }
               activeOpacity={
                 0.75
+              }
+              disabled={
+                profileLoading
               }
             >
               <Text
@@ -382,6 +671,24 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {profileError ? (
+          <View
+            style={
+              styles.profileErrorBox
+            }
+          >
+            <Text
+              style={
+                styles.profileErrorText
+              }
+            >
+              {
+                profileError
+              }
+            </Text>
+          </View>
+        ) : null}
+
         <View
           style={
             styles.header
@@ -398,7 +705,7 @@ export default function ProfileScreen() {
               }
             >
               {
-                currentUser.initials
+                displayedInitials
               }
             </Text>
           </View>
@@ -414,10 +721,7 @@ export default function ProfileScreen() {
               }
             >
               {
-                currentUser.firstName
-              }{' '}
-              {
-                currentUser.lastName
+                displayedName
               }
             </Text>
 
@@ -427,7 +731,7 @@ export default function ProfileScreen() {
               }
             >
               {
-                currentUser.role
+                displayedRole
               }
             </Text>
           </View>
@@ -520,19 +824,17 @@ export default function ProfileScreen() {
                     styles.inputLabel
                   }
                 >
-                  Email
+                  Email (read only)
                 </Text>
 
                 <TextInput
                   value={
                     email
                   }
-                  onChangeText={
-                    setEmail
-                  }
-                  style={
-                    styles.input
-                  }
+                  style={[
+                    styles.input,
+                    styles.readOnlyInput,
+                  ]}
                   placeholder="Email address"
                   placeholderTextColor={
                     colors.textMuted
@@ -540,6 +842,12 @@ export default function ProfileScreen() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={
+                    false
+                  }
+                  editable={
+                    false
+                  }
+                  selectTextOnFocus={
                     false
                   }
                 />
@@ -624,28 +932,29 @@ export default function ProfileScreen() {
               <ProfileRow
                 label="First Name"
                 value={
-                  currentUser.firstName
+                  displayedFirstName
                 }
               />
 
               <ProfileRow
                 label="Last Name"
                 value={
-                  currentUser.lastName
+                  displayedLastName ||
+                  'Not added'
                 }
               />
 
               <ProfileRow
                 label="Email"
                 value={
-                  currentUser.email
+                  displayedEmail
                 }
               />
 
               <ProfileRow
                 label="Phone"
                 value={
-                  currentUser.phone ||
+                  displayedPhone ||
                   'Not added'
                 }
                 last
@@ -670,14 +979,21 @@ export default function ProfileScreen() {
           <ProfileRow
             label="Farm"
             value={
-              mockFarm.name
+              isFarmLoading
+                ? 'Loading...'
+                : farm?.name ??
+                  'Farm unavailable'
             }
           />
 
           <ProfileRow
             label="Location"
             value={
-              mockFarm.location.city
+              isFarmLoading
+                ? 'Loading...'
+                : farm?.location ??
+                  farmError ??
+                  'Not available'
             }
             last
           />
@@ -786,6 +1102,24 @@ function createStyles(
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+    },
+
+    profileErrorBox: {
+      marginTop: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor:
+        colors.errorBackground,
+      borderWidth: 1,
+      borderColor:
+        colors.error,
+    },
+
+    profileErrorText: {
+      fontSize: 10,
+      lineHeight: 15,
+      color:
+        colors.error,
     },
 
     backButton: {
@@ -985,6 +1319,12 @@ function createStyles(
       fontSize: 12,
       color:
         colors.text,
+    },
+
+    readOnlyInput: {
+      opacity: 0.65,
+      color:
+        colors.textSecondary,
     },
 
     saveButton: {

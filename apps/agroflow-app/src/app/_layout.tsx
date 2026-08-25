@@ -14,7 +14,7 @@ import {
 } from '@/context/AgroFlowContext';//provides shared information
 
 import {
-  AuthProvider,//stores and provides authentication 
+  AuthProvider,//stores and provides authentication
   useAuth,//allows component to read authentication information
 } from '@/context/AuthContext';
 
@@ -68,11 +68,11 @@ function RootNavigator() {//decides which screens the user is permitted to acces
       }}
     >
 {/* Protects login screens from authenticated users */}
-<Stack.Protected
-  guard={
-    !isAuthenticated
-  }
->
+      <Stack.Protected
+        guard={
+          !isAuthenticated
+        }
+      >
         <Stack.Screen
           name="login"
         />
@@ -99,32 +99,37 @@ function RootNavigator() {//decides which screens the user is permitted to acces
           name="zone/[id]"
         />
       </Stack.Protected>
+
+{/* The recovery route remains registered while Supabase changes the temporary authentication state. It is placed after the normal protected routes so it does not become the default screen. */}
+      <Stack.Screen
+        name="update-password"
+      />
     </Stack>
   );
 }
 
 export default function RootLayout() {/*wraps the application with ThemeProvider, AuthProvider, and AgroFlowProvider to provide theme, authentication, and farm state contexts throughout the app. It renders the RootNavigator component, which defines the main navigation structure of the app using Expo Router's Stack navigator.*/
   return (
-  <ThemeProvider>
-    {/* Authentication provider - checks if user has a saved session*/}
-    <AuthProvider>
-      {/* Farm data provider */}
-      <AgroFlowProvider>
-        <RootNavigator />
-        {/*reads authentication state */}
-      </AgroFlowProvider>
-    </AuthProvider>
-  </ThemeProvider>
-);
+    <ThemeProvider>
+      {/* Authentication provider - checks if user has a saved session*/}
+      <AuthProvider>
+        {/* Farm data provider */}
+        <AgroFlowProvider>
+          <RootNavigator />
+          {/*reads authentication state */}
+        </AgroFlowProvider>
+      </AuthProvider>
+    </ThemeProvider>
+  );
 }
 
 const styles =
   StyleSheet.create({
     loadingContainer: {
       flex:
-        1,  /*fills the entire screen while the app is loading, ensuring that the loading indicator is centered and the background color matches the app's theme.*/ 
+        1,  
       alignItems:
-        'center',  /* horizontal centering of the loading indicator within the container*/ 
+        'center',  
       justifyContent:
         'center',
     },
