@@ -1,4 +1,4 @@
-//defines the central farm state and provides functions to manipulate that state. It uses React's context API to make the farm data and functions available throughout the application. The context includes information about zones, irrigation history, and alerts, as well as functions to start/stop irrigation, enable/disable manual overrides, set override schedules, and mark alerts as read. The state is persisted using AsyncStorage, allowing the app to retain data across sessions.
+//defines the central farm state and provides functions to manipulate that state. Zone identity and automation settings come from Supabase, while temporary irrigation history and alerts are still stored locally with AsyncStorage.
 import AsyncStorage from '@react-native-async-storage/async-storage';//saves information locally on the phone to temporarily allow the demo to remember things when the app is closed
 
 import {
@@ -23,7 +23,15 @@ import {
 
 import {
   mockZones,
-} from '@/data/mockZones';//rep database zone records
+} from '@/data/mockZones';//temporary sensor, irrigation, relay, and pump values until the hardware tables are connected
+
+import {
+  useAuth,
+} from '@/context/AuthContext';
+
+import {
+  supabase,
+} from '@/lib/supabase';
 //status stypes - restricts irrigation to these statuses
 export type IrrigationStatus =
   | 'Active'
@@ -51,12 +59,9 @@ export type PumpStatus =
   | 'Running'
   | 'Off'
   | 'Fault';
-//schedule types
-export type TemporarySchedule = {//once off schedule created during manuall override
-  date: string;
-  time: string;
-  durationMinutes: number;
-};
+export type IrrigationMode =
+  | 'automatic'
+  | 'scheduled';
 
 export type IrrigationSchedule = {//normal irrigation - later can be delegated to backend 
   enabled: boolean;
@@ -74,16 +79,19 @@ export type AutomationRules = {
 
 export type IrrigationOverride = {
   active: boolean;
-  temporarySchedule:
-    | TemporarySchedule
+  durationMinutes:
+    | number
     | null;
 };
 //defines everything one zone needs to show
 export type Zone = {
   id: string;
+  farmId: string;
   name: string;
   location: string;
   crop: string;
+  healthStatus: string;
+  waterSavedLitres: number;
 
   size: {
     value: number;
@@ -109,6 +117,7 @@ export type Zone = {
 //irrigation information
   irrigation: {
     status: IrrigationStatus;
+    mode: IrrigationMode;
 
     lastIrrigation: {
       date: string;
@@ -149,6 +158,347 @@ export type Zone = {
   }[];
 };
 
+//defines the farm information retrieved from Supabase for the
+//currently authenticated farmer
+export type Farm = {
+  id: string;
+  ownerId: string;
+  name: string;
+  location: string;
+  totalArea: number;
+  status: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+type DatabaseId =
+  | string
+  | number;
+
+type FarmMemberRow = {
+  farm_id: DatabaseId;
+};
+
+type FarmRow = {
+  farm_id: DatabaseId;
+  owner_id: string;
+  name: string;
+  location: string;
+  total_area:
+    | number
+    | string;
+  status: string;
+  latitude:
+    | number
+    | string
+    | null;
+  longitude:
+    | number
+    | string
+    | null;
+};
+
+type ZoneRow = {
+  id: DatabaseId;
+  farm_id: DatabaseId;
+  name?: string | null;
+  location?: string | null;
+  crop_type?: string | null;
+  water_saved?:
+    | number
+    | string
+    | null;
+  health_status?: string | null;
+  size_value?:
+    | number
+    | string
+    | null;
+  size_unit?: string | null;
+  automation_enabled?: boolean | null;
+  moisture_threshold?:
+    | number
+    | string
+    | null;
+  desired_moisture?:
+    | number
+    | string
+    | null;
+  weather_adjustment?: boolean | null;
+  irrigation_mode?: string | null;
+  schedule_enabled?: boolean | null;
+  schedule_days?: string[] | null;
+  schedule_start_time?: string | null;
+  schedule_duration_minutes?:
+    | number
+    | string
+    | null;
+};
+
+//uses the authenticated profile ID to find the farmer's membership
+//record and then retrieves the assigned farm from Supabase
+async function fetchAssignedFarm(
+  profileId: string
+): Promise<Farm | null> {
+  const {
+    data: membership,
+    error: membershipError,
+  } =
+    await supabase
+      .from('farm_member')
+      .select('farm_id')
+      .eq(
+        'profile_id',
+        profileId
+      )
+      .limit(1)
+      .maybeSingle<
+        FarmMemberRow
+      >();
+
+  if (
+    membershipError
+  ) {
+    throw membershipError;
+  }
+
+  if (
+    !membership
+  ) {
+    return null;
+  }
+
+  const {
+    data: farmRow,
+    error: farmError,
+  } =
+    await supabase
+      .from('farm')
+      .select(
+        'farm_id, owner_id, name, location, total_area, status, latitude, longitude'
+      )
+      .eq(
+        'farm_id',
+        membership.farm_id
+      )
+      .single<
+        FarmRow
+      >();
+
+  if (
+    farmError
+  ) {
+    throw farmError;
+  }
+
+  return {
+    id:
+      String(
+        farmRow.farm_id
+      ),
+
+    ownerId:
+      farmRow.owner_id,
+
+    name:
+      farmRow.name,
+
+    location:
+      farmRow.location,
+
+    totalArea:
+      Number(
+        farmRow.total_area
+      ),
+
+    status:
+      farmRow.status,
+
+    latitude:
+      farmRow.latitude ===
+      null
+        ? null
+        : Number(
+            farmRow.latitude
+          ),
+
+    longitude:
+      farmRow.longitude ===
+      null
+        ? null
+        : Number(
+            farmRow.longitude
+          ),
+  };
+}
+
+export type UpdateZoneSettingsInput = {
+  name: string;
+  location: string;
+  crop: string;
+  moistureThreshold: number;
+  desiredMoisture: number;
+  automationEnabled: boolean;
+  weatherAdjustment: boolean;
+};
+
+export type UpdateZoneScheduleInput = {
+  enabled: boolean;
+  days: string[];
+  startTime: string;
+  durationMinutes: number;
+};
+
+function mapZoneRow(
+  row: ZoneRow,
+  index: number
+): Zone {
+  const template =
+    mockZones[
+      index %
+      mockZones.length
+    ] as unknown as Zone;
+
+  return {
+    ...template,
+    id:
+      String(
+        row.id
+      ),
+    farmId:
+      String(
+        row.farm_id
+      ),
+    name:
+      row.name?.trim() ||
+      `Zone ${index + 1}`,
+    location:
+      row.location?.trim() ||
+      'Not configured',
+    crop:
+      row.crop_type?.trim() ||
+      'Not configured',
+    healthStatus:
+      row.health_status ??
+      'Unknown',
+    waterSavedLitres:
+      Number(
+        row.water_saved ??
+        0
+      ),
+    size: {
+      ...template.size,
+      value:
+        Number(
+          row.size_value ??
+          template.size.value
+        ),
+      unit:
+        row.size_unit ??
+        template.size.unit,
+    },
+    irrigation: {
+      ...template.irrigation,
+      status:
+        row.irrigation_mode ===
+        'scheduled'
+          ? 'Scheduled'
+          : 'Off',
+      mode:
+        row.irrigation_mode ===
+        'scheduled'
+          ? 'scheduled'
+          : 'automatic',
+      schedule: {
+        ...template.irrigation.schedule,
+        enabled:
+          row.irrigation_mode ===
+          'scheduled',
+        days:
+          Array.isArray(
+            row.schedule_days
+          ) &&
+          row.schedule_days.length > 0
+            ? row.schedule_days
+            : template.irrigation.schedule.days,
+        startTime:
+          row.schedule_start_time
+            ?.trim()
+            .slice(0, 5) ||
+          template.irrigation.schedule.startTime,
+        durationMinutes:
+          Number(
+            row.schedule_duration_minutes ??
+            template.irrigation.schedule.durationMinutes
+          ),
+      },
+      automation: {
+        ...template.irrigation.automation,
+        enabled:
+          row.irrigation_mode !==
+          'scheduled',
+        moistureThreshold:
+          Number(
+            row.moisture_threshold ??
+            30
+          ),
+        desiredMoisture:
+          Number(
+            row.desired_moisture ??
+            60
+          ),
+        weatherAdjustment:
+          row.weather_adjustment ??
+          true,
+      },
+      override: {
+        active:
+          false,
+        durationMinutes:
+          null,
+      },
+    },
+  };
+}
+
+async function fetchZonesForFarm(
+  farmId: string
+): Promise<Zone[]> {
+  const {
+    data,
+    error,
+  } =
+    await supabase
+      .from(
+        'zone'
+      )
+      .select(
+        '*'
+      )
+      .eq(
+        'farm_id',
+        farmId
+      )
+      .order(
+        'id',
+        {
+          ascending:
+            true,
+        }
+      );
+
+  if (
+    error
+  ) {
+    throw error;
+  }
+
+  return (
+    data as ZoneRow[]
+  ).map(
+    mapZoneRow
+  );
+}
+
 type AutomaticIrrigationAction =//deciding whether to start or stop
   | 'start'
   | 'stop'
@@ -170,6 +520,8 @@ function getAutomaticIrrigationAction(
     automation.desiredMoisture;
 
   const automaticControlIsAvailable =
+    zone.irrigation.mode ===
+      'automatic' &&
     automation.enabled &&
     !zone.irrigation.override.active;
 
@@ -188,9 +540,6 @@ function getAutomaticIrrigationAction(
     return 'stop';
   }
 
-  const scheduleAllowsStart =
-    zone.irrigation.schedule.enabled;
-
   const sensorAllowsStart =
     zone.sensors.soilMoisture.status ===
     'Online';
@@ -202,7 +551,6 @@ function getAutomaticIrrigationAction(
   if (
     zone.irrigation.status !== 'Active' &&
     moisture <= startAt &&
-    scheduleAllowsStart &&
     sensorAllowsStart &&
     !weatherBlocksStart
   ) {
@@ -226,7 +574,8 @@ function applyAutomaticIrrigationAction(//creates updated zone object
       ...zone.irrigation,
       status: shouldStart
         ? 'Active'
-        : zone.irrigation.schedule.enabled
+        : zone.irrigation.mode ===
+            'scheduled'
           ? 'Scheduled'
           : 'Off',
     },
@@ -261,31 +610,37 @@ type AlertEntry =
   (typeof mockAlerts)[number];
 
 type AgroFlowContextType = {//defines the structure of the AgroFlow context, including the state variables for zones, history, and alerts, as well as the functions to manipulate these states. It provides a centralized way to manage the farm's irrigation system and related data within the app.
+  farm: Farm | null;
+  isFarmLoading: boolean;
+  farmError: string | null;
   zones: Zone[];
+  isZonesLoading: boolean;
+  zonesError: string | null;
   history: HistoryEntry[];
   alerts: AlertEntry[];
 
-  startIrrigation: (//starts irrigation for a specific zone, updating the zone's irrigation status to "Active" and turning on the relay and pump. It also logs the action in the history and generates an alert to inform the user that manual irrigation has started.
-    zoneId: string
-  ) => void;
+  updateZoneSettings: (
+    zoneId: string,
+    settings: UpdateZoneSettingsInput
+  ) => Promise<void>;
 
-  stopIrrigation: (//stops irrigation for a specific zone, updating the zone's irrigation status to "Off" and turning off the relay and pump. It also logs the action in the history and generates an alert to inform the user that manual irrigation has been stopped.
-    zoneId: string
-  ) => void;
+  updateZoneSchedule: (
+    zoneId: string,
+    schedule: UpdateZoneScheduleInput
+  ) => Promise<void>;
 
-  enableManualOverride: (//enables manual override for a specific zone, allowing the user to take control of the irrigation system. It updates the zone's irrigation status to "Active" and sets the override state to active. This function also logs the action in the history and generates an alert to inform the user that manual override is now active.
-    zoneId: string
-  ) => void;
+  updateIrrigationMode: (
+    zoneId: string,
+    mode: IrrigationMode
+  ) => Promise<void>;
 
-  endManualOverride: (//ends the manual override for a specific zone, returning control to the automatic irrigation system. It updates the zone's irrigation status based on whether the schedule is enabled or not, and resets the override state. This function also logs the action in the history and generates an alert to inform the user that automatic control has been restored.
-    zoneId: string
-  ) => void;
-
-  setOverrideSchedule: (
-    zoneId: string,//sets a temporary irrigation schedule for a specific zone. It updates the zone's irrigation status to "Scheduled" and stores the provided date, time, and duration for the override. This allows users to manually control irrigation timing while the manual override is active.
-    date: string,
-    time: string,
+  startManualIrrigation: (
+    zoneId: string,
     durationMinutes: number
+  ) => void;
+
+  stopManualIrrigation: (
+    zoneId: string
   ) => void;
 
   markAlertAsRead: (
@@ -293,10 +648,7 @@ type AgroFlowContextType = {//defines the structure of the AgroFlow context, inc
   ) => void;
 };
 
-const STORAGE_KEYS = {//data is saved in AsyncStorage with specific keys for zones, history, and alerts. This allows the app to persist the farm state across sessions and retrieve it when the app is restarted.
-  zones:
-    'agroflow_zones_v4',
-
+const STORAGE_KEYS = {//history and alerts remain local while zone configuration is stored in Supabase.
   history:
     'agroflow_history',
 
@@ -314,13 +666,53 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 }: {
   children: ReactNode;
 }) {
-  const [//state variables for zones, history, and alerts are initialized using the useState hook. The initial values are set to mock data for development purposes, but they will be replaced with persisted data from AsyncStorage when the component mounts.
+  const {
+    user,
+    isLoading:
+      isAuthLoading,
+  } = useAuth();
+
+  const [
+    farm,
+    setFarm,
+  ] =
+    useState<
+      Farm | null
+    >(null);
+
+  const [
+    isFarmLoading,
+    setIsFarmLoading,
+  ] =
+    useState(true);
+
+  const [
+    farmError,
+    setFarmError,
+  ] =
+    useState<
+      string | null
+    >(null);
+
+  const [//zone identity and configuration are loaded from Supabase after the farmer's assigned farm has been retrieved. Sensor and hardware values still use the temporary mock structures until those tables are connected.
     zones,
     setZones,
   ] =
-    useState<Zone[]>(
-      mockZones as Zone[]
-    );
+    useState<Zone[]>([]);
+
+  const [
+    isZonesLoading,
+    setIsZonesLoading,
+  ] =
+    useState(true);
+
+  const [
+    zonesError,
+    setZonesError,
+  ] =
+    useState<
+      string | null
+    >(null);
 //stores action history
   const [
     history,
@@ -349,19 +741,268 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       Record<string, string>
     >({});
 
-  useEffect(() => {//loads the saved data for zones, history and alerts from AsyncStorage when the component mounts. It retrieves the data using the defined storage keys and updates the state variables accordingly. If any of the data is not found, it retains the default mock data. Once the data is loaded, it sets isHydrated to true to indicate that the initial load is complete.
+  const manualRunTimers =
+    useRef<
+      Record<
+        string,
+        ReturnType<
+          typeof setTimeout
+        >
+      >
+    >({});
+
+  const zonesRef =
+    useRef<Zone[]>(
+      []
+    );
+
+  useEffect(() => {
+    zonesRef.current =
+      zones;
+  }, [
+    zones,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(
+        manualRunTimers.current
+      ).forEach(
+        clearTimeout
+      );
+    };
+  }, []);
+
+  useEffect(() => {//loads the farm assigned to the authenticated farmer from Supabase. The profile ID is the same UUID as the Supabase Authentication user ID.
+    let isMounted =
+      true;
+
+    if (
+      isAuthLoading
+    ) {
+      return () => {
+        isMounted =
+          false;
+      };
+    }
+
+    if (
+      !user
+    ) {
+      setFarm(
+        null
+      );
+
+      setFarmError(
+        null
+      );
+
+      setIsFarmLoading(
+        false
+      );
+
+      return () => {
+        isMounted =
+          false;
+      };
+    }
+
+    setIsFarmLoading(
+      true
+    );
+
+    setFarmError(
+      null
+    );
+
+    fetchAssignedFarm(
+      user.id
+    )
+      .then(
+        (
+          assignedFarm
+        ) => {
+          if (
+            !isMounted
+          ) {
+            return;
+          }
+
+          setFarm(
+            assignedFarm
+          );
+
+          if (
+            !assignedFarm
+          ) {
+            setFarmError(
+              'No farm has been assigned to this farmer.'
+            );
+          }
+        }
+      )
+      .catch(
+        (
+          error: unknown
+        ) => {
+          if (
+            !isMounted
+          ) {
+            return;
+          }
+
+          console.error(
+            'Failed to load assigned farm:',
+            error
+          );
+
+          setFarm(
+            null
+          );
+
+          setFarmError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load the assigned farm.'
+          );
+        }
+      )
+      .finally(
+        () => {
+          if (
+            isMounted
+          ) {
+            setIsFarmLoading(
+              false
+            );
+          }
+        }
+      );
+
+    return () => {
+      isMounted =
+        false;
+    };
+  }, [
+    user,
+    isAuthLoading,
+  ]);
+
+  useEffect(() => {//loads the zones that belong to the farmer's assigned farm. Supabase is the source of truth for zone identity and automation settings.
+    let isMounted =
+      true;
+
+    if (
+      isFarmLoading
+    ) {
+      return () => {
+        isMounted =
+          false;
+      };
+    }
+
+    if (
+      !farm
+    ) {
+      setZones(
+        []
+      );
+
+      setZonesError(
+        null
+      );
+
+      setIsZonesLoading(
+        false
+      );
+
+      return () => {
+        isMounted =
+          false;
+      };
+    }
+
+    setIsZonesLoading(
+      true
+    );
+
+    setZonesError(
+      null
+    );
+
+    fetchZonesForFarm(
+      farm.id
+    )
+      .then(
+        (
+          assignedZones
+        ) => {
+          if (
+            !isMounted
+          ) {
+            return;
+          }
+
+          setZones(
+            assignedZones
+          );
+        }
+      )
+      .catch(
+        (
+          error: unknown
+        ) => {
+          if (
+            !isMounted
+          ) {
+            return;
+          }
+
+          console.error(
+            'Failed to load farm zones:',
+            error
+          );
+
+          setZones(
+            []
+          );
+
+          setZonesError(
+            error instanceof Error
+              ? error.message
+              : 'Failed to load the farm zones.'
+          );
+        }
+      )
+      .finally(
+        () => {
+          if (
+            isMounted
+          ) {
+            setIsZonesLoading(
+              false
+            );
+          }
+        }
+      );
+
+    return () => {
+      isMounted =
+        false;
+    };
+  }, [
+    farm,
+    isFarmLoading,
+  ]);
+
+  useEffect(() => {//loads history and alerts from AsyncStorage. Zone configuration is no longer restored locally because Supabase is now its source of truth.
     async function loadSavedData() {
       try {
         const [
-          savedZones,
           savedHistory,
           savedAlerts,
         ] =
-          await Promise.all([//retrieves the saved data for zones, history, and alerts from AsyncStorage in parallel. This improves performance by reducing the total time spent waiting for each individual retrieval operation.
-            AsyncStorage.getItem(
-              STORAGE_KEYS.zones
-            ),
-
+          await Promise.all([//retrieves history and alerts from AsyncStorage in parallel. This improves performance by reducing the total time spent waiting for each individual retrieval operation.
             AsyncStorage.getItem(
               STORAGE_KEYS.history
             ),
@@ -370,16 +1011,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
               STORAGE_KEYS.alerts
             ),
           ]);
-
-        if (
-          savedZones
-        ) {
-          setZones(
-            JSON.parse(
-              savedZones
-            ) as Zone[]
-          );
-        }
 
         if (
           savedHistory
@@ -416,33 +1047,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
     loadSavedData();
   }, []);
-
-  useEffect(() => {
-    if (
-      !isHydrated
-    ) {
-      return;
-    }
-
-    AsyncStorage.setItem(
-      STORAGE_KEYS.zones,
-      JSON.stringify(
-        zones
-      )
-    ).catch(
-      (
-        error
-      ) => {
-        console.error(
-          'Failed to save zones:',
-          error
-        );
-      }
-    );
-  }, [
-    zones,
-    isHydrated,
-  ]);
 
   useEffect(() => {//saves the history data to AsyncStorage whenever it changes, but only after the initial load is complete (isHydrated is true). This ensures that the app does not overwrite existing data with default values before the initial load. If an error occurs during saving, it logs the error to the console.
     if (
@@ -659,7 +1263,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
   function findZone(//finds a zone by its ID from the zones state array. It returns the zone object if found, or undefined if no matching zone is found. This function is used internally by other functions to locate specific zones for irrigation control and alert management.
     zoneId: string
   ) {
-    return zones.find(
+    return zonesRef.current.find(
       (
         zone
       ) =>
@@ -763,8 +1367,9 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     );
   }
 
-  function startIrrigation(//starts irrigation for a specific zone, updating the zone's irrigation status to "Active" and turning on the relay and pump. It also logs the action in the history and generates an alert to inform the user that manual irrigation has started.
-    zoneId: string
+  function startManualIrrigation(
+    zoneId: string,
+    durationMinutes: number
   ) {
     const zone =
       findZone(
@@ -773,7 +1378,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
     if (
       !zone ||
-      !zone.irrigation
+      zone.irrigation
         .override.active
     ) {
       return;
@@ -797,6 +1402,12 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
                     status:
                       'Active',
+
+                    override: {
+                      active:
+                        true,
+                      durationMinutes,
+                    },
                   },
 
                   relay: {
@@ -827,20 +1438,48 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     addHistoryEntry(//logs the action of starting irrigation in the history for the specific zone, providing a description and categorizing it as an "irrigation" type entry. This helps track user actions and system events related to irrigation control.
       zoneId,
       'Manual Irrigation Started',
-      'Irrigation was started while manual override was active.',
+      `Manual irrigation started for ${durationMinutes} minutes.`,
       'irrigation'
     );
 
     addAlert(//generates an alert to inform the user that manual irrigation has started for the specific zone. The alert includes a title, message, and type, and is added to the alerts state to notify users of important events related to irrigation and zone management.
       zoneId,
       'Irrigation Started',
-      'Manual irrigation has started successfully.',
+      `Manual irrigation will run for ${durationMinutes} minutes.`,
       'success'
+    );
+
+    const existingTimer =
+      manualRunTimers.current[
+        zoneId
+      ];
+
+    if (
+      existingTimer
+    ) {
+      clearTimeout(
+        existingTimer
+      );
+    }
+
+    manualRunTimers.current[
+      zoneId
+    ] = setTimeout(
+      () => {
+        stopManualIrrigation(
+          zoneId,
+          true
+        );
+      },
+      durationMinutes *
+        60 *
+        1000
     );
   }
 
-  function stopIrrigation(//stops irrigation for a specific zone, updating the zone's irrigation status to "Off" and turning off the relay and pump. It also logs the action in the history and generates an alert to inform the user that manual irrigation has been stopped.
-    zoneId: string
+  function stopManualIrrigation(
+    zoneId: string,
+    endedAutomatically = false
   ) {
     const zone =
       findZone(
@@ -872,7 +1511,17 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
                     ...item.irrigation,
 
                     status:
-                      'Off',
+                      item.irrigation.mode ===
+                      'scheduled'
+                        ? 'Scheduled'
+                        : 'Off',
+
+                    override: {
+                      active:
+                        false,
+                      durationMinutes:
+                        null,
+                    },
                   },
 
                   relay: {
@@ -902,188 +1551,91 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
     addHistoryEntry(//logs the action of stopping irrigation in the history for the specific zone, providing a description and categorizing it as an "irrigation" type entry. This helps track user actions and system events related to irrigation control.
       zoneId,
-      'Manual Irrigation Stopped',
-      'Irrigation was stopped while manual override was active.',
+      endedAutomatically
+        ? 'Manual Irrigation Completed'
+        : 'Manual Irrigation Stopped',
+      endedAutomatically
+        ? `The timed manual run finished and the zone returned to ${zone.irrigation.mode} mode.`
+        : `Manual irrigation was stopped and the zone returned to ${zone.irrigation.mode} mode.`,
       'irrigation'
     );
 
     addAlert(
       zoneId,
-      'Irrigation Stopped',
-      'Manual irrigation has been stopped.',
+      endedAutomatically
+        ? 'Manual Run Complete'
+        : 'Irrigation Stopped',
+      endedAutomatically
+        ? `The zone has returned to ${zone.irrigation.mode} mode.`
+        : 'Manual irrigation has been stopped.',
       'info'
     );
-  }
 
-  function enableManualOverride(//enables manual override for a specific zone, allowing the user to take control of the irrigation system. It updates the zone's irrigation status to "Active" and sets the override state to active. This function also logs the action in the history and generates an alert to inform the user that manual override is now active.
-    zoneId: string
-  ) {
-    const zone =
-      findZone(
+    const timer =
+      manualRunTimers.current[
         zoneId
-      );
+      ];
 
     if (
-      !zone ||
-      zone.irrigation
-        .override.active
+      timer
     ) {
-      return;
-    }
-
-    setZones(
-      (
-        current
-      ) =>
-        current.map(
-          (
-            item
-          ) =>
-            item.id ===
-            zoneId
-              ? {
-                  ...item,
-
-                  irrigation: {
-                    ...item.irrigation,
-
-                    override: {
-                      active:
-                        true,
-
-                      temporarySchedule:
-                        null,
-                    },
-                  },
-                }
-              : item
-        )
-    );
-
-    addHistoryEntry(//logs the action of enabling manual override in the history for the specific zone, providing a description and categorizing it as an "override" type entry. This helps track user actions and system events related to irrigation control.
-      zoneId,
-      'Manual Override Enabled',
-      'Automatic irrigation control was temporarily suspended.',
-      'override'
-    );
-
-    addAlert(//generates an alert to inform the user that manual override has been enabled for the specific zone. The alert includes a title, message, and type, and is added to the alerts state to notify users of important events related to irrigation and zone management.
-      zoneId,
-      'Manual Override Active',
-      'Automatic irrigation control has been temporarily suspended.',
-      'warning'
-    );
-  }
-
-  function endManualOverride(
-    zoneId: string
-  ) {
-    const zone =
-      findZone(
-        zoneId
+      clearTimeout(
+        timer
       );
 
-    if (
-      !zone ||
-      !zone.irrigation
-        .override.active
-    ) {
-      return;
+      delete manualRunTimers
+        .current[
+          zoneId
+        ];
     }
-
-    setZones(
-      (
-        current
-      ) =>
-        current.map(
-          (
-            item
-          ) => {
-            if (
-              item.id !==
-              zoneId
-            ) {
-              return item;
-            }
-
-            return {
-              ...item,
-
-              irrigation: {
-                ...item.irrigation,
-
-                status:
-                  item.irrigation
-                    .schedule.enabled
-                    ? 'Scheduled'
-                    : 'Off',
-
-                override: {
-                  active:
-                    false,
-
-                  temporarySchedule:
-                    null,
-                },
-              },
-
-              relay: {
-                ...item.relay,
-
-                status:
-                  'Off',
-              },
-
-              pump: {
-                ...item.pump,
-
-                status:
-                  'Off',
-              },
-
-              water: {
-                ...item.water,
-
-                flowRateLpm:
-                  0,
-              },
-            };
-          }
-        )
-    );
-
-    addHistoryEntry(//logs the action of ending manual override in the history for the specific zone, providing a description and categorizing it as an "override" type entry. This helps track user actions and system events related to irrigation control.
-      zoneId,
-      'Manual Override Ended',
-      'Manual control ended and automatic irrigation control resumed.',
-      'override'
-    );
-
-    addAlert(//generates an alert to inform the user that manual override has ended for the specific zone. The alert includes a title, message, and type, and is added to the alerts state to notify users of important events related to irrigation and zone management.
-      zoneId,
-      'Automatic Control Restored',
-      'The zone has returned to automatic irrigation control.',
-      'success'
-    );
   }
 
-  function setOverrideSchedule(//sets a temporary irrigation schedule for a specific zone. It updates the zone's irrigation status to "Scheduled" and stores the provided date, time, and duration for the override. This allows users to manually control irrigation timing while the manual override is active.
+  async function updateIrrigationMode(
     zoneId: string,
-    date: string,
-    time: string,
-    durationMinutes: number
+    mode: IrrigationMode
   ) {
-    const zone =
-      findZone(
-        zoneId
+    if (
+      !farm
+    ) {
+      throw new Error(
+        'No assigned farm is available.'
       );
+    }
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          'zone'
+        )
+        .update({
+          irrigation_mode:
+            mode,
+          automation_enabled:
+            mode ===
+            'automatic',
+          schedule_enabled:
+            mode ===
+            'scheduled',
+        })
+        .eq(
+          'id',
+          zoneId
+        )
+        .eq(
+          'farm_id',
+          farm.id
+        )
+        .select(
+          'id'
+        )
+        .single();
 
     if (
-      !zone ||
-      !zone.irrigation
-        .override.active
+      error
     ) {
-      return;
+      throw error;
     }
 
     setZones(
@@ -1092,68 +1644,261 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       ) =>
         current.map(
           (
-            item
+            zone
           ) =>
-            item.id ===
+            zone.id ===
             zoneId
               ? {
-                  ...item,
-
+                  ...zone,
                   irrigation: {
-                    ...item.irrigation,
-
+                    ...zone.irrigation,
+                    mode,
                     status:
-                      'Scheduled',
-
-                    override: {
-                      active:
-                        true,
-
-                      temporarySchedule: {
-                        date,
-                        time,
-                        durationMinutes,
-                      },
+                      zone.irrigation.override.active ||
+                      zone.irrigation.status ===
+                        'Active'
+                        ? zone.irrigation.status
+                        : mode ===
+                            'scheduled'
+                          ? 'Scheduled'
+                          : 'Off',
+                    schedule: {
+                      ...zone.irrigation.schedule,
+                      enabled:
+                        mode ===
+                        'scheduled',
+                    },
+                    automation: {
+                      ...zone.irrigation.automation,
+                      enabled:
+                        mode ===
+                        'automatic',
                     },
                   },
-
-                  relay: {
-                    ...item.relay,
-
-                    status:
-                      'Off',
-                  },
-
-                  pump: {
-                    ...item.pump,
-
-                    status:
-                      'Off',
-                  },
-
-                  water: {
-                    ...item.water,
-
-                    flowRateLpm:
-                      0,
-                  },
                 }
-              : item
+              : zone
         )
     );
 
-    addHistoryEntry(//logs the action of overriding schedule
+    addHistoryEntry(
       zoneId,
-      'Override Schedule Created',
-      `Temporary irrigation scheduled for ${date} at ${time} for ${durationMinutes} minutes.`,
-      'override'
+      'Irrigation Mode Changed',
+      `The zone was changed to ${mode} mode.`,
+      'irrigation'
     );
 
-    addAlert(//generate an alert to inform user that the temporary schedule is set
-      zoneId,
-      'Override Schedule Set',
-      `Temporary irrigation is scheduled for ${date} at ${time}.`,
-      'info'
+    setZonesError(
+      null
+    );
+  }
+
+  async function updateZoneSettings(
+    zoneId: string,
+    settings: UpdateZoneSettingsInput
+  ) {
+    if (
+      !farm
+    ) {
+      throw new Error(
+        'No assigned farm is available.'
+      );
+    }
+
+    const cleanedName =
+      settings.name.trim();
+
+    const cleanedLocation =
+      settings.location.trim();
+
+    const cleanedCrop =
+      settings.crop.trim();
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          'zone'
+        )
+        .update({
+          name:
+            cleanedName,
+          location:
+            cleanedLocation,
+          crop_type:
+            cleanedCrop,
+          automation_enabled:
+            settings.automationEnabled,
+          moisture_threshold:
+            settings.moistureThreshold,
+          desired_moisture:
+            settings.desiredMoisture,
+          weather_adjustment:
+            settings.weatherAdjustment,
+        })
+        .eq(
+          'id',
+          zoneId
+        )
+        .eq(
+          'farm_id',
+          farm.id
+        )
+        .select(
+          'id'
+        )
+        .single();
+
+    if (
+      error
+    ) {
+      throw error;
+    }
+
+    setZones(
+      (
+        current
+      ) =>
+        current.map(
+          (
+            zone
+          ) =>
+            zone.id ===
+            zoneId
+              ? {
+                  ...zone,
+                  name:
+                    cleanedName,
+                  location:
+                    cleanedLocation,
+                  crop:
+                    cleanedCrop,
+                  irrigation: {
+                    ...zone.irrigation,
+                    automation: {
+                      ...zone.irrigation.automation,
+                      enabled:
+                        settings.automationEnabled,
+                      moistureThreshold:
+                        settings.moistureThreshold,
+                      desiredMoisture:
+                        settings.desiredMoisture,
+                      weatherAdjustment:
+                        settings.weatherAdjustment,
+                    },
+                  },
+                }
+              : zone
+        )
+    );
+
+    setZonesError(
+      null
+    );
+  }
+
+  async function updateZoneSchedule(
+    zoneId: string,
+    scheduleSettings: UpdateZoneScheduleInput
+  ) {
+    if (
+      !farm
+    ) {
+      throw new Error(
+        'No assigned farm is available.'
+      );
+    }
+
+    const cleanedDays =
+      scheduleSettings.days
+        .map(
+          (
+            day
+          ) =>
+            day.trim()
+        )
+        .filter(
+          Boolean
+        );
+
+    const cleanedStartTime =
+      scheduleSettings.startTime.trim();
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          'zone'
+        )
+        .update({
+          schedule_enabled:
+            scheduleSettings.enabled,
+          schedule_days:
+            cleanedDays,
+          schedule_start_time:
+            cleanedStartTime,
+          schedule_duration_minutes:
+            scheduleSettings.durationMinutes,
+        })
+        .eq(
+          'id',
+          zoneId
+        )
+        .eq(
+          'farm_id',
+          farm.id
+        )
+        .select(
+          'id'
+        )
+        .single();
+
+    if (
+      error
+    ) {
+      throw error;
+    }
+
+    setZones(
+      (
+        current
+      ) =>
+        current.map(
+          (
+            zone
+          ) =>
+            zone.id ===
+            zoneId
+              ? {
+                  ...zone,
+                  irrigation: {
+                    ...zone.irrigation,
+                    status:
+                      zone.irrigation.override.active ||
+                      zone.irrigation.status === 'Active'
+                        ? zone.irrigation.status
+                        : scheduleSettings.enabled
+                          ? 'Scheduled'
+                          : 'Off',
+                    schedule: {
+                      enabled:
+                        scheduleSettings.enabled,
+                      days:
+                        cleanedDays,
+                      startTime:
+                        cleanedStartTime,
+                      durationMinutes:
+                        scheduleSettings.durationMinutes,
+                    },
+                  },
+                }
+              : zone
+        )
+    );
+
+    setZonesError(
+      null
     );
   }
 
@@ -1184,14 +1929,19 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
   return (
     <AgroFlowContext.Provider
       value={{
+        farm,
+        isFarmLoading,
+        farmError,
         zones,
+        isZonesLoading,
+        zonesError,
         history,
         alerts,
-        startIrrigation,
-        stopIrrigation,
-        enableManualOverride,
-        endManualOverride,
-        setOverrideSchedule,
+        updateZoneSettings,
+        updateZoneSchedule,
+        updateIrrigationMode,
+        startManualIrrigation,
+        stopManualIrrigation,
         markAlertAsRead,
       }}
     >
