@@ -7,7 +7,7 @@
 // AgroFlow.Api host, not here:
 //   1. reads the soil moisture sensor and PUBLISHES it over MQTT to
 //      agroflow/farm/{farmId}/device/{deviceId}/sensors (see
-//      hardware/MQTT_TOPICS.md) - AgroFlow.Api's MQTT subscriber inserts it
+//      hardware/shared/MQTT_TOPICS.md) - AgroFlow.Api's MQTT subscriber inserts it
 //      into sensor_reading, computes health status, and decides start/stop
 //      the same way the earlier Postgres-trigger version did.
 //   2. SUBSCRIBES over MQTT to agroflow/farm/{farmId}/device/{deviceId}/commands
@@ -83,7 +83,7 @@ const char *SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 // slash. Irrigation events, device claiming and the firmware version check
 // go here over HTTP. Sensor readings and command delivery moved to MQTT -
 // see MQTT_HOST below.
-const char *API_BASE_URL = "http://YOUR_API_HOST:5000";
+const char *API_BASE_URL = "http://192.168.10.82:5000";
 
 // TODO: must match ApiKey in api/AgroFlow.Api/appsettings.json. Same key on
 // every board - it identifies "this is a genuine AgroFlow device", not any
@@ -91,7 +91,7 @@ const char *API_BASE_URL = "http://YOUR_API_HOST:5000";
 const char *API_KEY = "YOUR_SHARED_API_KEY";
 
 // HiveMQ Cloud cluster credentials (HiveMQ Cloud console -> your cluster ->
-// Access Management). TLS on port 8883 - see hardware/MQTT_TOPICS.md for the
+// Access Management). TLS on port 8883 - see hardware/shared/MQTT_TOPICS.md for the
 // topic structure this connects to.
 const char *MQTT_HOST = "853fe2eddcd24d0c8e0f4d69869c5dab.s1.eu.hivemq.cloud";
 const uint16_t MQTT_PORT = 8883;
@@ -99,7 +99,7 @@ const char *MQTT_USERNAME = "agroflow-device";
 // TODO: the agroflow-device credential's password - not filled in here since
 // it isn't something to guess or fabricate. Paste the value you saved when
 // you created it in HiveMQ Cloud (Access Management).
-const char *MQTT_PASSWORD = "YOUR_HIVEMQ_PASSWORD";
+const char *MQTT_PASSWORD = "AgroFlow$2MuchSauce";
 
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 
@@ -123,7 +123,7 @@ const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 
 // Both are resolved once via /api/devices/claim on first setup and persisted
 // to flash (Preferences), then loaded from flash on every subsequent boot.
 // 0 means "not yet claimed". FARM_ID is needed alongside ZONE_ID because
-// MQTT topics are keyed on farmId, not zoneId - see hardware/MQTT_TOPICS.md.
+// MQTT topics are keyed on farmId, not zoneId - see hardware/shared/MQTT_TOPICS.md.
 long ZONE_ID = 0;
 long FARM_ID = 0;
 
@@ -318,7 +318,7 @@ void applyApiHeaders(HTTPClient &http) {
 // The ESP32's true unique hardware ID, burned into the chip at manufacture -
 // NOT the WiFi station MAC (which is derived from this but is interface/mode
 // specific). This is what hardware.device_id stores and what MQTT topics are
-// keyed on (see hardware/MQTT_TOPICS.md). Only the lower 48 bits are
+// keyed on (see hardware/shared/MQTT_TOPICS.md). Only the lower 48 bits are
 // meaningful; formatted as 12 hex chars for a MAC-like, fixed-width string.
 String getDeviceId() {
   uint64_t chipId = ESP.getEfuseMac();

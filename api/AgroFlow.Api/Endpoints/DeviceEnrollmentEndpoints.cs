@@ -10,7 +10,7 @@ public record EnrollDeviceResponse(long HardwareId, string EnrollmentCode, DateT
 public record ClaimDeviceRequest(string DeviceId, string EnrollmentCode);
 // FarmId is included alongside ZoneId because the firmware needs both to
 // build its MQTT topics (agroflow/farm/{farmId}/device/{deviceId}/...) - see
-// hardware/MQTT_TOPICS.md. Both are persisted to flash on claim.
+// hardware/shared/MQTT_TOPICS.md. Both are persisted to flash on claim.
 public record ClaimDeviceResponse(long ZoneId, long FarmId, long HardwareId);
 
 public record FirmwareCheckResponse(bool UpdateAvailable, string? LatestVersion, string? DownloadUrl);

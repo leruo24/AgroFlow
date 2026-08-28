@@ -1,6 +1,6 @@
 namespace AgroFlow.Api.Mqtt;
 
-// Topic structure - full write-up in hardware/MQTT_TOPICS.md (also documents
+// Topic structure - full write-up in hardware/shared/MQTT_TOPICS.md (also documents
 // how future device types should extend this).
 //
 //   Device -> backend: agroflow/farm/{farmId}/device/{deviceId}/sensors
@@ -19,7 +19,7 @@ public static class MqttTopics
     // Parses "agroflow/farm/{farmId}/device/{deviceId}/sensors" (or any
     // topic following the same farm/device shape, regardless of the
     // trailing channel segment - see the "extending this" note in
-    // hardware/MQTT_TOPICS.md). Returns null for anything that doesn't
+    // hardware/shared/MQTT_TOPICS.md). Returns null for anything that doesn't
     // match, rather than throwing - a malformed/unexpected topic should be
     // logged and ignored, not crash the subscriber.
     public static (long FarmId, string DeviceId)? ParseFarmAndDevice(string topic)
