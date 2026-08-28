@@ -313,17 +313,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
       toast(`Deleted ${u?.name ?? "user"}.`, "warn");
       return void refresh();
     }
-    case "add-user":
-      return openDrawer({
-        title: "Add user",
-        fields: [
-          { label: "Full name", value: "", editable: true, name: "name" },
-          { label: "Email", value: "", editable: true, name: "email" },
-          { label: "Assigned farm", value: "", editable: true, name: "farm" },
-        ],
-        confirmLabel: "Create account",
-        onConfirm: (v) => toast(`Account for ${v["name"] || "user"} created (demo).`, "success"),
-      });
+
 
     /* farms */
     case "view-farm": return openFarmDetail(numId);

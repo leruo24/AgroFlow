@@ -25,7 +25,7 @@ export async function usersPage(): Promise<string> {
 
   return `
   ${pageHeader("Users", "Manage platform accounts, access and farm assignment.",
-    `<button class="btn" data-act="add-user">+ Add User</button>`)}
+    `<a href="#onboarding" class="btn" data-go="onboarding">+ Onboard Farmer</a>`)}
 
   <div class="grid kpis four">
     ${kpiCard({ label: "Total Users", value: total, icon: "👥" })}
