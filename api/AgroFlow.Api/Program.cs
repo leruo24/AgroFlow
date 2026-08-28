@@ -1,7 +1,8 @@
-using System.Text;
 using AgroFlow.Api.Endpoints;
 using AgroFlow.Api.Mqtt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 
@@ -27,20 +28,32 @@ builder.Services.AddNpgsqlDataSource(connectionString);
 var apiKey = builder.Configuration["ApiKey"]
     ?? throw new InvalidOperationException("Missing ApiKey in configuration - see appsettings.json.");
 
-// TODO: set Supabase:JwtSecret to your project's JWT secret (Settings -> API
-// -> JWT Settings -> "Legacy JWT Secret" in the Supabase dashboard). This
-// validates that a bearer token was genuinely issued by Supabase Auth for a
-// real logged-in user - it does NOT by itself prove that user is an admin,
-// see AdminOnlyFilter for the role check.
-//
-// If this project has migrated to Supabase's newer asymmetric JWT signing
-// keys, the legacy shared secret may not be exposed the same way - in that
-// case this needs to switch to JWKS-based validation
-// (https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json) instead
-// of a symmetric key. Using the legacy secret here since it's simpler and
-// still supported for backward compatibility on all Supabase projects.
-var supabaseJwtSecret = builder.Configuration["Supabase:JwtSecret"]
-    ?? throw new InvalidOperationException("Missing Supabase:JwtSecret in configuration - see appsettings.json.");
+// TODO: set Supabase:JwksUrl in appsettings.json - this project's Supabase
+// instance uses the newer asymmetric JWT signing keys, not the legacy
+// shared secret, so tokens are validated against the public keys Supabase
+// publishes there instead of a symmetric key AgroFlow.Api would otherwise
+// need to hold. Always {Supabase:Url}/auth/v1/.well-known/jwks.json for a
+// given project. This validates that a bearer token was genuinely issued by
+// Supabase Auth for a real logged-in user - it does NOT by itself prove
+// that user is an admin, see AdminOnlyFilter for the role check.
+var jwksUrl = builder.Configuration["Supabase:JwksUrl"]
+    ?? throw new InvalidOperationException("Missing Supabase:JwksUrl in configuration - see appsettings.json.");
+
+// ConfigurationManager fetches and caches the JWKS document itself (default
+// ~24h refresh, with automatic retry-on-failure) - this is the standard
+// ASP.NET Core building block for "validate against a JWKS endpoint",
+// distinct from the Authority-based OIDC discovery flow JwtBearerOptions
+// normally uses, since Supabase's GoTrue exposes a raw JWKS document at
+// this URL rather than a full OpenID Connect discovery document. There's no
+// built-in IConfigurationRetriever for a bare JWKS document in this package
+// version (only the full-discovery-document one), so JwksOnlyConfigurationRetriever
+// below wraps the raw response in a JsonWebKeySet directly - ConfigurationManager's
+// own IConfigurationRetriever<T> extensibility point is the documented way to do
+// exactly this.
+var jwksConfigManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+    jwksUrl,
+    new JwksOnlyConfigurationRetriever(),
+    new HttpDocumentRetriever { RequireHttps = true });
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -54,7 +67,9 @@ builder.Services
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(supabaseJwtSecret)),
+            IssuerSigningKeyResolver = (token, securityToken, kid, validationParameters) =>
+                jwksConfigManager.GetConfigurationAsync(CancellationToken.None)
+                    .GetAwaiter().GetResult().SigningKeys,
             ValidateAudience = true,
             ValidAudience = "authenticated", // Supabase's standard audience claim for logged-in users
             ValidateIssuer = false, // would need the exact project ref to validate reliably; signing key check is the important part
@@ -106,3 +121,28 @@ app.MapDeviceEnrollmentEndpoints();
 app.MapFarmerOnboardingEndpoints();
 
 app.Run();
+
+// Parses a bare JWKS document (just {"keys": [...]}), not a full OpenID
+// Connect discovery document - Supabase's jwks.json endpoint is the former.
+// Wrapping it in an (otherwise-empty) OpenIdConnectConfiguration is just to
+// satisfy ConfigurationManager<T>'s generic parameter; only .SigningKeys is
+// ever read (see IssuerSigningKeyResolver above).
+internal sealed class JwksOnlyConfigurationRetriever : IConfigurationRetriever<OpenIdConnectConfiguration>
+{
+    public async Task<OpenIdConnectConfiguration> GetConfigurationAsync(
+        string address, IDocumentRetriever retriever, CancellationToken cancel)
+    {
+        var jwksJson = await retriever.GetDocumentAsync(address, cancel);
+        var configuration = new OpenIdConnectConfiguration
+        {
+            JsonWebKeySet = new JsonWebKeySet(jwksJson),
+        };
+
+        foreach (var signingKey in configuration.JsonWebKeySet.GetSigningKeys())
+        {
+            configuration.SigningKeys.Add(signingKey);
+        }
+
+        return configuration;
+    }
+}
