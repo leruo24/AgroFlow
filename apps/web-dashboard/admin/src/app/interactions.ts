@@ -11,6 +11,7 @@ import {
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, healthDot } from "@/lib/format";
 import { ADMINS, TECHNICIANS } from "@/data/mock";
 import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
+import { zoneRow } from "@/pages/onboarding";
 
 /* ----------------------------- filter toolbar ---------------------------- */
 
@@ -337,7 +338,46 @@ async function handleAction(el: HTMLElement): Promise<void> {
         confirmLabel: "Register",
         onConfirm: (v) => toast(`${v["name"] || "Farm"} registered — pending approval.`, "success"),
       });
+        /* onboarding */
+    case "onboarding-next": {
+      const v = collectFields();
+      const err = validateOnboardingStep1(v);
+      if (err) return void showOnboardingError(err);
+      clearOnboardingError();
+      return void goToOnboardingStep(2);
+    }
+    case "onboarding-back":
+      clearOnboardingError();
+      return void goToOnboardingStep(1);
+    case "onboarding-submit": {
+      const v = collectFields();
+      const zoneCount = Math.max(0, Math.min(50, Number(v["zoneCount"]) || 0));
+      const err = validateOnboardingStep2(v, zoneCount);
+      if (err) return void showOnboardingError(err);
+      clearOnboardingError();
 
+      const zones = Array.from({ length: zoneCount }, (_, i) => ({
+        name: v[`zone_name_${i}`] ?? "",
+        sizeHectares: Number(v[`zone_size_${i}`]) || 0,
+      }));
+
+      try {
+        await api.onboardFarmer(
+          {
+            fullName: v["fullName"] ?? "", email: v["email"] ?? "", phone: v["phone"] ?? "",
+            password: v["password"] ?? "", role: (v["role"] as "farmer" | "admin") ?? "farmer",
+          },
+          {
+            farmName: v["farmName"] ?? "", location: v["location"] ?? "",
+            sizeHectares: Number(v["farmSize"]) || 0, zones,
+          },
+        );
+        toast("Farmer onboarded successfully.", "success");
+        return void go("farms");
+      } catch (e) {
+        return void showOnboardingError(e instanceof Error ? e.message : "Something went wrong.");
+      }
+    }
     /* hardware */
     case "view-device": {
       const h = api.findHardware(idAttr);
@@ -705,10 +745,80 @@ async function runComparison(): Promise<void> {
   toast("Comparison generated.", "success");
 }
 
+function collectFields(): Record<string, string> {
+  const values: Record<string, string> = {};
+  document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((el) => {
+    values[el.dataset["field"] ?? ""] = el.value;
+  });
+  return values;
+}
+
+function showOnboardingError(message: string): void {
+  const box = document.getElementById("onboardingError");
+  if (!box) return;
+  box.textContent = message;
+  box.style.display = "block";
+}
+
+function clearOnboardingError(): void {
+  const box = document.getElementById("onboardingError");
+  if (!box) return;
+  box.style.display = "none";
+  box.textContent = "";
+}
+
+function goToOnboardingStep(step: 1 | 2): void {
+  document.querySelectorAll<HTMLElement>("[data-step]").forEach((el) => {
+    el.style.display = el.dataset["step"] === String(step) ? "" : "none";
+  });
+  document.querySelectorAll<HTMLElement>("[data-step-indicator]").forEach((el) => {
+    el.classList.toggle("active", el.dataset["stepIndicator"] === String(step));
+  });
+}
+
+function validateOnboardingStep1(v: Record<string, string>): string | null {
+  if (!v["fullName"]?.trim()) return "Full name is required.";
+  if (!v["email"]?.trim() || !/^\S+@\S+\.\S+$/.test(v["email"])) return "Enter a valid email address.";
+  if (!v["phone"]?.trim()) return "Phone number is required.";
+  if ((v["password"] ?? "").length < 8) return "Password must be at least 8 characters.";
+  return null;
+}
+
+function validateOnboardingStep2(v: Record<string, string>, zoneCount: number): string | null {
+  if (!v["farmName"]?.trim()) return "Farm name is required.";
+  if (!v["location"]?.trim()) return "Farm location is required.";
+  if (!v["farmSize"] || Number(v["farmSize"]) <= 0) return "Enter a valid farm size.";
+  if (zoneCount === 0) return "Add at least one zone.";
+  for (let i = 0; i < zoneCount; i++) {
+    if (!v[`zone_name_${i}`]?.trim()) return `Zone ${i + 1} needs a name.`;
+    if (!v[`zone_size_${i}`] || Number(v[`zone_size_${i}`]) <= 0) return `Zone ${i + 1} needs a valid size.`;
+  }
+  return null;
+}
+
+function wireOnboardingZones(): void {
+  const countInput = document.querySelector<HTMLInputElement>("[data-zone-count]");
+  const container = document.getElementById("zonesContainer");
+  if (!countInput || !container) return;
+  if (countInput.dataset["bound"]) return;
+  countInput.dataset["bound"] = "1";
+
+  countInput.addEventListener("input", () => {
+    const count = Math.max(0, Math.min(50, Number(countInput.value) || 0));
+    const existing = collectFields();
+    container.innerHTML = Array.from({ length: count }, (_, i) => zoneRow(i)).join("");
+    container.querySelectorAll<HTMLInputElement>("[data-field]").forEach((el) => {
+      const name = el.dataset["field"] ?? "";
+      if (existing[name]) el.value = existing[name];
+    });
+  });
+}
+
 /* --------------------------- binding after render ------------------------ */
 
 export function wirePageInteractions(): void {
   wireFilters();
+ wireOnboardingZones();
 
   document.querySelectorAll<HTMLElement>("[data-go]").forEach((a) => {
     if (a.dataset["bound"]) return;
