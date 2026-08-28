@@ -4,6 +4,7 @@ import type { NavItem, PageId, PageOptions, PageRenderer, SettingsTab } from "@/
 import { dashboardPage } from "@/pages/dashboard";
 import { usersPage } from "@/pages/users";
 import { farmsPage } from "@/pages/farms";
+import { onboardingPage } from "@/pages/onboarding";
 import { hardwarePage, alertsPage, maintenancePage } from "@/pages/operations";
 import {
   irrigationPage, reportsPage, activityPage, settingsPage, settingsTabBody, SETTINGS_TABS,
@@ -28,6 +29,7 @@ export const NAV: NavItem[] = [
 const PAGES: Record<PageId, PageRenderer> = {
   dashboard: () => dashboardPage(),
   users: () => usersPage(),
+  onboarding: () => onboardingPage(),
   farms: () => farmsPage(),
   hardware: () => hardwarePage(),
   alerts: () => alertsPage(),
