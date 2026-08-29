@@ -22,7 +22,7 @@ public static class SensorReadingProcessor
     {
         await InsertSensorReadingAsync(connection, zoneId, sensorType, value);
 
-        var (moisture, temperature, humidity, dryThreshold, wetThreshold) =
+        var (moisture, temperature, humidity, moistureThreshold, desiredMoisture) =
             await FetchZoneLatestReadingAsync(connection, zoneId);
 
         // The domain layer decides the health status - this method's job is
@@ -36,8 +36,8 @@ public static class SensorReadingProcessor
         {
             var zone = new Zone
             {
-                MoistureDryThreshold = dryThreshold,
-                MoistureWetThreshold = wetThreshold,
+                MoistureThreshold = moistureThreshold,
+                DesiredMoisture = desiredMoisture,
             };
 
             // Use the just-received value directly for the decision (matches
@@ -76,11 +76,11 @@ public static class SensorReadingProcessor
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task<(float? Moisture, float? Temperature, float? Humidity, float? DryThreshold, float? WetThreshold)>
+    private static async Task<(float? Moisture, float? Temperature, float? Humidity, float? MoistureThreshold, float? DesiredMoisture)>
         FetchZoneLatestReadingAsync(NpgsqlConnection connection, long zoneId)
     {
         await using var cmd = new NpgsqlCommand(
-            "select moisture, temperature, humidity, moisture_dry_threshold, moisture_wet_threshold " +
+            "select moisture, temperature, humidity, moisture_threshold, desired_moisture " +
             "from zone_latest_reading where zone_id = $1", connection);
         cmd.Parameters.AddWithValue(zoneId);
 

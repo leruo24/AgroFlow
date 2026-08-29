@@ -138,7 +138,7 @@ const bool RELAY_ACTIVE_LOW = true;
 // TODO: calibrate against your actual sensor (dry-in-air vs. wet-in-water
 // raw ADC readings). These only affect the reported percentage now - the
 // dry/wet thresholds that decide when to irrigate live in zone.
-// moisture_dry_threshold / moisture_wet_threshold in Postgres instead.
+// moisture_threshold / desired_moisture in Postgres instead.
 const int ADC_DRY = 3000; // raw reading in dry air ~= 0%
 const int ADC_WET = 1200; // raw reading fully submerged ~= 100%
 

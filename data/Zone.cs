@@ -11,12 +11,14 @@ namespace AgroFlow.Business
         private float waterSaved;
         private string healthStatus;
 
-        // Per-zone auto-irrigation thresholds (Postgres: zone.moisture_dry_threshold /
-        // moisture_wet_threshold). Nullable to match the DB columns - a zone with no
-        // threshold configured should never auto-trigger, not fall back to a guessed
-        // default (see ShouldStartIrrigation/ShouldStopIrrigation below).
-        private float? moistureDryThreshold;
-        private float? moistureWetThreshold;
+        // Per-zone auto-irrigation thresholds (Postgres: zone.moisture_threshold /
+        // desired_moisture - renamed from moisture_dry_threshold/moisture_wet_threshold
+        // by 0010_zone_schema_realignment.sql to match the app's zone-settings UI).
+        // Nullable to match the DB columns - a zone with no threshold configured
+        // should never auto-trigger, not fall back to a guessed default (see
+        // ShouldStartIrrigation/ShouldStopIrrigation below).
+        private float? moistureThreshold;
+        private float? desiredMoisture;
 
         // Running total (Postgres: zone.water_used_total). NOT the same column as
         // waterSaved above - see AddWaterUsage.
@@ -77,16 +79,16 @@ namespace AgroFlow.Business
             set { healthStatus = value; }
         }
 
-        public float? MoistureDryThreshold
+        public float? MoistureThreshold
         {
-            get { return moistureDryThreshold; }
-            set { moistureDryThreshold = value; }
+            get { return moistureThreshold; }
+            set { moistureThreshold = value; }
         }
 
-        public float? MoistureWetThreshold
+        public float? DesiredMoisture
         {
-            get { return moistureWetThreshold; }
-            set { moistureWetThreshold = value; }
+            get { return desiredMoisture; }
+            set { desiredMoisture = value; }
         }
 
         public float WaterUsedTotal
@@ -165,12 +167,12 @@ namespace AgroFlow.Business
         // start irrigating.
         public bool ShouldStartIrrigation(float moisture)
         {
-            return moistureDryThreshold.HasValue && moisture < moistureDryThreshold.Value;
+            return moistureThreshold.HasValue && moisture < moistureThreshold.Value;
         }
 
         public bool ShouldStopIrrigation(float moisture)
         {
-            return moistureWetThreshold.HasValue && moisture > moistureWetThreshold.Value;
+            return desiredMoisture.HasValue && moisture > desiredMoisture.Value;
         }
 
         // Adds to the running water-usage total and returns the new total. The
