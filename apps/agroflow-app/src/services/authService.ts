@@ -1,4 +1,16 @@
-//imitates a backend authentication service for the Agroflow mobile app. It provides a mock implementation of user login, returning a hardcoded access token and user information for a specific email and password combination. The service simulates network latency with a delay and throws an error for invalid credentials. This allows the app to test authentication flows without needing a real backend server during development.
+//Connects the AgroFlow mobile app to Supabase Authentication.
+//It signs farmers in using their email and password and converts
+//the Supabase user into the AuthUser structure used by the app.
+
+import type {
+  Session,
+  User,
+} from '@supabase/supabase-js';
+
+import {
+  supabase,
+} from '@/lib/supabase';
+
 export type AuthUser = {
   id: string;
   firstName: string;
@@ -10,53 +22,272 @@ export type AuthUser = {
 };
 
 export type LoginResponse = {
+  session: Session;
   accessToken: string;
   user: AuthUser;
 };
 
+export type UpdateProfileInput = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+};
+
+function createInitials(
+  firstName: string,
+  lastName: string
+) {
+  const firstInitial =
+    firstName
+      .trim()
+      .charAt(0)
+      .toUpperCase();
+
+  const lastInitial =
+    lastName
+      .trim()
+      .charAt(0)
+      .toUpperCase();
+
+  return `${firstInitial}${lastInitial}`;
+}
+
+function getMetadataValue(
+  value: unknown
+) {
+  if (
+    typeof value === 'string'
+  ) {
+    return value;
+  }
+
+  return '';
+}
+
+//Converts the Supabase user structure into the
+//AuthUser structure already used throughout AgroFlow.
+export function mapSupabaseUser(
+  user: User
+): AuthUser {
+  const firstName =
+    getMetadataValue(
+      user.user_metadata
+        .first_name
+    ) ||
+    getMetadataValue(
+      user.user_metadata
+        .firstName
+    );
+
+  const lastName =
+    getMetadataValue(
+      user.user_metadata
+        .last_name
+    ) ||
+    getMetadataValue(
+      user.user_metadata
+        .lastName
+    );
+
+  const phone =
+    getMetadataValue(
+      user.user_metadata
+        .phone
+    );
+
+  const generatedInitials =
+    createInitials(
+      firstName,
+      lastName
+    );
+
+  const fallbackInitial =
+    user.email
+      ?.trim()
+      .charAt(0)
+      .toUpperCase() ??
+    '';
+
+  return {
+    id:
+      user.id,
+
+    firstName,
+
+    lastName,
+
+    email:
+      user.email ?? '',
+
+    phone,
+
+    role:
+      'Farmer',
+
+    initials:
+      generatedInitials ||
+      fallbackInitial,
+  };
+}
+
+//Sends the farmer's login details to Supabase.
+//Supabase checks whether the email and password are valid.
 export async function loginUser(
   email: string,
   password: string
 ): Promise<LoginResponse> {
-  await new Promise(
-    (resolve) =>
-      setTimeout(
-        resolve,
-        700
-      )
-  );
-
   const normalisedEmail =
     email
       .trim()
       .toLowerCase();
 
+  const {
+    data,
+    error,
+  } =
+    await supabase.auth
+      .signInWithPassword({
+        email:
+          normalisedEmail,
+
+        password,
+      });
+
   if (
-    normalisedEmail !==
-      'farmer@agroflow.co.za' ||
-    password !==
-      'demo123'
+    error
   ) {
     throw new Error(
-      'Invalid email address or password.'
+      error.message
+    );
+  }
+
+  if (
+    !data.session ||
+    !data.user
+  ) {
+    throw new Error(
+      'Supabase did not return a valid authentication session.'
     );
   }
 
   return {
-    accessToken:
-      'agroflow-development-token',
+    session:
+      data.session,
 
-    user: {
-      id: 'USR001',
-      firstName: 'Suyon',
-      lastName: 'Tyobeka',
-      email:
-        'farmer@agroflow.co.za',
-      phone: '',
-      role: 'Farmer',
-      initials: 'ST',
-    },
+    accessToken:
+      data.session
+        .access_token,
+
+    user:
+      mapSupabaseUser(
+        data.user
+      ),
   };
 }
-//password is demo123
-//email is farmer@agroflow.co.za
+
+//Updates the signed-in farmer's Supabase
+//authentication information and profile metadata.
+export async function updateAuthenticatedUser(
+  profile: UpdateProfileInput
+): Promise<AuthUser> {
+  const firstName =
+    profile.firstName.trim();
+
+  const lastName =
+    profile.lastName.trim();
+
+  const email =
+    profile.email
+      .trim()
+      .toLowerCase();
+
+  const phone =
+    profile.phone.trim();
+
+  const {
+    data: currentUserData,
+    error: currentUserError,
+  } =
+    await supabase.auth
+      .getUser();
+
+  if (
+    currentUserError
+  ) {
+    throw new Error(
+      currentUserError.message
+    );
+  }
+
+  if (
+    !currentUserData.user
+  ) {
+    throw new Error(
+      'No authenticated farmer was found.'
+    );
+  }
+
+  const emailChanged =
+    currentUserData.user
+      .email !== email;
+
+  const {
+    data,
+    error,
+  } =
+    await supabase.auth
+      .updateUser({
+        ...(emailChanged
+          ? {
+              email,
+            }
+          : {}),
+
+        data: {
+          first_name:
+            firstName,
+
+          last_name:
+            lastName,
+
+          phone,
+
+          initials:
+            createInitials(
+              firstName,
+              lastName
+            ),
+        },
+      });
+
+  if (
+    error
+  ) {
+    throw new Error(
+      error.message
+    );
+  }
+
+  return mapSupabaseUser(
+    data.user
+  );
+}
+
+//Ends the Supabase session and removes the
+//persisted session from the device.
+export async function logoutUser() {
+  const {
+    error,
+  } =
+    await supabase.auth
+      .signOut();
+
+  if (
+    error
+  ) {
+    throw new Error(
+      error.message
+    );
+  }
+}

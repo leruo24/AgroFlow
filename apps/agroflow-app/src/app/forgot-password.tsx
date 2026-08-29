@@ -23,6 +23,8 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
+import * as Linking from 'expo-linking';
+
 import type {
   AppColors,
 } from '@/constants/colors';
@@ -30,6 +32,10 @@ import type {
 import {
   useTheme,
 } from '@/context/ThemeContext';
+
+import {
+  supabase,
+} from '@/lib/supabase';
 
 export default function ForgotPasswordScreen() {
   const {
@@ -105,7 +111,7 @@ export default function ForgotPasswordScreen() {
     return true;
   }
 
-  function handleResetPassword() {
+  async function handleResetPassword() {
     setError('');
 
     if (
@@ -114,22 +120,68 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    setLoading(
-      true
-    );
+    const cleanedEmail =
+      email
+        .trim()
+        .toLowerCase();
 
-    setTimeout(
-      () => {
-        setLoading(
-          false
+    try {
+      setLoading(
+        true
+      );
+
+      const redirectTo =
+        Linking.createURL(
+          '/update-password'
         );
 
-        setSubmitted(//react state variable that indicates whether the password reset request has been submitted. When the user submits their email address for password recovery, this state is set to true, triggering a change in the UI to show a confirmation message and options to return to login or try another email address.
-          true
-        );
-      },
-      600
-    );
+      console.log(
+        'Password recovery redirect URL:',
+        redirectTo
+      );
+
+      const {
+        error: resetError,
+      } =
+        await supabase.auth
+          .resetPasswordForEmail(
+            cleanedEmail,
+            {
+              redirectTo,
+            }
+          );
+
+      if (
+        resetError
+      ) {
+        throw resetError;
+      }
+
+      setEmail(
+        cleanedEmail
+      );
+
+      setSubmitted(//react state variable that indicates whether the password reset request has been submitted. When the user submits their email address for password recovery, this state is set to true, triggering a change in the UI to show a confirmation message and options to return to login or try another email address.
+        true
+      );
+    } catch (
+      error: unknown
+    ) {
+      console.log(
+        'Password reset request error:',
+        error
+      );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to send password recovery instructions.'
+      );
+    } finally {
+      setLoading(
+        false
+      );
+    }
   }
 
   function handleBackToLogin() {
@@ -330,6 +382,8 @@ export default function ForgotPasswordScreen() {
                       }
                       keyboardType="email-address"
                       autoCapitalize="none"
+                      autoComplete="email"
+                      textContentType="emailAddress"
                       autoCorrect={
                         false
                       }

@@ -65,12 +65,33 @@ export default function HomeScreen() {
   } = useAuth();
 
   const {
+    farm,
+    isFarmLoading,
+    farmError,
     zones,
     zonesLoading,
     zonesError,
     refreshZones,
     alerts,
   } = useAgroFlow();
+
+  const farmName =
+    isFarmLoading
+      ? 'Loading farm...'
+      : farm?.name ??
+        'Farm unavailable';
+
+  const farmDetails =
+    isFarmLoading
+      ? 'Loading assigned farm information...'
+      : farm
+        ? `${farm.location} • ${farm.totalArea} ha • ${farm.status}`
+        : farmError ??
+          'No farm information is available.';
+
+  const weatherLocation =
+    farm?.location ??
+    mockFarm.location.city;
 
   const profileInitials =
     [
@@ -136,13 +157,28 @@ export default function HomeScreen() {
             false
           );
 //A live weather API 
-          const latitude = //takes coordinates of the farm from mockFarm data and takes them to open meteo requesting weather information
-            mockFarm.location
-              .latitude;
+          //The weather request uses the coordinates stored for the
+          //authenticated farmer's assigned farm in Supabase.
+          const latitude =
+            farm?.latitude;
 
           const longitude =
-            mockFarm.location
-              .longitude;
+            farm?.longitude;
+
+          if (
+            latitude ===
+              null ||
+            latitude ===
+              undefined ||
+            longitude ===
+              null ||
+            longitude ===
+              undefined
+          ) {
+            throw new Error(
+              'The assigned farm does not have weather coordinates.'
+            );
+          }
 
           const url =
             `https://api.open-meteo.com/v1/forecast` +
@@ -247,14 +283,22 @@ export default function HomeScreen() {
         }
       }
 
-      loadWeather();
+      if (
+        !isFarmLoading
+      ) {
+        loadWeather();
+      }
 
       return () => {
         mounted =
           false;
       };
     },
-    []
+    [
+      farm?.latitude,
+      farm?.longitude,
+      isFarmLoading,
+    ]
   );
 // Calculates the average soil moisture, active zones, water used today,
 // and unread alerts displayed on the Home screen.
@@ -452,7 +496,7 @@ export default function HomeScreen() {
             }
           >
             {
-              mockFarm.name
+              farmName
             }
           </Text>
 
@@ -462,11 +506,8 @@ export default function HomeScreen() {
             }
           >
             {
-              mockFarm.location
-                .city
+              farmDetails
             }
-            {' • '}
-            South Africa
           </Text>
         </View>
 
@@ -502,8 +543,7 @@ export default function HomeScreen() {
                 }
               >
                 {
-                  mockFarm.location
-                    .city
+                  weatherLocation
                 }
               </Text>
 
@@ -528,8 +568,7 @@ export default function HomeScreen() {
                   }
                 >
                   {
-                    mockFarm.location
-                      .city
+                    weatherLocation
                   }
                 </Text>
 
@@ -1080,4 +1119,6 @@ function getWeatherCondition(
 
   return 'Cloudy';
 }
+
+
 

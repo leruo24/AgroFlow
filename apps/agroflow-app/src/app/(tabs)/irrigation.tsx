@@ -34,6 +34,8 @@ import {
 export default function IrrigationScreen() {
   const {
     zones,
+    isZonesLoading,
+    zonesError,
   } = useAgroFlow();
 
   const {
@@ -211,7 +213,43 @@ export default function IrrigationScreen() {
             styles.zoneList
           }
         >
-          {zones.map(//zone list is created dynamically, one layout is created and reused however many zones there are in the farm, this is done by mapping through the zones array and creating a new layout for each zone
+          {isZonesLoading && (
+            <Text
+              style={
+                styles.stateText
+              }
+            >
+              Loading zones...
+            </Text>
+          )}
+
+          {!isZonesLoading &&
+            zonesError && (
+            <Text
+              style={
+                styles.errorText
+              }
+            >
+              {zonesError}
+            </Text>
+          )}
+
+          {!isZonesLoading &&
+            !zonesError &&
+            zones.length ===
+              0 && (
+            <Text
+              style={
+                styles.stateText
+              }
+            >
+              No zones have been configured for this farm.
+            </Text>
+          )}
+
+          {!isZonesLoading &&
+            !zonesError &&
+            zones.map(//zone list is created dynamically, one layout is created and reused however many zones there are in the farm, this is done by mapping through the zones array and creating a new layout for each zone
             (
               zone
             ) => {
@@ -555,6 +593,22 @@ function createStyles(
 
     zoneList: {
       gap: 12,
+    },
+
+    stateText: {
+      paddingVertical: 20,
+      textAlign: 'center',
+      fontSize: 13,
+      color:
+        colors.textSecondary,
+    },
+
+    errorText: {
+      paddingVertical: 20,
+      textAlign: 'center',
+      fontSize: 13,
+      color:
+        colors.error,
     },
 
     zoneCard: {

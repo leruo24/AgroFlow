@@ -34,6 +34,48 @@ import {
   useTheme,
 } from '@/context/ThemeContext';
 
+function getLoginErrorMessage(
+  error: unknown
+) {
+  if (
+    !(error instanceof Error)
+  ) {
+    return 'Unable to sign in. Please try again.';
+  }
+
+  const message =
+    error.message.toLowerCase();
+
+  if (
+    message.includes(
+      'invalid login credentials'
+    )
+  ) {
+    return 'Incorrect email address or password.';
+  }
+
+  if (
+    message.includes(
+      'email not confirmed'
+    )
+  ) {
+    return 'Your email is not confirmed. Please contact your AgroFlow administrator.';
+  }
+
+  if (
+    message.includes(
+      'network'
+    ) ||
+    message.includes(
+      'fetch'
+    )
+  ) {
+    return 'Unable to connect. Check your internet connection and try again.';
+  }
+
+  return error.message;
+}
+
 export default function LoginScreen() {
   const {
     signIn,
@@ -139,18 +181,11 @@ export default function LoginScreen() {
     } catch (
       caughtError: unknown
     ) {
-      if (
-        caughtError instanceof
-        Error
-      ) {
-        setError(
-          caughtError.message
-        );
-      } else {
-        setError(
-          'Unable to sign in. Please try again.'
-        );
-      }
+      setError(
+        getLoginErrorMessage(
+          caughtError
+        )
+      );
     } finally {
       setLoading(
         false
@@ -312,6 +347,8 @@ export default function LoginScreen() {
                   }
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoComplete="email"
+                  textContentType="emailAddress"
                   autoCorrect={
                     false
                   }
@@ -390,6 +427,8 @@ export default function LoginScreen() {
                       !showPassword
                     }
                     autoCapitalize="none"
+                    autoComplete="current-password"
+                    textContentType="password"
                     autoCorrect={
                       false
                     }

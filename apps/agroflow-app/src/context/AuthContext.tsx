@@ -1,7 +1,14 @@
-//centralises current user authentication state and provides functions to manage that state. It uses React's context API to make the authentication data and functions available throughout the application. The context includes information about the authenticated user, access token, and authentication status, as well as functions to sign in, sign out, and update the user's profile. The authentication state is persisted using AsyncStorage or SecureStore, depending on the platform, allowing the app to retain user session data across sessions.
-//storage is mobile dependant. On mobile platforms (iOS and Android), it uses SecureStore to securely store sensitive information like access tokens and user data. On web platforms, it falls back to using AsyncStorage for storing the same information. This ensures that the authentication state is preserved across app restarts and sessions, providing a seamless user experience.
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+//Centralises the current Supabase authentication state
+//and makes it available throughout the AgroFlow app.
+//Supabase manages session persistence and token refreshing.
+//The context listens for authentication changes and updates
+//the app whenever a farmer signs in, signs out or updates
+//their account.
+
+import type {
+  Session,
+} from '@supabase/supabase-js';
+
 import {
   createContext,
   ReactNode,
@@ -11,26 +18,17 @@ import {
 } from 'react';
 
 import {
-  Platform,
-} from 'react-native';
+  supabase,
+} from '@/lib/supabase';
 
 import {
   AuthUser,
   loginUser,
+  logoutUser,
+  mapSupabaseUser,
+  UpdateProfileInput,
+  updateAuthenticatedUser,
 } from '@/services/authService';
-
-const TOKEN_KEY =
-  'agroflow_access_token';
-
-const USER_KEY =
-  'agroflow_auth_user';
-
-type UpdateProfileInput = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-};
 
 type AuthContextType = {
   user: AuthUser | null;
@@ -56,85 +54,19 @@ const AuthContext =
     AuthContextType | undefined
   >(undefined);
 
-async function getStoredValue(
-  key: string
-) {
-  if (
-    Platform.OS === 'web'
-  ) {
-    return AsyncStorage.getItem(
-      key
-    );
-  }
-
-  return SecureStore.getItemAsync(
-    key
-  );
-}
-
-async function setStoredValue(
-  key: string,
-  value: string
-) {
-  if (
-    Platform.OS === 'web'
-  ) {
-    await AsyncStorage.setItem(
-      key,
-      value
-    );
-
-    return;
-  }
-
-  await SecureStore.setItemAsync(
-    key,
-    value
-  );
-}
-
-async function deleteStoredValue(
-  key: string
-) {
-  if (
-    Platform.OS === 'web'
-  ) {
-    await AsyncStorage.removeItem(
-      key
-    );
-
-    return;
-  }
-
-  await SecureStore.deleteItemAsync(
-    key
-  );
-}
-
-function createInitials(
-  firstName: string,
-  lastName: string
-) {
-  const firstInitial =
-    firstName
-      .trim()
-      .charAt(0)
-      .toUpperCase();
-
-  const lastInitial =
-    lastName
-      .trim()
-      .charAt(0)
-      .toUpperCase();
-
-  return `${firstInitial}${lastInitial}`;
-}
-
 export function AuthProvider({
   children,
 }: {
   children: ReactNode;
 }) {
+  const [
+    session,
+    setSession,
+  ] =
+    useState<
+      Session | null
+    >(null);
+
   const [
     user,
     setUser,
@@ -144,111 +76,123 @@ export function AuthProvider({
     >(null);
 
   const [
-    accessToken,
-    setAccessToken,
-  ] =
-    useState<
-      string | null
-    >(null);
-
-  const [
     isLoading,
     setIsLoading,
   ] =
     useState(true);
 
   useEffect(() => {
-    restoreSession();
-  }, []);
+    let isMounted =
+      true;
 
-  async function restoreSession() {//attempts to restore the user's session by retrieving the stored access token and user data from secure storage or AsyncStorage. If both values are found, it sets the authentication state accordingly. If either value is missing or an error occurs during retrieval, it clears the session to ensure a clean state.
-    try {
-      const [
-        storedToken,
-        storedUser,
-      ] =
-        await Promise.all([
-          getStoredValue(
-            TOKEN_KEY
-          ),
+    //Restores the Supabase session when the application starts.
+    async function restoreSession() {
+      try {
+        const {
+          data,
+          error,
+        } =
+          await supabase.auth
+            .getSession();
 
-          getStoredValue(
-            USER_KEY
-          ),
-        ]);
+        if (
+          error
+        ) {
+          throw error;
+        }
 
-      if (
-        !storedToken ||
-        !storedUser
+        if (
+          !isMounted
+        ) {
+          return;
+        }
+
+        setSession(
+          data.session
+        );
+
+        setUser(
+          data.session
+            ? mapSupabaseUser(
+                data.session.user
+              )
+            : null
+        );
+      } catch (
+        error: unknown
       ) {
-        await clearSession();
+        console.log(
+          'Supabase session restore error:',
+          error
+        );
 
-        return;
+        if (
+          isMounted
+        ) {
+          setSession(
+            null
+          );
+
+          setUser(
+            null
+          );
+        }
+      } finally {
+        if (
+          isMounted
+        ) {
+          setIsLoading(
+            false
+          );
+        }
       }
-
-      const parsedUser =
-        JSON.parse(
-          storedUser
-        ) as Partial<AuthUser>;
-
-      const restoredUser: AuthUser =
-        {
-          id:
-            parsedUser.id ??
-            'USR001',
-
-          firstName:
-            parsedUser.firstName ??
-            '',
-
-          lastName:
-            parsedUser.lastName ??
-            '',
-
-          email:
-            parsedUser.email ??
-            '',
-
-          phone:
-            parsedUser.phone ??
-            '',
-
-          role:
-            parsedUser.role ??
-            'Farmer',
-
-          initials:
-            parsedUser.initials ??
-            createInitials(
-              parsedUser.firstName ??
-                '',
-              parsedUser.lastName ??
-                ''
-            ),
-        };
-
-      setAccessToken(
-        storedToken
-      );
-
-      setUser(
-        restoredUser
-      );
-    } catch (
-      error: unknown
-    ) {
-      console.log(
-        'Session restore error:',
-        error
-      );
-
-      await clearSession();
-    } finally {
-      setIsLoading(
-        false
-      );
     }
-  }
+
+    restoreSession();
+
+    //Listens for sign-in, sign-out and token refresh events.
+    const {
+      data: {
+        subscription,
+      },
+    } =
+      supabase.auth
+        .onAuthStateChange(
+          (
+            _event,
+            newSession
+          ) => {
+            if (
+              !isMounted
+            ) {
+              return;
+            }
+
+            setSession(
+              newSession
+            );
+
+            setUser(
+              newSession
+                ? mapSupabaseUser(
+                    newSession.user
+                  )
+                : null
+            );
+
+            setIsLoading(
+              false
+            );
+          }
+        );
+
+    return () => {
+      isMounted =
+        false;
+
+      subscription.unsubscribe();
+    };
+  }, []);
 
   async function signIn(
     email: string,
@@ -260,22 +204,8 @@ export function AuthProvider({
         password
       );
 
-    await Promise.all([
-      setStoredValue(
-        TOKEN_KEY,
-        response.accessToken
-      ),
-
-      setStoredValue(
-        USER_KEY,
-        JSON.stringify(
-          response.user
-        )
-      ),
-    ]);
-
-    setAccessToken(
-      response.accessToken
+    setSession(
+      response.session
     );
 
     setUser(
@@ -287,42 +217,17 @@ export function AuthProvider({
     profile: UpdateProfileInput
   ) {
     if (
-      !user
+      !session
     ) {
-      return;
+      throw new Error(
+        'You must be signed in to update your profile.'
+      );
     }
 
-    const updatedUser: AuthUser =
-      {
-        ...user,
-
-        firstName:
-          profile.firstName.trim(),
-
-        lastName:
-          profile.lastName.trim(),
-
-        email:
-          profile.email
-            .trim()
-            .toLowerCase(),
-
-        phone:
-          profile.phone.trim(),
-
-        initials:
-          createInitials(
-            profile.firstName,
-            profile.lastName
-          ),
-      };
-
-    await setStoredValue(
-      USER_KEY,
-      JSON.stringify(
-        updatedUser
-      )
-    );
+    const updatedUser =
+      await updateAuthenticatedUser(
+        profile
+      );
 
     setUser(
       updatedUser
@@ -330,42 +235,26 @@ export function AuthProvider({
   }
 
   async function signOut() {
-    await clearSession();
+    await logoutUser();
+
+    setSession(
+      null
+    );
+
+    setUser(
+      null
+    );
   }
 
-  async function clearSession() {
-    try {
-      await Promise.all([
-        deleteStoredValue(
-          TOKEN_KEY
-        ),
-
-        deleteStoredValue(
-          USER_KEY
-        ),
-      ]);
-    } catch (
-      error: unknown
-    ) {
-      console.log(
-        'Session clear error:',
-        error
-      );
-    } finally {
-      setAccessToken(
-        null
-      );
-
-      setUser(
-        null
-      );
-    }
-  }
+  const accessToken =
+    session
+      ?.access_token ??
+    null;
 
   const isAuthenticated =
     Boolean(
-      user &&
-      accessToken
+      session &&
+      user
     );
 
   return (
