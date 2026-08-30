@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\Agroflow\\data\\AgroFlow.csproj": {}
+    "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\agroflow\\data\\AgroFlow.csproj": {}
   },
   "projects": {
-    "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\Agroflow\\data\\AgroFlow.csproj": {
+    "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\agroflow\\data\\AgroFlow.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\Agroflow\\data\\AgroFlow.csproj",
+        "projectUniqueName": "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\agroflow\\data\\AgroFlow.csproj",
         "projectName": "AgroFlow",
-        "projectPath": "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\Agroflow\\data\\AgroFlow.csproj",
+        "projectPath": "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\agroflow\\data\\AgroFlow.csproj",
         "packagesPath": "C:\\Users\\leruo\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\Agroflow\\data\\obj\\",
+        "outputPath": "C:\\Users\\leruo\\OneDrive - University of Cape Town\\2026\\INF3003W\\Project\\agroflow\\data\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
