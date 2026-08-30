@@ -2,3 +2,4 @@
 # `dotnet build`/`dotnet run`, never source.
 [Bb]in/
 [Oo]bj/
+node_modules/
