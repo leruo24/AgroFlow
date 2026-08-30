@@ -69,7 +69,7 @@ export default function HomeScreen() {
     isFarmLoading,
     farmError,
     zones,
-    zonesLoading,
+    isZonesLoading,
     zonesError,
     refreshZones,
     alerts,
@@ -761,7 +761,7 @@ export default function HomeScreen() {
           Farm Status
         </Text>
 
-        {zonesLoading ? (
+        {isZonesLoading ? (
           <View
             style={
               styles.statusCard

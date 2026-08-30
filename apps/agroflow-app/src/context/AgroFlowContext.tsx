@@ -2,11 +2,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';//saves information locally on the phone to temporarily allow the demo to remember things when the app is closed
 
 import {
-  createContext,//creates shared data that can be accessed by different pages 
+  createContext,//creates shared data that can be accessed by different pages
+  useCallback,//memoises a function so it can be reused (e.g. as a manual "retry" action) without changing identity every render
   useContext,//reads the shared data
   useEffect,//stores changing info
   useRef,//stores a value without causing the page to render
-  useState,//runs the code when data changes 
+  useState,//runs the code when data changes
 } from 'react';
 
 import type {
@@ -616,6 +617,7 @@ type AgroFlowContextType = {//defines the structure of the AgroFlow context, inc
   zones: Zone[];
   isZonesLoading: boolean;
   zonesError: string | null;
+  refreshZones: () => void;
   history: HistoryEntry[];
   alerts: AlertEntry[];
 
@@ -888,112 +890,130 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     isAuthLoading,
   ]);
 
-  useEffect(() => {//loads the zones that belong to the farmer's assigned farm. Supabase is the source of truth for zone identity and automation settings.
-    let isMounted =
-      true;
+  const loadZones = useCallback(//fetches the zones for the currently-assigned farm and updates loading/error/zones state - shared between the initial-load effect below and the manually-triggered refreshZones exposed on the context (e.g. a "retry" action after a failed load).
+    () => {
+      let isMounted =
+        true;
 
-    if (
-      isFarmLoading
-    ) {
-      return () => {
-        isMounted =
-          false;
-      };
-    }
+      if (
+        isFarmLoading
+      ) {
+        return () => {
+          isMounted =
+            false;
+        };
+      }
 
-    if (
-      !farm
-    ) {
-      setZones(
-        []
+      if (
+        !farm
+      ) {
+        setZones(
+          []
+        );
+
+        setZonesError(
+          null
+        );
+
+        setIsZonesLoading(
+          false
+        );
+
+        return () => {
+          isMounted =
+            false;
+        };
+      }
+
+      setIsZonesLoading(
+        true
       );
 
       setZonesError(
         null
       );
 
-      setIsZonesLoading(
-        false
-      );
+      fetchZonesForFarm(
+        farm.id
+      )
+        .then(
+          (
+            assignedZones
+          ) => {
+            if (
+              !isMounted
+            ) {
+              return;
+            }
+
+            setZones(
+              assignedZones
+            );
+          }
+        )
+        .catch(
+          (
+            error: unknown
+          ) => {
+            if (
+              !isMounted
+            ) {
+              return;
+            }
+
+            console.error(
+              'Failed to load farm zones:',
+              error
+            );
+
+            setZones(
+              []
+            );
+
+            setZonesError(
+              error instanceof Error
+                ? error.message
+                : 'Failed to load the farm zones.'
+            );
+          }
+        )
+        .finally(
+          () => {
+            if (
+              isMounted
+            ) {
+              setIsZonesLoading(
+                false
+              );
+            }
+          }
+        );
 
       return () => {
         isMounted =
           false;
       };
-    }
+    },
+    [
+      farm,
+      isFarmLoading,
+    ]
+  );
 
-    setIsZonesLoading(
-      true
-    );
-
-    setZonesError(
-      null
-    );
-
-    fetchZonesForFarm(
-      farm.id
-    )
-      .then(
-        (
-          assignedZones
-        ) => {
-          if (
-            !isMounted
-          ) {
-            return;
-          }
-
-          setZones(
-            assignedZones
-          );
-        }
-      )
-      .catch(
-        (
-          error: unknown
-        ) => {
-          if (
-            !isMounted
-          ) {
-            return;
-          }
-
-          console.error(
-            'Failed to load farm zones:',
-            error
-          );
-
-          setZones(
-            []
-          );
-
-          setZonesError(
-            error instanceof Error
-              ? error.message
-              : 'Failed to load the farm zones.'
-          );
-        }
-      )
-      .finally(
-        () => {
-          if (
-            isMounted
-          ) {
-            setIsZonesLoading(
-              false
-            );
-          }
-        }
-      );
-
-    return () => {
-      isMounted =
-        false;
-    };
+  useEffect(() => {//loads the zones that belong to the farmer's assigned farm. Supabase is the source of truth for zone identity and automation settings.
+    return loadZones();
   }, [
-    farm,
-    isFarmLoading,
+    loadZones,
   ]);
+
+  const refreshZones = useCallback(//manually re-triggers the zone load above - exposed on the context for UI "retry after error" actions.
+    () => {
+      loadZones();
+    },
+    [
+      loadZones,
+    ]
+  );
 
   useEffect(() => {//loads history and alerts from AsyncStorage. Zone configuration is no longer restored locally because Supabase is now its source of truth.
     async function loadSavedData() {
@@ -1935,6 +1955,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         zones,
         isZonesLoading,
         zonesError,
+        refreshZones,
         history,
         alerts,
         updateZoneSettings,
