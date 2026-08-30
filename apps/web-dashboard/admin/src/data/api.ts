@@ -21,7 +21,7 @@ import {
 } from "@/data/mock";
 import type {
   Kpis, Trends, GrowthSeries, SystemHealth, StatusDistribution,
-  User, Farm, Hardware, AdminAlert, MaintenanceJob,
+  User, Farm, Zone, Hardware, AdminAlert, MaintenanceJob,
   IrrigationSchedule, IrrigationEvent, ActivityEntry,
   AlertStatus, AlertPriority, MaintenanceStatus, UserStatus,
 } from "@/types/models";
@@ -69,6 +69,22 @@ export function recordActivity(
     outcome: "Success",
   });
 }
+
+interface CreateFarmerInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  role: "farmer" | "admin";
+}
+
+interface CreateFarmInput {
+  farmName: string;
+  location: string;
+  sizeHectares: number;
+  zones: { name: string; sizeHectares: number }[];
+}
+
 
 export const api = {
   /* ------------------------------- reads ------------------------------- */
@@ -166,6 +182,67 @@ export const api = {
     }
     return mockDelay(farms);
   },
+
+  async onboardFarmer(
+  farmerInput: CreateFarmerInput,
+  farmInput: CreateFarmInput,
+): Promise<{ user: User; farm: Farm }> {
+  if (!USE_MOCK) {
+    return request<{ user: User; farm: Farm }>("/onboarding", {
+      method: "POST",
+      body: JSON.stringify({ farmer: farmerInput, farm: farmInput }),
+    });
+  }
+
+  const newUserId = Math.max(0, ...users.map((u) => u.id)) + 1;
+  const newFarmId = Math.max(0, ...farms.map((f) => f.id)) + 1;
+
+  const zones: Zone[] = farmInput.zones.map((z, i) => ({
+    id: newFarmId * 100 + i + 1,
+    name: z.name,
+    sizeHectares: z.sizeHectares,
+  }));
+
+  const newUser: User = {
+    id: newUserId,
+    name: farmerInput.fullName,
+    email: farmerInput.email,
+    phone: farmerInput.phone,
+    farm: farmInput.farmName,
+    status: "Active",
+    dateJoined: new Date().toISOString().slice(0, 10),
+    lastActive: "just now",
+    hardware: [],
+    scheduleIds: [],
+    support: [],
+    notes: [],
+  };
+
+  const newFarm: Farm = {
+    id: newFarmId,
+    name: farmInput.farmName,
+    owner: farmerInput.fullName,
+    province: farmInput.location.split(",").pop()?.trim() ?? farmInput.location,
+    region: farmInput.location.split(",")[0]?.trim() ?? farmInput.location,
+    health: "Attention Required",
+    status: "Pending Approval",
+    hectares: farmInput.sizeHectares,
+    registered: new Date().toISOString().slice(0, 10),
+    lastActivity: "just now",
+    healthFactors: { deviceConnectivity: 0, gatewayOnline: false, sensorsAvailable: 0, outstandingAlerts: 0, openMaintenance: 0 },
+    users: 1,
+    devices: 0,
+    zones,
+  };
+
+  users.push(newUser);
+  farms.push(newFarm);
+  recordActivity("Farm registered", newFarm.name, newFarm.name);
+  recordActivity("User created", newUser.name, newFarm.name);
+
+  return mockDelay({ user: newUser, farm: newFarm });
+},
+
   async setFarmStatus(id: number, status: Farm["status"]): Promise<Farm[]> {
     const f = farms.find((x) => x.id === id);
     if (f) {

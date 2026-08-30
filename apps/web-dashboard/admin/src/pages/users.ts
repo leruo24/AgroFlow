@@ -25,7 +25,7 @@ export async function usersPage(): Promise<string> {
 
   return `
   ${pageHeader("Users", "Manage platform accounts, access and farm assignment.",
-    `<button class="btn" data-act="add-user">+ Add User</button>
+    `<a href="#onboarding" class="btn" data-go="onboarding">+ Onboard Farmer</a>
      <button class="btn ghost" data-act="create-farmer-direct">+ Create Farmer</button>
      <button class="btn ghost" data-act="invite-farmer">+ Invite Farmer</button>`)}
 
