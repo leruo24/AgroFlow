@@ -3,7 +3,7 @@
 Broker: HiveMQ Cloud (free tier) — TLS on port 8883, username/password auth.
 
 Enrollment/claim stays HTTP (`POST /api/devices/enroll`, `POST /api/devices/claim`,
-see `api/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs`) — it's a
+see `backend/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs`) — it's a
 one-time, low-frequency handshake with no established MQTT identity yet.
 Everything after a device is claimed and running normally goes over MQTT.
 
@@ -39,7 +39,7 @@ it.
 ## What still needs to happen
 
 - `Mqtt:Host` / `Mqtt:Port` / `Mqtt:Username` / `Mqtt:Password` in
-  `api/AgroFlow.Api/appsettings.json` need your actual HiveMQ Cloud cluster
+  `backend/AgroFlow.Api/appsettings.json` need your actual HiveMQ Cloud cluster
   credentials (HiveMQ Cloud console → your cluster → Access Management).
 - The firmware's `MQTT_HOST`/`MQTT_PORT`/`MQTT_USERNAME`/`MQTT_PASSWORD`
   constants need the same values.

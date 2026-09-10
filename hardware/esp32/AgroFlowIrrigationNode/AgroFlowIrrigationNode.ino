@@ -31,7 +31,7 @@
 // image. On first boot (nothing saved in flash) it opens its own
 // AgroFlow-Setup-XXXX access point, serves a form for the farm WiFi + a
 // one-time enrollment code (see
-// api/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs), then calls
+// backend/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs), then calls
 // /api/devices/claim to find out which zone/farm it belongs to. Every board
 // runs the identical image.
 //
@@ -79,13 +79,13 @@
 const char *SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co";
 const char *SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 
-// TODO: base URL of the AgroFlow.Api host (api/AgroFlow.Api), no trailing
+// TODO: base URL of the AgroFlow.Api host (backend/AgroFlow.Api), no trailing
 // slash. Irrigation events, device claiming and the firmware version check
 // go here over HTTP. Sensor readings and command delivery moved to MQTT -
 // see MQTT_HOST below.
 const char *API_BASE_URL = "http://192.168.10.82:5000";
 
-// TODO: must match ApiKey in api/AgroFlow.Api/appsettings.json. Same key on
+// TODO: must match ApiKey in backend/AgroFlow.Api/appsettings.json. Same key on
 // every board - it identifies "this is a genuine AgroFlow device", not any
 // individual device or zone (that's what enrollment/claim is for).
 const char *API_KEY = "YOUR_SHARED_API_KEY";
@@ -110,7 +110,7 @@ const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 const uint16_t CONFIG_PORTAL_TIMEOUT_SECONDS = 300;
 
 // Reported to /api/devices/firmware-check and compared against
-// Firmware:LatestVersion in api/AgroFlow.Api/appsettings.json. TODO: bump
+// Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json. TODO: bump
 // this to match whatever you set there each time you cut a release.
 const char *FIRMWARE_VERSION = "1.0.0";
 

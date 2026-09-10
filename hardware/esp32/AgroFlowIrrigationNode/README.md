@@ -36,8 +36,8 @@ one is and where the value comes from):
 | Constant | What it's for | Where the value comes from |
 |---|---|---|
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Marking a command `executed` via direct REST PATCH to Supabase | Supabase dashboard → Project Settings → API |
-| `API_BASE_URL` | Base URL of the `AgroFlow.Api` host (device claim, irrigation event logging, firmware check) | Wherever you're running `api/AgroFlow.Api` |
-| `API_KEY` | Shared device secret sent as `X-Api-Key` on every `AgroFlow.Api` call | Must exactly match `ApiKey` in `api/AgroFlow.Api/appsettings.json` |
+| `API_BASE_URL` | Base URL of the `AgroFlow.Api` host (device claim, irrigation event logging, firmware check) | Wherever you're running `backend/AgroFlow.Api` |
+| `API_KEY` | Shared device secret sent as `X-Api-Key` on every `AgroFlow.Api` call | Must exactly match `ApiKey` in `backend/AgroFlow.Api/appsettings.json` |
 | `MQTT_HOST` / `MQTT_PORT` / `MQTT_USERNAME` / `MQTT_PASSWORD` | HiveMQ Cloud broker connection | HiveMQ Cloud console → your cluster → Access Management |
 | `FIRMWARE_VERSION` | Reported to `/api/devices/firmware-check` for OTA update comparison | Bump to match `Firmware:LatestVersion` in `appsettings.json` each release |
 | `RELAY_PIN` / `MOISTURE_PIN` | GPIO wiring | Your actual board wiring |
