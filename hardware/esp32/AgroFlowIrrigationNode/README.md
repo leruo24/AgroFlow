@@ -27,6 +27,23 @@ core installed via Boards Manager.
 `Preferences.h`, `time.h` are all built into the ESP32 core - nothing to
 install for those.
 
+## Secrets (`secrets.h`)
+
+Two credentials live in `secrets.h`, which is **gitignored**. Before
+flashing:
+
+```bash
+cd hardware/esp32/AgroFlowIrrigationNode
+cp secrets.example.h secrets.h      # then edit secrets.h
+```
+
+The sketch will not compile without `secrets.h`.
+
+| Constant (in `secrets.h`) | What it's for | Where the value comes from |
+|---|---|---|
+| `API_KEY` | Shared device secret sent as `X-Api-Key` on every `AgroFlow.Api` call | Must exactly match `ApiKey` in `AgroFlow.Api`'s user-secrets (`backend/AgroFlow.Api`: `dotnet user-secrets list`) |
+| `MQTT_PASSWORD` | HiveMQ Cloud password for `MQTT_USERNAME` | HiveMQ Cloud console → your cluster → Access Management; must match `Mqtt:Password` in `AgroFlow.Api`'s user-secrets |
+
 ## Config placeholders (top of the `.ino`)
 
 Every one of these is a `const` near the top of the file - fill in real
@@ -37,8 +54,7 @@ one is and where the value comes from):
 |---|---|---|
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Marking a command `executed` via direct REST PATCH to Supabase | Supabase dashboard → Project Settings → API |
 | `API_BASE_URL` | Base URL of the `AgroFlow.Api` host (device claim, irrigation event logging, firmware check) | Wherever you're running `backend/AgroFlow.Api` |
-| `API_KEY` | Shared device secret sent as `X-Api-Key` on every `AgroFlow.Api` call | Must exactly match `ApiKey` in `backend/AgroFlow.Api/appsettings.json` |
-| `MQTT_HOST` / `MQTT_PORT` / `MQTT_USERNAME` / `MQTT_PASSWORD` | HiveMQ Cloud broker connection | HiveMQ Cloud console → your cluster → Access Management |
+| `MQTT_HOST` / `MQTT_PORT` / `MQTT_USERNAME` | HiveMQ Cloud broker endpoint (not the password — that's in `secrets.h`) | HiveMQ Cloud console → your cluster → Access Management |
 | `FIRMWARE_VERSION` | Reported to `/api/devices/firmware-check` for OTA update comparison | Bump to match `Firmware:LatestVersion` in `appsettings.json` each release |
 | `RELAY_PIN` / `MOISTURE_PIN` | GPIO wiring | Your actual board wiring |
 | `RELAY_ACTIVE_LOW` | Whether your relay module energises on LOW or HIGH | Your relay module's datasheet/behaviour |

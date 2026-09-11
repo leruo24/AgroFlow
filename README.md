@@ -53,15 +53,16 @@ Each sub-project has its own setup:
 
 ## Configuration & secrets
 
-Every project's config file ships with placeholder values only — real
-credentials are filled in locally per developer and must never be committed:
+Non-secret config is committed; secrets are kept out of the tree per
+sub-project:
 
-- The two `apps/` use `.env` (copy from `.env.example`).
-- `backend/AgroFlow.Api` uses `appsettings.json` — copy
-  `backend/AgroFlow.Api/appsettings.example.json` to `appsettings.json` and
-  fill in real values. `appsettings.json` is gitignored.
+| Sub-project | Non-secret config | Secrets |
+|---|---|---|
+| `apps/mobile`, `apps/web/admin` | — | `.env` (copy from `.env.example`), gitignored |
+| `backend/AgroFlow.Api` | `appsettings.json` (committed) | .NET user-secrets — `ConnectionStrings:Supabase`, `Supabase:ServiceRoleKey`, `ApiKey`, `Mqtt:Password`. See [backend/AgroFlow.Api/README.md](backend/AgroFlow.Api/README.md#configuration). |
+| `hardware/esp32/AgroFlowIrrigationNode` | inline constants in the `.ino` | `secrets.h` (copy from `secrets.example.h`), gitignored — `API_KEY`, `MQTT_PASSWORD` |
 
-> **Note:** earlier commits committed a real `appsettings.json` (database
-> password, API key, Supabase service role key, HiveMQ password) at the old
-> `api/AgroFlow.Api/` path. Those secrets remain in git history and should be
-> rotated.
+> **Rotate these:** a real `appsettings.json` (DB password, `ApiKey`,
+> Supabase `service_role` key, HiveMQ password) and the firmware's HiveMQ
+> password were committed before this hardening. They remain in git history
+> and must be rotated. History was deliberately left unrewritten.

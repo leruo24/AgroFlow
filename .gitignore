@@ -4,7 +4,6 @@
 [Oo]bj/
 node_modules/
 
-# Real API config - holds live secrets (DB password, ApiKey, Supabase
-# service_role key, HiveMQ password). Copy appsettings.example.json to
-# appsettings.json and fill in real values locally.
-backend/AgroFlow.Api/appsettings.json
+# Firmware credentials - real values live here, created from secrets.example.h
+# before flashing. AgroFlow.Api's secrets are in .NET user-secrets, not a file.
+hardware/**/secrets.h

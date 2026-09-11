@@ -10,11 +10,18 @@ where irrigation decision logic actually lives.
 
 ```bash
 cd backend/AgroFlow.Api
+dotnet user-secrets set "ConnectionStrings:Supabase" "Host=...;Password=...;..."
+dotnet user-secrets set "Supabase:ServiceRoleKey" "sb_secret_..."
+dotnet user-secrets set "ApiKey" "<shared device key>"
+dotnet user-secrets set "Mqtt:Password" "<HiveMQ password>"
 dotnet build
 dotnet run
 ```
 
-Requires `appsettings.json` filled in first — see Configuration below.
+The four secrets above must be set first — the app throws on startup if the
+connection string, `ApiKey`, `Supabase:JwksUrl`, or any `Mqtt:*` value is
+missing. Everything else is in the committed `appsettings.json`. See
+Configuration below.
 
 ## What it does
 
@@ -45,21 +52,34 @@ Two separate mechanisms, not one:
   (`Auth/AdminOnlyFilter.cs`) — a valid token only proves a real logged-in
   user, not that they're an admin.
 
-## Configuration (`appsettings.json`)
+## Configuration
 
-| Key | Where to find it | Notes |
-|---|---|---|
-| `ConnectionStrings:Supabase` | Supabase dashboard → Project Settings → Database → Connection string | Direct Postgres connection (not the REST API) |
-| `ApiKey` | You choose it | Must exactly match `API_KEY` in the firmware's `.ino` |
-| `Supabase:Url` | Project Settings → API | e.g. `https://<project-ref>.supabase.co` |
-| `Supabase:ServiceRoleKey` | Project Settings → API → `service_role` key | Bypasses Row Level Security — server-side only, never expose to a client app |
-| `Supabase:JwksUrl` | `{Supabase:Url}/auth/v1/.well-known/jwks.json` | Used to validate admin bearer tokens |
-| `Firmware:LatestVersion` / `Firmware:DownloadUrl` | You set these per release | `DownloadUrl` must point at an actual hosted `.bin` — this project doesn't host firmware binaries itself |
-| `Mqtt:Host` / `Port` / `Username` / `Password` | HiveMQ Cloud console → your cluster → Access Management | |
+Config is split by sensitivity:
 
-**`appsettings.json` is not gitignored.** Once you've filled in real values,
-either keep that in mind before committing, or move secrets to
-`appsettings.Local.json` / environment variables / user-secrets first.
+- **`appsettings.json`** — committed, no secrets. Holds `Logging`,
+  `AllowedHosts`, `Supabase:Url`, `Supabase:JwksUrl`, `Firmware:*`, and
+  `Mqtt:Host` / `Mqtt:Port` / `Mqtt:Username`.
+- **.NET user-secrets** (`dotnet user-secrets`, keyed by the `UserSecretsId`
+  in `AgroFlow.Api.csproj`, stored outside the repo) — the four secrets.
+  In CI/production, supply the same keys via environment variables instead
+  (`ConnectionStrings__Supabase`, `Supabase__ServiceRoleKey`, `ApiKey`,
+  `Mqtt__Password`).
+
+| Key | Location | Where to find it | Notes |
+|---|---|---|---|
+| `ConnectionStrings:Supabase` | **user-secrets** | Supabase dashboard → Project Settings → Database → Connection string | Direct Postgres connection (not the REST API) |
+| `ApiKey` | **user-secrets** | You choose it | Must exactly match `API_KEY` in the firmware's `secrets.h` |
+| `Supabase:ServiceRoleKey` | **user-secrets** | Project Settings → API → `service_role` key | Bypasses Row Level Security — server-side only, never expose to a client app |
+| `Mqtt:Password` | **user-secrets** | HiveMQ Cloud console → your cluster → Access Management | Password for the `Mqtt:Username` account |
+| `Supabase:Url` | `appsettings.json` | Project Settings → API | e.g. `https://<project-ref>.supabase.co` |
+| `Supabase:JwksUrl` | `appsettings.json` | `{Supabase:Url}/auth/v1/.well-known/jwks.json` | Used to validate admin bearer tokens |
+| `Firmware:LatestVersion` / `Firmware:DownloadUrl` | `appsettings.json` | You set these per release | `DownloadUrl` must point at an actual hosted `.bin` — this project doesn't host firmware binaries itself |
+| `Mqtt:Host` / `Mqtt:Port` / `Mqtt:Username` | `appsettings.json` | HiveMQ Cloud console → your cluster → Access Management | Endpoint identity, not a credential |
+
+> A real `appsettings.json` with live secrets (DB password, `ApiKey`,
+> `service_role` key, HiveMQ password) was committed under the old
+> `api/AgroFlow.Api/` path before this split. Those values are still in git
+> history and must be rotated.
 
 ## Project structure
 

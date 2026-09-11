@@ -68,6 +68,11 @@
 #include <time.h>
 #include <string.h>
 
+// Real credentials (API_KEY, MQTT_PASSWORD) live in secrets.h, which is
+// gitignored. Create it before flashing:  cp secrets.example.h secrets.h
+// then paste in the real values. The build will not compile without it.
+#include "secrets.h"
+
 // ---------------------------------------------------------------------------
 // Config - TODO: fill in / adjust per board before flashing.
 // ---------------------------------------------------------------------------
@@ -85,21 +90,22 @@ const char *SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 // see MQTT_HOST below.
 const char *API_BASE_URL = "http://192.168.10.82:5000";
 
-// TODO: must match ApiKey in backend/AgroFlow.Api/appsettings.json. Same key on
-// every board - it identifies "this is a genuine AgroFlow device", not any
-// individual device or zone (that's what enrollment/claim is for).
-const char *API_KEY = "YOUR_SHARED_API_KEY";
+// API_KEY is defined in secrets.h (see the #include above). TODO: set it
+// there - copy secrets.example.h to secrets.h first. It must match the
+// "ApiKey" value in AgroFlow.Api's user-secrets. Same key on every board -
+// it identifies "this is a genuine AgroFlow device", not any individual
+// device or zone (that's what enrollment/claim is for).
 
-// HiveMQ Cloud cluster credentials (HiveMQ Cloud console -> your cluster ->
+// HiveMQ Cloud cluster connection (HiveMQ Cloud console -> your cluster ->
 // Access Management). TLS on port 8883 - see hardware/shared/MQTT_TOPICS.md for the
-// topic structure this connects to.
+// topic structure this connects to. The password is a secret and lives in
+// secrets.h (MQTT_PASSWORD); host and username are not, and stay here.
 const char *MQTT_HOST = "853fe2eddcd24d0c8e0f4d69869c5dab.s1.eu.hivemq.cloud";
 const uint16_t MQTT_PORT = 8883;
 const char *MQTT_USERNAME = "agroflow-device";
-// TODO: the agroflow-device credential's password - not filled in here since
-// it isn't something to guess or fabricate. Paste the value you saved when
-// you created it in HiveMQ Cloud (Access Management).
-const char *MQTT_PASSWORD = "AgroFlow$2MuchSauce";
+// TODO: set MQTT_PASSWORD in secrets.h (copy secrets.example.h to secrets.h
+// first) - the agroflow-device credential's password from HiveMQ Cloud
+// Access Management.
 
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 
