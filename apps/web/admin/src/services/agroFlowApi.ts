@@ -1,9 +1,9 @@
 /* Calls AgroFlow.Api's admin-only farmer onboarding endpoints.
    Both endpoints require a real Supabase Auth session (JWT bearer + a
    profile.role='admin' check server-side) - see
-   backend/AgroFlow.Api/Auth/AdminOnlyFilter.cs. This dashboard has no login
-   flow yet, so there is no session to authorize with until one exists -
-   these calls will fail with "not signed in" until that's built. */
+   backend/AgroFlow.Api/Auth/AdminOnlyFilter.cs. app/auth.ts's sign-in gate
+   (main.ts) means this only ever runs while such a session exists, but the
+   check below stays as a defensive fallback rather than assuming that. */
 
 import { supabase } from "@/lib/supabase";
 
@@ -13,9 +13,7 @@ async function postAuthorized(path: string, body: unknown): Promise<void> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) {
-    throw new Error(
-      "Not signed in — the admin dashboard has no login flow yet, so there's no Supabase session to authorize this with."
-    );
+    throw new Error("Not signed in.");
   }
 
   const response = await fetch(`${API_BASE}${path}`, {

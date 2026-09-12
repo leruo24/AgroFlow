@@ -13,6 +13,7 @@ import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, healthDot } from "@/lib/format
 import { ADMINS, TECHNICIANS } from "@/data/mock";
 import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
+import { signOut, getAdminProfile } from "@/app/auth";
 
 /* ----------------------------- filter toolbar ---------------------------- */
 
@@ -929,6 +930,16 @@ export function wirePageInteractions(): void {
 
 /* ------------------------------ header chrome ---------------------------- */
 
+// main.ts's render() rebuilds the whole shell (a fresh #avatarBtn/
+// #avatarMenu) on every sign-in, so initHeader() runs again each time too
+// - correct for btn/menu's own listeners (bound to brand-new nodes each
+// call), but this one's on `document`, which persists across #root
+// clears. Bound at most once, and re-queries the CURRENT avatar elements
+// on every firing rather than closing over whichever ones existed the
+// first time this ran - those could belong to a shell that's since been
+// torn down and rebuilt.
+let outsideClickBound = false;
+
 export function initHeader(): void {
   const btn = document.getElementById("avatarBtn");
   const menu = document.getElementById("avatarMenu");
@@ -938,13 +949,48 @@ export function initHeader(): void {
     e.stopPropagation();
     menu.classList.toggle("open");
   });
-  document.addEventListener("click", (e) => {
-    if (!btn.contains(e.target as Node) && !menu.contains(e.target as Node)) {
-      menu.classList.remove("open");
-    }
-  });
+
+  if (!outsideClickBound) {
+    outsideClickBound = true;
+    document.addEventListener("click", (e) => {
+      const activeBtn = document.getElementById("avatarBtn");
+      const activeMenu = document.getElementById("avatarMenu");
+      if (!activeBtn || !activeMenu) return;
+      if (!activeBtn.contains(e.target as Node) && !activeMenu.contains(e.target as Node)) {
+        activeMenu.classList.remove("open");
+      }
+    });
+  }
+
   document.getElementById("logoutBtn")?.addEventListener("click", () => {
     menu.classList.remove("open");
-    toast("Signed out.", "info");
+    void signOut().then(() => toast("Signed out.", "info"));
+    // Rendering the login screen again is main.ts's job, driven by
+    // app/auth.ts's onAuthChange - not this click handler.
   });
+
+  updateHeaderIdentity();
+}
+
+/** Reflects the signed-in admin's real name/initials in the header avatar,
+    replacing the static "Aisha Patel" placeholder that used to be
+    hardcoded in index.html. Called from initHeader() and again by
+    main.ts whenever auth state changes. */
+export function updateHeaderIdentity(): void {
+  const profile = getAdminProfile();
+  const btn = document.getElementById("avatarBtn");
+  const nameEl = document.querySelector<HTMLElement>("#avatarMenu .menu-head b");
+  if (!profile || !btn || !nameEl) return;
+
+  const initials = profile.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || profile.email[0]?.toUpperCase() || "?";
+
+  btn.textContent = initials;
+  btn.title = profile.name || profile.email;
+  nameEl.textContent = profile.name || profile.email;
 }

@@ -124,11 +124,21 @@ export function initNav(): void {
   });
 }
 
+let hashListenerBound = false;
+
+// Idempotent: main.ts's startAppShell() can now run more than once per
+// page life (sign-out unmounts the shell, a later sign-in remounts and
+// re-boots it - see app/shell.ts), but `window` itself is never torn down
+// in between, so a second, unguarded addEventListener here would leave two
+// listeners both calling go() on every future hash change.
 export function bootRouter(): void {
   const fromHash = (): void => {
     const raw = (location.hash || "#dashboard").replace(/^#/, "") || "dashboard";
     void go(raw);
   };
-  window.addEventListener("hashchange", fromHash);
+  if (!hashListenerBound) {
+    hashListenerBound = true;
+    window.addEventListener("hashchange", fromHash);
+  }
   fromHash();
 }

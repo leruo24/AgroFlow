@@ -9,4 +9,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Same session-handling options as apps/mobile/src/lib/supabase.ts
+// (autoRefreshToken/persistSession) - this is a browser tab, not a native
+// app, so there's no AsyncStorage/AppState equivalent to wire up: the
+// client's default storage (window.localStorage) and default
+// detectSessionInUrl (true, for any future magic-link/invite flow) are
+// already correct for the web.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+  },
+});

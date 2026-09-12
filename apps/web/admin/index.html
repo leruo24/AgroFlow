@@ -7,46 +7,18 @@
   <meta name="description" content="AgroFlow platform administration console." />
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar" id="sidebar">
-      <div class="brand">
-        <span class="leaf">🌱</span>
-        <div>
-          <h1>AgroFlow</h1>
-          <div class="sub">Administration</div>
-        </div>
-      </div>
-      <nav class="nav" id="nav"></nav>
-      <div class="side-foot">
-        <b>Platform status</b>
-        All core services operational
-      </div>
-    </aside>
-
-    <div class="main">
-      <header class="header">
-        <div class="header-l">
-          <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation">☰</button>
-          <h2 id="headerTitle">Dashboard</h2>
-        </div>
-        <div class="header-r">
-          <input id="headerSearch" class="search" type="text" placeholder="Search this page…" />
-          <div class="status-chip"><span class="dot pulse-dot"></span>All systems operational</div>
-          <button id="avatarBtn" class="avatar" title="Aisha Patel" aria-label="Account menu">AP</button>
-          <div id="avatarMenu" class="menu">
-            <div class="menu-head">
-              <b>Aisha Patel</b>
-              <span>Platform Administrator</span>
-            </div>
-            <a href="#settings">Profile</a>
-            <a href="#settings">Settings</a>
-            <button id="logoutBtn">Sign out</button>
-          </div>
-        </div>
-      </header>
-
-      <section id="content" class="content"></section>
-    </div>
+  <!-- Everything this app ever shows lives inside #root, and only ever
+       ONE of three mutually exclusive states at a time: loading,
+       signed-out (login card), signed-in (the dashboard shell). See
+       src/main.ts's render() - it always clears #root before building
+       the next state into it, so there is no code path where two
+       states' markup can coexist, and no CSS hide/overlay involved in
+       switching between them. The div below is the "loading" state's
+       markup, shown until the first real render() call (also "loading",
+       explicitly, then whichever of the other two the session check
+       resolves to) replaces it. -->
+  <div id="root">
+    <div class="boot-loading" aria-live="polite">Loading…</div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>
