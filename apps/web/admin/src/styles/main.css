@@ -6,28 +6,68 @@
    ========================================================================== */
 
 :root{
-  --brand:#16a34a;
-  --brand-2:#0ea5e9;
-  --accent:#22c55e;
-  --good:#16a34a; --warn:#d97706; --bad:#dc2626; --info:#0284c7; --neutral:#64748b;
+  /* Colour tokens - derived from apps/mobile/src/constants/colors.ts's
+     lightColors (AppColors), the app's one live theme source, not
+     invented separately for the web. Where mobile has no equivalent
+     (border-strong, info, the sidebar's 2nd accent shade - mobile only
+     ever defines ONE shade per role), the value is a reasoned extrapolation
+     from what mobile does define, called out below rather than left
+     unexplained. Mobile's dark-mode palette (darkColors) is not wired up
+     here yet - this pass only carries over the light theme this dashboard
+     already is. */
+  --brand:#168f99;        /* mobile primaryDark */
+  --brand-2:#2f6b4b;       /* mobile secondaryDark - mobile pairs a teal primary with a green secondary; this does the same */
+  --accent:#42c3c7;        /* mobile primary */
+  --good:#4f8f62;          /* mobile success */
+  --warn:#b77a26;          /* mobile warning */
+  --bad:#d65a50;           /* mobile error */
+  --info:#168f99;          /* mobile has no distinct "info" colour - reusing primaryDark (=--brand) rather than inventing a new hue */
+  --neutral:#879187;       /* mobile textMuted */
 
-  --bg:#f1f5f9;
-  --bg-grad-1:#0f2b24;
-  --bg-grad-2:#123240;
+  --bg:#dce8d7;            /* mobile background - pale sage, not the previous cool blue-grey */
+  --bg-grad-1:#184d35;     /* mobile navigation */
+  --bg-grad-2:#168f99;     /* mobile primaryDark - forest-green-to-teal, the same pairing mobile's own nav/brand colours make */
 
-  --surface:#ffffff;
-  --surface-2:#f8fafc;
-  --border:#e2e8f0;
-  --border-strong:#cbd5e1;
+  --surface:#ffffff;       /* mobile surface */
+  --surface-2:#eef4eb;     /* mobile surfaceSecondary */
+  --border:#b9cbb4;        /* mobile border */
+  --border-strong:#9fb799; /* darkened extrapolation of mobile border - mobile only defines one border shade per theme, not a "strong" variant */
 
-  --text:#0f172a;
-  --text-2:#475569;
-  --muted:#64748b;
+  --text:#253126;          /* mobile text */
+  --text-2:#637064;        /* mobile textSecondary */
+  --muted:#879187;         /* mobile textMuted (same source as --neutral - mobile doesn't distinguish these either) */
 
-  --side:#0f172a;
-  --side-2:#1e293b;
-  --side-text:#cbd5e1;
+  --side:#184d35;          /* mobile navigation */
+  --side-2:#168f99;        /* mobile primaryDark - hover/active accent inside the dark sidebar; mobile has no 2nd nav shade of its own */
+  --side-text:#c4d8cc;     /* mobile navigationMuted */
+  --side-text-strong:#ffffff; /* mobile navigationText - active/hovered nav item text */
 
+  /* Spacing scale - apps/mobile/src/constants/theme.ts's Spacing, folded
+     in here verbatim (theme.ts itself is deleted - see colors.ts, which
+     is now the one place both apps' spacing scale is defined). Not
+     retrofitted over every existing pixel value in this file (plenty of
+     hand-tuned in-between numbers stay literal, same as mobile's own
+     styles/homeStyles.ts does over its own Spacing import) - available
+     for new/touched CSS going forward. */
+  --space-half:2px; --space-1:4px; --space-2:8px; --space-3:16px;
+  --space-4:24px; --space-5:32px; --space-6:64px;
+
+  /* Type scale - the actual distinct font sizes in use across
+     apps/mobile/src (9-40px, grep-counted), collapsed into named steps
+     rather than left as 12 near-duplicate raw numbers. Font WEIGHTS are
+     every value mobile actually sets explicitly - only 600/700, nothing
+     else (mobile leaves everything else at the RN/web default 400). */
+  --text-xs:10px; --text-sm:12px; --text-base:13px; --text-md:14px;
+  --text-lg:16px; --text-xl:18px; --text-2xl:20px; --text-3xl:22px;
+  --text-display:40px;
+  --weight-regular:400; --weight-semibold:600; --weight-bold:700;
+
+  /* Radii - mobile defines NONE (grepped styles/homeStyles.ts: zero
+     borderRadius properties anywhere: every mobile surface is
+     square-cornered). Kept as this dashboard's own pre-existing values
+     rather than either flattening the web to match mobile exactly (a
+     much bigger visual change than "derive tokens" implies) or pretending
+     a mobile source exists - flagging this gap rather than guessing. */
   --radius:12px;
   --radius-sm:8px;
   --shadow-sm:0 1px 2px rgba(15,23,42,.06);
@@ -70,7 +110,8 @@ a{color:inherit}
   box-shadow:var(--shadow-lg);padding:32px 28px;display:flex;flex-direction:column;gap:16px;
 }
 .auth-brand{text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:4px}
-.auth-brand .leaf{color:var(--brand);font-size:28px}
+.auth-brand .leaf{color:var(--brand)}
+.auth-brand .leaf svg{width:32px;height:32px}
 .auth-brand p{font-size:13px}
 .auth-error{
   font-size:13px;color:var(--bad);background:rgba(220,38,38,.08);
@@ -90,8 +131,9 @@ a{color:inherit}
 .brand .leaf{
   width:34px;height:34px;flex:0 0 34px;border-radius:9px;
   background:linear-gradient(140deg,var(--brand),var(--brand-2));
-  display:grid;place-items:center;font-size:17px;
+  display:grid;place-items:center;color:#fff;
 }
+.brand .leaf svg{width:18px;height:18px}
 .brand h1{font-size:15.5px;color:#fff;letter-spacing:-.02em}
 .brand .sub{font-size:11px;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-top:1px}
 
@@ -102,10 +144,11 @@ a{color:inherit}
   display:flex;align-items:center;gap:10px;font-family:inherit;
   transition:background .16s var(--ease),color .16s var(--ease);
 }
-.nav .nav-ico{font-size:14px;width:18px;text-align:center;opacity:.85;transition:transform .2s var(--ease)}
-.nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav .nav-ico{width:18px;display:inline-flex;justify-content:center;opacity:.85;transition:transform .2s var(--ease)}
+.nav .nav-ico svg{width:16px;height:16px}
+.nav button:hover{background:rgba(255,255,255,.06);color:var(--side-text-strong)}
 .nav button:hover .nav-ico{transform:scale(1.12)}
-.nav button.active{background:rgba(34,197,94,.15);color:#fff;font-weight:600}
+.nav button.active{background:rgba(66,195,199,.18);color:var(--side-text-strong);font-weight:var(--weight-semibold)}
 .nav button.active::before{
   content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;
   border-radius:0 3px 3px 0;background:var(--accent);animation:barGrow .3s var(--ease);
@@ -129,7 +172,8 @@ a{color:inherit}
 .header h2{font-size:16.5px;font-weight:650}
 .header-l{display:flex;align-items:center;gap:10px;min-width:0}
 .header-r{display:flex;align-items:center;gap:12px;position:relative}
-.sidebar-toggle{display:none;border:0;background:transparent;font-size:18px;cursor:pointer;color:var(--text-2)}
+.sidebar-toggle{display:none;border:0;background:transparent;cursor:pointer;color:var(--text-2)}
+.sidebar-toggle svg{width:18px;height:18px}
 
 .search{
   border:1px solid var(--border-strong);background:var(--surface-2);border-radius:var(--radius-sm);
@@ -217,7 +261,8 @@ a{color:inherit}
   font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.01em;
   display:flex;align-items:center;gap:6px;
 }
-.kpi-ico{font-size:13px}
+.kpi-ico{display:inline-flex;color:var(--brand);vertical-align:-3px}
+.kpi-ico svg{width:15px;height:15px}
 .card .value{font-size:26px;font-weight:700;letter-spacing:-.03em;margin-top:5px;font-variant-numeric:tabular-nums}
 .trend{font-size:11.5px;font-weight:600;margin-top:3px}
 .up{color:var(--good)}.down{color:var(--bad)}
@@ -268,7 +313,9 @@ a{color:inherit}
 .range-chip{
   font-size:12px;font-weight:600;background:#e0f2fe;color:#075985;
   padding:4px 10px;border-radius:99px;
+  display:inline-flex;align-items:center;gap:5px;
 }
+.range-chip svg{width:12px;height:12px;flex:0 0 12px}
 .filter-count{font-size:12px;font-weight:600;color:var(--warn);background:#fef3c7;padding:4px 10px;border-radius:99px}
 .filter-buttons{display:flex;gap:8px;flex-wrap:wrap}
 .result-count{font-size:12.5px;color:var(--muted)}
@@ -308,7 +355,7 @@ a{color:inherit}
 .legend-row{display:flex;gap:8px;align-items:center;margin:6px 0;color:var(--text-2)}
 .legend-row b{margin-left:auto;color:var(--text);font-variant-numeric:tabular-nums}
 .dot-r{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
-.dot-good{background:var(--good)}.dot-bad{background:var(--bad)}
+.dot-good{background:var(--good)}.dot-bad{background:var(--bad)}.dot-warn{background:var(--warn)}
 .dot-throb{animation:throb 1.6s ease-in-out infinite}
 @keyframes throb{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
 
@@ -325,8 +372,15 @@ a{color:inherit}
 
 /* -------------------------------- tables --------------------------------- */
 .table-wrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:10px 12px;text-align:left;white-space:nowrap;vertical-align:middle}
+table{width:100%;border-collapse:collapse;font-size:var(--text-base)}
+/* Was 10px 12px - a printed export showed only 4 rows of the hardware
+   table fitting on one A4 page. Tightened for scannability; not pulled
+   from --space-* since neither step lands here without either being too
+   cramped (--space-half, 2px) or barely different from the original
+   (--space-1, 4px still leaves ~34px rows) - a direct, deliberately
+   in-between value, the same way mobile's own homeStyles.ts has plenty
+   of numbers that don't land on its Spacing scale either. */
+th,td{padding:6px 10px;text-align:left;white-space:nowrap;vertical-align:middle}
 th{
   font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700;
   border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1;
@@ -395,6 +449,8 @@ tbody tr:last-child td{border-bottom:none}
 .farm-owner{font-size:12.5px;color:var(--muted);margin-top:2px}
 .farm-health{display:flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
 .farm-meta{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:11px}
+.meta-ico{display:inline-flex;align-items:center;gap:4px}
+.meta-ico svg{width:12px;height:12px;flex:0 0 12px}
 .farm-stats{
   display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px;
   padding:11px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
@@ -415,7 +471,8 @@ tbody tr:last-child td{border-bottom:none}
   transition:transform .18s var(--ease),box-shadow .18s,border-color .18s;
 }
 .report-card:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--border-strong);background:#fff}
-.report-ico{font-size:21px}
+.report-ico{color:var(--brand)}
+.report-ico svg{width:21px;height:21px}
 .report-body h5{font-size:13.5px}
 .report-body p{font-size:12px;color:var(--muted);margin-top:3px}
 .report-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}
@@ -505,11 +562,16 @@ tbody tr:last-child td{border-bottom:none}
 }
 .toast.in{opacity:1;transform:none}
 .toast.out{opacity:0;transform:translateX(26px) scale(.97)}
-.toast-ico{font-size:14px}
+.toast-ico{display:inline-flex}
+.toast-ico svg{width:15px;height:15px}
 .toast-success{border-left:3px solid var(--accent)}
+.toast-success .toast-ico{color:var(--accent)}
 .toast-info{border-left:3px solid var(--info)}
+.toast-info .toast-ico{color:var(--info)}
 .toast-warn{border-left:3px solid var(--warn)}
+.toast-warn .toast-ico{color:var(--warn)}
 .toast-error{border-left:3px solid var(--bad)}
+.toast-error .toast-ico{color:var(--bad)}
 
 /* drawer */
 .drawer-overlay{
@@ -527,7 +589,8 @@ tbody tr:last-child td{border-bottom:none}
 .drawer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px;border-bottom:1px solid var(--border)}
 .drawer-head h4{font-size:17px}
 .drawer-head p{margin-top:3px;font-size:13px}
-.drawer-x{border:0;background:transparent;font-size:15px;cursor:pointer;color:var(--muted);border-radius:6px;padding:4px 8px;transition:background .14s}
+.drawer-x{border:0;background:transparent;cursor:pointer;color:var(--muted);border-radius:6px;padding:4px 8px;transition:background .14s;display:inline-flex}
+.drawer-x svg{width:15px;height:15px}
 .drawer-x:hover{background:var(--surface-2)}
 .drawer-body{padding:18px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:15px}
 .drawer-field{display:flex;flex-direction:column;gap:5px}

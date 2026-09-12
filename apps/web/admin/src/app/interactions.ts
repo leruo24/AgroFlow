@@ -9,7 +9,7 @@ import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
-import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, healthDot } from "@/lib/format";
+import { esc, fmtInt, fmtPct, fmtDate, fmtLitres } from "@/lib/format";
 import { ADMINS, TECHNICIANS } from "@/data/mock";
 import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
@@ -212,7 +212,11 @@ async function openFarmDetail(id: number): Promise<void> {
                  : `<p class="muted">None recorded.</p>`;
 
   openDrawer({
-    title: `${healthDot(f.health)} ${f.name}`,
+    // Not healthDot(f.health) here - openDrawer's title is HTML-escaped by
+    // design (see lib/drawer.ts's escapeText), so it can't safely carry the
+    // dot's markup. Health status is already shown explicitly in the
+    // "Farm summary" section below.
+    title: f.name,
     subtitle: `${f.owner} · ${f.province} · ${f.region}`,
     wide: true,
     bodyHtml: [

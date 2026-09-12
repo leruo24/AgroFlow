@@ -1,4 +1,48 @@
 //gives the chosen color combination a consistent typescript structure and allows for type checking and autocompletion when using the colors in the application. The AppColors type is defined as a mapped type that takes each key from the lightColors object and assigns it a string type, ensuring that all color properties are present and correctly typed in both light and dark color schemes.
+
+// Fonts and Spacing folded in from the old (unused) constants/theme.ts -
+// that file also defined its own separate, orphaned Colors object nothing
+// imported; this file is the one real theme source now. Font family
+// selection and the spacing scale are both still worth keeping - neither
+// duplicated anything here, they just weren't wired into the live theme
+// module before.
+import { Platform } from 'react-native';
+
+export const Fonts = Platform.select({
+  ios: {
+    /** iOS `UIFontDescriptorSystemDesignDefault` */
+    sans: 'system-ui',
+    /** iOS `UIFontDescriptorSystemDesignSerif` */
+    serif: 'ui-serif',
+    /** iOS `UIFontDescriptorSystemDesignRounded` */
+    rounded: 'ui-rounded',
+    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
+    mono: 'ui-monospace',
+  },
+  default: {
+    sans: 'normal',
+    serif: 'serif',
+    rounded: 'normal',
+    mono: 'monospace',
+  },
+  web: {
+    sans: 'var(--font-display)',
+    serif: 'var(--font-serif)',
+    rounded: 'var(--font-rounded)',
+    mono: 'var(--font-mono)',
+  },
+});
+
+export const Spacing = {
+  half: 2,
+  one: 4,
+  two: 8,
+  three: 16,
+  four: 24,
+  five: 32,
+  six: 64,
+} as const;
+
 export type AppColors = {
   primary: string;
   primaryDark: string;

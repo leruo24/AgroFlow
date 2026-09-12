@@ -1,5 +1,7 @@
 /* Slide-out drawer — detail views, edit forms and confirmations. */
 
+import { Icon } from "@/lib/icons";
+
 export interface DrawerField {
   label: string;
   value: string;
@@ -72,7 +74,7 @@ export function openDrawer(opts: DrawerOptions): void {
         <h4>${escapeText(opts.title)}</h4>
         ${opts.subtitle ? `<p class="muted">${escapeText(opts.subtitle)}</p>` : ""}
       </div>
-      <button class="drawer-x" data-drawer-close aria-label="Close">✕</button>
+      <button class="drawer-x" data-drawer-close aria-label="Close">${Icon.x}</button>
     </div>
     <div class="drawer-body">
       ${fieldsHtml}

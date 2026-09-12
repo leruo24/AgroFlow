@@ -46,5 +46,10 @@ export function healthTone(health: string): BadgeTone {
   return "bad";
 }
 
-export const healthDot = (health: string): string =>
-  health === "Healthy" ? "🟢" : health === "Attention Required" ? "🟡" : "🔴";
+// Reuses the dot-r/dot-good/dot-bad pattern already established for the
+// system-health panel (dashboard.ts) instead of an emoji or a new icon -
+// a plain status dot has no real "icon" to derive from lucide anyway.
+export const healthDot = (health: string): string => {
+  const tone = health === "Healthy" ? "good" : health === "Attention Required" ? "warn" : "bad";
+  return `<span class="dot-r dot-${tone}"></span>`;
+};

@@ -12,18 +12,19 @@ import {
 import { skeletonPage } from "@/ui/components";
 import { animateIn, swapContent } from "@/lib/animate";
 import { esc } from "@/lib/format";
+import { Icon } from "@/lib/icons";
 
 export const NAV: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: "📊" },
-  { id: "users", label: "Users", icon: "👥" },
-  { id: "farms", label: "Farms", icon: "🚜" },
-  { id: "hardware", label: "Farm Hardware", icon: "📡" },
-  { id: "alerts", label: "Alerts", icon: "🚨" },
-  { id: "maintenance", label: "Maintenance", icon: "🛠️" },
-  { id: "reports", label: "Reports & Analytics", icon: "📈" },
-  { id: "irrigation", label: "Irrigation Data", icon: "💧" },
-  { id: "activity", label: "Platform Activity", icon: "📜" },
-  { id: "settings", label: "Settings", icon: "⚙️" },
+  { id: "dashboard", label: "Dashboard", icon: Icon.layoutDashboard },
+  { id: "users", label: "Users", icon: Icon.users },
+  { id: "farms", label: "Farms", icon: Icon.tractor },
+  { id: "hardware", label: "Farm Hardware", icon: Icon.radio },
+  { id: "alerts", label: "Alerts", icon: Icon.bell },
+  { id: "maintenance", label: "Maintenance", icon: Icon.wrench },
+  { id: "reports", label: "Reports & Analytics", icon: Icon.barChart },
+  { id: "irrigation", label: "Irrigation Data", icon: Icon.droplet },
+  { id: "activity", label: "Platform Activity", icon: Icon.activity },
+  { id: "settings", label: "Settings", icon: Icon.settings },
 ];
 
 const PAGES: Record<PageId, PageRenderer> = {

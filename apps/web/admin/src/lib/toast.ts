@@ -1,14 +1,15 @@
 /* Toast notifications — animated, auto-dismissing, stack in a corner. */
 
 import { prefersReducedMotion } from "@/lib/animate";
+import { Icon } from "@/lib/icons";
 
 export type ToastKind = "success" | "info" | "warn" | "error";
 
 const ICONS: Record<ToastKind, string> = {
-  success: "✅",
-  info: "ℹ️",
-  warn: "⚠️",
-  error: "⛔",
+  success: Icon.circleCheck,
+  info: Icon.info,
+  warn: Icon.triangleAlert,
+  error: Icon.circleX,
 };
 
 function container(): HTMLElement {

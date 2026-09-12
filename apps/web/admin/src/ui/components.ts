@@ -6,6 +6,7 @@
 
 import { esc, fmtInt, badgeTone, trendClass } from "@/lib/format";
 import { PRESET_LABELS, activeFilterCount, rangeLabel } from "@/lib/filters";
+import { Icon } from "@/lib/icons";
 import type {
   BadgeTone, Trend, SeriesPoint, StatusDistribution, PageId,
   FilterState, DateRangePreset,
@@ -260,7 +261,7 @@ export function filterBar(opts: FilterBarOptions): string {
     </div>
     <div class="filter-foot">
       <div class="filter-summary">
-        ${opts.showDateRange ? `<span class="range-chip">📅 ${esc(rangeLabel(f))}</span>` : ""}
+        ${opts.showDateRange ? `<span class="range-chip">${Icon.calendar}${esc(rangeLabel(f))}</span>` : ""}
         ${count > 0 ? `<span class="filter-count">${count} filter${count === 1 ? "" : "s"} active</span>` : ""}
       </div>
       <div class="filter-buttons">
