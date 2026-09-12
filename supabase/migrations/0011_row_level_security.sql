@@ -363,6 +363,22 @@ drop policy if exists farmers_read_assigned_zones on zone;
 drop policy if exists farmers_update_assigned_zones on zone;
 
 -- ---------------------------------------------------------------------------
+-- 7. Optional performance cleanup, unrelated to RLS: sensor_reading has
+--    both idx_sensor_reading_zone_id (zone_id) and
+--    idx_sensor_reading_zone_id_recorded_at (zone_id, recorded_at desc),
+--    both from 0002_relationships.sql. The single-column index is
+--    redundant - zone_id is the LEADING column of the composite index, so
+--    any plan that could use idx_sensor_reading_zone_id (an equality or
+--    range scan on zone_id alone) can use the composite index's zone_id
+--    prefix exactly as well; this holds generally for a plain btree
+--    index, not something that needed a live EXPLAIN to establish. Kept
+--    as a separate, clearly-optional statement rather than folded into
+--    the RLS work above - it's a housekeeping win, not a fix for
+--    anything broken. IF EXISTS makes it a no-op if already dropped.
+-- ---------------------------------------------------------------------------
+drop index if exists idx_sensor_reading_zone_id;
+
+-- ---------------------------------------------------------------------------
 -- Open items NOT handled by this migration - see the chat response this
 -- shipped with for the investigation queries and why:
 --   - irrigation_schedule: RLS left off, table left in place, pending
