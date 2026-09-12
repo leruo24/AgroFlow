@@ -2,13 +2,14 @@ import { api } from "@/data/api";
 import { esc, fmtInt, fmtDate, fmtPct, fmtLitres } from "@/lib/format";
 import { getFilter, applyFilters, rangeLabel } from "@/lib/filters";
 import {
-  FARM_NAMES, PROVINCES, REGIONS, CROPS, ADMINS, EVENT_TYPE_OPTIONS,
-} from "@/data/mock";
+  PROVINCES, REGIONS, CROPS,
+} from "@/data/referenceData";
 import {
   badge, kpiCard, panel, table, pageHeader, filterBar, resultCount,
   lineChart, barChart, donut, meter,
 } from "@/ui/components";
 import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
+import { Icon } from "@/lib/icons";
 
 /* ============================ IRRIGATION DATA ============================ */
 /* Historical analytics for administrators — NOT live irrigation control.   */
@@ -83,7 +84,7 @@ export async function irrigationPage(): Promise<string> {
     showDateRange: true,
     searchPlaceholder: "Search by farm, zone or crop…",
     selects: [
-      { key: "farm", label: "Farm", options: [...FARM_NAMES] },
+      { key: "farm", label: "Farm", options: [...new Set(events.map((e) => e.farm))] },
       { key: "province", label: "Province", options: [...PROVINCES] },
       { key: "region", label: "Region", options: [...REGIONS] },
       { key: "crop", label: "Crop type", options: [...CROPS] },
@@ -91,10 +92,10 @@ export async function irrigationPage(): Promise<string> {
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Water Delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range" }, icon: "💧" })}
-    ${kpiCard({ label: "Irrigation Events", value: filteredEvents.length, icon: "🔁" })}
-    ${kpiCard({ label: "Total Duration", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: "⏱️" })}
-    ${kpiCard({ label: "Schedule Compliance", value: compliance, format: "pct", icon: "✅" })}
+    ${kpiCard({ label: "Water Delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range" }, icon: Icon.droplet })}
+    ${kpiCard({ label: "Irrigation Events", value: filteredEvents.length, icon: Icon.repeat })}
+    ${kpiCard({ label: "Total Duration", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
+    ${kpiCard({ label: "Schedule Compliance", value: compliance, format: "pct", icon: Icon.circleCheck })}
   </div>
 
   <div class="grid split-2">
@@ -144,16 +145,16 @@ export async function irrigationPage(): Promise<string> {
 /* =========================== REPORTS & ANALYTICS ========================== */
 
 const REPORT_TYPES = [
-  { id: "farm-growth", name: "Farm Growth", desc: "New farm registrations over time", icon: "🚜" },
-  { id: "user-growth", name: "User Growth", desc: "Account creation and activation trend", icon: "👥" },
-  { id: "device-performance", name: "Device Performance", desc: "Uptime and reliability by device type", icon: "📡" },
-  { id: "hardware-downtime", name: "Hardware Downtime", desc: "Outage duration and root cause", icon: "⏸️" },
-  { id: "connectivity", name: "Connectivity", desc: "Gateway and node connection quality", icon: "📶" },
-  { id: "maintenance-history", name: "Maintenance History", desc: "Jobs raised, completed and overdue", icon: "🛠️" },
-  { id: "alert-trends", name: "Alert Trends", desc: "Volume and category breakdown", icon: "🚨" },
-  { id: "support-performance", name: "Support Performance", desc: "Response and resolution times", icon: "🎧" },
-  { id: "irrigation-history", name: "Irrigation History", desc: "Scheduled vs actual irrigation runs", icon: "💧" },
-  { id: "water-usage", name: "Water Usage Trends", desc: "Volume delivered by farm and region", icon: "📊" },
+  { id: "farm-growth", name: "Farm Growth", desc: "New farm registrations over time", icon: Icon.tractor },
+  { id: "user-growth", name: "User Growth", desc: "Account creation and activation trend", icon: Icon.users },
+  { id: "device-performance", name: "Device Performance", desc: "Uptime and reliability by device type", icon: Icon.radio },
+  { id: "hardware-downtime", name: "Hardware Downtime", desc: "Outage duration and root cause", icon: Icon.pause },
+  { id: "connectivity", name: "Connectivity", desc: "Gateway and node connection quality", icon: Icon.wifi },
+  { id: "maintenance-history", name: "Maintenance History", desc: "Jobs raised, completed and overdue", icon: Icon.wrench },
+  { id: "alert-trends", name: "Alert Trends", desc: "Volume and category breakdown", icon: Icon.bell },
+  { id: "support-performance", name: "Support Performance", desc: "Response and resolution times", icon: Icon.headphones },
+  { id: "irrigation-history", name: "Irrigation History", desc: "Scheduled vs actual irrigation runs", icon: Icon.droplet },
+  { id: "water-usage", name: "Water Usage Trends", desc: "Volume delivered by farm and region", icon: Icon.barChart },
 ];
 
 export async function reportsPage(): Promise<string> {
@@ -186,17 +187,17 @@ export async function reportsPage(): Promise<string> {
     showDateRange: true,
     searchPlaceholder: "Search report types…",
     selects: [
-      { key: "farm", label: "Farm", options: [...FARM_NAMES] },
+      { key: "farm", label: "Farm", options: [...new Set([...events.map((e) => e.farm), ...maintenance.map((m) => m.farm)])] },
       { key: "province", label: "Province", options: [...PROVINCES] },
       { key: "region", label: "Region", options: [...REGIONS] },
     ],
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Farms Reporting", value: kpis.totalFarms, icon: "🚜" })}
-    ${kpiCard({ label: "Water in Range", value: Math.round(waterInRange / 1000), trend: { dir: "up", text: "kL" }, icon: "💧" })}
-    ${kpiCard({ label: "Maintenance in Range", value: filteredJobs.length, icon: "🛠️" })}
-    ${kpiCard({ label: "Platform Availability", value: kpis.platformAvailability, format: "pct2", icon: "✅" })}
+    ${kpiCard({ label: "Farms Reporting", value: kpis.totalFarms, icon: Icon.tractor })}
+    ${kpiCard({ label: "Water in Range", value: Math.round(waterInRange / 1000), trend: { dir: "up", text: "kL" }, icon: Icon.droplet })}
+    ${kpiCard({ label: "Maintenance in Range", value: filteredJobs.length, icon: Icon.wrench })}
+    ${kpiCard({ label: "Platform Availability", value: kpis.platformAvailability, format: "pct2", icon: Icon.circleCheck })}
   </div>
 
   <div class="grid split-2">
@@ -257,48 +258,21 @@ export async function reportsPage(): Promise<string> {
 
 /* =========================== PLATFORM ACTIVITY =========================== */
 
+/** No activity-log table exists anywhere in the schema (see
+    data/api.ts's getActivity()) - this is a genuine "not built yet", not
+    an empty result to filter. No filter bar, no table: those would imply
+    there's a real feature underneath with nothing in it right now. */
 export async function activityPage(): Promise<string> {
-  const activity = await api.getActivity();
-  const f = getFilter("activity");
-
-  const filtered = applyFilters(activity, f, {
-    search: (a) => `${a.administrator} ${a.eventType} ${a.target ?? ""} ${a.farm ?? ""}`,
-    date: (a) => a.timestamp,
-    administrator: (a) => a.administrator,
-    farm: (a) => a.farm ?? "",
-    eventType: (a) => a.eventType,
-    status: (a) => a.outcome,
-  });
-
-  const shown = filtered.slice(0, 120);
-
   return `
-  ${pageHeader("Platform Activity", "History of significant administrator and platform actions.",
-    `<button class="btn ghost" data-act="export-activity">Export CSV</button>`)}
+  ${pageHeader("Platform Activity", "History of significant administrator and platform actions.")}
 
-  ${filterBar({
-    page: "activity",
-    filter: f,
-    showDateRange: true,
-    searchPlaceholder: "Search by administrator, action or target…",
-    selects: [
-      { key: "administrator", label: "Administrator", options: [...ADMINS] },
-      { key: "eventType", label: "Event type", options: [...EVENT_TYPE_OPTIONS] },
-      { key: "farm", label: "Farm", options: [...FARM_NAMES] },
-      { key: "status", label: "Outcome", options: ["Success", "Failed", "Pending"] },
-    ],
-  })}
-
-  ${panel("Activity Log", `Most recent 120 entries in range · ${rangeLabel(f)}`,
-    resultCount(shown.length, filtered.length, "entries"),
-    table(["Timestamp", "Administrator", "Action", "Farm", "Affected", "Outcome"], shown, (a) => [
-      `<span class="mono sm">${esc(a.timestamp)}</span>`,
-      esc(a.administrator),
-      `<span class="event-type">${esc(a.eventType)}</span>`,
-      a.farm ? esc(a.farm) : `<span class="muted">Platform</span>`,
-      a.target ? esc(a.target) : `<span class="muted">—</span>`,
-      badge(a.outcome),
-    ], "No activity matches the current filters."))}
+  ${panel("Not yet implemented", "", "", `
+    <div class="empty-state">
+      Platform Activity has no backing table yet - there is nowhere to
+      record or read administrator actions from. This is a gap to build,
+      not empty data.
+    </div>
+  `)}
   `;
 }
 

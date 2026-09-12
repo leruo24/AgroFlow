@@ -10,7 +10,7 @@ import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres } from "@/lib/format";
-import { ADMINS, TECHNICIANS } from "@/data/mock";
+import { TECHNICIANS } from "@/data/referenceData";
 import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
 import { signOut, getAdminProfile } from "@/app/auth";
@@ -150,7 +150,7 @@ async function exportCurrent(kind: string): Promise<void> {
 
 /* ------------------------------ detail views ----------------------------- */
 
-async function openUserProfile(id: number): Promise<void> {
+async function openUserProfile(id: string): Promise<void> {
   const u = api.findUser(id);
   if (!u) return;
   const schedules = await api.getSchedules();
@@ -280,9 +280,9 @@ async function handleAction(el: HTMLElement): Promise<void> {
       return void refresh();
 
     /* users */
-    case "view-user": return openUserProfile(numId);
+    case "view-user": return openUserProfile(idAttr);
     case "edit-user": {
-      const u = api.findUser(numId);
+      const u = api.findUser(idAttr);
       if (!u) return;
       return openDrawer({
         title: `Edit ${u.name}`,
@@ -295,7 +295,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
         ],
         confirmLabel: "Save changes",
         onConfirm: (v) => {
-          void api.updateUser(numId, {
+          void api.updateUser(idAttr, {
             name: v["name"] ?? u.name, email: v["email"] ?? u.email,
             farm: v["farm"] ?? u.farm, phone: v["phone"] ?? u.phone,
           }).then(() => { toast("User updated.", "success"); void refresh(); });
@@ -303,19 +303,19 @@ async function handleAction(el: HTMLElement): Promise<void> {
       });
     }
     case "disable-user":
-      await api.setUserStatus(numId, "Disabled");
+      await api.setUserStatus(idAttr, "Disabled");
       toast("Account disabled.", "warn");
       return void refresh();
     case "enable-user":
-      await api.setUserStatus(numId, "Active");
+      await api.setUserStatus(idAttr, "Active");
       toast("Account enabled.", "success");
       return void refresh();
     case "reset-password":
-      await api.resetPassword(numId);
+      await api.resetPassword(idAttr);
       return toast("Password reset link sent.", "success");
     case "delete-user": {
-      const u = api.findUser(numId);
-      await api.deleteUser(numId);
+      const u = api.findUser(idAttr);
+      await api.deleteUser(idAttr);
       toast(`Deleted ${u?.name ?? "user"}.`, "warn");
       return void refresh();
     }
@@ -526,7 +526,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
     case "assign-alert":
       return openDrawer({
         title: `Assign ${idAttr}`,
-        fields: [{ label: "Administrator", value: ADMINS[0], editable: true, name: "admin" }],
+        fields: [{ label: "Administrator", value: "", editable: true, name: "admin" }],
         confirmLabel: "Assign",
         onConfirm: (v) => {
           void api.assignAlert(idAttr, v["admin"] ?? "").then(() => {

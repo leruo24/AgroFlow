@@ -2,10 +2,10 @@ import { api } from "@/data/api";
 import { esc, fmtDate } from "@/lib/format";
 import { getFilter } from "@/lib/filters";
 import { applyFilters } from "@/lib/filters";
-import { FARM_NAMES } from "@/data/mock";
 import {
   badge, kpiCard, panel, table, pageHeader, filterBar, resultCount,
 } from "@/ui/components";
+import { Icon } from "@/lib/icons";
 
 export async function usersPage(): Promise<string> {
   const users = await api.getUsers();
@@ -30,10 +30,10 @@ export async function usersPage(): Promise<string> {
      <button class="btn ghost" data-act="invite-farmer">+ Invite Farmer</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Total Users", value: total, icon: "👥" })}
-    ${kpiCard({ label: "New Users", value: recent, trend: { dir: "up", text: "since 1 June" }, icon: "✨" })}
-    ${kpiCard({ label: "Active Users", value: active, icon: "✅" })}
-    ${kpiCard({ label: "Disabled Users", value: disabled, icon: "🚫" })}
+    ${kpiCard({ label: "Total Users", value: total, icon: Icon.users })}
+    ${kpiCard({ label: "New Users", value: recent, trend: { dir: "up", text: "since 1 June" }, icon: Icon.sparkles })}
+    ${kpiCard({ label: "Active Users", value: active, icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Disabled Users", value: disabled, icon: Icon.userX })}
   </div>
 
   ${filterBar({
@@ -42,7 +42,7 @@ export async function usersPage(): Promise<string> {
     showDateRange: true,
     searchPlaceholder: "Search by name, email or farm…",
     selects: [
-      { key: "farm", label: "Assigned farm", options: [...FARM_NAMES, "All Farms"] },
+      { key: "farm", label: "Assigned farm", options: [...new Set(users.map((u) => u.farm))] },
       { key: "status", label: "Status", options: ["Active", "Disabled", "Pending"] },
     ],
     rightHtml: `<button class="btn ghost sm" data-act="export-users">Export CSV</button>`,

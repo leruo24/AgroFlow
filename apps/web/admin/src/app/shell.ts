@@ -5,11 +5,13 @@
    Holds no mount/unmount state itself; #root's own innerHTML is the only
    thing that determines whether this exists in the DOM at all. */
 
+import { Icon } from "@/lib/icons";
+
 export const SHELL_HTML = `
   <div class="app" id="appShell">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <span class="leaf">🌱</span>
+        <span class="leaf">${Icon.sprout}</span>
         <div>
           <h1>AgroFlow</h1>
           <div class="sub">Administration</div>
@@ -18,19 +20,19 @@ export const SHELL_HTML = `
       <nav class="nav" id="nav"></nav>
       <div class="side-foot">
         <b>Platform status</b>
-        All core services operational
+        Monitoring not yet implemented
       </div>
     </aside>
 
     <div class="main">
       <header class="header">
         <div class="header-l">
-          <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation">☰</button>
+          <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation">${Icon.menu}</button>
           <h2 id="headerTitle">Dashboard</h2>
         </div>
         <div class="header-r">
           <input id="headerSearch" class="search" type="text" placeholder="Search this page…" />
-          <div class="status-chip"><span class="dot pulse-dot"></span>All systems operational</div>
+          <div class="status-chip status-chip-unknown">Monitoring not yet implemented</div>
           <button id="avatarBtn" class="avatar" title="Account menu" aria-label="Account menu">··</button>
           <div id="avatarMenu" class="menu">
             <div class="menu-head">

@@ -187,6 +187,9 @@ a{color:inherit}
   display:flex;gap:7px;align-items:center;font-size:12px;font-weight:600;color:#166534;
   background:#dcfce7;padding:5px 10px;border-radius:99px;white-space:nowrap;
 }
+/* Neutral, not a green "all good" claim - see app/shell.ts's note on why
+   the old hardcoded "All systems operational" chip was replaced. */
+.status-chip-unknown{color:var(--muted);background:var(--surface-2)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--good)}
 .dot.pulse-dot{animation:pulse 2s infinite}
 @keyframes pulse{

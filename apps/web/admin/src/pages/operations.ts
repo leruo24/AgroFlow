@@ -1,10 +1,11 @@
 import { api } from "@/data/api";
 import { esc, fmtInt, fmtDate, fmtPct } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
-import { FARM_NAMES, HARDWARE_TYPES, ADMINS, PROVINCES } from "@/data/mock";
+import { HARDWARE_TYPES, PROVINCES } from "@/data/referenceData";
 import {
   badge, kpiCard, panel, table, pageHeader, filterBar, resultCount,
 } from "@/ui/components";
+import { Icon } from "@/lib/icons";
 
 /* ============================== FARM HARDWARE ============================= */
 
@@ -32,10 +33,10 @@ export async function hardwarePage(): Promise<string> {
     `<button class="btn" data-act="add-device">+ Register Hardware</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Total Hardware", value: total, icon: "📡" })}
-    ${kpiCard({ label: "Online", value: online, format: "ratio", total: fmtInt(total), icon: "🟢" })}
-    ${kpiCard({ label: "Offline / Fault", value: offline, icon: "🔴" })}
-    ${kpiCard({ label: "Needs Service", value: needsService, icon: "🛠️" })}
+    ${kpiCard({ label: "Total Hardware", value: total, icon: Icon.radio })}
+    ${kpiCard({ label: "Online", value: online, format: "ratio", total: fmtInt(total), icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Offline / Fault", value: offline, icon: Icon.circleX })}
+    ${kpiCard({ label: "Needs Service", value: needsService, icon: Icon.wrench })}
   </div>
 
   ${filterBar({
@@ -44,7 +45,7 @@ export async function hardwarePage(): Promise<string> {
     showDateRange: true,
     searchPlaceholder: "Search by device ID, type or farm…",
     selects: [
-      { key: "farm", label: "Farm", options: [...FARM_NAMES] },
+      { key: "farm", label: "Farm", options: [...new Set(hardware.map((h) => h.farm))] },
       { key: "deviceType", label: "Device type", options: [...HARDWARE_TYPES] },
       { key: "status", label: "Connection", options: ["Online", "Offline", "Degraded", "Fault"] },
       { key: "maintenanceState", label: "Maintenance", options: ["OK", "Due", "Overdue", "Scheduled"] },
@@ -105,10 +106,10 @@ export async function alertsPage(): Promise<string> {
     `<button class="btn ghost" data-act="export-alerts">Export CSV</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Open Alerts", value: open.length, icon: "🚨" })}
-    ${kpiCard({ label: "Critical", value: critical, icon: "🔴" })}
-    ${kpiCard({ label: "Unassigned", value: unassigned, icon: "📥" })}
-    ${kpiCard({ label: "Escalated", value: escalated, icon: "⚠️" })}
+    ${kpiCard({ label: "Open Alerts", value: open.length, icon: Icon.bell })}
+    ${kpiCard({ label: "Critical", value: critical, icon: Icon.circleX })}
+    ${kpiCard({ label: "Unassigned", value: unassigned, icon: Icon.inbox })}
+    ${kpiCard({ label: "Escalated", value: escalated, icon: Icon.triangleAlert })}
   </div>
 
   ${filterBar({
@@ -120,8 +121,8 @@ export async function alertsPage(): Promise<string> {
       { key: "eventType", label: "Category", options: ["Account", "Farm Approval", "Hardware", "Connectivity", "Maintenance", "Platform", "Security", "Support"] },
       { key: "priority", label: "Priority", options: ["Critical", "High", "Medium", "Low"] },
       { key: "status", label: "Status", options: ["New", "Assigned", "In Progress", "Escalated", "Waiting for User", "Resolved", "Closed"] },
-      { key: "administrator", label: "Assigned to", options: [...ADMINS] },
-      { key: "farm", label: "Farm", options: [...FARM_NAMES] },
+      { key: "administrator", label: "Assigned to", options: [...new Set(alerts.map((a) => a.assignedTo).filter((x): x is string => !!x))] },
+      { key: "farm", label: "Farm", options: [...new Set(alerts.map((a) => a.farm).filter((x): x is string => !!x))] },
     ],
   })}
 
@@ -179,10 +180,10 @@ export async function maintenancePage(): Promise<string> {
     `<button class="btn" data-act="schedule-maint">+ Schedule Maintenance</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Scheduled", value: scheduled, icon: "📅" })}
-    ${kpiCard({ label: "Overdue", value: overdue, icon: "⚠️" })}
-    ${kpiCard({ label: "Upcoming", value: upcoming, icon: "🔜" })}
-    ${kpiCard({ label: "Completed", value: completed, icon: "✅" })}
+    ${kpiCard({ label: "Scheduled", value: scheduled, icon: Icon.calendar })}
+    ${kpiCard({ label: "Overdue", value: overdue, icon: Icon.triangleAlert })}
+    ${kpiCard({ label: "Upcoming", value: upcoming, icon: Icon.clock })}
+    ${kpiCard({ label: "Completed", value: completed, icon: Icon.circleCheck })}
   </div>
 
   ${filterBar({
@@ -193,7 +194,7 @@ export async function maintenancePage(): Promise<string> {
     selects: [
       { key: "status", label: "Status", options: ["Scheduled", "Overdue", "In Progress", "Upcoming", "Completed"] },
       { key: "priority", label: "Priority", options: ["Critical", "High", "Medium", "Low"] },
-      { key: "farm", label: "Farm", options: [...FARM_NAMES] },
+      { key: "farm", label: "Farm", options: [...new Set(jobs.map((m) => m.farm))] },
       { key: "province", label: "Province", options: [...PROVINCES] },
       { key: "deviceType", label: "Device type", options: [...HARDWARE_TYPES] },
     ],

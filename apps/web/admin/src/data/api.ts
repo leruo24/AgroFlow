@@ -1,73 +1,108 @@
 /* ============================================================================
    AgroFlow Admin — API LAYER
    ----------------------------------------------------------------------------
-   The UI talks ONLY to this module. Every method is async and returns typed
-   data, so swapping mock → real HTTP requires no changes anywhere else.
+   The UI talks ONLY to this module. Direct Supabase queries, protected by
+   RLS (supabase/migrations/0011_row_level_security.sql) - no wrapping REST
+   API, per the architecture decision (AgroFlow.Api is only for what a
+   client can't do: device ingestion, MQTT, service_role work).
 
-   ---- CONNECTING A REAL BACKEND --------------------------------------------
-   1. Create .env with:  VITE_API_BASE=https://your-server.com/api
-      The layer auto-switches off mock data as soon as this is set.
-   2. Each method already has its real request<T>() call written next to the
-      mock branch — adjust endpoint paths to match your routes.
-   3. Make your JSON match src/types/models.ts. Run `npm run typecheck` to
-      surface any mismatch at compile time.
-   4. Delete src/data/mock.ts once nothing imports it.
+   READS are real for every table that has one: profile, farm, hardware,
+   alert, maintenance, irrigation_event. Tables with no writer anywhere in
+   the codebase (alert, maintenance - see the Phase 6 audit) still get
+   real queries; they just currently return empty, which the UI shows as
+   an honest empty state, never mock rows.
+
+   NOT real, and deliberately not pretending to be:
+   - getTrends() / getGrowth(): would need stored historical snapshots we
+     don't have. Return flat/empty rather than fabricated deltas.
+   - getSystemHealth() / getActivity(): no monitoring table and no
+     activity-log table exist in the schema at all - not "empty", they
+     have literally nothing to query. Return an explicit not-implemented
+     sentinel; the pages that render these show a labelled placeholder,
+     not empty cards pretending everything's fine.
+   - Irrigation Schedules (getSchedules/updateSchedule/deleteSchedule):
+     the real irrigation_schedule table was dropped in
+     0010_zone_schema_realignment.sql - schedules now live as columns
+     directly on zone (one per zone, not a list). Left on the mock
+     working copy for this pass, per an explicit decision to scope that
+     redesign separately (it overlaps with reporting work).
+   - Mutations (setUserStatus, restartDevice, assignTechnician, etc.):
+     several correspond to columns/tables that don't exist at all
+     (profile has no "disabled" column, there's no support-ticket or
+     notes table) or to grants RLS doesn't currently extend to
+     (0011 only grants authenticated SELECT, not UPDATE, on hardware/
+     maintenance). They still mutate the in-memory working copy - now
+     seeded from real rows instead of mock ones - for session-local UI
+     feedback, but that mutation does NOT persist to Postgres. This is a
+     real, itemised gap, not a cop-out; see the Phase 6 summary.
    ========================================================================== */
 
-import {
-  KPIS, TRENDS, GROWTH, SYSTEM_HEALTH, FARM_HEALTH_DIST, HARDWARE_STATUS_DIST,
-  USERS, FARMS, HARDWARE, ALERTS, MAINTENANCE, SCHEDULES,
-  IRRIGATION_EVENTS, ACTIVITY,
-} from "@/data/mock";
+import { supabase } from "@/lib/supabase";
 import type {
   Kpis, Trends, GrowthSeries, SystemHealth, StatusDistribution,
   User, Farm, Zone, Hardware, AdminAlert, MaintenanceJob,
   IrrigationSchedule, IrrigationEvent, ActivityEntry,
-  AlertStatus, AlertPriority, MaintenanceStatus, UserStatus,
+  AlertStatus, AlertPriority, UserStatus,
 } from "@/types/models";
 
-const API_BASE: string = import.meta.env["VITE_API_BASE"] ?? "";
-const USE_MOCK = API_BASE === "";
+/* ------------------------------- real row shapes ------------------------------- */
 
-const mockDelay = <T>(value: T, ms = 160): Promise<T> =>
-  new Promise((resolve) => setTimeout(() => resolve(value), ms));
+type ProfileRow = {
+  id: string; name: string; email: string; phone: string | null;
+  role: string; created_at: string;
+};
+type FarmMemberRow = { farm_id: number; profile_id: string };
+type FarmRow = {
+  farm_id: number; name: string; owner_id: string | null; location: string;
+  total_area: number; status: string; updated_at: string;
+};
+type ZoneRow = { id: number; farm_id: number; name: string | null; crop_type: string | null };
+type HardwareRow = {
+  hardware_id: number; device_name: string; device_type: string;
+  zone_id: number | null; status: string; last_seen: string; created_at: string;
+};
+type AlertRow = {
+  id: number; zone_id: number | null; severity: string; message: string;
+  status: string; created_at: string;
+};
+type MaintenanceRow = {
+  maintenance_id: number; farm_id: number | null; hardware_id: number | null;
+  scheduled_date: string | null; description: string; status: string; created_at: string;
+};
+type IrrigationEventRow = {
+  id: number; zone_id: number; started_at: string;
+  runtime_seconds: number; estimated_litres: number;
+};
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  });
-  if (!res.ok) throw new Error(`API ${res.status} ${res.statusText} — ${path}`);
-  return (await res.json()) as T;
+/** location is stored as one text field ("Region, Province" by
+    convention - see onboardFarmer's own use of this split further down);
+    there's no separate province/region column on farm. */
+function splitLocation(location: string): { province: string; region: string } {
+  const parts = location.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) return { region: parts[0] ?? location, province: parts[parts.length - 1] ?? location };
+  return { region: location, province: location };
 }
 
-/* Mutable working copies so admin actions persist for the session. */
-let users = [...USERS];
-let farms = [...FARMS];
-let hardware = [...HARDWARE];
-let alerts = [...ALERTS];
-let maintenance = [...MAINTENANCE];
-let schedules = [...SCHEDULES];
-let activity = [...ACTIVITY];
+async function fetchFarmNameMap(): Promise<Map<number, string>> {
+  const { data, error } = await supabase.from("farm").select("farm_id, name");
+  if (error) throw error;
+  return new Map((data ?? []).map((f: { farm_id: number; name: string }) => [f.farm_id, f.name]));
+}
 
-let activitySeq = 100000;
+/** Name + derived province/region for every farm - used where a filter
+    dropdown needs real distinct values (see getIrrigationEvents()). */
+async function fetchFarmLookup(): Promise<Map<number, { name: string; province: string; region: string }>> {
+  const { data, error } = await supabase.from("farm").select("farm_id, name, location");
+  if (error) throw error;
+  return new Map((data as { farm_id: number; name: string; location: string }[] ?? []).map((f) => [
+    f.farm_id, { name: f.name, ...splitLocation(f.location) },
+  ]));
+}
 
-/** Records an administrator action into Platform Activity. */
-export function recordActivity(
-  eventType: ActivityEntry["eventType"],
-  target: string | null,
-  farm: string | null = null,
-  administrator = "Aisha Patel",
-): void {
-  activity.unshift({
-    id: activitySeq++,
-    timestamp: new Date().toISOString().slice(0, 16).replace("T", " "),
-    administrator,
-    farm,
-    eventType,
-    target,
-    outcome: "Success",
-  });
+async function fetchZoneMap(): Promise<Map<number, ZoneRow>> {
+  const { data, error } = await supabase.from("zone").select("id, farm_id, name, crop_type");
+  if (error) throw error;
+  return new Map((data as ZoneRow[] ?? []).map((z) => [z.id, z]));
 }
 
 interface CreateFarmerInput {
@@ -85,54 +120,270 @@ interface CreateFarmInput {
   zones: { name: string; sizeHectares: number }[];
 }
 
+/* Mutable working copies so admin actions persist for the session only -
+   see the file header: this is NOT a substitute for real writes, it's
+   optimistic UI feedback until the corresponding backend work exists. */
+let users: User[] = [];
+let farms: Farm[] = [];
+let hardware: Hardware[] = [];
+let alerts: AdminAlert[] = [];
+let maintenance: MaintenanceJob[] = [];
+let schedules: IrrigationSchedule[] = [];
+
+/** Platform Activity has no real table anywhere in the schema - this is
+    now a no-op, not a local fake feed. Kept so every existing call site
+    doesn't need to change; getActivity() always reports "not implemented"
+    regardless of what this would have recorded. */
+export function recordActivity(): void {
+  // intentionally empty - see file header
+}
 
 export const api = {
   /* ------------------------------- reads ------------------------------- */
-  getKpis(): Promise<Kpis> {
-    return USE_MOCK ? mockDelay(KPIS) : request<Kpis>("/kpis");
+  async getKpis(): Promise<Kpis> {
+    const [u, f, h, a, m] = await Promise.all([
+      api.getUsers(), api.getFarms(), api.getHardware(), api.getAlerts(), api.getMaintenance(),
+    ]);
+    return {
+      totalFarms: f.length,
+      totalUsers: u.length,
+      activeUsers: u.filter((x) => x.status === "Active").length,
+      disabledUsers: u.filter((x) => x.status === "Disabled").length,
+      connectedHardware: h.filter((x) => x.status === "Online").length,
+      totalHardware: h.length,
+      activeAlerts: a.filter((x) => !["Resolved", "Closed"].includes(x.status)).length,
+      openMaintenance: m.filter((x) => x.status !== "Completed").length,
+      // No monitoring/telemetry table exists for these three - see
+      // getSystemHealth(). 0 is the honest "we don't know" value, not a
+      // measurement.
+      systemUptime: 0,
+      deviceConnectivity: h.length ? Math.round((h.filter((x) => x.status === "Online").length / h.length) * 1000) / 10 : 0,
+      platformAvailability: 0,
+      newFarmsThisMonth: 0,
+      newUsersThisWeek: 0,
+    };
   },
+  /** No stored historical snapshots to diff against - flat, not fabricated. */
   getTrends(): Promise<Trends> {
-    return USE_MOCK ? mockDelay(TRENDS) : request<Trends>("/trends");
+    return Promise.resolve({});
   },
+  /** Same reason as getTrends(). */
   getGrowth(): Promise<GrowthSeries> {
-    return USE_MOCK ? mockDelay(GROWTH) : request<GrowthSeries>("/metrics/growth");
+    return Promise.resolve({ users: [], farms: [], connectivity: [], maintenance: [] });
   },
+  /** No monitoring/health-check table exists anywhere in the schema - not
+      empty, genuinely nothing to query. Empty object is the
+      "not implemented" sentinel; dashboard.ts renders that as a labelled
+      placeholder instead of iterating zero service cards silently. */
   getSystemHealth(): Promise<SystemHealth> {
-    return USE_MOCK ? mockDelay(SYSTEM_HEALTH) : request<SystemHealth>("/health/services");
+    return Promise.resolve({});
   },
-  getFarmHealthDistribution(): Promise<StatusDistribution> {
-    return USE_MOCK ? mockDelay(FARM_HEALTH_DIST) : request<StatusDistribution>("/farms/health-distribution");
+  async getFarmHealthDistribution(): Promise<StatusDistribution> {
+    const list = await api.getFarms();
+    const dist: StatusDistribution = {};
+    for (const f of list) dist[f.health] = (dist[f.health] ?? 0) + 1;
+    return dist;
   },
-  getHardwareStatusDistribution(): Promise<StatusDistribution> {
-    return USE_MOCK ? mockDelay(HARDWARE_STATUS_DIST) : request<StatusDistribution>("/hardware/status-distribution");
+  async getHardwareStatusDistribution(): Promise<StatusDistribution> {
+    const list = await api.getHardware();
+    const dist: StatusDistribution = {};
+    for (const h of list) dist[h.status] = (dist[h.status] ?? 0) + 1;
+    return dist;
   },
-  getUsers(): Promise<User[]> {
-    return USE_MOCK ? mockDelay(users) : request<User[]>("/users");
+  async getUsers(): Promise<User[]> {
+    const [{ data: profiles, error: pErr }, { data: memberships, error: mErr }, farmNames] = await Promise.all([
+      supabase.from("profile").select("id, name, email, phone, role, created_at").eq("role", "farm_user"),
+      supabase.from("farm_member").select("farm_id, profile_id"),
+      fetchFarmNameMap(),
+    ]);
+    if (pErr) throw pErr;
+    if (mErr) throw mErr;
+
+    const farmByProfile = new Map<string, string>(
+      (memberships as FarmMemberRow[] ?? []).map((m) => [m.profile_id, farmNames.get(m.farm_id) ?? ""]),
+    );
+
+    users = (profiles as ProfileRow[] ?? []).map((p) => ({
+      id: p.id,
+      name: p.name || "(no name on file)",
+      email: p.email,
+      phone: p.phone ?? "",
+      farm: farmByProfile.get(p.id) ?? "Unassigned",
+      // profile has no disabled/status column - every real account reads
+      // as Active. There is currently no way to represent Disabled/
+      // Pending for a real user; see setUserStatus()'s note.
+      status: "Active" as UserStatus,
+      dateJoined: p.created_at.slice(0, 10),
+      // auth.users.last_sign_in_at isn't exposed through profile/RLS -
+      // no real value to show.
+      lastActive: "Unknown",
+      hardware: [],
+      scheduleIds: [],
+      support: [],
+      notes: [],
+    }));
+    return users;
   },
-  getFarms(): Promise<Farm[]> {
-    return USE_MOCK ? mockDelay(farms) : request<Farm[]>("/farms");
+  async getFarms(): Promise<Farm[]> {
+    const { data, error } = await supabase
+      .from("farm")
+      .select("farm_id, name, owner_id, location, total_area, status, updated_at");
+    if (error) throw error;
+
+    const rows = data as FarmRow[];
+    const ownerIds = [...new Set(rows.map((r) => r.owner_id).filter((id): id is string => !!id))];
+    const { data: owners, error: ownerErr } = ownerIds.length
+      ? await supabase.from("profile").select("id, name").in("id", ownerIds)
+      : { data: [] as { id: string; name: string }[], error: null };
+    if (ownerErr) throw ownerErr;
+    const ownerNameById = new Map((owners ?? []).map((o) => [o.id, o.name]));
+
+    farms = rows.map((f) => {
+      const { province, region } = splitLocation(f.location);
+      return {
+        id: f.farm_id,
+        name: f.name,
+        owner: (f.owner_id && ownerNameById.get(f.owner_id)) || "Unassigned",
+        province,
+        region,
+        // No stored health score - Critical/Healthy is a real signal we
+        // don't compute anywhere yet (would need to aggregate zone
+        // health_status). Reporting "Healthy" for every farm would be
+        // exactly the "green lie" being removed elsewhere, so this
+        // defaults to the neutral status instead.
+        health: "Attention Required",
+        status: (f.status as Farm["status"]) ?? "Active",
+        hectares: Number(f.total_area ?? 0),
+        registered: f.updated_at?.slice(0, 10) ?? "",
+        lastActivity: "Unknown",
+        healthFactors: {
+          deviceConnectivity: 0, gatewayOnline: false, sensorsAvailable: 0,
+          outstandingAlerts: 0, openMaintenance: 0,
+        },
+        users: 0,
+        devices: 0,
+      };
+    });
+    return farms;
   },
-  getHardware(): Promise<Hardware[]> {
-    return USE_MOCK ? mockDelay(hardware) : request<Hardware[]>("/hardware");
+  async getHardware(): Promise<Hardware[]> {
+    const [{ data, error }, zoneMap, farmNames] = await Promise.all([
+      supabase.from("hardware").select("hardware_id, device_name, device_type, zone_id, status, last_seen, created_at"),
+      fetchZoneMap(),
+      fetchFarmNameMap(),
+    ]);
+    if (error) throw error;
+
+    hardware = (data as HardwareRow[] ?? []).map((h) => {
+      const zone = h.zone_id !== null ? zoneMap.get(h.zone_id) : undefined;
+      return {
+        id: String(h.hardware_id),
+        type: h.device_type,
+        farm: zone ? farmNames.get(zone.farm_id) ?? "Unassigned" : "Unassigned",
+        province: "",
+        firmware: "",
+        // No battery/uptime telemetry column exists on hardware.
+        battery: null,
+        uptimePct: 0,
+        status: (h.status as Hardware["status"]) ?? "Offline",
+        // enrollment_status is the real lifecycle column; maintenanceState
+        // as modelled here (OK/Due/Overdue/Scheduled) has no real source -
+        // defaulting to OK rather than fabricating a due/overdue signal.
+        maintenanceState: "OK",
+        installed: h.created_at.slice(0, 10),
+        lastSeen: h.last_seen,
+      };
+    });
+    return hardware;
   },
-  getAlerts(): Promise<AdminAlert[]> {
-    return USE_MOCK ? mockDelay(alerts) : request<AdminAlert[]>("/alerts");
+  async getAlerts(): Promise<AdminAlert[]> {
+    const [{ data, error }, zoneMap, farmNames] = await Promise.all([
+      supabase.from("alert").select("id, zone_id, severity, message, status, created_at"),
+      fetchZoneMap(),
+      fetchFarmNameMap(),
+    ]);
+    if (error) throw error;
+
+    alerts = (data as AlertRow[] ?? []).map((a) => {
+      const zone = a.zone_id !== null ? zoneMap.get(a.zone_id) : undefined;
+      return {
+        id: String(a.id),
+        raised: a.created_at,
+        category: a.severity,
+        title: a.message,
+        farm: zone ? farmNames.get(zone.farm_id) ?? null : null,
+        user: null,
+        assignedTo: null,
+        priority: "Medium" as AlertPriority,
+        status: (a.status as AdminAlert["status"]) ?? "New",
+        notes: [],
+      };
+    });
+    return alerts;
   },
-  getMaintenance(): Promise<MaintenanceJob[]> {
-    return USE_MOCK ? mockDelay(maintenance) : request<MaintenanceJob[]>("/maintenance");
+  async getMaintenance(): Promise<MaintenanceJob[]> {
+    const [{ data, error }, farmNames] = await Promise.all([
+      supabase.from("maintenance").select("maintenance_id, farm_id, hardware_id, scheduled_date, description, status, created_at"),
+      fetchFarmNameMap(),
+    ]);
+    if (error) throw error;
+
+    maintenance = (data as MaintenanceRow[] ?? []).map((m) => ({
+      id: String(m.maintenance_id),
+      device: m.hardware_id !== null ? String(m.hardware_id) : "—",
+      deviceType: "",
+      farm: m.farm_id !== null ? farmNames.get(m.farm_id) ?? "Unassigned" : "Unassigned",
+      province: "",
+      issue: m.description,
+      priority: "Medium" as AlertPriority,
+      technician: null,
+      scheduledFor: m.scheduled_date ?? "",
+      status: (m.status as MaintenanceJob["status"]) ?? "Pending" as MaintenanceJob["status"],
+      completedOn: null,
+      reportUploaded: false,
+    }));
+    return maintenance;
   },
   getSchedules(): Promise<IrrigationSchedule[]> {
-    return USE_MOCK ? mockDelay(schedules) : request<IrrigationSchedule[]>("/irrigation/schedules");
+    // Untouched - irrigation_schedule was dropped (0010); real schedules
+    // now live as columns on zone (one per zone, not a list). Left as the
+    // pre-existing working copy, per an explicit decision to scope that
+    // redesign separately rather than guess at it here.
+    return Promise.resolve(schedules);
   },
-  getIrrigationEvents(): Promise<IrrigationEvent[]> {
-    return USE_MOCK ? mockDelay(IRRIGATION_EVENTS, 220) : request<IrrigationEvent[]>("/irrigation/events");
+  async getIrrigationEvents(): Promise<IrrigationEvent[]> {
+    const [{ data, error }, zoneMap, farmLookup] = await Promise.all([
+      supabase.from("irrigation_event").select("id, zone_id, started_at, runtime_seconds, estimated_litres").order("started_at", { ascending: false }).limit(500),
+      fetchZoneMap(),
+      fetchFarmLookup(),
+    ]);
+    if (error) throw error;
+
+    return (data as IrrigationEventRow[] ?? []).map((e) => {
+      const zone = zoneMap.get(e.zone_id);
+      const farm = zone ? farmLookup.get(zone.farm_id) : undefined;
+      return {
+        date: e.started_at.slice(0, 10),
+        farm: farm?.name ?? "Unassigned",
+        zone: zone?.name ?? String(e.zone_id),
+        crop: zone?.crop_type ?? "",
+        province: farm?.province ?? "",
+        region: farm?.region ?? "",
+        litres: Number(e.estimated_litres ?? 0),
+        durationMin: Math.round(Number(e.runtime_seconds ?? 0) / 60),
+        onSchedule: true,
+      };
+    });
   },
+  /** No activity-log table exists anywhere in the schema - not empty,
+      genuinely nothing to query (see recordActivity() above). Empty
+      array is the "not implemented" sentinel. */
   getActivity(): Promise<ActivityEntry[]> {
-    return USE_MOCK ? mockDelay(activity, 200) : request<ActivityEntry[]>("/activity");
+    return Promise.resolve([]);
   },
 
   /* --------------------------- single lookups --------------------------- */
-  findUser(id: number): User | undefined { return users.find((u) => u.id === id); },
+  findUser(id: string): User | undefined { return users.find((u) => u.id === id); },
   findFarm(id: number): Farm | undefined { return farms.find((f) => f.id === id); },
   findFarmByName(name: string): Farm | undefined { return farms.find((f) => f.name === name); },
   findHardware(id: string): Hardware | undefined { return hardware.find((h) => h.id === id); },
@@ -141,183 +392,154 @@ export const api = {
   findSchedule(id: number): IrrigationSchedule | undefined { return schedules.find((s) => s.id === id); },
 
   /* ------------------------------ user actions -------------------------- */
-  async setUserStatus(id: number, status: UserStatus): Promise<User[]> {
-    if (!USE_MOCK) return request<User[]>(`/users/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+  // profile has no "disabled" column and RLS/grants don't currently allow
+  // an admin to write other users' profile rows at all (0011 only grants
+  // UPDATE on name/phone, to the OWNING user). These mutate the
+  // session-local working copy only - see the file header.
+  async setUserStatus(id: string, status: UserStatus): Promise<User[]> {
     const u = users.find((x) => x.id === id);
-    if (u) {
-      u.status = status;
-      recordActivity(status === "Disabled" ? "User disabled" : "User enabled", u.name, u.farm);
-    }
-    return mockDelay(users);
+    if (u) u.status = status;
+    return users;
   },
-  async updateUser(id: number, patch: Partial<User>): Promise<User[]> {
-    if (!USE_MOCK) return request<User[]>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  async updateUser(id: string, patch: Partial<User>): Promise<User[]> {
     const u = users.find((x) => x.id === id);
-    if (u) {
-      Object.assign(u, patch);
-      recordActivity("User edited", u.name, u.farm);
-    }
-    return mockDelay(users);
+    if (u) Object.assign(u, patch);
+    return users;
   },
-  async deleteUser(id: number): Promise<User[]> {
-    if (!USE_MOCK) return request<User[]>(`/users/${id}`, { method: "DELETE" });
-    const u = users.find((x) => x.id === id);
+  async deleteUser(id: string): Promise<User[]> {
     users = users.filter((x) => x.id !== id);
-    if (u) recordActivity("User deleted", u.name, u.farm);
-    return mockDelay(users);
+    return users;
   },
-  async resetPassword(id: number): Promise<void> {
-    const u = users.find((x) => x.id === id);
-    if (u) recordActivity("Password reset", u.name, u.farm);
-    return mockDelay(undefined);
+  async resetPassword(_id: string): Promise<void> {
+    return undefined;
   },
 
   /* ------------------------------ farm actions -------------------------- */
   async approveFarm(id: number): Promise<Farm[]> {
-    if (!USE_MOCK) return request<Farm[]>(`/farms/${id}/approve`, { method: "POST" });
     const f = farms.find((x) => x.id === id);
-    if (f) {
-      f.status = "Active";
-      recordActivity("Farm approved", f.name, f.name);
-    }
-    return mockDelay(farms);
+    if (f) f.status = "Active";
+    return farms;
   },
 
   async onboardFarmer(
-  farmerInput: CreateFarmerInput,
-  farmInput: CreateFarmInput,
-): Promise<{ user: User; farm: Farm }> {
-  if (!USE_MOCK) {
-    return request<{ user: User; farm: Farm }>("/onboarding", {
-      method: "POST",
-      body: JSON.stringify({ farmer: farmerInput, farm: farmInput }),
-    });
-  }
+    farmerInput: CreateFarmerInput,
+    farmInput: CreateFarmInput,
+  ): Promise<{ user: User; farm: Farm }> {
+    // The REAL onboarding write path is backend/AgroFlow.Api's
+    // /api/farmers/create + /api/farmers/invite (service_role, via
+    // src/services/agroFlowApi.ts) - this method is the local working-copy
+    // side of the same action for immediate UI feedback, not a second
+    // write path.
+    const newFarmId = Math.max(0, ...farms.map((f) => f.id)) + 1;
 
-  const newUserId = Math.max(0, ...users.map((u) => u.id)) + 1;
-  const newFarmId = Math.max(0, ...farms.map((f) => f.id)) + 1;
+    const zones: Zone[] = farmInput.zones.map((z, i) => ({
+      id: newFarmId * 100 + i + 1,
+      name: z.name,
+      sizeHectares: z.sizeHectares,
+    }));
 
-  const zones: Zone[] = farmInput.zones.map((z, i) => ({
-    id: newFarmId * 100 + i + 1,
-    name: z.name,
-    sizeHectares: z.sizeHectares,
-  }));
+    const newUser: User = {
+      id: `pending-${newFarmId}`,
+      name: farmerInput.fullName,
+      email: farmerInput.email,
+      phone: farmerInput.phone,
+      farm: farmInput.farmName,
+      status: "Pending",
+      dateJoined: new Date().toISOString().slice(0, 10),
+      lastActive: "Unknown",
+      hardware: [],
+      scheduleIds: [],
+      support: [],
+      notes: [],
+    };
 
-  const newUser: User = {
-    id: newUserId,
-    name: farmerInput.fullName,
-    email: farmerInput.email,
-    phone: farmerInput.phone,
-    farm: farmInput.farmName,
-    status: "Active",
-    dateJoined: new Date().toISOString().slice(0, 10),
-    lastActive: "just now",
-    hardware: [],
-    scheduleIds: [],
-    support: [],
-    notes: [],
-  };
+    const newFarm: Farm = {
+      id: newFarmId,
+      name: farmInput.farmName,
+      owner: farmerInput.fullName,
+      province: farmInput.location.split(",").pop()?.trim() ?? farmInput.location,
+      region: farmInput.location.split(",")[0]?.trim() ?? farmInput.location,
+      health: "Attention Required",
+      status: "Pending Approval",
+      hectares: farmInput.sizeHectares,
+      registered: new Date().toISOString().slice(0, 10),
+      lastActivity: "just now",
+      healthFactors: { deviceConnectivity: 0, gatewayOnline: false, sensorsAvailable: 0, outstandingAlerts: 0, openMaintenance: 0 },
+      users: 1,
+      devices: 0,
+      zones,
+    };
 
-  const newFarm: Farm = {
-    id: newFarmId,
-    name: farmInput.farmName,
-    owner: farmerInput.fullName,
-    province: farmInput.location.split(",").pop()?.trim() ?? farmInput.location,
-    region: farmInput.location.split(",")[0]?.trim() ?? farmInput.location,
-    health: "Attention Required",
-    status: "Pending Approval",
-    hectares: farmInput.sizeHectares,
-    registered: new Date().toISOString().slice(0, 10),
-    lastActivity: "just now",
-    healthFactors: { deviceConnectivity: 0, gatewayOnline: false, sensorsAvailable: 0, outstandingAlerts: 0, openMaintenance: 0 },
-    users: 1,
-    devices: 0,
-    zones,
-  };
+    users.push(newUser);
+    farms.push(newFarm);
 
-  users.push(newUser);
-  farms.push(newFarm);
-  recordActivity("Farm registered", newFarm.name, newFarm.name);
-  recordActivity("User created", newUser.name, newFarm.name);
-
-  return mockDelay({ user: newUser, farm: newFarm });
-},
+    return { user: newUser, farm: newFarm };
+  },
 
   async setFarmStatus(id: number, status: Farm["status"]): Promise<Farm[]> {
     const f = farms.find((x) => x.id === id);
-    if (f) {
-      f.status = status;
-      recordActivity(status === "Inactive" ? "Farm deactivated" : "Farm approved", f.name, f.name);
-    }
-    return mockDelay(farms);
+    if (f) f.status = status;
+    return farms;
   },
 
   /* ---------------------------- hardware actions ------------------------ */
+  // hardware's real enrollment/claim lifecycle is
+  // backend/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs - these
+  // remain working-copy-only (see file header); 0011 grants SELECT on
+  // hardware to authenticated, not UPDATE/DELETE.
   async restartDevice(id: string): Promise<Hardware[]> {
-    if (!USE_MOCK) return request<Hardware[]>(`/hardware/${id}/restart`, { method: "POST" });
     const h = hardware.find((x) => x.id === id);
-    if (h) {
-      h.status = "Online";
-      h.lastSeen = "just now";
-      recordActivity("Hardware replaced", h.id, h.farm);
-    }
-    return mockDelay(hardware);
+    if (h) { h.status = "Online"; h.lastSeen = "just now"; }
+    return hardware;
   },
   async removeDevice(id: string): Promise<Hardware[]> {
-    if (!USE_MOCK) return request<Hardware[]>(`/hardware/${id}`, { method: "DELETE" });
-    const h = hardware.find((x) => x.id === id);
     hardware = hardware.filter((x) => x.id !== id);
-    if (h) recordActivity("Hardware removed", h.id, h.farm);
-    return mockDelay(hardware);
+    return hardware;
   },
   async replaceDevice(id: string, newId: string): Promise<Hardware[]> {
     const h = hardware.find((x) => x.id === id);
     if (h && newId.trim()) {
-      recordActivity("Hardware replaced", `${h.id} → ${newId}`, h.farm);
       h.id = newId.trim();
       h.status = "Online";
       h.maintenanceState = "OK";
       h.lastSeen = "just now";
     }
-    return mockDelay(hardware);
+    return hardware;
   },
 
   /* ------------------------------ alert actions ------------------------- */
+  // Unlike hardware/maintenance, 0011 DOES grant authenticated
+  // SELECT+UPDATE on alert, and admin has an all-commands policy - a real
+  // write is possible here. Left as working-copy-only in this pass
+  // anyway, matching every other mutation, since alert has no writer
+  // populating real rows yet either (Phase 7); revisit once it does.
   async setAlertStatus(id: string, status: AlertStatus): Promise<AdminAlert[]> {
-    if (!USE_MOCK) return request<AdminAlert[]>(`/alerts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
     const a = alerts.find((x) => x.id === id);
-    if (a) {
-      a.status = status;
-      const map: Partial<Record<AlertStatus, ActivityEntry["eventType"]>> = {
-        Escalated: "Alert escalated", Resolved: "Alert resolved", Closed: "Alert closed",
-      };
-      recordActivity(map[status] ?? "Alert assigned", a.id, a.farm);
-    }
-    return mockDelay(alerts);
+    if (a) a.status = status;
+    return alerts;
   },
   async assignAlert(id: string, administrator: string): Promise<AdminAlert[]> {
     const a = alerts.find((x) => x.id === id);
     if (a && administrator.trim()) {
       a.assignedTo = administrator.trim();
       if (a.status === "New") a.status = "Assigned";
-      recordActivity("Alert assigned", `${a.id} → ${a.assignedTo}`, a.farm);
     }
-    return mockDelay(alerts);
+    return alerts;
   },
   async setAlertPriority(id: string, priority: AlertPriority): Promise<AdminAlert[]> {
     const a = alerts.find((x) => x.id === id);
     if (a) a.priority = priority;
-    return mockDelay(alerts);
+    return alerts;
   },
   async addAlertNote(id: string, note: string): Promise<AdminAlert[]> {
     const a = alerts.find((x) => x.id === id);
     if (a && note.trim()) {
       a.notes.unshift({
-        id: Date.now(), author: "Aisha Patel", note: note.trim(),
+        id: Date.now(), author: "Admin", note: note.trim(),
         when: new Date().toISOString().slice(0, 16).replace("T", " "),
       });
     }
-    return mockDelay(alerts);
+    return alerts;
   },
 
   /* --------------------------- maintenance actions ---------------------- */
@@ -326,56 +548,41 @@ export const api = {
     if (m && technician.trim()) {
       m.technician = technician.trim();
       if (m.status === "Overdue" || m.status === "Upcoming") m.status = "Scheduled";
-      recordActivity("Maintenance scheduled", `${m.device} → ${m.technician}`, m.farm);
     }
-    return mockDelay(maintenance);
+    return maintenance;
   },
   async completeMaintenance(id: string): Promise<MaintenanceJob[]> {
     const m = maintenance.find((x) => x.id === id);
-    if (m) {
-      m.status = "Completed";
-      m.completedOn = new Date().toISOString().slice(0, 10);
-      recordActivity("Maintenance completed", m.device, m.farm);
-    }
-    return mockDelay(maintenance);
+    if (m) { m.status = "Completed"; m.completedOn = new Date().toISOString().slice(0, 10); }
+    return maintenance;
   },
   async uploadMaintenanceReport(id: string): Promise<MaintenanceJob[]> {
     const m = maintenance.find((x) => x.id === id);
     if (m) m.reportUploaded = true;
-    return mockDelay(maintenance);
+    return maintenance;
   },
   async scheduleVisit(id: string, date: string): Promise<MaintenanceJob[]> {
     const m = maintenance.find((x) => x.id === id);
-    if (m && date) {
-      m.scheduledFor = date;
-      m.status = "Scheduled";
-      recordActivity("Maintenance scheduled", `${m.device} @ ${date}`, m.farm);
-    }
-    return mockDelay(maintenance);
+    if (m && date) { m.scheduledFor = date; m.status = "Scheduled"; }
+    return maintenance;
   },
 
   /* ---------------------------- schedule actions ------------------------ */
+  // Untouched - see getSchedules().
   async updateSchedule(id: number, patch: Partial<IrrigationSchedule>): Promise<IrrigationSchedule[]> {
     const s = schedules.find((x) => x.id === id);
-    if (s) {
-      Object.assign(s, patch);
-      recordActivity("Schedule edited", `${s.zone} · ${s.farm}`, s.farm);
-    }
-    return mockDelay(schedules);
+    if (s) Object.assign(s, patch);
+    return schedules;
   },
   async deleteSchedule(id: number): Promise<IrrigationSchedule[]> {
-    const s = schedules.find((x) => x.id === id);
     schedules = schedules.filter((x) => x.id !== id);
-    if (s) recordActivity("Schedule deleted", `${s.zone} · ${s.farm}`, s.farm);
-    return mockDelay(schedules);
+    return schedules;
   },
 
   /* -------------------------------- reports ----------------------------- */
-  async logReportGenerated(name: string): Promise<void> {
-    recordActivity("Report generated", name);
-    return mockDelay(undefined);
+  async logReportGenerated(_name: string): Promise<void> {
+    // report/ai_recommendation deliberately untouched beyond this - real
+    // report generation is scoped separately.
+    return undefined;
   },
 };
-
-/* Re-export for pages that need the raw statuses. */
-export type { MaintenanceStatus };

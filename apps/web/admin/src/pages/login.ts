@@ -3,12 +3,13 @@
    (see app/router.ts): outside the authenticated app shell entirely. */
 
 import { signIn } from "@/app/auth";
+import { Icon } from "@/lib/icons";
 
 export const LOGIN_HTML = `
   <div class="auth-screen">
     <form class="auth-card" id="loginForm" novalidate>
       <div class="auth-brand">
-        <span class="leaf">🌱</span>
+        <span class="leaf">${Icon.sprout}</span>
         <h1>AgroFlow</h1>
         <p class="muted">Administration console</p>
       </div>

@@ -95,7 +95,9 @@ export interface Note {
 }
 
 export interface User {
-  id: number;
+  /** profile.id is a Supabase Auth uuid, not a numeric id - unlike Farm/
+      Hardware/etc., which map onto real bigint/generated ids. */
+  id: string;
   name: string;
   email: string;
   phone: string;

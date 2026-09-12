@@ -1,11 +1,12 @@
 import { api } from "@/data/api";
 import { esc, fmtInt, healthDot, healthTone, fmtPct } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
-import { PROVINCES, REGIONS } from "@/data/mock";
+import { PROVINCES, REGIONS } from "@/data/referenceData";
 import {
   badge, kpiCard, panel, pageHeader, filterBar, resultCount, meter,
 } from "@/ui/components";
 import type { Farm } from "@/types/models";
+import { Icon } from "@/lib/icons";
 
 function farmCard(f: Farm): string {
   const hf = f.healthFactors;
@@ -19,9 +20,9 @@ function farmCard(f: Farm): string {
     </div>
 
     <div class="farm-meta">
-      <span>📍 ${esc(f.province)}</span>
-      <span>🗺️ ${esc(f.region)}</span>
-      <span>📐 ${fmtInt(f.hectares)} ha</span>
+      <span class="meta-ico">${Icon.mapPin}${esc(f.province)}</span>
+      <span class="meta-ico">${Icon.map}${esc(f.region)}</span>
+      <span class="meta-ico">${Icon.ruler}${fmtInt(f.hectares)} ha</span>
     </div>
 
     <div class="farm-stats">
@@ -67,11 +68,11 @@ export async function farmsPage(): Promise<string> {
     `<button class="btn" data-act="add-farm">+ Register Farm</button>`)}
 
   <div class="grid kpis five">
-    ${kpiCard({ label: "Total Farms", value: total, icon: "🚜" })}
-    ${kpiCard({ label: "New Farms", value: recent, trend: { dir: "up", text: "since 1 May" }, icon: "✨" })}
-    ${kpiCard({ label: "Active Farms", value: active, icon: "✅" })}
-    ${kpiCard({ label: "Inactive Farms", value: inactive, icon: "💤" })}
-    ${kpiCard({ label: "Pending Approval", value: pending, icon: "⏳" })}
+    ${kpiCard({ label: "Total Farms", value: total, icon: Icon.tractor })}
+    ${kpiCard({ label: "New Farms", value: recent, trend: { dir: "up", text: "since 1 May" }, icon: Icon.sparkles })}
+    ${kpiCard({ label: "Active Farms", value: active, icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Inactive Farms", value: inactive, icon: Icon.moon })}
+    ${kpiCard({ label: "Pending Approval", value: pending, icon: Icon.hourglass })}
   </div>
 
   ${filterBar({

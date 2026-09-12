@@ -14,7 +14,6 @@ import {
 } from 'react';
 
 import {
-  Linking,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -36,10 +35,6 @@ import {
 import {
   useTheme,
 } from '@/context/ThemeContext';
-
-import {
-  mockFarm,
-} from '@/data/mockFarm';
 
 import {
   createHomeStyles,
@@ -91,7 +86,7 @@ export default function HomeScreen() {
 
   const weatherLocation =
     farm?.location ??
-    mockFarm.location.city;
+    'your location';
 
   const profileInitials =
     [
@@ -353,15 +348,12 @@ export default function HomeScreen() {
     ).length;
 
   async function handleDashboard() {
-    if (
-      !mockFarm.dashboardUrl
-    ) {
-      return;
-    }
-
-    await Linking.openURL(
-      mockFarm.dashboardUrl
-    );
+    // No real per-farm web-dashboard URL exists anywhere in the schema -
+    // this was always a dead placeholder (mockFarm.dashboardUrl was ''),
+    // never actually wired to anything. Left as a no-op rather than
+    // removing the button outright, pending a real decision on whether
+    // this feature exists at all.
+    return;
   }
 
   return (

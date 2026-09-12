@@ -4,6 +4,7 @@ import {
   badge, kpiCard, panel, barChart, lineChart, donut, table,
   pageHeader, routeLink, meter,
 } from "@/ui/components";
+import { Icon } from "@/lib/icons";
 
 export async function dashboardPage(): Promise<string> {
   const [kpis, trends, growth, health, farmDist, hwDist, alerts, maintenance, activity] =
@@ -29,12 +30,12 @@ export async function dashboardPage(): Promise<string> {
     `<button class="btn ghost" data-act="export-dashboard">Export summary</button>`)}
 
   <div class="grid kpis">
-    ${kpiCard({ label: "Total Farms", value: kpis.totalFarms, trend: trends["totalFarms"] ?? undefined, icon: "🚜" })}
-    ${kpiCard({ label: "Total Users", value: kpis.totalUsers, trend: trends["totalUsers"] ?? undefined, icon: "👥" })}
-    ${kpiCard({ label: "Connected Hardware", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: "📡" })}
-    ${kpiCard({ label: "Active Alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: "🚨" })}
-    ${kpiCard({ label: "Open Maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: "🛠️" })}
-    ${kpiCard({ label: "System Uptime", value: kpis.systemUptime, format: "pct", trend: trends["systemUptime"] ?? undefined, icon: "✅" })}
+    ${kpiCard({ label: "Total Farms", value: kpis.totalFarms, trend: trends["totalFarms"] ?? undefined, icon: Icon.tractor })}
+    ${kpiCard({ label: "Total Users", value: kpis.totalUsers, trend: trends["totalUsers"] ?? undefined, icon: Icon.users })}
+    ${kpiCard({ label: "Connected Hardware", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: Icon.radio })}
+    ${kpiCard({ label: "Active Alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: Icon.bell })}
+    ${kpiCard({ label: "Open Maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: Icon.wrench })}
+    ${kpiCard({ label: "System Uptime", value: kpis.systemUptime, format: "pct", trend: trends["systemUptime"] ?? undefined, icon: Icon.circleCheck })}
   </div>
 
   <div class="grid kpis secondary">
@@ -69,22 +70,33 @@ export async function dashboardPage(): Promise<string> {
     `)}
   </div>
 
-  ${panel("System Health", "Core platform services", routeLink("alerts", "Operations centre →"), `
-    <div class="health-grid">
-      ${Object.entries(health).map(([name, svc]) => `
-        <div class="health-card">
-          <div class="health-top">
-            <span class="dot-r ${svc.ok ? "dot-good" : "dot-bad dot-throb"}"></span>
-            <b>${esc(name)}</b>
-          </div>
-          <div class="health-status">${esc(svc.status)}</div>
-          ${svc.latencyMs !== null ? `<div class="health-latency">${fmtInt(svc.latencyMs)} ms</div>` : ""}
-        </div>`).join("")}
-    </div>
-    <div class="uptime-row">
-      <span>30-day uptime</span>${meter(kpis.systemUptime)}<b>${fmtPct(kpis.systemUptime)}</b>
-    </div>
-  `)}
+  ${Object.keys(health).length
+    ? panel("System Health", "Core platform services", routeLink("alerts", "Operations centre →"), `
+        <div class="health-grid">
+          ${Object.entries(health).map(([name, svc]) => `
+            <div class="health-card">
+              <div class="health-top">
+                <span class="dot-r ${svc.ok ? "dot-good" : "dot-bad dot-throb"}"></span>
+                <b>${esc(name)}</b>
+              </div>
+              <div class="health-status">${esc(svc.status)}</div>
+              ${svc.latencyMs !== null ? `<div class="health-latency">${fmtInt(svc.latencyMs)} ms</div>` : ""}
+            </div>`).join("")}
+        </div>
+        <div class="uptime-row">
+          <span>30-day uptime</span>${meter(kpis.systemUptime)}<b>${fmtPct(kpis.systemUptime)}</b>
+        </div>
+      `)
+    // No monitoring/health-check table exists anywhere in the schema
+    // (see data/api.ts's getSystemHealth()) - a real gap, not empty data.
+    // Was previously a hardcoded "All systems operational" - that was a
+    // lie the UI told with no data behind it at all.
+    : panel("System Health", "", "", `
+        <div class="empty-state">
+          Not yet implemented - there is no monitoring/health-check table
+          to report on.
+        </div>
+      `)}
 
   <div class="grid split-2">
     ${panel("Priority Alerts", "Requiring administrator action", routeLink("alerts", "View all →"),
