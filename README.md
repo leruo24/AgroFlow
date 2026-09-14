@@ -5,6 +5,11 @@ backend with Row Level Security, a .NET API bridging MQTT + device
 enrollment to the database, a farmer-facing mobile app, and an admin web
 dashboard.
 
+> Coming from an older branch and don't recognize this layout? See
+> [docs/ORIENTATION.md](docs/ORIENTATION.md) for a directory map, exact
+> run commands, the RLS/schema-truth situation, and a farmer-onboarding
+> handover.
+
 ## Architecture
 
 ```
