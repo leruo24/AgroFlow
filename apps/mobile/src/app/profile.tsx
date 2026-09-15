@@ -40,8 +40,9 @@ import {
 } from '@/context/ThemeContext';
 
 import {
-  supabase,
-} from '@/lib/supabase';
+  fetchFarmerDashboard,
+  updateProfileThroughApi,
+} from '@/services/agroFlowApi';
 
 type ProfileRecord = {
   id: string;
@@ -210,28 +211,12 @@ export default function ProfileScreen() {
 
           setProfileError('');
 
-          const {
-            data,
-            error,
-          } =
-            await supabase
-              .from(
-                'profile'
-              )
-              .select(
-                'id, name, email, role, phone'
-              )
-              .eq(
-                'id',
-                authUser.id
-              )
-              .single();
+          const dashboard =
+            await fetchFarmerDashboard();
+          const data =
+            dashboard.profile;
 
-          if (
-            error
-          ) {
-            throw error;
-          }
+          if (!data) throw new Error('Profile not found.');
 
           if (
             !isMounted
@@ -459,33 +444,10 @@ export default function ProfileScreen() {
         true
       );
 //save the editable fields to the public profile row. Email and role are deliberately excluded, so this screen cannot change either protected field. Auth metadata is then refreshed so the rest of the app immediately shows the new name, phone, and initials.
-      const {
-        error: databaseError,
-      } =
-        await supabase
-          .from(
-            'profile'
-          )
-          .update({
-            name:
-              fullName,
-            phone:
-              cleanPhone,
-          })
-          .eq(
-            'id',
-            currentUser.id
-          )
-          .select(
-            'id'
-          )
-          .single();
-
-      if (
-        databaseError
-      ) {
-        throw databaseError;
-      }
+      await updateProfileThroughApi(
+        fullName,
+        cleanPhone
+      );
 
       await updateProfile({
         firstName:
@@ -579,6 +541,9 @@ export default function ProfileScreen() {
       ]}
     >
       <ScrollView
+        style={
+          styles.page
+        }
         showsVerticalScrollIndicator={
           false
         }
@@ -1000,25 +965,54 @@ export default function ProfileScreen() {
         </View>
 
         {!editing && (
-          <TouchableOpacity
-            style={
-              styles.logoutButton
-            }
-            onPress={
-              handleLogout
-            }
-            activeOpacity={
-              0.75
-            }
-          >
-            <Text
+          <>
+            <TouchableOpacity
               style={
-                styles.logoutText
+                styles.changePasswordButton
+              }
+              onPress={() =>
+                router.push({
+                  pathname:
+                    '/update-password',
+                  params: {
+                    source:
+                      'profile',
+                  },
+                })
+              }
+              activeOpacity={
+                0.75
               }
             >
-              Log Out
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={
+                  styles.changePasswordText
+                }
+              >
+                Change Password
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={
+                styles.logoutButton
+              }
+              onPress={
+                handleLogout
+              }
+              activeOpacity={
+                0.75
+              }
+            >
+              <Text
+                style={
+                  styles.logoutText
+                }
+              >
+                Log Out
+              </Text>
+            </TouchableOpacity>
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -1088,20 +1082,30 @@ function createStyles(
     container: {
       flex: 1,
       backgroundColor:
+        colors.navigation,
+    },
+
+    page: {
+      flex: 1,
+      backgroundColor:
         colors.background,
     },
 
     scrollContent: {
       paddingHorizontal: 18,
-      paddingTop: 8,
       paddingBottom: 40,
     },
 
     topBar: {
-      minHeight: 44,
+      minHeight: 54,
+      marginHorizontal: -18,
+      marginBottom: 16,
+      paddingHorizontal: 18,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      backgroundColor:
+        colors.navigation,
     },
 
     profileErrorBox: {
@@ -1132,14 +1136,14 @@ function createStyles(
       fontSize: 28,
       lineHeight: 30,
       color:
-        colors.text,
+        colors.navigationText,
     },
 
     backText: {
       fontSize: 12,
       fontWeight: '600',
       color:
-        colors.text,
+        colors.navigationText,
     },
 
     editButton: {
@@ -1167,17 +1171,17 @@ function createStyles(
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
-        colors.surface,
+        colors.navigation,
       borderWidth: 1,
       borderColor:
-        colors.border,
+        colors.navigationMuted,
     },
 
     cancelTopText: {
       fontSize: 10,
       fontWeight: '600',
       color:
-        colors.textSecondary,
+        colors.navigationText,
     },
 
     header: {
@@ -1360,6 +1364,25 @@ function createStyles(
       borderWidth: 1,
       borderColor:
         colors.error,
+    },
+
+    changePasswordButton: {
+      height: 44,
+      marginTop: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor:
+        colors.surface,
+      borderWidth: 1,
+      borderColor:
+        colors.primary,
+    },
+
+    changePasswordText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color:
+        colors.primary,
     },
 
     logoutText: {

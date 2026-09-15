@@ -19,8 +19,10 @@ import {
 } from '@/context/AuthContext';
 
 import {
-  supabase,
-} from '@/lib/supabase';
+  fetchFarmerDashboard,
+  sendManualIrrigationCommand,
+  updateZoneThroughApi,
+} from '@/services/agroFlowApi';
 //status stypes - restricts irrigation to these statuses
 export type IrrigationStatus =
   | 'Active'
@@ -228,56 +230,13 @@ type ZoneRow = {
 async function fetchAssignedFarm(
   profileId: string
 ): Promise<Farm | null> {
-  const {
-    data: membership,
-    error: membershipError,
-  } =
-    await supabase
-      .from('farm_member')
-      .select('farm_id')
-      .eq(
-        'profile_id',
-        profileId
-      )
-      .limit(1)
-      .maybeSingle<
-        FarmMemberRow
-      >();
+  void profileId;
+  const dashboard =
+    await fetchFarmerDashboard();
+  const farmRow =
+    dashboard.farm as FarmRow | null;
 
-  if (
-    membershipError
-  ) {
-    throw membershipError;
-  }
-
-  if (
-    !membership
-  ) {
-    return null;
-  }
-
-  const {
-    data: farmRow,
-    error: farmError,
-  } =
-    await supabase
-      .from('farm')
-      .select(
-        'farm_id, owner_id, name, location, total_area, status, latitude, longitude'
-      )
-      .eq(
-        'farm_id',
-        membership.farm_id
-      )
-      .single<
-        FarmRow
-      >();
-
-  if (
-    farmError
-  ) {
-    throw farmError;
-  }
+  if (!farmRow) return null;
 
   return {
     id:
@@ -372,6 +331,8 @@ type AlertRow = {
   zone_id: DatabaseId | null;
   severity: string;
   message: string;
+  status?: string;
+  created_at?: string;
 };
 
 // A sensor with no reading in the last hour reads as Offline - the
@@ -587,90 +548,17 @@ function mapZoneRow(
 
 async function fetchZonesForFarm(
   farmId: string
-): Promise<Zone[]> {
-  const {
-    data,
-    error,
-  } =
-    await supabase
-      .from(
-        'zone'
-      )
-      .select(
-        '*'
-      )
-      .eq(
-        'farm_id',
-        farmId
-      )
-      .order(
-        'id',
-        {
-          ascending:
-            true,
-        }
-      );
-
-  if (
-    error
-  ) {
-    throw error;
-  }
-
-  const rows = data as ZoneRow[];
-  const zoneIds = rows.map((r) => r.id);
-
-  // Real tables, queried directly - some (sensor_reading, irrigation_event
-  // via the view, weather, alert) currently have no writer or no hardware
-  // reporting yet, so these commonly come back empty. That's a correct
-  // "no data yet" state, not an error - see the empty-state defaults
-  // inside mapZoneRow above, not fabricated fallback content.
-  const [
-    { data: readings, error: readingsError },
-    { data: events, error: eventsError },
-    { data: usage, error: usageError },
-    { data: weatherRows, error: weatherError },
-    { data: alertRows, error: alertsError },
-  ] = await Promise.all([
-    supabase
-      .from('zone_latest_reading')
-      .select('zone_id, moisture, temperature, humidity, last_reading_at')
-      .eq('farm_id', farmId),
-    zoneIds.length
-      ? supabase
-          .from('irrigation_event')
-          .select('zone_id, started_at, runtime_seconds, estimated_litres')
-          .in('zone_id', zoneIds)
-          .order('started_at', { ascending: false })
-          .limit(500)
-      : Promise.resolve({ data: [] as IrrigationEventRow[], error: null }),
-    zoneIds.length
-      ? supabase
-          .from('zone_daily_water_usage')
-          .select('zone_id, used_today_litres')
-          .in('zone_id', zoneIds)
-      : Promise.resolve({ data: [] as WaterUsageRow[], error: null }),
-    supabase
-      .from('weather')
-      .select('weather_conditions, recorded_at')
-      .eq('farm_id', farmId)
-      .order('recorded_at', { ascending: false })
-      .limit(1),
-    zoneIds.length
-      ? supabase
-          .from('alert')
-          .select('id, zone_id, severity, message')
-          .in('zone_id', zoneIds)
-          .eq('status', 'Open')
-          .order('created_at', { ascending: false })
-      : Promise.resolve({ data: [] as AlertRow[], error: null }),
-  ]);
-
-  if (readingsError) throw readingsError;
-  if (eventsError) throw eventsError;
-  if (usageError) throw usageError;
-  if (weatherError) throw weatherError;
-  if (alertsError) throw alertsError;
+): Promise<{ zones: Zone[]; alerts: AlertEntry[] }> {
+  const dashboard =
+    await fetchFarmerDashboard();
+  const rows = dashboard.zones
+    .filter((row) => String(row.farm_id) === farmId) as ZoneRow[];
+  const readings = dashboard.readings as ZoneLatestReadingRow[];
+  const events = dashboard.events as IrrigationEventRow[];
+  const usage = dashboard.usage as WaterUsageRow[];
+  const weatherRows = dashboard.weather as WeatherRow[];
+  const alertRows = (dashboard.alerts as (AlertRow & { status?: string })[])
+    .filter((alert) => !alert.status || alert.status === 'Open');
 
   const readingByZone = new Map<string, ZoneLatestReadingRow>(
     ((readings ?? []) as ZoneLatestReadingRow[]).map((r) => [String(r.zone_id), r])
@@ -697,7 +585,7 @@ async function fetchZonesForFarm(
     alertsByZone.set(key, list);
   }
 
-  return rows.map((row, index) =>
+  const mappedZones = rows.map((row, index) =>
     mapZoneRow(
       row,
       index,
@@ -707,109 +595,26 @@ async function fetchZonesForFarm(
       latestWeather,
       alertsByZone.get(String(row.id)) ?? []
     ));
-}
 
-type AutomaticIrrigationAction =//deciding whether to start or stop
-  | 'start'
-  | 'stop'
-  | null;
-
-function getAutomaticIrrigationAction(
-  zone: Zone
-): AutomaticIrrigationAction {
-  const automation =
-    zone.irrigation.automation;
-
-  const moisture =
-    zone.sensors.soilMoisture.value;
-
-  const startAt =
-    automation.moistureThreshold;
-
-  const stopAt =
-    automation.desiredMoisture;
-
-  const automaticControlIsAvailable =
-    zone.irrigation.mode ===
-      'automatic' &&
-    automation.enabled &&
-    !zone.irrigation.override.active;
-
-  if (
-    !automaticControlIsAvailable
-  ) {
-    return null;
-  }
-
-  // Once irrigation starts, it continues until the
-  // separate desired moisture level is reached.
-  if (
-    zone.irrigation.status === 'Active' &&
-    moisture >= stopAt
-  ) {
-    return 'stop';
-  }
-
-  const sensorAllowsStart =
-    zone.sensors.soilMoisture.status ===
-    'Online';
-
-  const weatherBlocksStart =
-    automation.weatherAdjustment &&
-    zone.weather.rainExpected;
-
-  if (
-    zone.irrigation.status !== 'Active' &&
-    moisture <= startAt &&
-    sensorAllowsStart &&
-    !weatherBlocksStart
-  ) {
-    return 'start';
-  }
-
-  return null;
-}
-
-function applyAutomaticIrrigationAction(//creates updated zone object
-  zone: Zone,
-  action: 'start' | 'stop'
-): Zone {
-  const shouldStart =
-    action === 'start';
+  const zoneNames = new Map(
+    rows.map((row) => [String(row.id), row.name ?? `Zone ${row.id}`])
+  );
+  const mappedAlerts: AlertEntry[] = alertRows
+    .filter((alert) => alert.zone_id !== null)
+    .map((alert) => ({
+      id: `database-${alert.id}`,
+      type: alert.severity.toLowerCase(),
+      title: `${alert.severity} Alert`,
+      message: alert.message,
+      zone: zoneNames.get(String(alert.zone_id)) ?? null,
+      zoneId: String(alert.zone_id),
+      timestamp: alert.created_at ?? new Date().toISOString(),
+      read: false,
+    }));
 
   return {
-    ...zone,
-
-    irrigation: {
-      ...zone.irrigation,
-      status: shouldStart
-        ? 'Active'
-        : zone.irrigation.mode ===
-            'scheduled'
-          ? 'Scheduled'
-          : 'Off',
-    },
-
-    relay: {
-      ...zone.relay,
-      status: shouldStart
-        ? 'On'
-        : 'Off',
-    },
-
-    pump: {
-      ...zone.pump,
-      status: shouldStart
-        ? 'Running'
-        : 'Off',
-    },
-
-    water: {
-      ...zone.water,
-      flowRateLpm: shouldStart
-        ? 15
-        : 0,
-    },
+    zones: mappedZones,
+    alerts: mappedAlerts,
   };
 }
 
@@ -831,6 +636,8 @@ type AlertEntry = {
   title: string;
   message: string;
   zone: string | null;
+  // Stable navigation target. The zone name is display-only and can change.
+  zoneId?: string | null;
   timestamp: string;
   read: boolean;
 };
@@ -864,11 +671,11 @@ type AgroFlowContextType = {//defines the structure of the AgroFlow context, inc
   startManualIrrigation: (
     zoneId: string,
     durationMinutes: number
-  ) => void;
+  ) => Promise<void>;
 
   stopManualIrrigation: (
     zoneId: string
-  ) => void;
+  ) => Promise<void>;
 
   markAlertAsRead: (
     alertId: string
@@ -962,11 +769,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     setIsHydrated,
   ] =
     useState(false);
-
-  const automaticActionKeys =
-    useRef<
-      Record<string, string>
-    >({});
 
   const manualRunTimers =
     useRef<
@@ -1163,7 +965,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       )
         .then(
           (
-            assignedZones
+            snapshot
           ) => {
             if (
               !isMounted
@@ -1172,8 +974,20 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
             }
 
             setZones(
-              assignedZones
+              snapshot.zones
             );
+
+            setAlerts((current) => {
+              const existingById = new Map(current.map((alert) => [alert.id, alert]));
+              const databaseIds = new Set(snapshot.alerts.map((alert) => alert.id));
+              return [
+                ...snapshot.alerts.map((alert) => ({
+                  ...alert,
+                  read: existingById.get(alert.id)?.read ?? alert.read,
+                })),
+                ...current.filter((alert) => !databaseIds.has(alert.id)),
+              ];
+            });
           }
         )
         .catch(
@@ -1270,11 +1084,14 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         if (
           savedAlerts
         ) {
-          setAlerts(
-            JSON.parse(
-              savedAlerts
-            ) as AlertEntry[]
-          );
+          const parsedAlerts = JSON.parse(savedAlerts) as AlertEntry[];
+          setAlerts((current) => {
+            const currentIds = new Set(current.map((alert) => alert.id));
+            return [
+              ...current,
+              ...parsedAlerts.filter((alert) => !currentIds.has(alert.id)),
+            ];
+          });
         }
       } catch (
         error
@@ -1347,164 +1164,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     isHydrated,
   ]);
 
-  useEffect(() => {
-    if (
-      !isHydrated
-    ) {
-      return;
-    }
-
-    const transitions: {
-      zone: Zone;
-      action: 'start' | 'stop';
-    }[] = [];
-
-    zones.forEach(
-      (
-        zone
-      ) => {
-        const action =
-          getAutomaticIrrigationAction(
-            zone
-          );
-
-        if (
-          !action
-        ) {
-          delete automaticActionKeys
-            .current[
-              zone.id
-            ];
-
-          return;
-        }
-
-        const moisture =
-          zone.sensors
-            .soilMoisture
-            .value;
-
-        const transitionKey =
-          `${action}:${moisture}:${zone.irrigation.status}`;
-
-        if (
-          automaticActionKeys
-            .current[
-              zone.id
-            ] ===
-          transitionKey
-        ) {
-          return;
-        }
-
-        automaticActionKeys
-          .current[
-            zone.id
-          ] =
-          transitionKey;
-
-        transitions.push({
-          zone,
-          action,
-        });
-      }
-    );
-
-    if (
-      transitions.length === 0
-    ) {
-      return;
-    }
-
-    setZones(
-      (
-        current
-      ) =>
-        current.map(
-          (
-            zone
-          ) => {
-            const transition =
-              transitions.find(
-                (
-                  item
-                ) =>
-                  item.zone.id ===
-                  zone.id
-              );
-
-            return transition
-              ? applyAutomaticIrrigationAction(
-                  zone,
-                  transition.action
-                )
-              : zone;
-          }
-        )
-    );
-
-    transitions.forEach(
-      ({
-        zone,
-        action,
-      }) => {
-        const moisture =
-          zone.sensors
-            .soilMoisture
-            .value;
-
-        const startAt =
-          zone.irrigation
-            .automation
-            .moistureThreshold;
-
-        const stopAt =
-          zone.irrigation
-            .automation
-            .desiredMoisture;
-
-        if (
-          action === 'start'
-        ) {
-          addHistoryEntry(
-            zone.id,
-            'Automatic Irrigation Started',
-            `Soil moisture reached ${moisture}%. Irrigation started at ${startAt}% and will continue until ${stopAt}%.`,
-            'irrigation',
-            'Automatic'
-          );
-
-          addAlert(
-            zone.id,
-            'Automatic Irrigation Started',
-            `Soil moisture is ${moisture}%. Irrigation will stop when it reaches ${stopAt}%.`,
-            'success'
-          );
-
-          return;
-        }
-
-        addHistoryEntry(
-          zone.id,
-          'Automatic Irrigation Stopped',
-          `Soil moisture reached the desired level of ${stopAt}%, so irrigation stopped automatically.`,
-          'irrigation',
-          'Automatic'
-        );
-
-        addAlert(
-          zone.id,
-          'Desired Moisture Reached',
-          `Soil moisture reached ${moisture}%. Automatic irrigation has stopped.`,
-          'info'
-        );
-      }
-    );
-  }, [
-    zones,
-    isHydrated,
-  ]);
-
   function findZone(//finds a zone by its ID from the zones state array. It returns the zone object if found, or undefined if no matching zone is found. This function is used internally by other functions to locate specific zones for irrigation control and alert management.
     zoneId: string
   ) {
@@ -1546,6 +1205,8 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
       zone:
         zone.name,
+
+      zoneId,
 
       source,
 
@@ -1612,7 +1273,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     );
   }
 
-  function startManualIrrigation(
+  async function startManualIrrigation(
     zoneId: string,
     durationMinutes: number
   ) {
@@ -1628,6 +1289,12 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     ) {
       return;
     }
+
+    await sendManualIrrigationCommand(
+      zoneId,
+      'start',
+      durationMinutes * 60
+    );
 
     setZones(//sets the irrigation status of the specified zone to "Active", turns on the relay and pump, and sets the water flow rate to 15 liters per minute. This function updates the zones state by mapping over the current zones and modifying the matching zone's properties accordingly.
       (
@@ -1711,7 +1378,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       zoneId
     ] = setTimeout(
       () => {
-        stopManualIrrigation(
+        void stopManualIrrigation(
           zoneId,
           true
         );
@@ -1722,7 +1389,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     );
   }
 
-  function stopManualIrrigation(
+  async function stopManualIrrigation(
     zoneId: string,
     endedAutomatically = false
   ) {
@@ -1738,6 +1405,14 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     ) {
       return;
     }
+
+    // A timed start already carries its own device-side deadline. Sending an
+    // explicit stop is still useful because it records one authoritative
+    // command when the user stops early or the app timer expires.
+    await sendManualIrrigationCommand(
+      zoneId,
+      'stop'
+    );
 
     setZones(
       (
@@ -1847,41 +1522,19 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       );
     }
 
-    const {
-      error,
-    } =
-      await supabase
-        .from(
-          'zone'
-        )
-        .update({
-          irrigation_mode:
+    await updateZoneThroughApi(
+      zoneId,
+      {
+          irrigationMode:
             mode,
-          automation_enabled:
+          automationEnabled:
             mode ===
             'automatic',
-          schedule_enabled:
+          scheduleEnabled:
             mode ===
             'scheduled',
-        })
-        .eq(
-          'id',
-          zoneId
-        )
-        .eq(
-          'farm_id',
-          farm.id
-        )
-        .select(
-          'id'
-        )
-        .single();
-
-    if (
-      error
-    ) {
-      throw error;
-    }
+      }
+    );
 
     setZones(
       (
@@ -1958,47 +1611,25 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     const cleanedCrop =
       settings.crop.trim();
 
-    const {
-      error,
-    } =
-      await supabase
-        .from(
-          'zone'
-        )
-        .update({
+    await updateZoneThroughApi(
+      zoneId,
+      {
           name:
             cleanedName,
           location:
             cleanedLocation,
-          crop_type:
+          cropType:
             cleanedCrop,
-          automation_enabled:
+          automationEnabled:
             settings.automationEnabled,
-          moisture_threshold:
+          moistureThreshold:
             settings.moistureThreshold,
-          desired_moisture:
+          desiredMoisture:
             settings.desiredMoisture,
-          weather_adjustment:
+          weatherAdjustment:
             settings.weatherAdjustment,
-        })
-        .eq(
-          'id',
-          zoneId
-        )
-        .eq(
-          'farm_id',
-          farm.id
-        )
-        .select(
-          'id'
-        )
-        .single();
-
-    if (
-      error
-    ) {
-      throw error;
-    }
+      }
+    );
 
     setZones(
       (
@@ -2069,41 +1700,19 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     const cleanedStartTime =
       scheduleSettings.startTime.trim();
 
-    const {
-      error,
-    } =
-      await supabase
-        .from(
-          'zone'
-        )
-        .update({
-          schedule_enabled:
+    await updateZoneThroughApi(
+      zoneId,
+      {
+          scheduleEnabled:
             scheduleSettings.enabled,
-          schedule_days:
+          scheduleDays:
             cleanedDays,
-          schedule_start_time:
+          scheduleStartTime:
             cleanedStartTime,
-          schedule_duration_minutes:
+          scheduleDurationMinutes:
             scheduleSettings.durationMinutes,
-        })
-        .eq(
-          'id',
-          zoneId
-        )
-        .eq(
-          'farm_id',
-          farm.id
-        )
-        .select(
-          'id'
-        )
-        .single();
-
-    if (
-      error
-    ) {
-      throw error;
-    }
+      }
+    );
 
     setZones(
       (

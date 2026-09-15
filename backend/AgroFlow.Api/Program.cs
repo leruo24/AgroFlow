@@ -5,8 +5,20 @@ using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// The Windows Event Log provider can throw AccessDenied for an ordinary
+// developer account while a background service is reporting a recoverable
+// MQTT/Postgres connection failure. Keep development and deployed logging on
+// providers that do not require machine-level Event Log registration.
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
+
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 
 // TODO: set ConnectionStrings:Supabase in appsettings.json (or via the
 // ConnectionStrings__Supabase environment variable) to your Supabase
@@ -98,10 +110,11 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
-    var isAdminRoute = path.StartsWithSegments("/api/devices/enroll") ||
-                        path.StartsWithSegments("/api/farmers");
+    var isUserRoute = path.StartsWithSegments("/api/devices/enroll") ||
+                      path.StartsWithSegments("/api/farmers") ||
+                      path.StartsWithSegments("/api/farmer");
 
-    if (!isAdminRoute &&
+    if (!isUserRoute &&
         (!context.Request.Headers.TryGetValue("X-Api-Key", out var providedKey) || providedKey != apiKey))
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -119,6 +132,7 @@ app.MapSensorReadingEndpoints();
 app.MapIrrigationEventEndpoints();
 app.MapDeviceEnrollmentEndpoints();
 app.MapFarmerOnboardingEndpoints();
+app.MapFarmerEndpoints();
 
 app.Run();
 

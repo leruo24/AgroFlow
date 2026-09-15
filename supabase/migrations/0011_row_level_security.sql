@@ -302,7 +302,9 @@ end $$;
 --    column-level restriction; REVOKE/GRANT are idempotent.
 -- ---------------------------------------------------------------------------
 revoke update (id, email, role) on profile from authenticated;
-grant update (name, phone) on profile to authenticated;
+-- profile.phone is added by 0012; grant name here so this migration also
+-- succeeds on a database built strictly from 0001 onward.
+grant update (name) on profile to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 5. Consolidate duplicate policies. Generic by design instead of hardcoded

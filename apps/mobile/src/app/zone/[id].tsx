@@ -569,11 +569,11 @@ export default function ZoneControlScreen() {
       duration <
         1 ||
       duration >
-        1440
+        60
     ) {
       Alert.alert(
         'Invalid Duration',
-        'Enter a duration between 1 and 1440 minutes.'
+        'Enter a duration between 1 and 60 minutes.'
       );
 
       return;
@@ -592,12 +592,19 @@ export default function ZoneControlScreen() {
         {
           text:
             'Start',
-          onPress:
-            () =>
-              startManualIrrigation(
+          onPress: async () => {
+            try {
+              await startManualIrrigation(
                 selectedZone.id,
                 duration
-              ),
+              );
+            } catch (error: unknown) {
+              Alert.alert(
+                'Could Not Start Irrigation',
+                error instanceof Error ? error.message : 'The command could not be sent.'
+              );
+            }
+          },
         },
       ]
     );
@@ -619,11 +626,18 @@ export default function ZoneControlScreen() {
             'Stop',
           style:
             'destructive',
-          onPress:
-            () =>
-              stopManualIrrigation(
+          onPress: async () => {
+            try {
+              await stopManualIrrigation(
                 selectedZone.id
-              ),
+              );
+            } catch (error: unknown) {
+              Alert.alert(
+                'Could Not Stop Irrigation',
+                error instanceof Error ? error.message : 'The command could not be sent.'
+              );
+            }
+          },
         },
       ]
     );

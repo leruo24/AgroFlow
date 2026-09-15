@@ -37,6 +37,10 @@ import {
 } from '@/context/ThemeContext';
 
 import {
+  fetchCurrentWeather,
+} from '@/services/agroFlowApi';
+
+import {
   createHomeStyles,
 } from '@/styles/homeStyles';
 
@@ -154,51 +158,8 @@ export default function HomeScreen() {
 //A live weather API 
           //The weather request uses the coordinates stored for the
           //authenticated farmer's assigned farm in Supabase.
-          const latitude =
-            farm?.latitude;
-
-          const longitude =
-            farm?.longitude;
-
-          if (
-            latitude ===
-              null ||
-            latitude ===
-              undefined ||
-            longitude ===
-              null ||
-            longitude ===
-              undefined
-          ) {
-            throw new Error(
-              'The assigned farm does not have weather coordinates.'
-            );
-          }
-
-          const url =
-            `https://api.open-meteo.com/v1/forecast` +
-            `?latitude=${latitude}` +
-            `&longitude=${longitude}` +
-            `&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m` +
-            `&daily=precipitation_probability_max` +
-            `&timezone=auto` +
-            `&forecast_days=1`;
-
-          const response =
-            await fetch(
-              url
-            );
-
-          if (
-            !response.ok
-          ) {
-            throw new Error(
-              'Weather request failed'
-            );
-          }
-
           const data =
-            await response.json();
+            await fetchCurrentWeather();
 
           if (
             !mounted

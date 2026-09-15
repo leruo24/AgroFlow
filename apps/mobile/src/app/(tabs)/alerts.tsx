@@ -4,6 +4,10 @@ import {
 } from 'react';
 
 import {
+  useRouter,
+} from 'expo-router';
+
+import {
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +32,9 @@ import {
 } from '@/context/ThemeContext';
 
 export default function AlertsScreen() {
+  const router =
+    useRouter();
+
   const {
     alerts,
     markAlertAsRead,
@@ -225,7 +232,20 @@ export default function AlertsScreen() {
                       ) {
                         markAlertAsRead(
                           alert.id
-                        );
+                          );
+                      }
+
+                      if (
+                        alert.zoneId
+                      ) {
+                        router.push({
+                          pathname:
+                            '/zone/[id]',
+                          params: {
+                            id:
+                              alert.zoneId,
+                          },
+                        });
                       }
                     }}
                   >
@@ -302,7 +322,9 @@ export default function AlertsScreen() {
                           styles.unreadText
                         }
                       >
-                        Tap to mark as read
+                        {alert.zoneId
+                          ? 'Tap to view zone'
+                          : 'Tap to mark as read'}
                       </Text>
                     )}
                   </TouchableOpacity>

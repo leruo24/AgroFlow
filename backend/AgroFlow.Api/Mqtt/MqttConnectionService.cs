@@ -61,14 +61,20 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         _client.ApplicationMessageReceivedAsync += OnMessageReceivedAsync;
         _client.DisconnectedAsync += OnDisconnectedAsync;
 
-        await ConnectAsync(stoppingToken);
-
-        // MQTTnet manages the connection/receive loop on its own background
-        // threads - this hosted service just needs to stay alive until
-        // shutdown.
         try
         {
-            await Task.Delay(Timeout.Infinite, stoppingToken);
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                if (!_client.IsConnected)
+                {
+                    await ConnectAsync(stoppingToken);
+                }
+
+                // MQTTnet manages message receipt itself. This loop owns all
+                // reconnect attempts so a failed ConnectAsync and its
+                // Disconnected event cannot start overlapping retry loops.
+                await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -97,8 +103,7 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 
     private Task OnDisconnectedAsync(MqttClientDisconnectedEventArgs args)
     {
-        _logger.LogWarning("MQTT disconnected ({Reason}), reconnecting...", args.Reason);
-        _ = ConnectAsync(CancellationToken.None);
+        _logger.LogWarning("MQTT disconnected ({Reason}); the connection loop will retry.", args.Reason);
         return Task.CompletedTask;
     }
 

@@ -1,6 +1,7 @@
 //allows a user who opened a valid Supabase password-recovery link to choose a new password. The recovery link creates a temporary authenticated session before Supabase permits the password change.
 import {
   router,
+  useLocalSearchParams,
 } from 'expo-router';
 
 import * as Linking from 'expo-linking';
@@ -64,6 +65,15 @@ function getRecoveryParameters(
 }
 
 export default function UpdatePasswordScreen() {
+  const {
+    source,
+  } = useLocalSearchParams<{
+    source?: string;
+  }>();
+
+  const openedFromProfile =
+    source === 'profile';
+
   const {
     colors,
   } = useTheme();
@@ -378,7 +388,17 @@ export default function UpdatePasswordScreen() {
     }
   }
 
-  async function handleReturnToLogin() {
+  async function handleSuccessNavigation() {
+    if (
+      openedFromProfile
+    ) {
+      router.replace(
+        '/profile'
+      );
+
+      return;
+    }
+
     await supabase.auth
       .signOut();
 
@@ -495,7 +515,7 @@ export default function UpdatePasswordScreen() {
                   styles.primaryButton
                 }
                 onPress={
-                  handleReturnToLogin
+                  handleSuccessNavigation
                 }
                 activeOpacity={
                   0.75
@@ -506,7 +526,9 @@ export default function UpdatePasswordScreen() {
                     styles.primaryButtonText
                   }
                 >
-                  Return to Login
+                  {openedFromProfile
+                    ? 'Return to Profile'
+                    : 'Return to Login'}
                 </Text>
               </TouchableOpacity>
             ) : (
