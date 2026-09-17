@@ -43,6 +43,55 @@ export const Spacing = {
   six: 64,
 } as const;
 
+// Named type steps replacing the ~13 ad hoc font sizes previously scattered
+// across the screen stylesheets (9-40px) - hierarchy comes from which named
+// step is used, not from a card/box around the text. See docs/ui_reference
+// (the Webex screenshots) for the source: label ~11sp small-caps, caption
+// ~12-13sp, body ~15-16sp, title ~17-18sp. `display` has no reference
+// equivalent (Webex's own screens don't show a hero numeral) - it's kept as
+// the one deliberate large-type moment per screen (a stat, a temperature),
+// consistent with "hierarchy through typography," not decoration.
+export const Type = {
+  label: 11,
+  caption: 13,
+  body: 15,
+  title: 18,
+  display: 32,
+} as const;
+
+// Flat by default. `full` is for genuinely circular elements (avatars) via
+// width/2, not a corner-rounding step. `sm`/`md` are for the rare remaining
+// boxed element (a text input) - list/status content uses `none` and relies
+// on `divider` instead, matching the reference's hairline-row model.
+export const Radius = {
+  none: 0,
+  sm: 8,
+  md: 12,
+  full: 9999,
+} as const;
+
+// Fixed heights for embedded media that must render at a concrete pixel
+// size regardless of theme or screen density - a MapView needs real height
+// to lay out, it isn't a layout gap from the Spacing scale. Deliberately
+// its own small scale, not folded into Spacing, so a reviewer doesn't
+// mistake `farmMap: 190` for a spacing value and "fix" it to the nearest
+// Spacing step.
+export const FixedMediaHeight = {
+  farmMap: 190,
+} as const;
+
+// Colours for chrome drawn ON TOP of map tiles/imagery - the pin, the tile
+// attribution strip. These must stay legible against real-world map tile
+// colours in both light and dark theme, so they live outside AppColors on
+// purpose and are NOT theme-aware. Do not swap these for a themed token or
+// move them into lightColors/darkColors - that would make the pin invisible
+// against tiles in whichever theme it stops matching.
+export const MapChrome = {
+  pinColor: '#168F99',
+  attributionBackground: '#FFFFFF',
+  attributionText: '#253126',
+} as const;
+
 export type AppColors = {
   primary: string;
   primaryDark: string;
@@ -63,6 +112,11 @@ export type AppColors = {
   textMuted: string;
 
   border: string;
+  // Hairline row separator - the reference's one constant structural
+  // element. Deliberately distinct from `border`: `border` is for the rare
+  // real boundary (a text input, an avatar ring); `divider` is for
+  // separating rows within an unboxed list.
+  divider: string;
 
   white: string;
   black: string;
@@ -95,20 +149,28 @@ export const lightColors: AppColors = {
   secondary: '#7FA88A',
   secondaryDark: '#2F6B4B',
 
-  navigation: '#184D35',
-  navigationText: '#FFFFFF',
-  navigationMuted: '#C4D8CC',
+  navigation: '#FFFFFF',
+  navigationText: '#253126',
+  navigationMuted: '#637064',
 
-  background: '#DCE8D7',
+  // Was '#F1F8F3' - a pale green tint every screen sat on. The Webex
+  // reference canvas is flat white with no tint; `surface` now equals this
+  // exactly, since the reference has no "card sits on a different plane
+  // than the page" model.
+  background: '#FFFFFF',
 
   surface: '#FFFFFF',
-  surfaceSecondary: '#EEF4EB',
+  surfaceSecondary: '#F5F6F5',
 
   text: '#253126',
   textSecondary: '#637064',
   textMuted: '#879187',
 
-  border: '#B9CBB4',
+  // Was '#DDE9DF' - green-tinted, and doing double duty as both card
+  // outline and row divider. Neutralised and narrowed to the rare real
+  // boundary; `divider` below now carries the row-separator job.
+  border: '#E4E7E4',
+  divider: 'rgba(20,26,20,0.08)',
 
   white: '#FFFFFF',
   black: '#000000',
@@ -155,6 +217,7 @@ export const darkColors: AppColors = {
   textMuted: '#8F9A8E',
 
   border: '#3A4739',
+  divider: 'rgba(241,245,239,0.08)',
 
   white: '#FFFFFF',
   black: '#000000',
