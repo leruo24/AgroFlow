@@ -3,6 +3,7 @@ import {
 } from '@/lib/supabase';
 
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 function resolveApiBase() {
   const configuredBase =
@@ -14,6 +15,14 @@ function resolveApiBase() {
     configuredBase
   ) {
     return configuredBase;
+  }
+
+  const port = process.env.EXPO_PUBLIC_AGROFLOW_API_PORT ?? '5080';
+
+  // Expo web does not always populate expoConfig.hostUri. The browser's own
+  // host is the reliable address when Metro and the API run on the same PC.
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `http://${window.location.hostname}:${port}`;
   }
 
   // In Expo development, hostUri is the Metro server address advertised to
@@ -28,14 +37,10 @@ function resolveApiBase() {
     const host =
       expoHostUri.startsWith('[')
         ? expoHostUri.slice(
-            1,
-            expoHostUri.indexOf(']')
+            0,
+            expoHostUri.indexOf(']') + 1
           )
         : expoHostUri.split(':')[0];
-
-    const port =
-      process.env.EXPO_PUBLIC_AGROFLOW_API_PORT ??
-      '5080';
 
     return `http://${host}:${port}`;
   }
@@ -43,11 +48,9 @@ function resolveApiBase() {
   return '';
 }
 
-const API_BASE =
-  resolveApiBase();
-
 export type FarmerDashboard = {
   profile: Record<string, unknown> | null;
+  farms: Record<string, unknown>[];
   farm: Record<string, unknown> | null;
   zones: Record<string, unknown>[];
   readings: Record<string, unknown>[];
@@ -75,8 +78,11 @@ async function authorizedRequest<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
+  const apiBase =
+    resolveApiBase();
+
   if (
-    !API_BASE
+    !apiBase
   ) {
     throw new Error(
       'AgroFlow.Api could not be located. Set EXPO_PUBLIC_AGROFLOW_API_BASE.'
@@ -99,11 +105,15 @@ async function authorizedRequest<T>(
     );
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
   const response =
     await fetch(
-      `${API_BASE}${path}`,
+      `${apiBase}${path}`,
       {
         ...init,
+        signal: controller.signal,
         headers: {
           Accept:
             'application/json',
@@ -134,18 +144,21 @@ async function authorizedRequest<T>(
     return undefined as T;
   }
 
-  return response.json() as Promise<T>;
+  return await response.json() as T;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
-export function fetchFarmerDashboard() {
+export function fetchFarmerDashboard(farmId?: string) {
   return authorizedRequest<FarmerDashboard>(
-    '/api/farmer/dashboard'
+    `/api/farmer/dashboard${farmId ? `?farmId=${encodeURIComponent(farmId)}` : ''}`
   );
 }
 
-export function fetchCurrentWeather() {
+export function fetchCurrentWeather(farmId: string) {
   return authorizedRequest<CurrentWeatherResponse>(
-    '/api/farmer/weather/current'
+    `/api/farmer/weather/current?farmId=${encodeURIComponent(farmId)}`
   );
 }
 
