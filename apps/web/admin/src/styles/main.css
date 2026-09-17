@@ -24,13 +24,14 @@
   --info:#168f99;          /* mobile has no distinct "info" colour - reusing primaryDark (=--brand) rather than inventing a new hue */
   --neutral:#879187;       /* mobile textMuted */
 
-  --bg:#dce8d7;            /* mobile background - pale sage, not the previous cool blue-grey */
+  --bg:#ffffff;
   --bg-grad-1:#184d35;     /* mobile navigation */
   --bg-grad-2:#168f99;     /* mobile primaryDark - forest-green-to-teal, the same pairing mobile's own nav/brand colours make */
 
   --surface:#ffffff;       /* mobile surface */
-  --surface-2:#eef4eb;     /* mobile surfaceSecondary */
-  --border:#b9cbb4;        /* mobile border */
+  --surface-2:#f5f6f5;
+  --border:#e4e7e4;
+  --divider:rgba(20,26,20,0.08);
   --border-strong:#9fb799; /* darkened extrapolation of mobile border - mobile only defines one border shade per theme, not a "strong" variant */
 
   --text:#253126;          /* mobile text */
