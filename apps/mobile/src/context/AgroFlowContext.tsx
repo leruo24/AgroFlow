@@ -33,7 +33,8 @@ export type IrrigationStatus =
 export type MoistureStatus =
   | 'Dry'
   | 'Optimal'
-  | 'Wet';
+  | 'Wet'
+  | 'Unknown';
 
 export type SensorStatus =
   | 'Online'
@@ -44,12 +45,14 @@ export type SensorStatus =
 export type RelayStatus =
   | 'On'
   | 'Off'
-  | 'Fault';
+  | 'Fault'
+  | 'Unknown';
 
 export type PumpStatus =
   | 'Running'
   | 'Off'
-  | 'Fault';
+  | 'Fault'
+  | 'Unknown';
 export type IrrigationMode =
   | 'automatic'
   | 'scheduled';
@@ -82,7 +85,9 @@ export type Zone = {
   location: string;
   crop: string;
   healthStatus: string;
-  waterSavedLitres: number;
+  // null means the zone's water_saved column has never been set - distinct
+  // from a real, tracked 0.
+  waterSavedLitres: number | null;
 
   size: {
     value: number;
@@ -132,7 +137,9 @@ export type Zone = {
   };
 
   water: {
-    usedTodayLitres: number;
+    // null means no zone_daily_water_usage row exists for today - distinct
+    // from a real, recorded 0 litres.
+    usedTodayLitres: number | null;
     latestCycleLitres: number;
     flowRateLpm: number;
   };
@@ -156,7 +163,7 @@ export type Farm = {
   ownerId: string;
   name: string;
   location: string;
-  totalArea: number;
+  totalArea: number | null;
   status: string;
   latitude: number | null;
   longitude: number | null;
@@ -225,20 +232,12 @@ type ZoneRow = {
     | null;
 };
 
-//uses the authenticated profile ID to find the farmer's membership
-//record and then retrieves the assigned farm from Supabase
-async function fetchAssignedFarm(
-  profileId: string
-): Promise<Farm | null> {
-  void profileId;
+//The API applies ownership/farm_member access and returns only farms available
+//to the authenticated farmer.
+async function fetchAssignedFarms(): Promise<Farm[]> {
   const dashboard =
     await fetchFarmerDashboard();
-  const farmRow =
-    dashboard.farm as FarmRow | null;
-
-  if (!farmRow) return null;
-
-  return {
+  return (dashboard.farms as FarmRow[]).map((farmRow) => ({
     id:
       String(
         farmRow.farm_id
@@ -248,21 +247,19 @@ async function fetchAssignedFarm(
       farmRow.owner_id,
 
     name:
-      farmRow.name,
+      farmRow.name?.trim() || 'Unnamed farm',
 
     location:
-      farmRow.location,
+      farmRow.location?.trim() || '',
 
     totalArea:
-      Number(
-        farmRow.total_area
-      ),
+      farmRow.total_area == null ? null : Number(farmRow.total_area),
 
     status:
-      farmRow.status,
+      farmRow.status || 'Unknown',
 
     latitude:
-      farmRow.latitude ===
+      farmRow.latitude ==
       null
         ? null
         : Number(
@@ -270,13 +267,13 @@ async function fetchAssignedFarm(
           ),
 
     longitude:
-      farmRow.longitude ===
+      farmRow.longitude ==
       null
         ? null
         : Number(
             farmRow.longitude
           ),
-  };
+  }));
 }
 
 export type UpdateZoneSettingsInput = {
@@ -312,6 +309,7 @@ type ZoneLatestReadingRow = {
 type IrrigationEventRow = {
   zone_id: DatabaseId;
   started_at: string;
+  trigger_source?: string | null;
   runtime_seconds: number | string | null;
   estimated_litres: number | string | null;
 };
@@ -358,7 +356,7 @@ function deriveMoistureStatus(
   dryThreshold: number,
   wetThreshold: number
 ): MoistureStatus {
-  if (moisture === null) return 'Optimal';
+  if (moisture === null) return 'Unknown';
   if (moisture < dryThreshold) return 'Dry';
   if (moisture > wetThreshold) return 'Wet';
   return 'Optimal';
@@ -369,7 +367,7 @@ function mapZoneRow(
   index: number,
   reading: ZoneLatestReadingRow | undefined,
   lastEvent: IrrigationEventRow | undefined,
-  usedTodayLitres: number,
+  usedTodayLitres: number | null,
   weather: WeatherRow | null,
   zoneAlerts: AlertRow[]
 ): Zone {
@@ -426,7 +424,7 @@ function mapZoneRow(
       ),
     name:
       row.name?.trim() ||
-      `Zone ${index + 1}`,
+      'Unnamed zone',
     location:
       row.location?.trim() ||
       'Not configured',
@@ -437,10 +435,9 @@ function mapZoneRow(
       row.health_status ??
       'Unknown',
     waterSavedLitres:
-      Number(
-        row.water_saved ??
-        0
-      ),
+      row.water_saved == null
+        ? null
+        : Number(row.water_saved),
     size: {
       value:
         Number(
@@ -453,7 +450,7 @@ function mapZoneRow(
       soilMoisture: {
         value: moistureValue ?? 0,
         unit: '%',
-        status: sensorStatus,
+        status: moistureValue == null ? 'Offline' : sensorStatus,
         moistureStatus: deriveMoistureStatus(
           moistureValue, moistureThreshold, desiredMoisture
         ),
@@ -463,7 +460,7 @@ function mapZoneRow(
         temperatureUnit: '°C',
         humidity: humidityValue ?? 0,
         humidityUnit: '%',
-        status: sensorStatus,
+        status: temperatureValue == null || humidityValue == null ? 'Offline' : sensorStatus,
       },
     },
     irrigation: {
@@ -484,8 +481,7 @@ function mapZoneRow(
       },
       schedule: {
         enabled:
-          row.irrigation_mode ===
-          'scheduled',
+          row.schedule_enabled === true,
         days:
           Array.isArray(row.schedule_days)
             ? row.schedule_days
@@ -521,10 +517,10 @@ function mapZoneRow(
     // Online/Offline connectivity, not an actuation state. Defaulting to
     // Off rather than inventing one; see the Phase 6 summary.
     relay: {
-      status: 'Off',
+      status: 'Unknown',
     },
     pump: {
-      status: 'Off',
+      status: 'Unknown',
     },
     water: {
       usedTodayLitres,
@@ -548,9 +544,9 @@ function mapZoneRow(
 
 async function fetchZonesForFarm(
   farmId: string
-): Promise<{ zones: Zone[]; alerts: AlertEntry[] }> {
+): Promise<{ zones: Zone[]; alerts: AlertEntry[]; history: HistoryEntry[] }> {
   const dashboard =
-    await fetchFarmerDashboard();
+    await fetchFarmerDashboard(farmId);
   const rows = dashboard.zones
     .filter((row) => String(row.farm_id) === farmId) as ZoneRow[];
   const readings = dashboard.readings as ZoneLatestReadingRow[];
@@ -591,7 +587,10 @@ async function fetchZonesForFarm(
       index,
       readingByZone.get(String(row.id)),
       latestEventByZone.get(String(row.id)),
-      usageByZone.get(String(row.id)) ?? 0,
+      // undefined (no zone_daily_water_usage row for today) stays null -
+      // never collapsed to 0, which would be indistinguishable from a real
+      // recorded zero.
+      usageByZone.get(String(row.id)) ?? null,
       latestWeather,
       alertsByZone.get(String(row.id)) ?? []
     ));
@@ -603,18 +602,31 @@ async function fetchZonesForFarm(
     .filter((alert) => alert.zone_id !== null)
     .map((alert) => ({
       id: `database-${alert.id}`,
+      farmId,
       type: alert.severity.toLowerCase(),
       title: `${alert.severity} Alert`,
       message: alert.message,
       zone: zoneNames.get(String(alert.zone_id)) ?? null,
       zoneId: String(alert.zone_id),
-      timestamp: alert.created_at ?? new Date().toISOString(),
+      timestamp: alert.created_at ?? '',
       read: false,
     }));
 
   return {
     zones: mappedZones,
     alerts: mappedAlerts,
+    history: events.map((event, index) => ({
+      id: `database-event-${farmId}-${index}-${event.started_at}`,
+      farmId,
+      action: 'Irrigation recorded',
+      description: event.runtime_seconds == null
+        ? 'An irrigation event was recorded.'
+        : `Irrigation ran for ${Math.round(Number(event.runtime_seconds) / 60)} minutes.`,
+      zone: zoneNames.get(String(event.zone_id)) ?? 'Zone',
+      source: event.trigger_source || 'Irrigation',
+      timestamp: event.started_at,
+      type: 'irrigation',
+    })),
   };
 }
 
@@ -622,6 +634,7 @@ async function fetchZonesForFarm(
 // addHistoryEntry/addAlert below actually construct.
 type HistoryEntry = {
   id: string;
+  farmId: string;
   action: string;
   description: string;
   zone: string;
@@ -632,6 +645,7 @@ type HistoryEntry = {
 
 type AlertEntry = {
   id: string;
+  farmId: string;
   type: string;
   title: string;
   message: string;
@@ -644,6 +658,9 @@ type AlertEntry = {
 
 type AgroFlowContextType = {//defines the structure of the AgroFlow context, including the state variables for zones, history, and alerts, as well as the functions to manipulate these states. It provides a centralized way to manage the farm's irrigation system and related data within the app.
   farm: Farm | null;
+  farms: Farm[];
+  selectFarm: (farmId: string) => void;
+  refreshFarms: () => void;
   isFarmLoading: boolean;
   farmError: string | null;
   zones: Zone[];
@@ -714,6 +731,11 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       Farm | null
     >(null);
 
+  const [farms, setFarms] = useState<Farm[]>([]);
+  const [farmReload, setFarmReload] = useState(0);
+  const selectedFarmId = useRef<string | null>(null);
+  const loadedUserId = useRef<string | null>(null);
+
   const [
     isFarmLoading,
     setIsFarmLoading,
@@ -764,11 +786,11 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       AlertEntry[]
     >([]);
 
-  const [//isHydrated state variable is used to track whether the initial data has been loaded from AsyncStorage. It prevents saving to AsyncStorage before the initial load is complete, ensuring that the app does not overwrite existing data with default values.
-    isHydrated,
-    setIsHydrated,
+  const [//hydratedUserId state variable is used to track whether the initial data has been loaded from AsyncStorage. It prevents saving to AsyncStorage before the initial load is complete, ensuring that the app does not overwrite existing data with default values.
+    hydratedUserId,
+    setHydratedUserId,
   ] =
-    useState(false);
+    useState<string | null>(null);
 
   const manualRunTimers =
     useRef<
@@ -784,6 +806,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     useRef<Zone[]>(
       []
     );
+  const zonesRequestId = useRef(0);
 
   useEffect(() => {
     zonesRef.current =
@@ -802,7 +825,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     };
   }, []);
 
-  useEffect(() => {//loads the farm assigned to the authenticated farmer from Supabase. The profile ID is the same UUID as the Supabase Authentication user ID.
+  useEffect(() => {//loads the authenticated farmer's accessible farms from the API.
     let isMounted =
       true;
 
@@ -815,9 +838,19 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       };
     }
 
+    if (loadedUserId.current !== (user?.id ?? null)) {
+      loadedUserId.current = user?.id ?? null;
+      selectedFarmId.current = null;
+      setFarm(null);
+      setFarms([]);
+      setZones([]);
+    }
+
     if (
       !user
     ) {
+      selectedFarmId.current = null;
+      setFarms([]);
       setFarm(
         null
       );
@@ -844,30 +877,27 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       null
     );
 
-    fetchAssignedFarm(
-      user.id
-    )
+    Promise.all([
+      fetchAssignedFarms(),
+      AsyncStorage.getItem(`agroflow_current_farm:${user.id}`).catch(() => null),
+    ])
       .then(
-        (
-          assignedFarm
-        ) => {
+        ([assignedFarms, storedFarmId]) => {
           if (
             !isMounted
           ) {
             return;
           }
 
-          setFarm(
-            assignedFarm
-          );
+          setFarms(assignedFarms);
+          const selected = assignedFarms.find(
+            (item) => item.id === (selectedFarmId.current ?? storedFarmId)
+          ) ?? assignedFarms[0] ?? null;
+          selectedFarmId.current = selected?.id ?? null;
+          setFarm(selected);
 
-          if (
-            !assignedFarm
-          ) {
-            setFarmError(
-              'No farm has been assigned to this farmer.'
-            );
-          }
+          // A successful empty farm list is an empty state, not a failed request.
+          setFarmError(null);
         }
       )
       .catch(
@@ -885,14 +915,10 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
             error
           );
 
-          setFarm(
-            null
-          );
+          setFarm(null);
 
           setFarmError(
-            error instanceof Error
-              ? error.message
-              : 'Failed to load the assigned farm.'
+            'Farm information is temporarily unavailable.'
           );
         }
       )
@@ -915,12 +941,29 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
   }, [
     user,
     isAuthLoading,
+    farmReload,
   ]);
+
+  const selectFarm = useCallback((farmId: string) => {
+    const selected = farms.find((item) => item.id === farmId);
+    if (!selected || selected.id === farm?.id) return;
+    selectedFarmId.current = selected.id;
+    AsyncStorage.setItem(`agroflow_current_farm:${loadedUserId.current}`, selected.id)
+      .catch((error) => console.error('Failed to save current farm:', error));
+    setZones([]);
+    setIsZonesLoading(true);
+    setFarm(selected);
+  }, [farms, farm?.id]);
+
+  const refreshFarms = useCallback(() => {
+    setFarmReload((value) => value + 1);
+  }, []);
 
   const loadZones = useCallback(//fetches the zones for the currently-assigned farm and updates loading/error/zones state - shared between the initial-load effect below and the manually-triggered refreshZones exposed on the context (e.g. a "retry" action after a failed load).
     () => {
       let isMounted =
         true;
+      const requestId = ++zonesRequestId.current;
 
       if (
         isFarmLoading
@@ -968,7 +1011,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
             snapshot
           ) => {
             if (
-              !isMounted
+              !isMounted || requestId !== zonesRequestId.current
             ) {
               return;
             }
@@ -976,6 +1019,11 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
             setZones(
               snapshot.zones
             );
+
+            setHistory((current) => [
+              ...snapshot.history,
+              ...current.filter((entry) => !entry.id.startsWith('database-event-')),
+            ]);
 
             setAlerts((current) => {
               const existingById = new Map(current.map((alert) => [alert.id, alert]));
@@ -985,7 +1033,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
                   ...alert,
                   read: existingById.get(alert.id)?.read ?? alert.read,
                 })),
-                ...current.filter((alert) => !databaseIds.has(alert.id)),
+                ...current.filter((alert) => !databaseIds.has(alert.id) && (alert.farmId !== farm.id || !alert.id.startsWith('database-alert-'))),
               ];
             });
           }
@@ -995,7 +1043,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
             error: unknown
           ) => {
             if (
-              !isMounted
+              !isMounted || requestId !== zonesRequestId.current
             ) {
               return;
             }
@@ -1005,21 +1053,15 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
               error
             );
 
-            setZones(
-              []
-            );
-
             setZonesError(
-              error instanceof Error
-                ? error.message
-                : 'Failed to load the farm zones.'
+              'Farm information is temporarily unavailable.'
             );
           }
         )
         .finally(
           () => {
             if (
-              isMounted
+              isMounted && requestId === zonesRequestId.current
             ) {
               setIsZonesLoading(
                 false
@@ -1031,6 +1073,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       return () => {
         isMounted =
           false;
+        zonesRequestId.current += 1;
       };
     },
     [
@@ -1055,6 +1098,12 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
   );
 
   useEffect(() => {//loads history and alerts from AsyncStorage. Zone configuration is no longer restored locally because Supabase is now its source of truth.
+    if (isAuthLoading) return;
+    setHistory([]);
+    setAlerts([]);
+    setHydratedUserId(null);
+    if (!user) return;
+    let active = true;
     async function loadSavedData() {
       try {
         const [
@@ -1063,22 +1112,23 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         ] =
           await Promise.all([//retrieves history and alerts from AsyncStorage in parallel. This improves performance by reducing the total time spent waiting for each individual retrieval operation.
             AsyncStorage.getItem(
-              STORAGE_KEYS.history
+              `${STORAGE_KEYS.history}:${user!.id}`
             ),
 
             AsyncStorage.getItem(
-              STORAGE_KEYS.alerts
+              `${STORAGE_KEYS.alerts}:${user!.id}`
             ),
           ]);
 
+        if (!active) return;
         if (
           savedHistory
         ) {
-          setHistory(
-            JSON.parse(
-              savedHistory
-            ) as HistoryEntry[]
-          );
+          const parsedHistory = JSON.parse(savedHistory) as HistoryEntry[];
+          setHistory((current) => {
+            const ids = new Set(current.map((entry) => entry.id));
+            return [...current, ...parsedHistory.filter((entry) => !ids.has(entry.id))];
+          });
         }
 
         if (
@@ -1086,9 +1136,13 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         ) {
           const parsedAlerts = JSON.parse(savedAlerts) as AlertEntry[];
           setAlerts((current) => {
+            const savedById = new Map(parsedAlerts.map((alert) => [alert.id, alert]));
             const currentIds = new Set(current.map((alert) => alert.id));
             return [
-              ...current,
+              ...current.map((alert) => ({
+                ...alert,
+                read: savedById.get(alert.id)?.read ?? alert.read,
+              })),
               ...parsedAlerts.filter((alert) => !currentIds.has(alert.id)),
             ];
           });
@@ -1101,24 +1155,23 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
           error
         );
       } finally {
-        setIsHydrated(
-          true
-        );
+        if (active) setHydratedUserId(user!.id);
       }
     }
 
     loadSavedData();
-  }, []);
+    return () => { active = false; };
+  }, [user?.id, isAuthLoading]);
 
-  useEffect(() => {//saves the history data to AsyncStorage whenever it changes, but only after the initial load is complete (isHydrated is true). This ensures that the app does not overwrite existing data with default values before the initial load. If an error occurs during saving, it logs the error to the console.
+  useEffect(() => {//saves the history data to AsyncStorage whenever it changes, but only after the initial load is complete (hydratedUserId is true). This ensures that the app does not overwrite existing data with default values before the initial load. If an error occurs during saving, it logs the error to the console.
     if (
-      !isHydrated
+      !user || hydratedUserId !== user.id
     ) {
       return;
     }
 
     AsyncStorage.setItem(
-      STORAGE_KEYS.history,
+      `${STORAGE_KEYS.history}:${user.id}`,
       JSON.stringify(
         history
       )
@@ -1134,18 +1187,19 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     );
   }, [
     history,
-    isHydrated,
+    hydratedUserId,
+    user?.id,
   ]);
 
-  useEffect(() => {//saves the alerts data to AsyncStorage whenever it changes, but only after the initial load is complete (isHydrated is true). This ensures that the app does not overwrite existing data with default values before the initial load. If an error occurs during saving, it logs the error to the console.
+  useEffect(() => {//saves the alerts data to AsyncStorage whenever it changes, but only after the initial load is complete (hydratedUserId is true). This ensures that the app does not overwrite existing data with default values before the initial load. If an error occurs during saving, it logs the error to the console.
     if (
-      !isHydrated
+      !user || hydratedUserId !== user.id
     ) {
       return;
     }
 
     AsyncStorage.setItem(
-      STORAGE_KEYS.alerts,
+      `${STORAGE_KEYS.alerts}:${user.id}`,
       JSON.stringify(
         alerts
       )
@@ -1161,7 +1215,8 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     );
   }, [
     alerts,
-    isHydrated,
+    hydratedUserId,
+    user?.id,
   ]);
 
   function findZone(//finds a zone by its ID from the zones state array. It returns the zone object if found, or undefined if no matching zone is found. This function is used internally by other functions to locate specific zones for irrigation control and alert management.
@@ -1198,6 +1253,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     const newEntry = {
       id:
         `history-${Date.now()}-${Math.random()}`,
+      farmId: zone.farmId,
 
       action,
 
@@ -1246,6 +1302,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     const newAlert = {//creates a new alert object with a unique ID, the provided title, message, and type, the name of the zone, the current timestamp, and a read status set to false. This object is then added to the alerts state array to notify users of important events related to irrigation and zone management.
       id:
         `alert-${Date.now()}-${Math.random()}`,
+      farmId: zone.farmId,
 
       type,
 
@@ -1311,10 +1368,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
                   irrigation: {
                     ...item.irrigation,
-
-                    status:
-                      'Active',
-
                     override: {
                       active:
                         true,
@@ -1322,26 +1375,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
                     },
                   },
 
-                  relay: {
-                    ...item.relay,
-
-                    status:
-                      'On',
-                  },
-
-                  pump: {
-                    ...item.pump,
-
-                    status:
-                      'Running',
-                  },
-
-                  water: {
-                    ...item.water,
-
-                    flowRateLpm:
-                      15,
-                  },
                 }
               : item
         )
@@ -1349,16 +1382,16 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
     addHistoryEntry(//logs the action of starting irrigation in the history for the specific zone, providing a description and categorizing it as an "irrigation" type entry. This helps track user actions and system events related to irrigation control.
       zoneId,
-      'Manual Irrigation Started',
-      `Manual irrigation started for ${durationMinutes} minutes.`,
+      'Start Command Sent',
+      `A ${durationMinutes}-minute manual irrigation command was accepted.`,
       'irrigation'
     );
 
     addAlert(//generates an alert to inform the user that manual irrigation has started for the specific zone. The alert includes a title, message, and type, and is added to the alerts state to notify users of important events related to irrigation and zone management.
       zoneId,
-      'Irrigation Started',
-      `Manual irrigation will run for ${durationMinutes} minutes.`,
-      'success'
+      'Start Command Sent',
+      `The manual command was accepted for ${durationMinutes} minutes. Confirm operation at the device.`,
+      'info'
     );
 
     const existingTimer =
@@ -1429,13 +1462,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
                   irrigation: {
                     ...item.irrigation,
-
-                    status:
-                      item.irrigation.mode ===
-                      'scheduled'
-                        ? 'Scheduled'
-                        : 'Off',
-
                     override: {
                       active:
                         false,
@@ -1444,26 +1470,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
                     },
                   },
 
-                  relay: {
-                    ...item.relay,
-
-                    status:
-                      'Off',
-                  },
-
-                  pump: {
-                    ...item.pump,
-
-                    status:
-                      'Off',
-                  },
-
-                  water: {
-                    ...item.water,
-
-                    flowRateLpm:
-                      0,
-                  },
                 }
               : item
         )
@@ -1472,22 +1478,16 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     addHistoryEntry(//logs the action of stopping irrigation in the history for the specific zone, providing a description and categorizing it as an "irrigation" type entry. This helps track user actions and system events related to irrigation control.
       zoneId,
       endedAutomatically
-        ? 'Manual Irrigation Completed'
-        : 'Manual Irrigation Stopped',
-      endedAutomatically
-        ? `The timed manual run finished and the zone returned to ${zone.irrigation.mode} mode.`
-        : `Manual irrigation was stopped and the zone returned to ${zone.irrigation.mode} mode.`,
+        ? 'Stop Command Sent'
+        : 'Stop Command Sent',
+      'A stop command was accepted for this zone.',
       'irrigation'
     );
 
     addAlert(
       zoneId,
-      endedAutomatically
-        ? 'Manual Run Complete'
-        : 'Irrigation Stopped',
-      endedAutomatically
-        ? `The zone has returned to ${zone.irrigation.mode} mode.`
-        : 'Manual irrigation has been stopped.',
+      'Stop Command Sent',
+      'The stop command was accepted. Confirm operation at the device.',
       'info'
     );
 
@@ -1784,14 +1784,17 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     <AgroFlowContext.Provider
       value={{
         farm,
+        farms,
+        selectFarm,
+        refreshFarms,
         isFarmLoading,
         farmError,
         zones,
         isZonesLoading,
         zonesError,
         refreshZones,
-        history,
-        alerts,
+        history: history.filter((entry) => entry.farmId === farm?.id),
+        alerts: alerts.filter((entry) => entry.farmId === farm?.id),
         updateZoneSettings,
         updateZoneSchedule,
         updateIrrigationMode,
