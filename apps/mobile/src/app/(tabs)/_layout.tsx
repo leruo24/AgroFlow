@@ -1,3 +1,4 @@
+import { Radius, Type } from '@/constants/colors';
 // Defines the bottom tab navigation structure for AgroFlow.
 import { Tabs } from 'expo-router';
 
@@ -8,14 +9,30 @@ import {//importing icons for the bottom navigation bar
   House,//home
   Settings,
 } from 'lucide-react-native';
-import { useMemo } from 'react';
+import { useMemo, type ComponentType } from 'react';
 import {//tells the app if its running on android or IOS
+  ColorValue,
   Platform,
   View,
 } from 'react-native';
 
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
 import { useTheme } from '@/context/ThemeContext';//contains the colors
+import { tabsLayoutStyles as styles } from '@/styles/tabsLayoutStyles';
+
+type TabIconProps = { size?: number; color?: ColorValue; strokeWidth?: number };
+
+// The five tab icons were each wrapped in an identical 38x38 chip View -
+// one shared render function instead of five copies of the same JSX.
+function TabIcon(Icon: ComponentType<TabIconProps>) {
+  return function RenderTabIcon({ color, size }: { color: ColorValue; size: number; focused: boolean }) {
+    return (
+      <View style={styles.tabIconWrapper}>
+        <Icon size={size} color={color} strokeWidth={1.8} />
+      </View>
+    );
+  };
+}
 
 export default function TabsLayout() {//creates layout component
   const { colors } = useTheme();
@@ -27,11 +44,17 @@ export default function TabsLayout() {//creates layout component
 
   const tabBarStyle = useMemo(
     () => ({
-      height: Platform.OS === 'ios' ? 78 : 68,
-      paddingTop: 7,
-      paddingBottom: Platform.OS === 'ios' ? 18 : 8,
-      borderTopWidth: 0,
-      backgroundColor: colors.navigation,
+      height: Platform.OS === 'ios' ? 82 : 72,
+      marginHorizontal: 16,
+      marginBottom: Platform.OS === 'ios' ? 8 : 12,
+      paddingTop: 8,
+      paddingBottom: Platform.OS === 'ios' ? 15 : 8,
+      borderRadius: Radius.md,
+      position: 'absolute' as const,
+      overflow: 'hidden' as const,
+      borderTopWidth: 1,
+      borderTopColor: colors.divider,
+      backgroundColor: colors.surface,
       elevation: 0,//android shadow
       shadowOpacity: 0,//ios shadow
     }),
@@ -40,6 +63,7 @@ export default function TabsLayout() {//creates layout component
 
   return (
     <Tabs
+      backBehavior="history"
       screenOptions={{
         headerShown: false,//hiding auto header
         tabBarHideOnKeyboard: true,
@@ -49,21 +73,21 @@ export default function TabsLayout() {//creates layout component
           <View
             style={{
               flex: 1,
-              backgroundColor: colors.navigation,
+              backgroundColor: colors.surface,
             }}
           />
         ),
 
         // Aqua identifies the selected tab against the forest-green bar.
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.secondaryDark,
 
         // Inactive icons and labels remain readable on forest green.
-        tabBarInactiveTintColor: colors.navigationText,
+        tabBarInactiveTintColor: colors.textMuted,
 
         tabBarStyle,
 
         tabBarLabelStyle: {
-          fontSize: 10,
+          fontSize: Type.label,
           fontWeight: '600',
           paddingTop: 3,
           backgroundColor: 'transparent',
@@ -82,13 +106,7 @@ export default function TabsLayout() {//creates layout component
         name="index"//home tab connects to index.tsx
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <House
-              size={size}
-              color={color}
-              strokeWidth={1.8}
-            />
-          ),
+          tabBarIcon: TabIcon(House),
         }}
       />
 
@@ -96,13 +114,7 @@ export default function TabsLayout() {//creates layout component
         name="irrigation"
         options={{
           title: 'Irrigation',
-          tabBarIcon: ({ color, size }) => (
-            <Droplets
-              size={size}
-              color={color}
-              strokeWidth={1.8}
-            />
-          ),
+          tabBarIcon: TabIcon(Droplets),
         }}
       />
 
@@ -115,20 +127,14 @@ export default function TabsLayout() {//creates layout component
               ? unreadAlerts
               : undefined,
           tabBarBadgeStyle: {
-            fontSize: 9,
+            fontSize: Type.label,
             minWidth: 17,
             height: 17,
             lineHeight: 17,
             backgroundColor: colors.error,
             color: colors.white,
           },
-          tabBarIcon: ({ color, size }) => (
-            <Bell
-              size={size}
-              color={color}
-              strokeWidth={1.8}
-            />
-          ),
+          tabBarIcon: TabIcon(Bell),
         }}
       />
 
@@ -136,13 +142,7 @@ export default function TabsLayout() {//creates layout component
         name="history"
         options={{
           title: 'History',
-          tabBarIcon: ({ color, size }) => (
-            <History
-              size={size}
-              color={color}
-              strokeWidth={1.8}
-            />
-          ),
+          tabBarIcon: TabIcon(History),
         }}
       />
 
@@ -150,13 +150,18 @@ export default function TabsLayout() {//creates layout component
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Settings
-              size={size}
-              color={color}
-              strokeWidth={1.8}
-            />
-          ),
+          tabBarIcon: TabIcon(Settings),
+        }}
+      />
+
+      {/* Profile lives inside the tab navigator (reached via the account
+          avatar, not a tab button) purely so the real floating tab bar
+          above keeps rendering underneath it - href: null keeps it out of
+          the tab bar itself while it stays a normal, routable tab screen. */}
+      <Tabs.Screen
+        name="profile"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

@@ -5,6 +5,7 @@ import {//creates stack navigation
 
 import {
   ActivityIndicator,
+  Platform,
   StyleSheet,
   View,
 } from 'react-native';
@@ -22,6 +23,7 @@ import {
   ThemeProvider,
   useTheme,//allow components to access current theme
 } from '@/context/ThemeContext';
+import { BlurRoot } from '@/components/BlurSheet';
 
 function RootNavigator() {//decides which screens the user is permitted to access
   const {//reading authentication states
@@ -92,10 +94,6 @@ function RootNavigator() {//decides which screens the user is permitted to acces
         />
 
         <Stack.Screen
-          name="profile"
-        />
-
-        <Stack.Screen
           name="zone/[id]"
         />
       </Stack.Protected>
@@ -115,7 +113,9 @@ export default function RootLayout() {/*wraps the application with ThemeProvider
       <AuthProvider>
         {/* Farm data provider */}
         <AgroFlowProvider>
-          <RootNavigator />
+          <View style={Platform.OS === 'web' ? styles.webFrame : styles.nativeFrame}>
+            <BlurRoot><RootNavigator /></BlurRoot>
+          </View>
           {/*reads authentication state */}
         </AgroFlowProvider>
       </AuthProvider>
@@ -132,5 +132,12 @@ const styles =
         'center',  
       justifyContent:
         'center',
+    },
+    nativeFrame: { flex: 1 },
+    webFrame: {
+      flex: 1,
+      width: '100%',
+      maxWidth: 480,
+      alignSelf: 'center',
     },
   });

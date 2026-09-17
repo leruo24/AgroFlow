@@ -1,3 +1,5 @@
+import { DataState } from '@/components/DataState';
+import { AppAlert as Alert } from '@/components/AppAlert';
 // Dynamic Expo route: the same screen manages every irrigation zone using its route ID.
 import {
   ArrowLeft,
@@ -15,9 +17,7 @@ import {
 } from 'react';
 
 import {
-  Alert,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -29,10 +29,6 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import type {
-  AppColors,
-} from '@/constants/colors';
-
 import {
   useAgroFlow,
 } from '@/context/AgroFlowContext';
@@ -40,6 +36,10 @@ import {
 import {
   useTheme,
 } from '@/context/ThemeContext';
+
+import {
+  createZoneDetailStyles,
+} from '@/styles/zoneDetailStyles';
 
 const SCHEDULE_DAY_OPTIONS = [
   'Mon',
@@ -78,23 +78,7 @@ function getErrorMessage(
   error: unknown,
   fallback: string
 ) {
-  if (
-    error instanceof Error
-  ) {
-    return error.message;
-  }
-
-  if (
-    typeof error ===
-      'object' &&
-    error !== null &&
-    'message' in error &&
-    typeof error.message ===
-      'string'
-  ) {
-    return error.message;
-  }
-
+  console.error('Zone action failed:', error);
   return fallback;
 }
 
@@ -115,7 +99,7 @@ export default function ZoneControlScreen() {
   const styles =
     useMemo(
       () =>
-        createStyles(
+        createZoneDetailStyles(
           colors
         ),
       [
@@ -124,7 +108,7 @@ export default function ZoneControlScreen() {
     );
 
   const {
-    zones,
+    zones, isZonesLoading, zonesError, isFarmLoading, farmError, refreshZones, refreshFarms,
     startManualIrrigation,
     stopManualIrrigation,
     updateIrrigationMode,
@@ -290,28 +274,16 @@ export default function ZoneControlScreen() {
             styles.notFound
           }
         >
-          <Text
-            style={
-              styles.notFoundTitle
-            }
-          >
-            Zone not found
-          </Text>
-
-          <Text
-            style={
-              styles.notFoundText
-            }
-          >
-            The selected irrigation zone could not be found.
-          </Text>
-
+          <DataState kind={isFarmLoading || isZonesLoading ? 'loading' : farmError || zonesError ? 'error' : 'empty'}
+            title={isFarmLoading || isZonesLoading ? 'Loading zone' : farmError || zonesError ? 'Unable to load zone' : 'Zone not found'}
+            description={isFarmLoading || isZonesLoading ? undefined : 'Return to Irrigation to select a zone in the current farm.'}
+            onRetry={farmError ? refreshFarms : zonesError ? refreshZones : undefined} />
           <TouchableOpacity
             style={
               styles.primaryButton
             }
             onPress={() =>
-              router.back()
+              router.canGoBack() ? router.back() : router.navigate('/irrigation')
             }
             accessibilityRole="button"
             accessibilityLabel="Go back"
@@ -367,7 +339,7 @@ export default function ZoneControlScreen() {
       label:
         'Soil Moisture',
       value:
-        `${soil.value}${soil.unit}`,
+        soil.status === 'Online' ? `${soil.value}${soil.unit}` : 'Unavailable',
       note:
         soil.moistureStatus,
     },
@@ -375,31 +347,35 @@ export default function ZoneControlScreen() {
       label:
         'Temperature',
       value:
-        `${environment.temperature}${environment.temperatureUnit}`,
+        environment.status === 'Online' ? `${environment.temperature}${environment.temperatureUnit}` : 'Unavailable',
     },
     {
       label:
         'Humidity',
       value:
-        `${environment.humidity}${environment.humidityUnit}`,
+        environment.status === 'Online' ? `${environment.humidity}${environment.humidityUnit}` : 'Unavailable',
     },
     {
       label:
         'Used Today',
       value:
-        `${selectedZone.water.usedTodayLitres} L`,
+        selectedZone.water.usedTodayLitres != null
+          ? `${selectedZone.water.usedTodayLitres} L`
+          : 'No data',
     },
     {
       label:
         'Water Saved',
       value:
-        `${selectedZone.waterSavedLitres} L`,
+        selectedZone.waterSavedLitres != null
+          ? `${selectedZone.waterSavedLitres} L`
+          : 'No data',
     },
     {
       label:
         'Flow Rate',
       value:
-        `${selectedZone.water.flowRateLpm} L/min`,
+        'Unavailable',
     },
   ];
 
@@ -601,7 +577,7 @@ export default function ZoneControlScreen() {
             } catch (error: unknown) {
               Alert.alert(
                 'Could Not Start Irrigation',
-                error instanceof Error ? error.message : 'The command could not be sent.'
+                getErrorMessage(error, 'The command could not be sent. Please retry.')
               );
             }
           },
@@ -634,7 +610,7 @@ export default function ZoneControlScreen() {
             } catch (error: unknown) {
               Alert.alert(
                 'Could Not Stop Irrigation',
-                error instanceof Error ? error.message : 'The command could not be sent.'
+                getErrorMessage(error, 'The command could not be sent. Please retry.')
               );
             }
           },
@@ -1016,7 +992,7 @@ export default function ZoneControlScreen() {
               styles.backButton
             }
             onPress={() =>
-              router.back()
+              router.canGoBack() ? router.back() : router.navigate('/irrigation')
             }
             activeOpacity={
               0.7
@@ -1026,7 +1002,7 @@ export default function ZoneControlScreen() {
           >
             <ArrowLeft
               size={24}
-              color={colors.navigationText}
+              color={colors.text}
               strokeWidth={2.25}
             />
           </TouchableOpacity>
@@ -1194,7 +1170,7 @@ export default function ZoneControlScreen() {
                 }
               >
                 {isOverrideActive
-                  ? 'Manual Run'
+                  ? 'Manual command sent'
                   : selectedMode === 'manual'
                     ? 'Manual'
                     : displayedBaseMode === 'automatic'
@@ -1227,7 +1203,7 @@ export default function ZoneControlScreen() {
                   }
                 >
                   {isOverrideActive
-                    ? 'Manual'
+                    ? 'Manual request'
                     : selectedMode === 'manual'
                       ? 'Manual'
                       : displayedBaseMode === 'automatic'
@@ -1388,7 +1364,7 @@ export default function ZoneControlScreen() {
                   >
                     <Text style={styles.primaryButtonText}>
                       {isOverrideActive
-                        ? 'Stop Manual Run'
+                        ? 'Send Stop Command'
                         : 'Start Manual Run'}
                     </Text>
                   </TouchableOpacity>
@@ -1808,614 +1784,3 @@ export default function ZoneControlScreen() {
   );
 }
 
-function createStyles(
-  colors: AppColors
-) {
-  return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor: colors.navigation,
-    },
-    page: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    topBar: {
-  marginBottom: 16,
-  backgroundColor:
-    colors.navigation,
-},
-
-topBarContent: {
-  width: '100%',
-  maxWidth: 720,
-  alignSelf: 'center',
-
-  paddingHorizontal: 18,
-  paddingTop: 4,
-  paddingBottom: 6,
-
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 12,
-},
-
-content: {
-  width: '100%',
-  maxWidth: 720,
-  alignSelf: 'center',
-  paddingHorizontal: 16,
-  paddingTop: 0,
-  gap: 12,
-},
-    backButton: {
-      minWidth: 38,
-      minHeight: 38,
-      justifyContent: 'center',
-    },
-    titleBlock: {
-      flex: 1,
-    },
-    zoneName: {
-      fontSize: 21,
-      fontWeight: '700',
-      color: colors.navigationText,
-    },
-    zoneSubtitle: {
-      marginTop: 3,
-      fontSize: 14,
-      fontWeight: '500',
-      color: colors.navigationText,
-    },
-    statusBadge: {
-      minWidth: 54,
-      paddingHorizontal: 9,
-      paddingVertical: 6,
-      alignItems: 'center',
-      backgroundColor: 'rgba(255, 255, 255, 0.14)',
-      borderWidth: 1,
-      borderColor: 'rgba(255, 255, 255, 0.22)',
-    },
-    statusBadgeText: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: colors.navigationText,
-    },
-    scrollContent: {
-      paddingBottom: 38,
-    },
-    
-    sectionHeading: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      justifyContent: 'space-between',
-      gap: 10,
-    },
-    sectionTitle: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    sectionCaption: {
-      fontSize: 13,
-      fontWeight: '500',
-      color: colors.text,
-    },
-    metricGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 7,
-    },
-    metricCard: {
-      width: '31.8%',
-      minHeight: 98,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    metricValue: {
-      width: '100%',
-      minHeight: 25,
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      fontSize: 18,
-      lineHeight: 23,
-      fontWeight: '700',
-      color: colors.secondaryDark,
-    },
-    metricLabel: {
-      width: '100%',
-      minHeight: 34,
-      marginTop: 2,
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      fontSize: 13,
-      lineHeight: 17,
-      fontWeight: '500',
-      color: colors.text,
-    },
-    metricNote: {
-      width: '100%',
-      minHeight: 16,
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      fontSize: 12,
-      lineHeight: 16,
-      fontWeight: '600',
-      color: colors.warning,
-    },
-    panel: {
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    panelHeader: {
-      minHeight: 44,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    headerActions: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-    },
-    panelTitle: {
-      flex: 1,
-      fontSize: 15,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    panelStatus: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    controlSummary: {
-      paddingHorizontal: 12,
-      paddingVertical: 12,
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      gap: 8,
-    },
-    controlSummaryItem: {
-      flex: 1,
-      minHeight: 76,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surfaceSecondary,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    controlLabel: {
-      width: '100%',
-      minHeight: 20,
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      fontSize: 12,
-      lineHeight: 20,
-      fontWeight: '500',
-      color: colors.text,
-    },
-    controlValue: {
-      width: '100%',
-      minHeight: 22,
-      marginTop: 2,
-      fontSize: 14,
-      lineHeight: 20,
-      fontWeight: '600',
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      color: colors.text,
-    },
-    controlActions: {
-      paddingHorizontal: 12,
-      paddingBottom: 12,
-    },
-    modeSelectorLabel: {
-      marginBottom: 7,
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    modeSelector: {
-      marginBottom: 12,
-      flexDirection: 'row',
-      gap: 6,
-    },
-    modeButton: {
-      flex: 1,
-      flexBasis: 0,
-      minWidth: 0,
-      minHeight: 44,
-      paddingHorizontal: 6,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surfaceSecondary,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    modeButtonSelected: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primaryDark,
-    },
-    modeButtonText: {
-      width: '100%',
-      fontSize: 13,
-      fontWeight: '600',
-      textAlign: 'center',
-      color: colors.text,
-    },
-    modeButtonTextSelected: {
-      color: colors.white,
-    },
-    primaryButton: {
-      minHeight: 42,
-      paddingHorizontal: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.primary,
-      borderWidth: 1,
-      borderColor: colors.primaryDark,
-    },
-    primaryButtonText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.white,
-    },
-    stopButton: {
-      backgroundColor: colors.error,
-      borderColor: colors.error,
-    },
-    buttonRow: {
-      marginTop: 8,
-      flexDirection: 'row',
-      gap: 8,
-    },
-    halfButton: {
-      flex: 1,
-    },
-    secondaryButton: {
-      minHeight: 40,
-      paddingHorizontal: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.lightBlue,
-      borderWidth: 1,
-      borderColor: colors.weatherBorder,
-    },
-    secondaryButtonText: {
-      fontSize: 13,
-      fontWeight: '700',
-      textAlign: 'center',
-      color: colors.primaryDark,
-    },
-    warningButton: {
-      minHeight: 40,
-      paddingHorizontal: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.warningBackground,
-      borderWidth: 1,
-      borderColor: colors.warning,
-    },
-    warningButtonText: {
-      fontSize: 12,
-      fontWeight: '700',
-      textAlign: 'center',
-      color: colors.warning,
-    },
-    textAction: {
-      paddingHorizontal: 8,
-      paddingVertical: 5,
-    },
-    textActionLabel: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: colors.primary,
-    },
-    editingLabel: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    infoRow: {
-      minHeight: 40,
-      paddingHorizontal: 12,
-      paddingVertical: 9,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    lastInfoRow: {
-      borderBottomWidth: 0,
-    },
-    infoLabel: {
-      flex: 1,
-      fontSize: 12,
-      color: colors.text,
-    },
-    infoValue: {
-      flex: 1,
-      fontSize: 12,
-      fontWeight: '700',
-      textAlign: 'right',
-      color: colors.text,
-    },
-    inlineForm: {
-      padding: 12,
-    },
-    inputLabel: {
-      marginBottom: 5,
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    input: {
-      height: 42,
-      marginBottom: 12,
-      paddingHorizontal: 10,
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
-      fontSize: 13,
-      color: colors.text,
-    },
-    inputRow: {
-      flexDirection: 'row',
-      gap: 10,
-    },
-    inputColumn: {
-      flex: 1,
-    },
-    switchRow: {
-      minHeight: 56,
-      marginBottom: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    switchCopy: {
-      flex: 1,
-    },
-    switchTitle: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    switchDescription: {
-      marginTop: 2,
-      fontSize: 13,
-      lineHeight: 18,
-      color: colors.text,
-    },
-    scheduleDayRow: {
-      marginBottom: 12,
-      flexDirection: 'row',
-      gap: 4,
-    },
-    scheduleDayButton: {
-      flex: 1,
-      flexBasis: 0,
-      minWidth: 0,
-      minHeight: 40,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    scheduleDayButtonSelected: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primaryDark,
-    },
-    scheduleDayText: {
-      width: '100%',
-      paddingHorizontal: 2,
-      fontSize: 12,
-      fontWeight: '700',
-      textAlign: 'center',
-      color: colors.text,
-    },
-    scheduleDayTextSelected: {
-      color: colors.white,
-    },
-    outlineButton: {
-      minHeight: 40,
-      marginTop: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.primary,
-    },
-    outlineButtonText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.primaryDark,
-    },
-    disabledButton: {
-      opacity: 0.6,
-    },
-    infoBoxRows: {
-      padding: 10,
-      gap: 7,
-    },
-    infoBoxRow: {
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      gap: 7,
-    },
-    infoBox: {
-      minHeight: 86,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surfaceSecondary,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    infoBoxFlexible: {
-      flex: 1,
-      flexBasis: 0,
-      minWidth: 0,
-    },
-    infoBoxLabel: {
-      width: '100%',
-      height: 34,
-      fontSize: 12,
-      lineHeight: 16,
-      fontWeight: '500',
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      color: colors.text,
-    },
-    infoBoxValue: {
-      width: '100%',
-      minHeight: 38,
-      marginTop: 2,
-      fontSize: 15,
-      lineHeight: 19,
-      fontWeight: '600',
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      color: colors.text,
-    },
-    standalonePanelTitle: {
-      paddingHorizontal: 12,
-      paddingTop: 11,
-      paddingBottom: 8,
-    },
-    overridePanel: {
-      backgroundColor: colors.warningBackground,
-      borderColor: colors.warning,
-    },
-    alertPanel: {
-      backgroundColor: colors.surface,
-    },
-    alertHeader: {
-      minHeight: 44,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    alertCountBadge: {
-      minWidth: 24,
-      minHeight: 20,
-      paddingHorizontal: 6,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.warningBackground,
-      borderWidth: 1,
-      borderColor: colors.warning,
-    },
-    alertCountText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: colors.warning,
-    },
-    alertRow: {
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    alertRowLast: {
-      borderBottomWidth: 0,
-    },
-    alertType: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: colors.warning,
-    },
-    alertMessage: {
-      marginTop: 3,
-      fontSize: 14,
-      lineHeight: 20,
-      color: colors.text,
-    },
-    modalOverlay: {
-      flex: 1,
-      paddingHorizontal: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.38)',
-    },
-    modalCard: {
-      width: '100%',
-      maxWidth: 520,
-      padding: 16,
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    modalHeader: {
-      marginBottom: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 12,
-    },
-    modalTitle: {
-      flex: 1,
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    modalClose: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.primaryDark,
-    },
-    modalNote: {
-      marginBottom: 14,
-      fontSize: 11,
-      lineHeight: 16,
-      color: colors.text,
-    },
-    notFound: {
-      flex: 1,
-      paddingHorizontal: 25,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.background,
-    },
-    notFoundTitle: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: colors.text,
-    },
-    notFoundText: {
-      marginTop: 6,
-      marginBottom: 20,
-      textAlign: 'center',
-      fontSize: 13,
-      color: colors.text,
-    },
-  });
-}

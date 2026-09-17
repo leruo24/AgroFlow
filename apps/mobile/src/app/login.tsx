@@ -11,7 +11,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -22,10 +21,6 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import type {
-  AppColors,
-} from '@/constants/colors';
-
 import {
   useAuth,
 } from '@/context/AuthContext';
@@ -33,6 +28,10 @@ import {
 import {
   useTheme,
 } from '@/context/ThemeContext';
+
+import {
+  createLoginStyles,
+} from '@/styles/loginStyles';
 
 function getLoginErrorMessage(
   error: unknown
@@ -88,7 +87,7 @@ export default function LoginScreen() {
   const styles =
     useMemo(
       () =>
-        createStyles(
+        createLoginStyles(
           colors
         ),
       [
@@ -513,212 +512,3 @@ export default function LoginScreen() {
   );
 }
 
-function createStyles(
-  colors: AppColors
-) {
-  return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor:
-        colors.background,
-    },
-
-    keyboardView: {
-      flex: 1,
-      backgroundColor:
-        colors.background,
-    },
-
-    scrollContent: {
-      flexGrow: 1,
-    },
-
-    container: {
-      flex: 1,
-      minHeight: 650,
-      paddingHorizontal: 20,
-      paddingTop: 24,
-      paddingBottom: 24,
-      backgroundColor:
-        colors.background,
-    },
-
-    brand: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 55,
-    },
-
-    brandMark: {
-      width: 13,
-      height: 28,
-      marginRight: 9,
-      backgroundColor:
-        colors.primary,
-    },
-
-    brandName: {
-      fontSize: 22,
-      fontWeight: '700',
-      color:
-        colors.text,
-    },
-
-    brandSubtitle: {
-      marginTop: 1,
-      fontSize: 9,
-      color:
-        colors.text,
-    },
-
-    heading: {
-      marginBottom: 22,
-    },
-
-    title: {
-      fontSize: 28,
-      fontWeight: '700',
-      color:
-        colors.text,
-    },
-
-    description: {
-      marginTop: 5,
-      fontSize: 13,
-      color:
-        colors.text,
-    },
-
-    errorBox: {
-      marginBottom: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      backgroundColor:
-        colors.errorBackground,
-      borderWidth: 1,
-      borderColor:
-        colors.error,
-    },
-
-    errorText: {
-      fontSize: 11,
-      lineHeight: 16,
-      color:
-        colors.error,
-    },
-
-    form: {
-      padding: 16,
-      backgroundColor:
-        colors.surface,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-    },
-
-    inputGroup: {
-      marginBottom: 18,
-    },
-
-    inputLabel: {
-      marginBottom: 7,
-      fontSize: 11,
-      fontWeight: '600',
-      color:
-        colors.text,
-    },
-
-    passwordLabelRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-
-    forgotText: {
-      marginBottom: 7,
-      fontSize: 10,
-      fontWeight: '600',
-      color:
-        colors.primaryDark,
-    },
-
-    input: {
-      height: 46,
-      paddingHorizontal: 12,
-      backgroundColor:
-        colors.background,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-      fontSize: 12,
-      color:
-        colors.text,
-    },
-
-    passwordInput: {
-      height: 46,
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor:
-        colors.background,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-    },
-
-    passwordTextInput: {
-      flex: 1,
-      height: '100%',
-      paddingHorizontal: 12,
-      fontSize: 12,
-      color:
-        colors.text,
-    },
-
-    showButton: {
-      height: '100%',
-      paddingHorizontal: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-
-    showButtonText: {
-      fontSize: 10,
-      fontWeight: '600',
-      color:
-        colors.primaryDark,
-    },
-
-    loginButton: {
-      height: 46,
-      marginTop: 2,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor:
-        colors.primary,
-      borderWidth: 1,
-      borderColor:
-        colors.primaryDark,
-    },
-
-    loginButtonDisabled: {
-      opacity: 0.55,
-    },
-
-    loginButtonText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color:
-        colors.white,
-    },
-
-    footer: {
-      marginTop: 'auto',
-      paddingTop: 30,
-      textAlign: 'center',
-      fontSize: 9,
-      color:
-        colors.text,
-    },
-  });
-}

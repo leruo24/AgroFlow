@@ -12,7 +12,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -25,10 +24,6 @@ import {
 
 import * as Linking from 'expo-linking';
 
-import type {
-  AppColors,
-} from '@/constants/colors';
-
 import {
   useTheme,
 } from '@/context/ThemeContext';
@@ -36,6 +31,10 @@ import {
 import {
   supabase,
 } from '@/lib/supabase';
+
+import {
+  createForgotPasswordStyles,
+} from '@/styles/forgotPasswordStyles';
 
 export default function ForgotPasswordScreen() {
   const {
@@ -45,7 +44,7 @@ export default function ForgotPasswordScreen() {
   const styles =//styles are created using the useMemo hook to ensure that they are only recalculated when the colors object changes. This optimizes performance by preventing unnecessary re-renders and style recalculations when the theme colors remain the same.
     useMemo(
       () =>
-        createStyles(
+        createForgotPasswordStyles(
           colors
         ),
       [
@@ -555,262 +554,3 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-function createStyles(
-  colors: AppColors
-) {
-  return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor:
-        colors.background,
-    },
-
-    keyboardView: {
-      flex: 1,
-      backgroundColor:
-        colors.background,
-    },
-
-    scrollContent: {
-      flexGrow: 1,
-    },
-
-    container: {
-      flex: 1,
-      minHeight: 650,
-      paddingHorizontal: 20,
-      paddingTop: 12,
-      paddingBottom: 24,
-      backgroundColor:
-        colors.background,
-    },
-
-    topBar: {
-      minHeight: 42,
-      justifyContent: 'center',
-      marginBottom: 12,
-    },
-
-    backButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-start',
-    },
-
-    backArrow: {
-      marginRight: 5,
-      fontSize: 28,
-      lineHeight: 30,
-      color:
-        colors.text,
-    },
-
-    backText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color:
-        colors.text,
-    },
-
-    brand: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 45,
-    },
-
-    brandMark: {
-      width: 13,
-      height: 28,
-      marginRight: 9,
-      backgroundColor:
-        colors.primary,
-    },
-
-    brandName: {
-      fontSize: 22,
-      fontWeight: '700',
-      color:
-        colors.text,
-    },
-
-    brandSubtitle: {
-      marginTop: 1,
-      fontSize: 9,
-      color:
-        colors.textSecondary,
-    },
-
-    heading: {
-      marginBottom: 22,
-    },
-
-    title: {
-      fontSize: 28,
-      fontWeight: '700',
-      color:
-        colors.text,
-    },
-
-    description: {
-      marginTop: 6,
-      maxWidth: 330,
-      fontSize: 13,
-      lineHeight: 19,
-      color:
-        colors.textSecondary,
-    },
-
-    errorBox: {
-      marginBottom: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      backgroundColor:
-        colors.errorBackground,
-      borderWidth: 1,
-      borderColor:
-        colors.error,
-    },
-
-    errorText: {
-      fontSize: 11,
-      lineHeight: 16,
-      color:
-        colors.error,
-    },
-
-    form: {
-      padding: 16,
-      backgroundColor:
-        colors.surface,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-    },
-
-    inputGroup: {
-      marginBottom: 18,
-    },
-
-    inputLabel: {
-      marginBottom: 7,
-      fontSize: 11,
-      fontWeight: '600',
-      color:
-        colors.text,
-    },
-
-    input: {
-      height: 46,
-      paddingHorizontal: 12,
-      backgroundColor:
-        colors.background,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-      fontSize: 12,
-      color:
-        colors.text,
-    },
-
-    primaryButton: {
-      height: 46,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor:
-        colors.primary,
-      borderWidth: 1,
-      borderColor:
-        colors.primaryDark,
-    },
-
-    primaryButtonText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color:
-        colors.white,
-    },
-
-    disabledButton: {
-      opacity: 0.55,
-    },
-
-    infoBox: {
-      marginTop: 12,
-      padding: 13,
-      backgroundColor:
-        colors.surfaceSecondary,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-    },
-
-    infoTitle: {
-      fontSize: 11,
-      fontWeight: '700',
-      color:
-        colors.text,
-    },
-
-    infoText: {
-      marginTop: 4,
-      fontSize: 10,
-      lineHeight: 15,
-      color:
-        colors.textSecondary,
-    },
-
-    successBox: {
-      marginBottom: 14,
-      padding: 16,
-      backgroundColor:
-        colors.surface,
-      borderWidth: 1,
-      borderLeftWidth: 4,
-      borderColor:
-        colors.secondary,
-    },
-
-    successLabel: {
-      fontSize: 11,
-      fontWeight: '700',
-      color:
-        colors.secondaryDark,
-    },
-
-    successEmail: {
-      marginTop: 7,
-      fontSize: 13,
-      fontWeight: '600',
-      color:
-        colors.text,
-    },
-
-    secondaryButton: {
-      height: 44,
-      marginTop: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor:
-        colors.surface,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-    },
-
-    secondaryButtonText: {
-      fontSize: 11,
-      fontWeight: '600',
-      color:
-        colors.primaryDark,
-    },
-
-    footer: {
-      marginTop: 'auto',
-      paddingTop: 30,
-      textAlign: 'center',
-      fontSize: 9,
-      color:
-        colors.textSecondary,
-    },
-  });
-}

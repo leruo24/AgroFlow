@@ -16,7 +16,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -27,10 +26,6 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import type {
-  AppColors,
-} from '@/constants/colors';
-
 import {
   useTheme,
 } from '@/context/ThemeContext';
@@ -38,6 +33,10 @@ import {
 import {
   supabase,
 } from '@/lib/supabase';
+
+import {
+  createUpdatePasswordStyles,
+} from '@/styles/updatePasswordStyles';
 
 function getRecoveryParameters(
   url: string
@@ -81,7 +80,7 @@ export default function UpdatePasswordScreen() {
   const styles =
     useMemo(
       () =>
-        createStyles(
+        createUpdatePasswordStyles(
           colors
         ),
       [
@@ -647,166 +646,3 @@ export default function UpdatePasswordScreen() {
   );
 }
 
-function createStyles(
-  colors: AppColors
-) {
-  return StyleSheet.create({
-    safeArea: {
-      flex: 1,
-      backgroundColor:
-        colors.background,
-    },
-
-    keyboardView: {
-      flex: 1,
-    },
-
-    scrollContent: {
-      flexGrow: 1,
-    },
-
-    container: {
-      flex: 1,
-      minHeight: 650,
-      paddingHorizontal: 20,
-      paddingTop: 70,
-      paddingBottom: 24,
-      backgroundColor:
-        colors.background,
-    },
-
-    brand: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 48,
-    },
-
-    brandMark: {
-      width: 13,
-      height: 28,
-      marginRight: 9,
-      backgroundColor:
-        colors.primary,
-    },
-
-    brandName: {
-      fontSize: 22,
-      fontWeight: '700',
-      color:
-        colors.text,
-    },
-
-    brandSubtitle: {
-      marginTop: 1,
-      fontSize: 9,
-      color:
-        colors.textSecondary,
-    },
-
-    title: {
-      fontSize: 28,
-      fontWeight: '700',
-      color:
-        colors.text,
-    },
-
-    description: {
-      marginTop: 6,
-      marginBottom: 22,
-      maxWidth: 340,
-      fontSize: 13,
-      lineHeight: 19,
-      color:
-        colors.textSecondary,
-    },
-
-    errorBox: {
-      marginBottom: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      backgroundColor:
-        colors.errorBackground,
-      borderWidth: 1,
-      borderColor:
-        colors.error,
-    },
-
-    errorText: {
-      fontSize: 11,
-      lineHeight: 16,
-      color:
-        colors.error,
-    },
-
-    form: {
-      padding: 16,
-      backgroundColor:
-        colors.surface,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-    },
-
-    inputLabel: {
-      marginBottom: 7,
-      fontSize: 11,
-      fontWeight: '600',
-      color:
-        colors.text,
-    },
-
-    confirmLabel: {
-      marginTop: 16,
-      marginBottom: 7,
-      fontSize: 11,
-      fontWeight: '600',
-      color:
-        colors.text,
-    },
-
-    input: {
-      height: 46,
-      paddingHorizontal: 12,
-      backgroundColor:
-        colors.background,
-      borderWidth: 1,
-      borderColor:
-        colors.border,
-      fontSize: 12,
-      color:
-        colors.text,
-    },
-
-    primaryButton: {
-      height: 46,
-      marginTop: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor:
-        colors.primary,
-      borderWidth: 1,
-      borderColor:
-        colors.primaryDark,
-    },
-
-    primaryButtonText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color:
-        colors.white,
-    },
-
-    disabledButton: {
-      opacity: 0.55,
-    },
-
-    footer: {
-      marginTop: 'auto',
-      paddingTop: 30,
-      textAlign: 'center',
-      fontSize: 9,
-      color:
-        colors.textSecondary,
-    },
-  });
-}
