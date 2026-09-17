@@ -434,6 +434,8 @@ async function handleAction(el: HTMLElement): Promise<void> {
         farmName: v["farmName"] ?? "",
         location: v["location"] ?? "",
         sizeHectares: Number(v["farmSize"]) || 0,
+        latitude: v["latitude"]?.trim() ? Number(v["latitude"]) : null,
+        longitude: v["longitude"]?.trim() ? Number(v["longitude"]) : null,
         zones,
       },
     });
@@ -862,6 +864,18 @@ function validateOnboardingStep2(v: Record<string, string>, zoneCount: number): 
   if (!v["farmName"]?.trim()) return "Farm name is required.";
   if (!v["location"]?.trim()) return "Farm location is required.";
   if (!v["farmSize"] || Number(v["farmSize"]) <= 0) return "Enter a valid farm size.";
+  // Latitude/longitude are optional (manual entry for now - geocoding the
+  // address is a follow-up), but if entered they must be in range so a typo
+  // doesn't silently place the farm's weather/map somewhere on the wrong
+  // continent.
+  if (v["latitude"]?.trim()) {
+    const lat = Number(v["latitude"]);
+    if (Number.isNaN(lat) || lat < -90 || lat > 90) return "Latitude must be between -90 and 90.";
+  }
+  if (v["longitude"]?.trim()) {
+    const lon = Number(v["longitude"]);
+    if (Number.isNaN(lon) || lon < -180 || lon > 180) return "Longitude must be between -180 and 180.";
+  }
   if (zoneCount === 0) return "Add at least one zone.";
   for (let i = 0; i < zoneCount; i++) {
     if (!v[`zone_name_${i}`]?.trim()) return `Zone ${i + 1} needs a name.`;

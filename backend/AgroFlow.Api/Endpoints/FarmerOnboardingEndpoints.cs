@@ -33,7 +33,13 @@ public record FarmerOnboardingFarm(
     string FarmName,
     string Location,
     double SizeHectares,
-    List<FarmerOnboardingZone> Zones
+    List<FarmerOnboardingZone> Zones,
+    // Optional for now - manual entry until the admin dashboard geocodes
+    // Location automatically. Left null, farm.latitude/longitude stay NULL
+    // and the mobile app's WeatherSummary/FarmLocationMap have nothing to
+    // show for this farm.
+    double? Latitude = null,
+    double? Longitude = null
 );
 
 public record FarmerOnboardingRequest(
@@ -143,6 +149,22 @@ public static class FarmerOnboardingEndpoints
             });
         }
 
+        if (request.Farm.Latitude is < -90 or > 90)
+        {
+            return Results.BadRequest(new
+            {
+                error = "Latitude must be between -90 and 90."
+            });
+        }
+
+        if (request.Farm.Longitude is < -180 or > 180)
+        {
+            return Results.BadRequest(new
+            {
+                error = "Longitude must be between -180 and 180."
+            });
+        }
+
         if (request.Farm.Zones is null ||
             request.Farm.Zones.Count == 0)
         {
@@ -199,7 +221,9 @@ public static class FarmerOnboardingEndpoints
                 name = request.Farm.FarmName.Trim(),
                 location = request.Farm.Location.Trim(),
                 total_area = request.Farm.SizeHectares,
-                status = "Active"
+                status = "Active",
+                latitude = request.Farm.Latitude,
+                longitude = request.Farm.Longitude
             };
 
             using var farmRequest = new HttpRequestMessage(

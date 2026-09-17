@@ -57,12 +57,6 @@ export async function onboardingPage(): Promise<string> {
           Temporary password
           <input type="password" data-field="password" placeholder="At least 8 characters" />
         </label>
-        <label class="f">
-          Role
-          <select data-field="role">
-            <option value="farmer" selected>Farmer</option>
-          </select>
-        </label>
       </div>
       <div class="form-foot">
         <button class="btn" data-act="onboarding-next">Next: Farm details</button>
@@ -82,6 +76,14 @@ export async function onboardingPage(): Promise<string> {
         <label class="f">
           Farm size (hectares)
           <input type="number" min="0" step="0.1" data-field="farmSize" placeholder="0" />
+        </label>
+        <label class="f">
+          Latitude <span class="muted">(optional — powers the weather &amp; map view)</span>
+          <input type="number" step="any" min="-90" max="90" data-field="latitude" placeholder="e.g. -33.3667" />
+        </label>
+        <label class="f">
+          Longitude <span class="muted">(optional — powers the weather &amp; map view)</span>
+          <input type="number" step="any" min="-180" max="180" data-field="longitude" placeholder="e.g. 19.3167" />
         </label>
         <label class="f">
           Number of irrigation zones

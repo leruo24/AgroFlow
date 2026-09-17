@@ -61,6 +61,8 @@ export async function onboardFarmer(input: {
     farmName: string;
     location: string;
     sizeHectares: number;
+    latitude?: number | null;
+    longitude?: number | null;
     zones: {
       name: string;
       sizeHectares: number;
