@@ -321,11 +321,6 @@ content: {
       fontWeight: '600',
       color: colors.primary,
     },
-    editingLabel: {
-      fontSize: Type.caption,
-      fontWeight: '700',
-      color: colors.text,
-    },
     infoRow: {
       minHeight: 48,
       paddingHorizontal: 12,
@@ -368,6 +363,7 @@ content: {
       backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
+      borderRadius: Radius.sm,
       fontSize: Type.caption,
       color: colors.text,
     },
@@ -387,8 +383,8 @@ content: {
       alignItems: 'center',
       gap: 10,
       backgroundColor: colors.background,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.divider,
     },
     switchCopy: {
       flex: 1,
@@ -419,6 +415,7 @@ content: {
       backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
+      borderRadius: Radius.sm,
     },
     scheduleDayButtonSelected: {
       backgroundColor: colors.primary,
@@ -443,6 +440,7 @@ content: {
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.primary,
+      borderRadius: Radius.sm,
     },
     outlineButtonText: {
       fontSize: Type.caption,
@@ -452,49 +450,28 @@ content: {
     disabledButton: {
       opacity: 0.6,
     },
-    infoBoxRows: {
-      padding: 10,
-      gap: 7,
+    detailRows: {
+      paddingHorizontal: Spacing.three,
     },
-    infoBoxRow: {
+    detailRow: {
+      minHeight: 52,
       flexDirection: 'row',
-      alignItems: 'stretch',
-      gap: 7,
-    },
-    infoBox: {
-      minHeight: 86,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.surface,
-      borderWidth: 0,
-      borderColor: colors.border,
+      justifyContent: 'space-between',
+      gap: Spacing.two,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.divider,
     },
-    infoBoxFlexible: {
+    detailLabel: {
       flex: 1,
-      flexBasis: 0,
-      minWidth: 0,
-    },
-    infoBoxLabel: {
-      width: '100%',
-      height: 34,
-      fontSize: Type.caption,
-      lineHeight: 16,
-      fontWeight: '500',
-      textAlign: 'center',
-      textAlignVertical: 'center',
-      color: colors.text,
-    },
-    infoBoxValue: {
-      width: '100%',
-      minHeight: 48,
-      marginTop: 2,
       fontSize: Type.body,
-      lineHeight: 19,
+      color: colors.textSecondary,
+    },
+    detailValue: {
+      flex: 1,
+      fontSize: Type.body,
       fontWeight: '600',
-      textAlign: 'center',
-      textAlignVertical: 'center',
+      textAlign: 'right',
       color: colors.text,
     },
     standalonePanelTitle: {

@@ -1,4 +1,4 @@
-import { Radius, Type } from '@/constants/colors';
+import { BlurView } from 'expo-blur';
 // Defines the bottom tab navigation structure for AgroFlow.
 import { Tabs } from 'expo-router';
 
@@ -18,7 +18,8 @@ import {//tells the app if its running on android or IOS
 
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
 import { useTheme } from '@/context/ThemeContext';//contains the colors
-import { tabsLayoutStyles as styles } from '@/styles/tabsLayoutStyles';
+import { FROSTED_BLUR_INTENSITY, useBlurTarget } from '@/components/BlurSheet';
+import { createTabsLayoutStyles, tabsLayoutStyles as styles } from '@/styles/tabsLayoutStyles';
 
 type TabIconProps = { size?: number; color?: ColorValue; strokeWidth?: number };
 
@@ -35,31 +36,15 @@ function TabIcon(Icon: ComponentType<TabIconProps>) {
 }
 
 export default function TabsLayout() {//creates layout component
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { alerts } = useAgroFlow();
+  const blurTarget = useBlurTarget();
+  const themedStyles = useMemo(() => createTabsLayoutStyles(colors), [colors]);
+  const canBlurTabBar = Platform.OS !== 'android' || Number(Platform.Version) >= 31;
 
   const unreadAlerts = alerts.filter(//gets unread alerts count
     (alert) => !alert.read
   ).length;
-
-  const tabBarStyle = useMemo(
-    () => ({
-      height: Platform.OS === 'ios' ? 82 : 72,
-      marginHorizontal: 16,
-      marginBottom: Platform.OS === 'ios' ? 8 : 12,
-      paddingTop: 8,
-      paddingBottom: Platform.OS === 'ios' ? 15 : 8,
-      borderRadius: Radius.md,
-      position: 'absolute' as const,
-      overflow: 'hidden' as const,
-      borderTopWidth: 1,
-      borderTopColor: colors.divider,
-      backgroundColor: colors.surface,
-      elevation: 0,//android shadow
-      shadowOpacity: 0,//ios shadow
-    }),
-    [colors]
-  );
 
   return (
     <Tabs
@@ -68,15 +53,19 @@ export default function TabsLayout() {//creates layout component
         headerShown: false,//hiding auto header
         tabBarHideOnKeyboard: true,
 
-        // Paints the complete tab area, including the safe-area section.
-        tabBarBackground: () => (
-          <View
-            style={{
-              flex: 1,
-              backgroundColor: colors.surface,
-            }}
-          />
-        ),
+        // The translucent surface remains legible if blur is unavailable.
+        tabBarBackground: () => canBlurTabBar ? (
+          <View style={styles.blurBackground}>
+            <BlurView
+              style={styles.blurLayer}
+              intensity={FROSTED_BLUR_INTENSITY}
+              tint={isDark ? 'dark' : 'light'}
+              blurTarget={blurTarget}
+              blurMethod={Platform.OS === 'android' ? 'dimezisBlurViewSdk31Plus' : undefined}
+            />
+            <View pointerEvents="none" style={themedStyles.frostedOverlay} />
+          </View>
+        ) : <View style={themedStyles.frostedFallback} />,
 
         // Aqua identifies the selected tab against the forest-green bar.
         tabBarActiveTintColor: colors.secondaryDark,
@@ -84,22 +73,11 @@ export default function TabsLayout() {//creates layout component
         // Inactive icons and labels remain readable on forest green.
         tabBarInactiveTintColor: colors.textMuted,
 
-        tabBarStyle,
+        tabBarStyle: themedStyles.tabBar,
 
-        tabBarLabelStyle: {
-          fontSize: Type.label,
-          fontWeight: '600',
-          paddingTop: 3,
-          backgroundColor: 'transparent',
-        },
-
-        tabBarItemStyle: {
-          backgroundColor: 'transparent',
-        },
-
-        tabBarIconStyle: {
-          marginBottom: 1,
-        },
+        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarItemStyle: styles.tabBarItem,
+        tabBarIconStyle: styles.tabBarIcon,
       }}
     >
       <Tabs.Screen
@@ -126,14 +104,7 @@ export default function TabsLayout() {//creates layout component
             unreadAlerts > 0
               ? unreadAlerts
               : undefined,
-          tabBarBadgeStyle: {
-            fontSize: Type.label,
-            minWidth: 17,
-            height: 17,
-            lineHeight: 17,
-            backgroundColor: colors.error,
-            color: colors.white,
-          },
+          tabBarBadgeStyle: themedStyles.badge,
           tabBarIcon: TabIcon(Bell),
         }}
       />

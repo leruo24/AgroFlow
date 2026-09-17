@@ -1,5 +1,6 @@
 import { DataState } from '@/components/DataState';
 import { AppAlert as Alert } from '@/components/AppAlert';
+import { BlurSheet } from '@/components/BlurSheet';
 // Dynamic Expo route: the same screen manages every irrigation zone using its route ID.
 import {
   ArrowLeft,
@@ -136,7 +137,6 @@ export default function ZoneControlScreen() {
   ] =
     useState('20');
 
-  // Zone configuration is edited directly inside the page instead of a modal.
   const [
     isEditingZone,
     setIsEditingZone,
@@ -1410,61 +1410,110 @@ export default function ZoneControlScreen() {
                 Zone &amp; Automation
               </Text>
 
-              {!isEditingZone ? (
-                <TouchableOpacity
-                  style={
-                    styles.textAction
-                  }
-                  onPress={
-                    beginZoneEditing
-                  }
-                >
-                  <Text
-                    style={
-                      styles.textActionLabel
-                    }
-                  >
-                    Edit
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <Text
-                  style={
-                    styles.editingLabel
-                  }
-                >
-                  Editing
-                </Text>
-              )}
+              <TouchableOpacity
+                style={styles.textAction}
+                onPress={beginZoneEditing}
+                accessibilityRole="button"
+                accessibilityLabel="Edit zone and automation"
+              >
+                <Text style={styles.textActionLabel}>Edit</Text>
+              </TouchableOpacity>
             </View>
 
-            {!isEditingZone ? (
-              <View style={styles.infoBoxRows}>
-                {zoneSummaryRows.map((row, rowIndex) => (
-                  <View key={`zone-row-${rowIndex}`} style={styles.infoBoxRow}>
-                    {row.map((item) => (
-                      <View
-                        key={item.label}
-                        style={[styles.infoBox, styles.infoBoxFlexible]}
-                      >
-                        <Text
-                          style={styles.infoBoxLabel}
-                          numberOfLines={2}
-                        >
-                          {item.label}
-                        </Text>
-                        <Text
-                          style={styles.infoBoxValue}
-                          numberOfLines={2}
-                        >
-                          {item.value}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ))}
+            <View style={styles.detailRows}>
+              {zoneSummaryRows.flat().map((item) => (
+                <View key={item.label} style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{item.label}</Text>
+                  <Text style={styles.detailValue}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelTitle}>Schedule &amp; Weather</Text>
+              <View style={styles.headerActions}>
+                <Text style={styles.panelStatus}>
+                  {displayedBaseMode === 'scheduled'
+                    ? 'Active'
+                    : 'Saved'}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.textAction}
+                  onPress={beginScheduleEditing}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit regular irrigation schedule"
+                >
+                  <Text style={styles.textActionLabel}>Edit</Text>
+                </TouchableOpacity>
               </View>
-            ) : (
+            </View>
+
+            <View style={styles.detailRows}>
+              {scheduleWeatherRows.flat().map((item) => (
+                <View key={item.label} style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{item.label}</Text>
+                  <Text style={styles.detailValue}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.panel}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelTitle}>System Status</Text>
+            </View>
+
+            <View style={styles.detailRows}>
+              {systemStatusItems.map((item) => (
+                <View key={item.label} style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{item.label}</Text>
+                  <Text style={styles.detailValue}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {selectedZone.alerts.length > 0 && (
+            <View style={[styles.panel, styles.alertPanel]}>
+              <View style={styles.alertHeader}>
+                <Text style={styles.panelTitle}>Zone Alerts</Text>
+
+                <View style={styles.alertCountBadge}>
+                  <Text style={styles.alertCountText}>
+                    {selectedZone.alerts.length}
+                  </Text>
+                </View>
+              </View>
+
+              {selectedZone.alerts.map((zoneAlert, index) => (
+                <View
+                  key={zoneAlert.id}
+                  style={[
+                    styles.alertRow,
+                    index === selectedZone.alerts.length - 1 &&
+                      styles.alertRowLast,
+                  ]}
+                >
+                  <Text style={styles.alertType}>
+                    {zoneAlert.type === 'warning'
+                      ? 'ATTENTION'
+                      : zoneAlert.type.toUpperCase()}
+                  </Text>
+
+                  <Text style={styles.alertMessage}>
+                    {zoneAlert.message}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      <BlurSheet visible={isEditingZone} onClose={() => { if (!settingsSaving) cancelZoneEditing(); }} title="Edit Zone & Automation">
               <View
                 style={
                   styles.inlineForm
@@ -1565,64 +1614,8 @@ export default function ZoneControlScreen() {
                   <Text style={styles.outlineButtonText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
-
-          <View style={styles.panel}>
-            <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>Schedule &amp; Weather</Text>
-              <View style={styles.headerActions}>
-                <Text style={styles.panelStatus}>
-                  {displayedBaseMode === 'scheduled'
-                    ? 'Active'
-                    : 'Saved'}
-                </Text>
-
-                {!isEditingSchedule ? (
-                  <TouchableOpacity
-                    style={styles.textAction}
-                    onPress={beginScheduleEditing}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit regular irrigation schedule"
-                  >
-                    <Text style={styles.textActionLabel}>Edit</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text style={styles.editingLabel}>Editing</Text>
-                )}
-              </View>
-            </View>
-
-            {!isEditingSchedule ? (
-              <View style={styles.infoBoxRows}>
-                {scheduleWeatherRows.map((row, rowIndex) => (
-                  <View
-                    key={`schedule-row-${rowIndex}`}
-                    style={styles.infoBoxRow}
-                  >
-                    {row.map((item) => (
-                      <View
-                        key={item.label}
-                        style={[styles.infoBox, styles.infoBoxFlexible]}
-                      >
-                        <Text
-                          style={styles.infoBoxLabel}
-                          numberOfLines={2}
-                        >
-                          {item.label}
-                        </Text>
-                        <Text
-                          style={styles.infoBoxValue}
-                          numberOfLines={2}
-                        >
-                          {item.value}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ))}
-              </View>
-            ) : (
+      </BlurSheet>
+      <BlurSheet visible={isEditingSchedule} onClose={() => { if (!scheduleSettingsSaving) cancelScheduleEditing(); }} title="Edit Schedule">
               <View style={styles.inlineForm}>
                 <Text style={styles.inputLabel}>Irrigation Days</Text>
 
@@ -1710,76 +1703,7 @@ export default function ZoneControlScreen() {
                   <Text style={styles.outlineButtonText}>Cancel</Text>
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
-
-          <View style={styles.panel}>
-            <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>System Status</Text>
-            </View>
-
-            <View style={styles.infoBoxRows}>
-              <View style={styles.infoBoxRow}>
-                {systemStatusItems.map((item) => (
-                  <View
-                    key={item.label}
-                    style={[styles.infoBox, styles.infoBoxFlexible]}
-                  >
-                    <Text
-                      style={styles.infoBoxLabel}
-                      numberOfLines={2}
-                    >
-                      {item.label}
-                    </Text>
-                    <Text
-                      style={styles.infoBoxValue}
-                      numberOfLines={2}
-                    >
-                      {item.value}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-
-          {selectedZone.alerts.length > 0 && (
-            <View style={[styles.panel, styles.alertPanel]}>
-              <View style={styles.alertHeader}>
-                <Text style={styles.panelTitle}>Zone Alerts</Text>
-
-                <View style={styles.alertCountBadge}>
-                  <Text style={styles.alertCountText}>
-                    {selectedZone.alerts.length}
-                  </Text>
-                </View>
-              </View>
-
-              {selectedZone.alerts.map((zoneAlert, index) => (
-                <View
-                  key={zoneAlert.id}
-                  style={[
-                    styles.alertRow,
-                    index === selectedZone.alerts.length - 1 &&
-                      styles.alertRowLast,
-                  ]}
-                >
-                  <Text style={styles.alertType}>
-                    {zoneAlert.type === 'warning'
-                      ? 'ATTENTION'
-                      : zoneAlert.type.toUpperCase()}
-                  </Text>
-
-                  <Text style={styles.alertMessage}>
-                    {zoneAlert.message}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      </ScrollView>
-
+      </BlurSheet>
     </SafeAreaView>
   );
 }

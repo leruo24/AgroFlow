@@ -106,6 +106,8 @@ export type AppColors = {
   background: string;
   surface: string;
   surfaceSecondary: string;
+  frostedSurface: string;
+  frostedFallback: string;
 
   text: string;
   textSecondary: string;
@@ -161,6 +163,8 @@ export const lightColors: AppColors = {
 
   surface: '#FFFFFF',
   surfaceSecondary: '#F5F6F5',
+  frostedSurface: 'rgba(255,255,255,0.16)',
+  frostedFallback: 'rgba(255,255,255,0.88)',
 
   text: '#253126',
   textSecondary: '#637064',
@@ -211,6 +215,8 @@ export const darkColors: AppColors = {
 
   surface: '#222C22',
   surfaceSecondary: '#2A352A',
+  frostedSurface: 'rgba(34,44,34,0.24)',
+  frostedFallback: 'rgba(34,44,34,0.9)',
 
   text: '#F1F5EF',
   textSecondary: '#B5C0B3',

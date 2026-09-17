@@ -48,6 +48,12 @@ import {
 } from '@/context/ThemeContext';
 
 const BlurTargetContext = createContext<RefObject<View | null> | undefined>(undefined);
+export const FROSTED_BLUR_INTENSITY = 45;
+
+export function useBlurTarget() {
+  return useContext(BlurTargetContext);
+}
+
 export function BlurRoot({ children }: { children: ReactNode }) {
   const target = useRef<View | null>(null);
   return <BlurTargetContext.Provider value={target}>
@@ -79,7 +85,7 @@ export function BlurSheet({
   } = useTheme();
 
   const styles = createStyles(colors);
-  const target = useContext(BlurTargetContext);
+  const target = useBlurTarget();
   const insets = useSafeAreaInsets();
 
   return (
@@ -100,7 +106,7 @@ export function BlurSheet({
 
         <BlurView
           style={StyleSheet.absoluteFill}
-          intensity={45}
+          intensity={FROSTED_BLUR_INTENSITY}
           blurTarget={target}
           tint={isDark ? 'dark' : 'light'}
           blurMethod={
