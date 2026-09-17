@@ -18,6 +18,13 @@ dotnet build
 dotnet run
 ```
 
+For Expo web, run this API alongside Metro. Development requests from
+`localhost`/`127.0.0.1` are allowed across ports. For a deployed web app or
+a browser opened on a LAN hostname, configure `Cors:AllowedOrigins:0` with
+the exact web origin (for example via `Cors__AllowedOrigins__0`). Restart the
+API after changing its code or CORS configuration; rebuilding alone does not
+update an already-running process.
+
 The four secrets above must be set first — the app throws on startup if the
 connection string, `ApiKey`, `Supabase:JwksUrl`, or any `Mqtt:*` value is
 missing. Everything else is in the committed `appsettings.json`. See
@@ -75,6 +82,7 @@ Config is split by sensitivity:
 | `Supabase:JwksUrl` | `appsettings.json` | `{Supabase:Url}/auth/v1/.well-known/jwks.json` | Used to validate admin bearer tokens |
 | `Firmware:LatestVersion` / `Firmware:DownloadUrl` | `appsettings.json` | You set these per release | `DownloadUrl` must point at an actual hosted `.bin` — this project doesn't host firmware binaries itself |
 | `Mqtt:Host` / `Mqtt:Port` / `Mqtt:Username` | `appsettings.json` | HiveMQ Cloud console → your cluster → Access Management | Endpoint identity, not a credential |
+| `Cors:AllowedOrigins` | deployment configuration | Your Expo web origin(s) | Exact browser origins allowed to call the API; local loopback origins are allowed only in Development |
 
 > A real `appsettings.json` with live secrets (DB password, `ApiKey`,
 > `service_role` key, HiveMQ password) was committed under the old

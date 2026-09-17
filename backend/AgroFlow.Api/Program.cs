@@ -91,6 +91,23 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddHttpClient();
 
+// Expo web runs on a separate origin from the API. Accept local browser
+// origins during development and explicitly configured origins in deployment.
+// Authentication and the device API key remain required for actual requests.
+var allowedWebOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+    policy.SetIsOriginAllowed(origin =>
+    {
+        if (allowedWebOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase)) return true;
+        return builder.Environment.IsDevelopment()
+            && Uri.TryCreate(origin, UriKind.Absolute, out var uri)
+            && uri.IsLoopback
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+    })
+    .AllowAnyHeader()
+    .AllowAnyMethod()));
+
 // TODO: set Mqtt:Host/Port/Username/Password in appsettings.json to your
 // HiveMQ Cloud cluster credentials (HiveMQ Cloud console -> your cluster ->
 // Access Management). MqttConnectionService owns the single connection this
@@ -104,6 +121,8 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttConnectionServ
 builder.Services.AddHostedService<IrrigationCommandNotifyService>();
 
 var app = builder.Build();
+
+app.UseCors();
 
 // Device shared-secret gate - skipped for the admin (JWT-authenticated)
 // routes below, which use app.UseAuthentication()/UseAuthorization() instead.

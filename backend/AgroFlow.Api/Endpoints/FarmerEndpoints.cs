@@ -40,19 +40,21 @@ public static class FarmerEndpoints
     }
 
     private static async Task<IResult> GetCurrentWeatherAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, IHttpClientFactory httpClientFactory)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, IHttpClientFactory httpClientFactory, long? farmId)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
         const string sql = """
             select f.latitude, f.longitude from farm f
-            where f.owner_id=$1 or exists (
-              select 1 from farm_member fm where fm.farm_id=f.farm_id and fm.profile_id=$1)
+            where (f.owner_id=$1 or exists (
+              select 1 from farm_member fm where fm.farm_id=f.farm_id and fm.profile_id=$1))
+              and ($2::bigint is null or f.farm_id=$2)
             order by case when f.owner_id=$1 then 0 else 1 end, f.farm_id limit 1;
             """;
         await using var connection = await dataSource.OpenConnectionAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue(userId);
+        command.Parameters.AddWithValue(NpgsqlDbType.Bigint, (object?)farmId ?? DBNull.Value);
         await using var reader = await command.ExecuteReaderAsync();
         if (!await reader.ReadAsync()) return Results.NotFound(new { error = "No assigned farm was found." });
         if (reader.IsDBNull(0) || reader.IsDBNull(1))
@@ -92,15 +94,18 @@ public static class FarmerEndpoints
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>
         Guid.TryParse(user.FindFirstValue("sub"), out userId);
 
-    private static async Task<IResult> GetDashboardAsync(ClaimsPrincipal user, NpgsqlDataSource dataSource)
+    private static async Task<IResult> GetDashboardAsync(ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
         const string sql = """
-            with selected_farm as (
+            with accessible_farms as (
                 select f.* from farm f
                 where f.owner_id = $1
                    or exists (select 1 from farm_member fm where fm.farm_id = f.farm_id and fm.profile_id = $1)
+            ), selected_farm as (
+                select f.* from accessible_farms f
+                where $2::bigint is null or f.farm_id = $2
                 order by case when f.owner_id = $1 then 0 else 1 end, f.farm_id
                 limit 1
             ), selected_zones as (
@@ -108,6 +113,7 @@ public static class FarmerEndpoints
             )
             select jsonb_build_object(
                 'profile', (select to_jsonb(p) from profile p where p.id = $1),
+                'farms', coalesce((select jsonb_agg(to_jsonb(f) order by f.farm_id) from accessible_farms f), '[]'::jsonb),
                 'farm', (select to_jsonb(f) from selected_farm f),
                 'zones', coalesce((select jsonb_agg(to_jsonb(z) order by z.id) from selected_zones z), '[]'::jsonb),
                 'readings', coalesce((select jsonb_agg(to_jsonb(r)) from zone_latest_reading r join selected_zones z on z.id = r.zone_id), '[]'::jsonb),
@@ -121,6 +127,7 @@ public static class FarmerEndpoints
         await using var connection = await dataSource.OpenConnectionAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue(userId);
+        command.Parameters.AddWithValue(NpgsqlDbType.Bigint, (object?)farmId ?? DBNull.Value);
         var json = await command.ExecuteScalarAsync() as string;
         return Results.Content(json ?? "{}", "application/json");
     }
