@@ -38,9 +38,10 @@
    ========================================================================== */
 
 import { supabase } from "@/lib/supabase";
+
 import type {
   Kpis, Trends, GrowthSeries, SystemHealth, StatusDistribution,
-  User, Farm, Zone, Hardware, AdminAlert, MaintenanceJob,
+  User, Farm, Hardware, AdminAlert, MaintenanceJob,
   IrrigationSchedule, IrrigationEvent, ActivityEntry,
   AlertStatus, AlertPriority, UserStatus,
 } from "@/types/models";
@@ -105,20 +106,6 @@ async function fetchZoneMap(): Promise<Map<number, ZoneRow>> {
   return new Map((data as ZoneRow[] ?? []).map((z) => [z.id, z]));
 }
 
-interface CreateFarmerInput {
-  fullName: string;
-  email: string;
-  phone: string;
-  password: string;
-  role: "farmer" | "admin";
-}
-
-interface CreateFarmInput {
-  farmName: string;
-  location: string;
-  sizeHectares: number;
-  zones: { name: string; sizeHectares: number }[];
-}
 
 /* Mutable working copies so admin actions persist for the session only -
    see the file header: this is NOT a substitute for real writes, it's
@@ -420,62 +407,6 @@ export const api = {
     if (f) f.status = "Active";
     return farms;
   },
-
-  async onboardFarmer(
-    farmerInput: CreateFarmerInput,
-    farmInput: CreateFarmInput,
-  ): Promise<{ user: User; farm: Farm }> {
-    // The REAL onboarding write path is backend/AgroFlow.Api's
-    // /api/farmers/create + /api/farmers/invite (service_role, via
-    // src/services/agroFlowApi.ts) - this method is the local working-copy
-    // side of the same action for immediate UI feedback, not a second
-    // write path.
-    const newFarmId = Math.max(0, ...farms.map((f) => f.id)) + 1;
-
-    const zones: Zone[] = farmInput.zones.map((z, i) => ({
-      id: newFarmId * 100 + i + 1,
-      name: z.name,
-      sizeHectares: z.sizeHectares,
-    }));
-
-    const newUser: User = {
-      id: `pending-${newFarmId}`,
-      name: farmerInput.fullName,
-      email: farmerInput.email,
-      phone: farmerInput.phone,
-      farm: farmInput.farmName,
-      status: "Pending",
-      dateJoined: new Date().toISOString().slice(0, 10),
-      lastActive: "Unknown",
-      hardware: [],
-      scheduleIds: [],
-      support: [],
-      notes: [],
-    };
-
-    const newFarm: Farm = {
-      id: newFarmId,
-      name: farmInput.farmName,
-      owner: farmerInput.fullName,
-      province: farmInput.location.split(",").pop()?.trim() ?? farmInput.location,
-      region: farmInput.location.split(",")[0]?.trim() ?? farmInput.location,
-      health: "Attention Required",
-      status: "Pending Approval",
-      hectares: farmInput.sizeHectares,
-      registered: new Date().toISOString().slice(0, 10),
-      lastActivity: "just now",
-      healthFactors: { deviceConnectivity: 0, gatewayOnline: false, sensorsAvailable: 0, outstandingAlerts: 0, openMaintenance: 0 },
-      users: 1,
-      devices: 0,
-      zones,
-    };
-
-    users.push(newUser);
-    farms.push(newFarm);
-
-    return { user: newUser, farm: newFarm };
-  },
-
   async setFarmStatus(id: number, status: Farm["status"]): Promise<Farm[]> {
     const f = farms.find((x) => x.id === id);
     if (f) f.status = status;

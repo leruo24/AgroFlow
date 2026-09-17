@@ -1,3 +1,4 @@
+
 /* Calls AgroFlow.Api's admin-only farmer onboarding endpoints.
    Both endpoints require a real Supabase Auth session (JWT bearer + a
    profile.role='admin' check server-side) - see
@@ -12,6 +13,7 @@ const API_BASE = import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "";
 async function postAuthorized(path: string, body: unknown): Promise<void> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
+
   if (!token) {
     throw new Error("Not signed in.");
   }
@@ -47,3 +49,24 @@ export async function inviteFarmer(input: {
 }): Promise<void> {
   await postAuthorized("/api/farmers/invite", input);
 }
+
+export async function onboardFarmer(input: {
+  farmer: {
+    fullName: string;
+    email: string;
+    phone: string;
+    password: string;
+  };
+  farm: {
+    farmName: string;
+    location: string;
+    sizeHectares: number;
+    zones: {
+      name: string;
+      sizeHectares: number;
+    }[];
+  };
+}): Promise<void> {
+  await postAuthorized("/api/farmers/onboard", input);
+}
+

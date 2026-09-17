@@ -61,7 +61,6 @@ export async function onboardingPage(): Promise<string> {
           Role
           <select data-field="role">
             <option value="farmer" selected>Farmer</option>
-            <option value="admin">Admin</option>
           </select>
         </label>
       </div>
