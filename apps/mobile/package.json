@@ -44,6 +44,7 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:clean": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-clean.ps1",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
