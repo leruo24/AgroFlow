@@ -90,6 +90,16 @@ builder.Services
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpClient();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AdminFrontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 // TODO: set Mqtt:Host/Port/Username/Password in appsettings.json to your
 // HiveMQ Cloud cluster credentials (HiveMQ Cloud console -> your cluster ->
@@ -104,6 +114,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttConnectionServ
 builder.Services.AddHostedService<IrrigationCommandNotifyService>();
 
 var app = builder.Build();
+app.UseCors("AdminFrontend");
 
 // Device shared-secret gate - skipped for the admin (JWT-authenticated)
 // routes below, which use app.UseAuthentication()/UseAuthorization() instead.

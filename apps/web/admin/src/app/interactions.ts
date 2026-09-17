@@ -3,7 +3,11 @@
 import { api } from "@/data/api";
 import { toast } from "@/lib/toast";
 import { openDrawer } from "@/lib/drawer";
-import { createFarmer, inviteFarmer } from "@/services/agroFlowApi";
+import {
+  createFarmer,
+  inviteFarmer,
+  onboardFarmer,
+} from "@/services/agroFlowApi";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
 import {
@@ -394,34 +398,60 @@ async function handleAction(el: HTMLElement): Promise<void> {
       clearOnboardingError();
       return void goToOnboardingStep(1);
     case "onboarding-submit": {
-      const v = collectFields();
-      const zoneCount = Math.max(0, Math.min(50, Number(v["zoneCount"]) || 0));
-      const err = validateOnboardingStep2(v, zoneCount);
-      if (err) return void showOnboardingError(err);
-      clearOnboardingError();
+  const v = collectFields();
 
-      const zones = Array.from({ length: zoneCount }, (_, i) => ({
-        name: v[`zone_name_${i}`] ?? "",
-        sizeHectares: Number(v[`zone_size_${i}`]) || 0,
-      }));
+  const zoneCount = Math.max(
+    0,
+    Math.min(50, Number(v["zoneCount"]) || 0),
+  );
 
-      try {
-        await api.onboardFarmer(
-          {
-            fullName: v["fullName"] ?? "", email: v["email"] ?? "", phone: v["phone"] ?? "",
-            password: v["password"] ?? "", role: (v["role"] as "farmer" | "admin") ?? "farmer",
-          },
-          {
-            farmName: v["farmName"] ?? "", location: v["location"] ?? "",
-            sizeHectares: Number(v["farmSize"]) || 0, zones,
-          },
-        );
-        toast("Farmer onboarded successfully.", "success");
-        return void go("farms");
-      } catch (e) {
-        return void showOnboardingError(e instanceof Error ? e.message : "Something went wrong.");
-      }
-    }
+  const err = validateOnboardingStep2(v, zoneCount);
+
+  if (err) {
+    return void showOnboardingError(err);
+  }
+
+  clearOnboardingError();
+
+  const zones = Array.from(
+    { length: zoneCount },
+    (_, i) => ({
+      name: v[`zone_name_${i}`] ?? "",
+      sizeHectares: Number(v[`zone_size_${i}`]) || 0,
+    }),
+  );
+
+  try {
+    await onboardFarmer({
+      farmer: {
+        fullName: v["fullName"] ?? "",
+        email: v["email"] ?? "",
+        phone: v["phone"] ?? "",
+        password: v["password"] ?? "",
+      },
+
+      farm: {
+        farmName: v["farmName"] ?? "",
+        location: v["location"] ?? "",
+        sizeHectares: Number(v["farmSize"]) || 0,
+        zones,
+      },
+    });
+
+    toast(
+      "Farmer onboarded successfully.",
+      "success",
+    );
+
+    return void go("farms");
+  } catch (e) {
+    return void showOnboardingError(
+      e instanceof Error
+        ? e.message
+        : "Something went wrong.",
+    );
+  }
+}
     /* hardware */
     case "view-device": {
       const h = api.findHardware(idAttr);
