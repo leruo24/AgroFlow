@@ -28,7 +28,7 @@ export function FarmLocationMap({ farm }: { farm: Farm }) {
       {canShow && (collapsed ? <ChevronDown size={20} color={colors.textSecondary} /> : <ChevronUp size={20} color={colors.textSecondary} />)}
     </Pressable>
     {canShow && !collapsed && <View style={styles.mapWrapper}>
-      <FarmMapSurface key={`${farm.id}-${zoom}`} latitude={farm.latitude!} longitude={farm.longitude!} zoom={zoom} onFailure={onFailure} />
+      <FarmMapSurface latitude={farm.latitude!} longitude={farm.longitude!} zoom={zoom} onFailure={onFailure} />
       <View style={styles.zoomControls}>
         {[{ Icon: Plus, step: 1, label: 'Zoom in' }, { Icon: Minus, step: -1, label: 'Zoom out' }].map(({ Icon, step, label }) => {
           const disabled = zoom + step < 4 || zoom + step > 17;
