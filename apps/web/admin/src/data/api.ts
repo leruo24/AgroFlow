@@ -84,6 +84,32 @@ function splitLocation(location: string): { province: string; region: string } {
   return { region: location, province: location };
 }
 
+/* AgroFlow.Api base URL used for backend-only operations. */
+const API_BASE = import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "";
+
+async function getAuthorized<T>(path: string): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (!token) {
+    throw new Error("Not signed in.");
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed (${response.status}).`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 async function fetchFarmNameMap(): Promise<Map<number, string>> {
   const { data, error } = await supabase.from("farm").select("farm_id, name");
   if (error) throw error;
@@ -178,81 +204,87 @@ export const api = {
     return dist;
   },
   async getUsers(): Promise<User[]> {
-    const [{ data: profiles, error: pErr }, { data: memberships, error: mErr }, farmNames] = await Promise.all([
-      supabase.from("profile").select("id, name, email, phone, role, created_at").eq("role", "farm_user"),
-      supabase.from("farm_member").select("farm_id, profile_id"),
-      fetchFarmNameMap(),
-    ]);
-    if (pErr) throw pErr;
-    if (mErr) throw mErr;
+  type ApiUserRow = {
+    id: string;
+    name: string;
+    email: string;
+    phone: string | null;
+    role: string | null;
+    created_at: string | null;
+    farm_id: number | null;
+    farm_name: string | null;
+  };
 
-    const farmByProfile = new Map<string, string>(
-      (memberships as FarmMemberRow[] ?? []).map((m) => [m.profile_id, farmNames.get(m.farm_id) ?? ""]),
-    );
+  const rows = await getAuthorized<ApiUserRow[]>("/api/users");
 
-    users = (profiles as ProfileRow[] ?? []).map((p) => ({
-      id: p.id,
-      name: p.name || "(no name on file)",
-      email: p.email,
-      phone: p.phone ?? "",
-      farm: farmByProfile.get(p.id) ?? "Unassigned",
-      // profile has no disabled/status column - every real account reads
-      // as Active. There is currently no way to represent Disabled/
-      // Pending for a real user; see setUserStatus()'s note.
-      status: "Active" as UserStatus,
-      dateJoined: p.created_at.slice(0, 10),
-      // auth.users.last_sign_in_at isn't exposed through profile/RLS -
-      // no real value to show.
-      lastActive: "Unknown",
-      hardware: [],
-      scheduleIds: [],
-      support: [],
-      notes: [],
-    }));
-    return users;
-  },
+  users = rows.map((u) => ({
+    id: u.id,
+    name: u.name || "(no name on file)",
+    email: u.email,
+    phone: u.phone ?? "",
+    farm: u.farm_name ?? "Unassigned",
+
+    // profile has no disabled/status column - every real account reads
+    // as Active. There is currently no way to represent Disabled/
+    // Pending for a real user; see setUserStatus()'s note.
+    status: "Active" as UserStatus,
+
+    dateJoined: u.created_at?.slice(0, 10) ?? "",
+
+    // auth.users.last_sign_in_at isn't exposed through profile/RLS -
+    // no real value to show.
+    lastActive: "Unknown",
+
+    hardware: [],
+    scheduleIds: [],
+    support: [],
+    notes: [],
+  }));
+
+  return users;
+},
   async getFarms(): Promise<Farm[]> {
-    const { data, error } = await supabase
-      .from("farm")
-      .select("farm_id, name, owner_id, location, total_area, status, updated_at");
-    if (error) throw error;
+  type ApiFarmRow = {
+    farm_id: number;
+    name: string;
+    owner_id: string | null;
+    owner_name: string | null;
+    location: string;
+    total_area: number;
+    status: string | null;
+    updated_at: string | null;
+  };
 
-    const rows = data as FarmRow[];
-    const ownerIds = [...new Set(rows.map((r) => r.owner_id).filter((id): id is string => !!id))];
-    const { data: owners, error: ownerErr } = ownerIds.length
-      ? await supabase.from("profile").select("id, name").in("id", ownerIds)
-      : { data: [] as { id: string; name: string }[], error: null };
-    if (ownerErr) throw ownerErr;
-    const ownerNameById = new Map((owners ?? []).map((o) => [o.id, o.name]));
+  const rows = await getAuthorized<ApiFarmRow[]>("/api/farms");
 
-    farms = rows.map((f) => {
-      const { province, region } = splitLocation(f.location);
-      return {
-        id: f.farm_id,
-        name: f.name,
-        owner: (f.owner_id && ownerNameById.get(f.owner_id)) || "Unassigned",
-        province,
-        region,
-        // No stored health score - Critical/Healthy is a real signal we
-        // don't compute anywhere yet (would need to aggregate zone
-        // health_status). Reporting "Healthy" for every farm would be
-        // exactly the "green lie" being removed elsewhere, so this
-        // defaults to the neutral status instead.
-        health: "Attention Required",
-        status: (f.status as Farm["status"]) ?? "Active",
-        hectares: Number(f.total_area ?? 0),
-        registered: f.updated_at?.slice(0, 10) ?? "",
-        lastActivity: "Unknown",
-        healthFactors: {
-          deviceConnectivity: 0, gatewayOnline: false, sensorsAvailable: 0,
-          outstandingAlerts: 0, openMaintenance: 0,
-        },
-        users: 0,
-        devices: 0,
-      };
-    });
-    return farms;
-  },
+  farms = rows.map((f) => {
+    const { province, region } = splitLocation(f.location);
+
+    return {
+      id: f.farm_id,
+      name: f.name,
+      owner: f.owner_name ?? "Unassigned",
+      province,
+      region,
+      health: "Attention Required",
+      status: (f.status as Farm["status"]) ?? "Active",
+      hectares: Number(f.total_area ?? 0),
+      registered: f.updated_at?.slice(0, 10) ?? "",
+      lastActivity: "Unknown",
+      healthFactors: {
+        deviceConnectivity: 0,
+        gatewayOnline: false,
+        sensorsAvailable: 0,
+        outstandingAlerts: 0,
+        openMaintenance: 0,
+      },
+      users: 0,
+      devices: 0,
+    };
+  });
+
+  return farms;
+},
   async getHardware(): Promise<Hardware[]> {
     const [{ data, error }, zoneMap, farmNames] = await Promise.all([
       supabase.from("hardware").select("hardware_id, device_name, device_type, zone_id, status, last_seen, created_at"),
@@ -506,7 +538,7 @@ export const api = {
     return schedules;
   },
   async deleteSchedule(id: number): Promise<IrrigationSchedule[]> {
-    schedules = schedules.filter((x) => x.id !== id);
+    schedules = schedules.filter((s) => s.id !== id);
     return schedules;
   },
 

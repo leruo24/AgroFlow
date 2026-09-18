@@ -413,13 +413,14 @@ async function handleAction(el: HTMLElement): Promise<void> {
 
   clearOnboardingError();
 
-  const zones = Array.from(
-    { length: zoneCount },
-    (_, i) => ({
-      name: v[`zone_name_${i}`] ?? "",
-      sizeHectares: Number(v[`zone_size_${i}`]) || 0,
-    }),
-  );
+ const zones = Array.from(
+  { length: zoneCount },
+  (_, i) => ({
+    name: v[`zone_name_${i}`] ?? "",
+    sizeHectares: Number(v[`zone_size_${i}`]) || 0,
+    cropType: v[`zone_crop_${i}`] ?? "",
+  }),
+);
 
   try {
     await onboardFarmer({
@@ -863,10 +864,21 @@ function validateOnboardingStep2(v: Record<string, string>, zoneCount: number): 
   if (!v["location"]?.trim()) return "Farm location is required.";
   if (!v["farmSize"] || Number(v["farmSize"]) <= 0) return "Enter a valid farm size.";
   if (zoneCount === 0) return "Add at least one zone.";
+
   for (let i = 0; i < zoneCount; i++) {
-    if (!v[`zone_name_${i}`]?.trim()) return `Zone ${i + 1} needs a name.`;
-    if (!v[`zone_size_${i}`] || Number(v[`zone_size_${i}`]) <= 0) return `Zone ${i + 1} needs a valid size.`;
+    if (!v[`zone_name_${i}`]?.trim()) {
+      return `Zone ${i + 1} needs a name.`;
+    }
+
+    if (!v[`zone_size_${i}`] || Number(v[`zone_size_${i}`]) <= 0) {
+      return `Zone ${i + 1} needs a valid size.`;
+    }
+
+    if (!v[`zone_crop_${i}`]?.trim()) {
+      return `Zone ${i + 1} needs a crop type.`;
+    }
   }
+
   return null;
 }
 

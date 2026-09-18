@@ -122,8 +122,10 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
     var isUserRoute = path.StartsWithSegments("/api/devices/enroll") ||
-                      path.StartsWithSegments("/api/farmers") ||
-                      path.StartsWithSegments("/api/farmer");
+                  path.StartsWithSegments("/api/farmers") ||
+                  path.StartsWithSegments("/api/farmer") ||
+                  path.StartsWithSegments("/api/farms")||
+                  path.StartsWithSegments("/api/users");
 
     if (!isUserRoute &&
         (!context.Request.Headers.TryGetValue("X-Api-Key", out var providedKey) || providedKey != apiKey))
@@ -144,6 +146,8 @@ app.MapIrrigationEventEndpoints();
 app.MapDeviceEnrollmentEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
+app.MapFarmEndpoints();
+app.MapUserEndpoints();
 
 app.Run();
 
