@@ -1,0 +1,15 @@
+# Build context hygiene: keep Windows-built .NET output, node_modules and local
+# secrets out of the image. bin/obj especially - copying host build artifacts
+# into the Linux build breaks or silently staleness-poisons `dotnet publish`.
+**/bin/
+**/obj/
+**/node_modules/
+.git/
+.gitignore
+apps/
+hardware/
+supabase/
+docs/
+**/.env
+**/.env.*
+**/secrets.h

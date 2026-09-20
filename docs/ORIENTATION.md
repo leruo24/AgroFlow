@@ -82,6 +82,32 @@ Opens at `http://localhost:5173` (Vite's default). You should see the
 
 ### Backend API (dotnet)
 
+**You usually do not need to run this at all.** `AgroFlow.Api` is deployed
+on Railway at:
+
+```
+https://agroflow-production-998d.up.railway.app
+```
+
+Both the mobile app and the admin dashboard point at it by default, so a
+normal day's work on either client needs no local backend, no `dotnet run`,
+and no LAN IP. Run it locally only when you are changing backend code
+itself — and if you do, point the client's `.env` back at
+`http://localhost:5080` while you work.
+
+To confirm the deployed API is alive, open the URL in a browser. You should
+see:
+
+```
+Missing or invalid X-Api-Key header.
+```
+
+That is the device auth middleware rejecting an unauthenticated request —
+it means the service is up and reachable. A Railway error page or a timeout
+means it is not.
+
+**Running it locally (backend work only):**
+
 ```powershell
 cd backend/AgroFlow.Api
 dotnet run
@@ -146,7 +172,21 @@ Copy-Item .env.example .env
 # edit .env: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_AGROFLOW_API_BASE
 ```
 
-Both `.env` files are gitignored. Use the Supabase **anon/publishable**
+Both `.env` files are gitignored. `.env.example` in each app already
+carries the deployed Railway API URL as the default
+`EXPO_PUBLIC_AGROFLOW_API_BASE` / `VITE_AGROFLOW_API_BASE`, so copying it
+across is enough — there is no per-machine or per-network value to fill in
+for the API any more.
+
+**Deployed backend config lives in Railway, not user-secrets.** The
+user-secrets above are for running the API locally. The deployed instance
+reads the same keys from Railway environment variables, using a double
+underscore for nested sections (`ConnectionStrings__Supabase`, `ApiKey`,
+`Supabase__ServiceRoleKey`, `Mqtt__Password`, and
+`Cors__AllowedOrigins__0` for each allowed browser origin). Changing a
+secret means changing it in both places.
+
+Use the Supabase **anon/publishable**
 key here, never the service role key — the service role key only ever
 belongs in the backend's user-secrets (`Supabase:ServiceRoleKey`), because
 it bypasses RLS entirely.
@@ -296,6 +336,15 @@ select count(*) from irrigation_schedule;
 ```
 
 ## 7. Current state, honestly
+
+**Deployed:** `AgroFlow.Api` runs on Railway at
+`https://agroflow-production-998d.up.railway.app` (Docker build from
+the repo-root `Dockerfile`; Railway's auto-builder has no .NET provider).
+MQTT subscribe and the Postgres `LISTEN irrigation_commands_channel`
+listener both come up cleanly there. Mobile and admin both point at it, so
+the old "find your LAN IP and update `.env` every time you change network"
+step is gone. The firmware is the one client still on a hardcoded LAN
+address — it needs a reflash to move (see section 9 / firmware TODOs).
 
 **Works end to end:** ESP32 → MQTT → `AgroFlow.Api` → Postgres sensor
 ingestion and auto-irrigation decisioning. Mobile sign-in/out (real,
