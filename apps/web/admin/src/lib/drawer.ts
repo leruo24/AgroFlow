@@ -20,6 +20,7 @@ export interface DrawerOptions {
   wide?: boolean;
   confirmLabel?: string;
   onConfirm?: (values: Record<string, string>) => void;
+  onOpen?: () => void;
 }
 
 function escapeText(value: string): string {
@@ -86,15 +87,16 @@ export function openDrawer(opts: DrawerOptions): void {
     </div>`;
 
   overlay.classList.add("open");
+  opts.onOpen?.();
 
   panel.querySelectorAll("[data-drawer-close]").forEach((b) =>
     b.addEventListener("click", () => closeDrawer()));
 
   panel.querySelector("[data-drawer-confirm]")?.addEventListener("click", () => {
     const values: Record<string, string> = {};
-    panel.querySelectorAll<HTMLInputElement>("[data-field]").forEach((input) => {
-      values[input.dataset["field"] ?? ""] = input.value;
-    });
+    panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((input) => {
+  values[input.dataset["field"] ?? ""] = input.value;
+});
     opts.onConfirm?.(values);
     closeDrawer();
   });

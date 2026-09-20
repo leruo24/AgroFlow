@@ -7,3 +7,13 @@ node_modules/
 # Firmware credentials - real values live here, created from secrets.example.h
 # before flashing. AgroFlow.Api's secrets are in .NET user-secrets, not a file.
 hardware/**/secrets.h
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Expo generated files
+.expo/
+
+# Supabase local CLI state
+supabase/.temp/

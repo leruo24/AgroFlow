@@ -48,15 +48,7 @@ import type {
 
 /* ------------------------------- real row shapes ------------------------------- */
 
-type ProfileRow = {
-  id: string; name: string; email: string; phone: string | null;
-  role: string; created_at: string;
-};
-type FarmMemberRow = { farm_id: number; profile_id: string };
-type FarmRow = {
-  farm_id: number; name: string; owner_id: string | null; location: string;
-  total_area: number; status: string; updated_at: string;
-};
+
 type ZoneRow = { id: number; farm_id: number; name: string | null; crop_type: string | null };
 type HardwareRow = {
   hardware_id: number; device_name: string; device_type: string;
@@ -97,6 +89,28 @@ async function getAuthorized<T>(path: string): Promise<T> {
 
   const response = await fetch(`${API_BASE}${path}`, {
     method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed (${response.status}).`);
+  }
+
+  return response.json() as Promise<T>;
+}
+async function postAuthorized<T>(path: string): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (!token) {
+    throw new Error("Not signed in.");
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -153,6 +167,9 @@ export function recordActivity(): void {
 
 export const api = {
   /* ------------------------------- reads ------------------------------- */
+  async testResendEmail(): Promise<{ message: string }> {
+  return postAuthorized<{ message: string }>("/api/test/email");
+ },
   async getKpis(): Promise<Kpis> {
     const [u, f, h, a, m] = await Promise.all([
       api.getUsers(), api.getFarms(), api.getHardware(), api.getAlerts(), api.getMaintenance(),

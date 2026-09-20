@@ -5,9 +5,14 @@ import { toast } from "@/lib/toast";
 import { openDrawer } from "@/lib/drawer";
 import {
   createFarmer,
+  deleteFarm,
+  deleteFarmerUser,
+  getFarmers,
   inviteFarmer,
   onboardFarmer,
+  registerFarm,
 } from "@/services/agroFlowApi";
+import { showErrorModal } from "@/lib/errorModal";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
 import {
@@ -317,12 +322,90 @@ async function handleAction(el: HTMLElement): Promise<void> {
     case "reset-password":
       await api.resetPassword(idAttr);
       return toast("Password reset link sent.", "success");
-    case "delete-user": {
-      const u = api.findUser(idAttr);
-      await api.deleteUser(idAttr);
-      toast(`Deleted ${u?.name ?? "user"}.`, "warn");
-      return void refresh();
+    
+case "delete-user": {
+  const u = api.findUser(idAttr);
+
+  try {
+    await deleteFarmerUser(idAttr);
+
+    toast(
+      `Deleted ${u?.name ?? "user"}. Farm data was retained.`,
+      "warn",
+    );
+
+    return void refresh();
+  } catch (e) {
+    showErrorModal(
+      e instanceof Error
+        ? e.message
+        : "Unable to delete farmer.",
+      "Unable to delete farmer",
+    );
+
+    return;
+  }
+}
+
+    case "delete-farm": {
+      const farm = api.findFarm(numId);
+
+      if (!farm) {
+        showErrorModal(
+          "The selected farm could not be found.",
+          "Unable to delete farm",
+        );
+        return;
+      }
+
+      return openDrawer({
+        title: `Delete ${farm.name}?`,
+        subtitle: "This action cannot be undone.",
+        bodyHtml: `
+          <div class="drawer-section">
+            <h6>Delete farm</h6>
+
+            <p>
+              This will permanently delete
+              <b>${esc(farm.name)}</b>
+              and its associated farm data.
+            </p>
+
+            <p class="muted">
+              The farmer's account and login will be retained.
+              Only the farm and its dependent farm data will be removed.
+            </p>
+
+            <p class="muted">
+              Please make sure this is the farm you intend to remove
+              before continuing.
+            </p>
+          </div>
+        `,
+        confirmLabel: "Delete Farm",
+        onConfirm: () => {
+          void deleteFarm(numId)
+            .then(() => {
+              toast(
+                `${farm.name} deleted successfully. Farmer account was retained.`,
+                "warn",
+              );
+
+              void refresh();
+            })
+            .catch((e) => {
+              showErrorModal(
+                e instanceof Error
+                  ? e.message
+                  : "Unable to delete farm.",
+                "Unable to delete farm",
+              );
+            });
+        },
+      });
     }
+
+
 
 
     /* farmer onboarding — real calls to AgroFlow.Api, not demo/mock like the
@@ -375,17 +458,146 @@ async function handleAction(el: HTMLElement): Promise<void> {
 
     /* farms */
     case "view-farm": return openFarmDetail(numId);
-    case "add-farm":
-      return openDrawer({
-        title: "Register farm",
-        fields: [
-          { label: "Farm name", value: "", editable: true, name: "name" },
-          { label: "Owner", value: "", editable: true, name: "owner" },
-          { label: "Province", value: "Western Cape", editable: true, name: "province" },
-        ],
-        confirmLabel: "Register",
-        onConfirm: (v) => toast(`${v["name"] || "Farm"} registered — pending approval.`, "success"),
-      });
+    case "add-farm": {
+  try {
+    const farmers = await getFarmers();
+
+    if (farmers.length === 0) {
+      showErrorModal(
+        "There are no existing farmers available. Register a farmer first.",
+        "No farmers available",
+      );
+      return;
+    }
+
+    const farmerOptions = farmers
+      .map(
+        (farmer) =>
+          `<option value="${farmer.id}">
+            ${farmer.name || farmer.email} (${farmer.email})
+          </option>`,
+      )
+      .join("");
+
+    openDrawer({
+      title: "Register new farm",
+      subtitle: "Link a new farm to an existing farmer.",
+      wide: true,
+
+      fields: [
+        {
+          label: "Farm name",
+          value: "",
+          editable: true,
+          name: "farmName",
+        },
+        {
+          label: "Location",
+          value: "",
+          editable: true,
+          name: "location",
+        },
+        {
+          label: "Farm size (hectares)",
+          value: "",
+          editable: true,
+          name: "farmSize",
+        },
+      ],
+
+      bodyHtml: `
+        <div class="drawer-field">
+          <span>Farmer / Owner</span>
+          <select data-field="ownerId">
+            <option value="">Select an existing farmer</option>
+            ${farmerOptions}
+          </select>
+        </div>
+
+        <div class="drawer-field">
+          <span>Number of zones</span>
+          <input
+            type="number"
+            min="1"
+            max="50"
+            value="1"
+            data-register-farm-zone-count
+          />
+        </div>
+
+        <div id="registerFarmZones"></div>
+      `,
+
+      confirmLabel: "Register Farm",
+
+      onOpen: () => {
+        wireRegisterFarmZones();
+      },
+
+      onConfirm: async (v) => {
+        const zoneCount = Math.max(
+          1,
+          Math.min(
+            50,
+            Number(
+              document.querySelector<HTMLInputElement>(
+                "[data-register-farm-zone-count]",
+              )?.value,
+            ) || 1,
+          ),
+        );
+
+        const zones = Array.from(
+          { length: zoneCount },
+          (_, i) => ({
+            name: v[`zone_name_${i}`] ?? "",
+            sizeHectares:
+              Number(v[`zone_size_${i}`]) || 0,
+            cropType:
+              v[`zone_crop_${i}`] ?? "",
+          }),
+        );
+
+        try {
+          await registerFarm({
+            ownerId: v["ownerId"] ?? "",
+            farm: {
+              farmName: v["farmName"] ?? "",
+              location: v["location"] ?? "",
+              sizeHectares:
+                Number(v["farmSize"]) || 0,
+              zones,
+            },
+          });
+
+          toast(
+            `${v["farmName"] || "Farm"} registered successfully.`,
+            "success",
+          );
+
+          return void refresh();
+        } catch (e) {
+          showErrorModal(
+            e instanceof Error
+              ? e.message
+              : "Unable to register farm.",
+            "Unable to register farm",
+          );
+        }
+      },
+    });
+
+    return;
+  } catch (e) {
+    showErrorModal(
+      e instanceof Error
+        ? e.message
+        : "Unable to load farmers.",
+      "Unable to load farmers",
+    );
+    return;
+  }
+}
         /* onboarding */
     case "onboarding-next": {
       const v = collectFields();
@@ -428,7 +640,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
         fullName: v["fullName"] ?? "",
         email: v["email"] ?? "",
         phone: v["phone"] ?? "",
-        password: v["password"] ?? "",
+        
       },
 
       farm: {
@@ -445,12 +657,15 @@ async function handleAction(el: HTMLElement): Promise<void> {
     );
 
     return void go("farms");
-  } catch (e) {
-    return void showOnboardingError(
+    } catch (e) {
+    showErrorModal(
       e instanceof Error
         ? e.message
         : "Something went wrong.",
+      "Unable to onboard farmer",
     );
+
+    return;
   }
 }
     /* hardware */
@@ -853,9 +1068,16 @@ function goToOnboardingStep(step: 1 | 2): void {
 
 function validateOnboardingStep1(v: Record<string, string>): string | null {
   if (!v["fullName"]?.trim()) return "Full name is required.";
-  if (!v["email"]?.trim() || !/^\S+@\S+\.\S+$/.test(v["email"])) return "Enter a valid email address.";
+
+  if (
+    !v["email"]?.trim() ||
+    !/^\S+@\S+\.\S+$/.test(v["email"])
+  ) {
+    return "Enter a valid email address.";
+  }
+
   if (!v["phone"]?.trim()) return "Phone number is required.";
-  if ((v["password"] ?? "").length < 8) return "Password must be at least 8 characters.";
+
   return null;
 }
 
@@ -901,6 +1123,35 @@ function wireOnboardingZones(): void {
 }
 
 /* --------------------------- binding after render ------------------------ */
+function wireRegisterFarmZones(): void {
+  const countInput =
+    document.querySelector<HTMLInputElement>("[data-register-farm-zone-count]");
+
+  const container =
+    document.getElementById("registerFarmZones");
+
+  if (!countInput || !container) return;
+
+  if (countInput.dataset["bound"]) return;
+
+  countInput.dataset["bound"] = "1";
+
+  const renderZones = () => {
+    const count = Math.max(
+      1,
+      Math.min(50, Number(countInput.value) || 1),
+    );
+
+    container.innerHTML = Array.from(
+      { length: count },
+      (_, i) => zoneRow(i),
+    ).join("");
+  };
+
+  countInput.addEventListener("input", renderZones);
+
+  renderZones();
+}
 
 export function wirePageInteractions(): void {
   wireFilters();
