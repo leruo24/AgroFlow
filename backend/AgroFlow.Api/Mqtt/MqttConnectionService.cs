@@ -10,6 +10,20 @@ public record SensorMqttPayload(string SensorType, float Value);
 public interface IMqttPublisher
 {
     Task PublishAsync(string topic, string payload);
+
+    // True only while the single shared MQTT connection is up. Callers that
+    // publish opportunistically (the irrigation-command replay sweep) check
+    // this instead of catching the "not connected" exception per message.
+    bool IsConnected { get; }
+
+    // Raised after a connection is established AND the subscription is in
+    // place - on first connect and on every reconnect after a drop.
+    //
+    // This is what lets IrrigationCommandNotifyService flush commands that
+    // piled up while the broker was unreachable. Handlers are invoked on the
+    // connect path, so they must not block: the handler kicks off its own task
+    // and returns.
+    event Action? Connected;
 }
 
 // Owns the single MQTT connection to HiveMQ Cloud for the whole API process:
@@ -24,6 +38,10 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
     private readonly ILogger<MqttConnectionService> _logger;
     private IMqttClient? _client;
     private MqttClientOptions? _options;
+
+    public event Action? Connected;
+
+    public bool IsConnected => _client is { IsConnected: true };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -91,6 +109,20 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
                 await _client!.ConnectAsync(_options, ct);
                 await _client.SubscribeAsync(MqttTopics.SensorTopicFilter, cancellationToken: ct);
                 _logger.LogInformation("MQTT connected, subscribed to {Topic}", MqttTopics.SensorTopicFilter);
+
+                // Announce only once the subscription is actually in place, so
+                // a handler that immediately publishes is not racing a
+                // half-ready connection. A throwing handler must not kill the
+                // connect loop and strand the whole MQTT path.
+                try
+                {
+                    Connected?.Invoke();
+                }
+                catch (Exception handlerEx)
+                {
+                    _logger.LogError(handlerEx, "An MQTT Connected handler threw; the connection itself is fine.");
+                }
+
                 return;
             }
             catch (Exception ex)
