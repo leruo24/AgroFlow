@@ -112,6 +112,7 @@
   "crops": {
     "maize": {
       "agroflowCrop": "maize",
+      "displayName": "maize",
       "fao56CropName": "Maize, Field (grain) (field corn)",
       "fao56Group": "i. Cereals",
 
@@ -157,6 +158,7 @@
 
     "potato": {
       "agroflowCrop": "potato",
+      "displayName": "potato",
       "fao56CropName": "Potato",
       "fao56Group": "d. Roots and Tubers",
 
@@ -197,6 +199,7 @@
 
     "tomato": {
       "agroflowCrop": "tomato",
+      "displayName": "tomato",
       "fao56CropName": "Tomato",
       "fao56Group": "b. Vegetables - Solanum Family (Solanaceae)",
 
@@ -244,6 +247,7 @@
 
     "dry_beans": {
       "agroflowCrop": "dry_beans",
+      "displayName": "dry beans",
       "fao56CropName": "Beans, dry and Pulses",
       "fao56Group": "e. Legumes (Leguminosae)",
 
@@ -282,6 +286,7 @@
 
     "leafy_veg": {
       "agroflowCrop": "leafy_veg",
+      "displayName": "leafy veg (lettuce)",
       "fao56CropName": "Lettuce",
       "fao56Group": "a. Small Vegetables",
       "mappingNote": "AgroFlow's crop list has a generic 'leafy veg' category; FAO-56 has no such category. Lettuce is used as the representative crop. FAO-56's other leafy small vegetables sit close to it but are NOT identical - Spinach shares Lettuce's Kc (1.00/0.95) and root depth (0.3-0.5 m) but has p = 0.20, not 0.30; Cabbage has Kc_mid 1.05, Zr 0.5-0.8 m and p = 0.45. If a farmer's zone is really spinach or cabbage, this mapping understates or overstates depletion tolerance. See the report - splitting 'leafy veg' into real crops is a decision for Leruo.",
@@ -318,6 +323,7 @@
 
     "citrus": {
       "agroflowCrop": "citrus",
+      "displayName": "citrus",
       "fao56CropName": "Citrus, no ground cover - 70% canopy",
       "fao56Group": "n. Fruit Trees",
       "mappingNote": "FAO-56 splits citrus six ways: with or without active ground cover, each at 70%, 50% and 20% canopy. The 70%-canopy, no-ground-cover variant is used as AgroFlow's default because it represents a mature, clean-floor commercial orchard. The other five variants' values are recorded below so a farm with a different orchard floor or a younger planting can be switched without touching code.",
