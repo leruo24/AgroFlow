@@ -34,6 +34,23 @@ public static class SensorReadingProcessor
 
         if (sensorType == "SoilMoisture")
         {
+            // Respect the zone's irrigation_mode BEFORE deciding anything.
+            //
+            // This check used to be missing entirely, which meant a zone the
+            // farmer had deliberately set to Manual could still have its pump
+            // started by an incoming sensor reading. irrigation_mode is read
+            // straight off `zone` rather than from zone_latest_reading, because
+            // 0010's view does not carry the column and widening the view would
+            // mean another migration for no gain.
+            var irrigationMode = await FetchIrrigationModeAsync(connection, zoneId);
+
+            if (!IrrigationMode.AllowsAutoCommands(irrigationMode))
+            {
+                // Health status above is still updated - observing a zone is
+                // always allowed. Only the command is suppressed.
+                return new SensorReadingResult(healthStatus, null);
+            }
+
             var zone = new Zone
             {
                 MoistureThreshold = moistureThreshold,
@@ -106,6 +123,19 @@ public static class SensorReadingProcessor
         cmd.Parameters.AddWithValue(healthStatus);
         cmd.Parameters.AddWithValue(zoneId);
         await cmd.ExecuteNonQueryAsync();
+    }
+
+    // Null when the zone row is gone (a delete racing an in-flight reading).
+    // IrrigationMode.AllowsAutoCommands fails closed on null, so that race
+    // ends in "no command issued" rather than in a pump start for a zone that
+    // no longer exists.
+    private static async Task<string?> FetchIrrigationModeAsync(NpgsqlConnection connection, long zoneId)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select irrigation_mode from zone where id = $1", connection);
+        cmd.Parameters.AddWithValue(zoneId);
+        var result = await cmd.ExecuteScalarAsync();
+        return result as string;
     }
 
     private static async Task<bool> HasActiveManualOverrideAsync(NpgsqlConnection connection, long zoneId)
