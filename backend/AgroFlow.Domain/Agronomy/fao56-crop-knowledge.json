@@ -1,0 +1,374 @@
+{
+  "$comment": [
+    "FAO-56 crop knowledge base for the AgroFlow growth-stage advice engine.",
+    "EVERY numeric value below carries a `cite` field naming the FAO-56 table and",
+    "the PRINTED page number of the book, so any value can be checked against the",
+    "textbook by opening that page. Nothing here is from memory or from a",
+    "secondary source: each value was read off the published tables.",
+    "",
+    "If you change a value, change its citation with it. If you cannot cite it,",
+    "it does not belong in this file."
+  ],
+
+  "source": {
+    "title": "Crop evapotranspiration - Guidelines for computing crop water requirements",
+    "series": "FAO Irrigation and Drainage Paper 56",
+    "authors": "Allen, R.G., Pereira, L.S., Raes, D., Smith, M.",
+    "publisher": "Food and Agriculture Organization of the United Nations, Rome",
+    "year": 1998,
+    "isbn": "92-5-104219-5",
+    "pageNumbering": "All `cite` fields use the book's own PRINTED page numbers (the number shown in the running head), not PDF page indices.",
+    "extractedOn": "2026-09-20",
+    "extractedFrom": "FAO Irrigation and Drainage Paper 56, full published PDF.",
+    "extractionMethod": "Text and word-coordinate extraction (pdftotext -layout plus pdfplumber word boxes). Table rows were reconstructed from word x/y positions rather than from naive text flow, because the naive flow mis-associates continuation rows with the wrong crop in Tables 11 and 12.",
+    "localCopyWarning": "docs/Fao56.pdf IN THIS REPOSITORY IS CORRUPT and was NOT the source. Roughly 2.47 million of its bytes have been replaced by the UTF-8 replacement character (U+FFFD), i.e. the file was at some point round-tripped through a lossy text decode. It cannot be opened, decrypted or repaired. See docs/OVERNIGHT_REPORT.md."
+  },
+
+  "equations": {
+    "extraterrestrialRadiation": {
+      "name": "Extraterrestrial radiation for daily periods (Ra)",
+      "equation": "Ra = (24*60/pi) * Gsc * dr * [ws*sin(phi)*sin(delta) + cos(phi)*cos(delta)*sin(ws)]",
+      "equationNumber": 21,
+      "cite": "FAO-56 Eq. 21, p. 46",
+      "units": "MJ m-2 day-1",
+      "solarConstantGsc": 0.0820,
+      "solarConstantCite": "FAO-56 Eq. 21 variable list, p. 46 (Gsc = 0.0820 MJ m-2 min-1)",
+      "components": {
+        "latitudeRadians": { "equation": "phi = (pi/180) * decimalDegrees; negative in the southern hemisphere", "equationNumber": 22, "cite": "FAO-56 Eq. 22, p. 46" },
+        "inverseRelativeDistance": { "equation": "dr = 1 + 0.033*cos(2*pi*J/365)", "equationNumber": 23, "cite": "FAO-56 Eq. 23, p. 46" },
+        "solarDeclination": { "equation": "delta = 0.409*sin(2*pi*J/365 - 1.39)", "equationNumber": 24, "cite": "FAO-56 Eq. 24, p. 46" },
+        "sunsetHourAngle": { "equation": "ws = arccos(-tan(phi)*tan(delta))", "equationNumber": 25, "cite": "FAO-56 Eq. 25, p. 46" }
+      },
+      "validityWarning": "For the winter months at latitudes greater than 55 degrees (N or S) the equations for Ra have limited validity.",
+      "validityWarningCite": "FAO-56 p. 47"
+    },
+
+    "hargreavesSamaniEt0": {
+      "name": "1985 Hargreaves reference evapotranspiration equation",
+      "equation": "ET0 = 0.0023 * (Tmean + 17.8) * (Tmax - Tmin)^0.5 * Ra",
+      "equationNumber": 52,
+      "cite": "FAO-56 Eq. 52, p. 64",
+      "units": "mm day-1, with Ra expressed in mm day-1 (i.e. Ra[MJ] * 0.408)",
+      "raConversionCite": "FAO-56 Eq. 20, p. 45 (equivalent evaporation = 0.408 * Ra[MJ m-2 day-1])",
+      "whyThisAndNotPenmanMonteith": "FAO-56 states Eq. 52 is the alternative for ET0 'when solar radiation data, relative humidity data and/or wind speed data are missing' (p. 64). AgroFlow has no pyranometer, no anemometer and no reliable RH at the weather-row level, so the Penman-Monteith form (Eq. 6) cannot be evaluated from measured inputs.",
+      "knownBias": "Eq. 52 has a tendency to underpredict under high wind conditions (u2 > 3 m/s) and to overpredict under conditions of high relative humidity.",
+      "knownBiasCite": "FAO-56 p. 64"
+    },
+
+    "cropEvapotranspiration": {
+      "name": "Crop evapotranspiration under standard conditions",
+      "equation": "ETc = Kc * ET0",
+      "equationNumber": 58,
+      "cite": "FAO-56 Eq. 58, Chapter 6"
+    },
+
+    "depletionFractionAdjustment": {
+      "name": "Adjustment of the soil water depletion fraction p for ETc rate",
+      "equation": "p = p_Table22 + 0.04 * (5 - ETc)",
+      "bounds": { "min": 0.1, "max": 0.8 },
+      "cite": "FAO-56 p. 162 (numerical approximation given with Eq. 83), and Table 22 footnote 2, p. 163",
+      "meaning": "The p values in Table 22 apply at ETc of about 5 mm/day. In hot dry weather, where ETc is high, p is 10-25% less than the tabulated value, so the soil is still relatively wet when stress starts. When ETc is low, p is up to 20% more.",
+      "meaningCite": "FAO-56 p. 162"
+    },
+
+    "totalAvailableWater": {
+      "equation": "TAW = 1000 * (theta_FC - theta_WP) * Zr",
+      "equationNumber": 82,
+      "cite": "FAO-56 Eq. 82, p. 162",
+      "units": "mm"
+    },
+
+    "readilyAvailableWater": {
+      "equation": "RAW = p * TAW",
+      "equationNumber": 83,
+      "cite": "FAO-56 Eq. 83, p. 162",
+      "units": "mm"
+    }
+  },
+
+  "stageModel": {
+    "stages": ["initial", "development", "mid", "late"],
+    "kcBehaviour": {
+      "initial": "Kc is constant at Kc_ini.",
+      "development": "Kc rises linearly from Kc_ini to Kc_mid across L_dev.",
+      "mid": "Kc is constant at Kc_mid, its maximum value.",
+      "late": "Kc falls linearly from Kc_mid to Kc_end across L_late."
+    },
+    "cite": "FAO-56 Chapter 6, 'Crop coefficient curve' and Figure 24, p. 97",
+    "midSeasonIsPeak": "At the mid-season stage the Kc reaches its maximum value. The value for Kc_mid is relatively constant for most growing and cultural conditions.",
+    "midSeasonIsPeakCite": "FAO-56 p. 96",
+    "kcEndMeaning": "The Kc value at the end of the late season stage (Kc_end) reflects crop and water management practices. The Kc_end value is high if the crop is frequently irrigated until harvested fresh. If the crop is allowed to senesce and to dry out in the field before harvest, the Kc_end value will be small.",
+    "kcEndMeaningCite": "FAO-56 p. 97",
+    "stageLengthCaveat": "Lengths of crop development stages provided in Table 11 are indicative of general conditions, but may vary substantially from region to region, with climate and cropping conditions, and with crop variety. The user is strongly encouraged to obtain appropriate local information.",
+    "stageLengthCaveatCite": "FAO-56 Table 11 footnote *, p. 104"
+  },
+
+  "rowSelectionPolicy": {
+    "problem": "FAO-56 Table 11 publishes SEVERAL stage-length rows per crop, one per planting date and climatic region. A daily engine needs one.",
+    "policy": "Every published row for each crop is recorded below under `allPublishedRows`, verbatim. Exactly one is marked `selected: true`. Selection prefers, in order: (1) a Mediterranean row, since AgroFlow's deployment region (Western Cape, South Africa) is a Mediterranean climate; (2) an arid or semi-arid row; (3) the first row FAO-56 lists. Rows whose Table 11 entry is ambiguous (e.g. potato's '30/45' Lmid with a '115/130' total) are recorded but not selected, so that no value in the computation path required a judgement call about which half of a slashed pair was meant.",
+    "consequence": "Changing the selection is a one-line edit to this file and requires no code change. The selected row's plantDate/region is surfaced to the farmer so the assumption is visible, not hidden."
+  },
+
+  "crops": {
+    "maize": {
+      "agroflowCrop": "maize",
+      "fao56CropName": "Maize, Field (grain) (field corn)",
+      "fao56Group": "i. Cereals",
+
+      "stageLengths": {
+        "cite": "FAO-56 Table 11, p. 106",
+        "units": "days",
+        "allPublishedRows": [
+          { "lIni": 30, "lDev": 50, "lMid": 60, "lLate": 40, "total": 180, "plantDate": "April", "region": "East Africa (alt.)" },
+          { "lIni": 25, "lDev": 40, "lMid": 45, "lLate": 30, "total": 140, "plantDate": "Dec/Jan", "region": "Arid Climate" },
+          { "lIni": 20, "lDev": 35, "lMid": 40, "lLate": 30, "total": 125, "plantDate": "June", "region": "Nigeria (humid)" },
+          { "lIni": 20, "lDev": 35, "lMid": 40, "lLate": 30, "total": 125, "plantDate": "October", "region": "India (dry, cool)" },
+          { "lIni": 30, "lDev": 40, "lMid": 50, "lLate": 30, "total": 150, "plantDate": "April", "region": "Spain (spr, sum.); Calif.", "selected": true },
+          { "lIni": 30, "lDev": 40, "lMid": 50, "lLate": 50, "total": 170, "plantDate": "April", "region": "Idaho, USA" }
+        ],
+        "selectionReason": "Spain is a Mediterranean climate, matching the deployment region; the row is unambiguous and its 150-day total is a realistic grain-maize season."
+      },
+
+      "kc": {
+        "cite": "FAO-56 Table 12, p. 111",
+        "kcIni": { "value": 0.30, "source": "group row", "cite": "FAO-56 Table 12, group 'i. Cereals', p. 111 - Table 12 prints Kc_ini once per crop group and omits it on each crop row that shares the group value; maize's row lists only Kc_mid, Kc_end and height." },
+        "kcMid": { "value": 1.20, "cite": "FAO-56 Table 12, p. 111" },
+        "kcEnd": {
+          "value": 0.60,
+          "alternateValue": 0.35,
+          "cite": "FAO-56 Table 12, p. 111, printed as '0.60, 0.35' with footnote 11",
+          "footnote": "The first Kc_end value is for harvest at high grain moisture. The second Kc_end value is for harvest after complete field drying of the grain (to about 18% moisture, wet mass basis).",
+          "footnoteCite": "FAO-56 Table 12 footnote 11, p. 111",
+          "selectionReason": "0.60 selected as the default: it is the irrigated-to-harvest case, which is what an irrigation controller is for. The engine switches to 0.35 only when the zone is explicitly flagged as drying down for harvest."
+        },
+        "maxHeightM": { "value": 2.0, "cite": "FAO-56 Table 12, p. 111" },
+        "kcIniCaveat": "Table 12's Kc_ini values are general values under typical irrigation management and soil wetting. For frequent wettings such as high-frequency sprinkle irrigation or daily rainfall, these values may increase substantially and may approach 1.0 to 1.2.",
+        "kcIniCaveatCite": "FAO-56 Table 12 footnote 1, p. 110"
+      },
+
+      "soil": {
+        "cite": "FAO-56 Table 22, p. 164",
+        "maxRootDepthM": { "min": 1.0, "max": 1.7, "cite": "FAO-56 Table 22, p. 164" },
+        "depletionFractionP": { "value": 0.55, "cite": "FAO-56 Table 22, p. 164", "appliesAtEtc": 5.0 },
+        "rootDepthFootnote": "The larger values for Zr are for soils having no significant layering or other characteristics that can restrict rooting depth. The smaller values for Zr may be used for irrigation scheduling and the larger values for modeling soil water stress or for rainfed conditions.",
+        "rootDepthFootnoteCite": "FAO-56 Table 22 footnote 1, p. 163"
+      }
+    },
+
+    "potato": {
+      "agroflowCrop": "potato",
+      "fao56CropName": "Potato",
+      "fao56Group": "d. Roots and Tubers",
+
+      "stageLengths": {
+        "cite": "FAO-56 Table 11, p. 105",
+        "units": "days",
+        "allPublishedRows": [
+          { "lIni": 25, "lDev": 30, "lMidPrinted": "30/45", "lLate": 30, "totalPrinted": "115/130", "plantDate": "Jan/Nov", "region": "(Semi)Arid Climate", "ambiguous": true, "ambiguityNote": "Table 11 prints two alternative mid-season lengths (30 or 45) and correspondingly two totals (115 or 130). Not selected: choosing one half would be a judgement call, not a tabulated value." },
+          { "lIni": 25, "lDev": 30, "lMid": 45, "lLate": 30, "total": 130, "plantDate": "May", "region": "Continental Climate" },
+          { "lIni": 30, "lDev": 35, "lMid": 50, "lLate": 30, "total": 145, "plantDate": "April", "region": "Europe" },
+          { "lIni": 45, "lDev": 30, "lMid": 70, "lLate": 20, "total": 165, "plantDate": "Apr/May", "region": "Idaho, USA" },
+          { "lIni": 30, "lDev": 35, "lMid": 50, "lLate": 25, "total": 140, "plantDate": "Dec", "region": "Calif. Desert, USA", "selected": true }
+        ],
+        "selectionReason": "FAO-56 lists no Mediterranean row for potato. The Calif. Desert row is the closest published analogue to a hot, dry South African summer planting, and is unambiguous."
+      },
+
+      "kc": {
+        "cite": "FAO-56 Table 12, p. 110",
+        "kcIni": { "value": 0.50, "source": "group row", "cite": "FAO-56 Table 12, group 'd. Roots and Tubers', p. 110 - group Kc_ini, omitted on the potato row itself." },
+        "kcMid": { "value": 1.15, "cite": "FAO-56 Table 12, p. 110" },
+        "kcEnd": {
+          "value": 0.75,
+          "alternateValue": 0.40,
+          "cite": "FAO-56 Table 12, p. 110, with footnote 4",
+          "footnote": "The Kc_end value for potatoes is about 0.40 for long season potatoes with vine kill.",
+          "footnoteCite": "FAO-56 Table 12 footnote 4, p. 110",
+          "selectionReason": "0.75 selected as the default (crop carried to harvest without vine kill). 0.40 is used only when the zone is flagged as a long-season crop with vine kill."
+        },
+        "maxHeightM": { "value": 0.6, "cite": "FAO-56 Table 12, p. 110" }
+      },
+
+      "soil": {
+        "cite": "FAO-56 Table 22, p. 163",
+        "maxRootDepthM": { "min": 0.4, "max": 0.6, "cite": "FAO-56 Table 22, p. 163" },
+        "depletionFractionP": { "value": 0.35, "cite": "FAO-56 Table 22, p. 163", "appliesAtEtc": 5.0 }
+      }
+    },
+
+    "tomato": {
+      "agroflowCrop": "tomato",
+      "fao56CropName": "Tomato",
+      "fao56Group": "b. Vegetables - Solanum Family (Solanaceae)",
+
+      "stageLengths": {
+        "cite": "FAO-56 Table 11, p. 104",
+        "units": "days",
+        "allPublishedRows": [
+          { "lIni": 30, "lDev": 40, "lMid": 40, "lLate": 25, "total": 135, "plantDate": "January", "region": "Arid Region" },
+          { "lIni": 35, "lDev": 40, "lMid": 50, "lLate": 30, "total": 155, "plantDate": "Apr/May", "region": "Calif., USA" },
+          { "lIni": 25, "lDev": 40, "lMid": 60, "lLate": 30, "total": 155, "plantDate": "Jan", "region": "Calif. Desert, USA" },
+          { "lIni": 35, "lDev": 45, "lMid": 70, "lLate": 30, "total": 180, "plantDate": "Oct/Nov", "region": "Arid Region" },
+          { "lIni": 30, "lDev": 40, "lMid": 45, "lLate": 30, "total": 145, "plantDate": "April/May", "region": "Mediterranean", "selected": true }
+        ],
+        "selectionReason": "The only Mediterranean row for tomato, matching the deployment region."
+      },
+
+      "kc": {
+        "cite": "FAO-56 Table 12, p. 110",
+        "kcIni": { "value": 0.60, "source": "group row", "cite": "FAO-56 Table 12, group 'b. Vegetables - Solanum Family (Solanaceae)', p. 110 - group Kc_ini, omitted on the tomato row itself." },
+        "kcMid": {
+          "value": 1.15,
+          "cite": "FAO-56 Table 12, p. 110, with footnote 2",
+          "footnote": "Beans, Peas, Legumes, Tomatoes, Peppers and Cucumbers are sometimes grown on stalks reaching 1.5 to 2 metres in height. In such cases, increased Kc values need to be taken. For green beans, peppers and cucumbers, 1.15 can be taken, and for tomatoes, dry beans and peas, 1.20.",
+          "footnoteCite": "FAO-56 Table 12 footnote 2, p. 110",
+          "alternateValue": 1.20,
+          "alternateCondition": "Trellised/staked tomatoes reaching 1.5-2 m."
+        },
+        "kcEnd": {
+          "valueMin": 0.70,
+          "valueMax": 0.90,
+          "value": 0.80,
+          "cite": "FAO-56 Table 12, p. 110, printed as the range '0.70-0.90'",
+          "selectionReason": "FAO-56 gives a bare range here with no interpretive footnote, unlike maize and potato. The midpoint 0.80 is used for computation AND the full published range is surfaced in the farmer-facing output whenever the zone is in late season, so the reader sees that this one number is a midpoint of a published range rather than a tabulated value.",
+          "isMidpointOfPublishedRange": true
+        },
+        "maxHeightM": { "value": 0.6, "cite": "FAO-56 Table 12, p. 110" }
+      },
+
+      "soil": {
+        "cite": "FAO-56 Table 22, p. 163",
+        "maxRootDepthM": { "min": 0.7, "max": 1.5, "cite": "FAO-56 Table 22, p. 163" },
+        "depletionFractionP": { "value": 0.40, "cite": "FAO-56 Table 22, p. 163", "appliesAtEtc": 5.0 }
+      }
+    },
+
+    "dry_beans": {
+      "agroflowCrop": "dry_beans",
+      "fao56CropName": "Beans, dry and Pulses",
+      "fao56Group": "e. Legumes (Leguminosae)",
+
+      "stageLengths": {
+        "cite": "FAO-56 Table 11, p. 105",
+        "units": "days",
+        "allPublishedRows": [
+          { "lIni": 20, "lDev": 30, "lMid": 40, "lLate": 20, "total": 110, "plantDate": "May/June", "region": "Continental Climates", "selected": true },
+          { "lIni": 15, "lDev": 25, "lMid": 35, "lLate": 20, "total": 95, "plantDate": "June", "region": "Pakistan, Calif." },
+          { "lIni": 25, "lDev": 25, "lMid": 30, "lLate": 20, "total": 100, "plantDate": "June", "region": "Idaho, USA" }
+        ],
+        "selectionReason": "FAO-56 publishes no Mediterranean, arid or semi-arid row for dry beans - only Continental, Pakistan/Calif. and Idaho. Falls through to policy rule (3), the first row listed. FLAGGED: none of the three published rows matches the deployment climate, so this crop's stage lengths are the weakest-matched of the six."
+      },
+
+      "kc": {
+        "cite": "FAO-56 Table 12, p. 111",
+        "kcIni": { "value": 0.40, "cite": "FAO-56 Table 12, p. 111 - printed on the 'Beans, dry and Pulses' row itself (0.4), and equal to the group 'e. Legumes (Leguminosae)' value." },
+        "kcMid": {
+          "value": 1.15,
+          "cite": "FAO-56 Table 12, p. 111, with footnote 2",
+          "footnote": "Beans, Peas, Legumes, Tomatoes, Peppers and Cucumbers are sometimes grown on stalks reaching 1.5 to 2 metres in height. In such cases, increased Kc values need to be taken. For green beans, peppers and cucumbers, 1.15 can be taken, and for tomatoes, dry beans and peas, 1.20.",
+          "footnoteCite": "FAO-56 Table 12 footnote 2, p. 110",
+          "alternateValue": 1.20,
+          "alternateCondition": "Beans grown on stalks reaching 1.5-2 m."
+        },
+        "kcEnd": { "value": 0.35, "cite": "FAO-56 Table 12, p. 111" },
+        "maxHeightM": { "value": 0.4, "cite": "FAO-56 Table 12, p. 111" }
+      },
+
+      "soil": {
+        "cite": "FAO-56 Table 22, p. 164",
+        "maxRootDepthM": { "min": 0.6, "max": 0.9, "cite": "FAO-56 Table 22, p. 164" },
+        "depletionFractionP": { "value": 0.45, "cite": "FAO-56 Table 22, p. 164", "appliesAtEtc": 5.0 }
+      }
+    },
+
+    "leafy_veg": {
+      "agroflowCrop": "leafy_veg",
+      "fao56CropName": "Lettuce",
+      "fao56Group": "a. Small Vegetables",
+      "mappingNote": "AgroFlow's crop list has a generic 'leafy veg' category; FAO-56 has no such category. Lettuce is used as the representative crop. FAO-56's other leafy small vegetables sit close to it but are NOT identical - Spinach shares Lettuce's Kc (1.00/0.95) and root depth (0.3-0.5 m) but has p = 0.20, not 0.30; Cabbage has Kc_mid 1.05, Zr 0.5-0.8 m and p = 0.45. If a farmer's zone is really spinach or cabbage, this mapping understates or overstates depletion tolerance. See the report - splitting 'leafy veg' into real crops is a decision for Leruo.",
+      "mappingNoteCite": "FAO-56 Table 12 p. 110 and Table 22 p. 163 for the Spinach and Cabbage comparison values.",
+
+      "stageLengths": {
+        "cite": "FAO-56 Table 11, p. 104",
+        "units": "days",
+        "allPublishedRows": [
+          { "lIni": 20, "lDev": 30, "lMid": 15, "lLate": 10, "total": 75, "plantDate": "April", "region": "Mediterranean", "selected": true },
+          { "lIni": 30, "lDev": 40, "lMid": 25, "lLate": 10, "total": 105, "plantDate": "Nov/Jan", "region": "Mediterranean" },
+          { "lIni": 25, "lDev": 35, "lMid": 30, "lLate": 10, "total": 100, "plantDate": "Oct/Nov", "region": "Arid Region" },
+          { "lIni": 35, "lDev": 50, "lMid": 45, "lLate": 10, "total": 140, "plantDate": "Feb", "region": "Mediterranean" }
+        ],
+        "selectionReason": "First Mediterranean row. Note FAO-56 gives lettuce three Mediterranean rows spanning 75 to 140 days - lettuce season length is highly planting-date dependent, so the selected row is the one most likely to need overriding per farm."
+      },
+
+      "kc": {
+        "cite": "FAO-56 Table 12, p. 110",
+        "kcIni": { "value": 0.70, "source": "group row", "cite": "FAO-56 Table 12, group 'a. Small Vegetables', p. 110 - group Kc_ini, omitted on the lettuce row itself." },
+        "kcMid": { "value": 1.00, "cite": "FAO-56 Table 12, p. 110" },
+        "kcEnd": { "value": 0.95, "cite": "FAO-56 Table 12, p. 110" },
+        "maxHeightM": { "value": 0.3, "cite": "FAO-56 Table 12, p. 110" },
+        "kcEndNote": "Kc_end (0.95) is nearly as high as Kc_mid (1.00). Per FAO-56 p. 97 this is the signature of a crop 'frequently irrigated until harvested fresh' - i.e. late-season dry-down is NOT appropriate for leafy vegetables, unlike maize or dry beans.",
+        "kcEndNoteCite": "FAO-56 p. 97"
+      },
+
+      "soil": {
+        "cite": "FAO-56 Table 22, p. 163",
+        "maxRootDepthM": { "min": 0.3, "max": 0.5, "cite": "FAO-56 Table 22, p. 163" },
+        "depletionFractionP": { "value": 0.30, "cite": "FAO-56 Table 22, p. 163", "appliesAtEtc": 5.0 }
+      }
+    },
+
+    "citrus": {
+      "agroflowCrop": "citrus",
+      "fao56CropName": "Citrus, no ground cover - 70% canopy",
+      "fao56Group": "n. Fruit Trees",
+      "mappingNote": "FAO-56 splits citrus six ways: with or without active ground cover, each at 70%, 50% and 20% canopy. The 70%-canopy, no-ground-cover variant is used as AgroFlow's default because it represents a mature, clean-floor commercial orchard. The other five variants' values are recorded below so a farm with a different orchard floor or a younger planting can be switched without touching code.",
+
+      "stageLengths": {
+        "cite": "FAO-56 Table 11, p. 107",
+        "units": "days",
+        "allPublishedRows": [
+          { "lIni": 60, "lDev": 90, "lMid": 120, "lLate": 95, "total": 365, "plantDate": "Jan", "region": "Mediterranean", "selected": true }
+        ],
+        "selectionReason": "FAO-56 publishes exactly one citrus row, and it is Mediterranean. Note it totals 365 days: citrus is an evergreen perennial, so 'planting date' here means the start of the annual cycle, not the year the tree went in the ground. See perennialNote."
+      },
+
+      "perennialNote": "For perennial vegetation in frost-free climates, crops may grow year round so that the date of termination may be taken as the same as the date of 'planting'.",
+      "perennialNoteCite": "FAO-56 p. 96",
+
+      "kc": {
+        "cite": "FAO-56 Table 12, p. 113",
+        "kcIni": { "value": 0.70, "cite": "FAO-56 Table 12, 'Citrus, no ground cover - 70% canopy', p. 113" },
+        "kcMid": { "value": 0.65, "cite": "FAO-56 Table 12, p. 113" },
+        "kcEnd": { "value": 0.70, "cite": "FAO-56 Table 12, p. 113" },
+        "maxHeightM": { "value": 4.0, "cite": "FAO-56 Table 12, p. 113" },
+        "kcShapeWarning": "Citrus is the one crop of the six whose Kc_mid (0.65) is LOWER than its Kc_ini (0.70). FAO-56 explains: 'The midseason value is lower than initial and ending values due to the effects of stomatal closure during periods of peak ET.' The engine's linear interpolation therefore runs DOWNWARD through the development stage and UPWARD through the late season for citrus. This is correct, not a sign error.",
+        "kcShapeWarningCite": "FAO-56 Table 12 footnote 21, p. 113",
+        "humidClimateAdjustment": "For humid and subhumid climates where there is less stomatal control by citrus, values for Kc_ini, Kc_mid and Kc_end can be increased by 0.1 - 0.2.",
+        "humidClimateAdjustmentCite": "FAO-56 Table 12 footnote 21, p. 113 (following Rogers et al., 1983)",
+        "otherVariants": [
+          { "variant": "no ground cover - 70% canopy", "kcIni": 0.70, "kcMid": 0.65, "kcEnd": 0.70, "heightM": 4, "cite": "FAO-56 Table 12, p. 113" },
+          { "variant": "no ground cover - 50% canopy", "kcIni": 0.65, "kcMid": 0.60, "kcEnd": 0.65, "heightM": 3, "cite": "FAO-56 Table 12, p. 113" },
+          { "variant": "no ground cover - 20% canopy", "kcIni": 0.50, "kcMid": 0.45, "kcEnd": 0.55, "heightM": 2, "cite": "FAO-56 Table 12, p. 113" },
+          { "variant": "active ground cover or weeds - 70% canopy", "kcIni": 0.75, "kcMid": 0.70, "kcEnd": 0.75, "heightM": 4, "cite": "FAO-56 Table 12, p. 113" },
+          { "variant": "active ground cover or weeds - 50% canopy", "kcIni": 0.80, "kcMid": 0.80, "kcEnd": 0.80, "heightM": 3, "cite": "FAO-56 Table 12, p. 113" },
+          { "variant": "active ground cover or weeds - 20% canopy", "kcIni": 0.85, "kcMid": 0.85, "kcEnd": 0.85, "heightM": 2, "cite": "FAO-56 Table 12, p. 113" }
+        ]
+      },
+
+      "soil": {
+        "cite": "FAO-56 Table 22, p. 165",
+        "maxRootDepthM": { "min": 1.2, "max": 1.5, "cite": "FAO-56 Table 22, 'Citrus - 70% canopy', p. 165" },
+        "depletionFractionP": { "value": 0.50, "cite": "FAO-56 Table 22, p. 165", "appliesAtEtc": 5.0 },
+        "otherVariants": [
+          { "variant": "70% canopy", "rootDepthMinM": 1.2, "rootDepthMaxM": 1.5, "p": 0.50, "cite": "FAO-56 Table 22, p. 165" },
+          { "variant": "50% canopy", "rootDepthMinM": 1.1, "rootDepthMaxM": 1.5, "p": 0.50, "cite": "FAO-56 Table 22, p. 165" },
+          { "variant": "20% canopy", "rootDepthMinM": 0.8, "rootDepthMaxM": 1.1, "p": 0.50, "cite": "FAO-56 Table 22, p. 165" }
+        ]
+      }
+    }
+  },
+
+  "notInFao56": {
+    "$comment": "Recorded deliberately. The overnight brief asked for per-crop stage sensitivity to water stress. Stating plainly what the textbook does NOT contain is part of the deliverable.",
+    "perCropStageSensitivityToWaterStress": "FAO-56 does NOT publish, for any crop, a ranking of which growth stages are most sensitive to water stress. That material belongs to FAO Irrigation and Drainage Paper 33 (Doorenbos & Kassam, 'Yield response to water') and its successor Paper 66, via the yield response factor Ky. FAO-56 lists Ky only in its symbol table and never tabulates it. No such claim is therefore made anywhere in this knowledge base or in the advice engine. What FAO-56 DOES support - and what the engine uses instead - is the per-crop depletion fraction p (Table 22) plus the rule that p tightens as ETc rises (p. 162), which is a real, citable, crop-specific and weather-specific stress limit."
+  }
+}
