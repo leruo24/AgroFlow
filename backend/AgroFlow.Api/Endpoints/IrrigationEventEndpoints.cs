@@ -19,9 +19,6 @@ public record IrrigationEventResponse(float WaterUsedTotal);
 // with the equivalent increment done in C# via Zone.AddWaterUsage.
 public static class IrrigationEventEndpoints
 {
-    private static readonly string[] ValidTriggerSources = { "auto", "manual", "scheduled", "unknown" };
-    private static readonly string[] ValidSyncStatuses = { "synced", "offline_queued" };
-
     public static void MapIrrigationEventEndpoints(this WebApplication app)
     {
         app.MapPost("/api/irrigation-events", HandleAsync);
@@ -29,11 +26,23 @@ public static class IrrigationEventEndpoints
 
     private static async Task<IResult> HandleAsync(IrrigationEventRequest request, NpgsqlDataSource dataSource)
     {
-        if (request.ZoneId <= 0 ||
-            !ValidTriggerSources.Contains(request.TriggerSource) ||
-            !ValidSyncStatuses.Contains(request.SyncStatus))
+        // Validate BEFORE opening a connection or a transaction.
+        //
+        // This used to check only zoneId/triggerSource/syncStatus, so a
+        // negative runtime or a negative estimatedLitres was accepted and
+        // silently SUBTRACTED from zone.water_used_total via Zone.AddWaterUsage
+        // below. Nothing recomputes that running total from the event rows, so
+        // the corruption never healed. The rules live in the domain layer
+        // (IrrigationEventValidation) and are unit-tested there; the reason
+        // string goes back in the 400 body so a device developer can see which
+        // field was rejected instead of guessing.
+        var validationError = IrrigationEventValidation.Validate(
+            request.ZoneId, request.RuntimeSeconds, request.EstimatedLitres,
+            request.TriggerSource, request.SyncStatus);
+
+        if (validationError is not null)
         {
-            return Results.BadRequest("Invalid zoneId, triggerSource or syncStatus.");
+            return Results.BadRequest(validationError);
         }
 
         await using var connection = await dataSource.OpenConnectionAsync();
