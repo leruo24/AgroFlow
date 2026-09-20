@@ -12,9 +12,12 @@
 //      the same way the earlier Postgres-trigger version did.
 //   2. SUBSCRIBES over MQTT to agroflow/farm/{farmId}/device/{deviceId}/commands
 //      and executes whatever arrives - REST polling of irrigation_commands
-//      is gone; this is now push-based. Marking a command 'executed' still
-//      goes straight to Supabase via REST PATCH (an acknowledgement write,
-//      not the polling this replaced - see markCommandExecuted()).
+//      is gone; this is now push-based. The board then acknowledges the
+//      command to AgroFlow.Api over HTTP
+//      (POST /api/devices/commands/{id}/executed - see markCommandExecuted()).
+//      That ACK used to be a direct Supabase REST PATCH; it never worked and
+//      never could, so this board no longer holds any Supabase credential at
+//      all. See markCommandExecuted() for the full story.
 //   3. logs the resulting run to AgroFlow.Api over HTTP
 //      (POST /api/irrigation-events), which inserts it into irrigation_event
 //      and updates the zone's running water usage total (with offline
@@ -77,18 +80,26 @@
 // Config - TODO: fill in / adjust per board before flashing.
 // ---------------------------------------------------------------------------
 
-// TODO: your Supabase project URL and anon/publishable key (Project Settings
-// -> API Keys). Still used directly for marking a command 'executed' via
-// REST PATCH (see markCommandExecuted()) - that's an acknowledgement write,
-// not the polling MQTT replaced.
-const char *SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co";
-const char *SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+// SUPABASE_URL / SUPABASE_ANON_KEY are GONE, deliberately. They existed only
+// to mark a command 'executed' by PATCHing Supabase's REST API directly, and
+// that path was dead twice over: the values were never filled in past their
+// placeholders, and migration 0011 grants the anon role SELECT only on
+// irrigation_commands - no UPDATE policy exists, by design, because an anon
+// write there drives a physical valve. The ACK now goes through AgroFlow.Api
+// instead (see markCommandExecuted()), so this board holds no Supabase
+// credential of any kind. Do not reintroduce one.
 
-// TODO: base URL of the AgroFlow.Api host (backend/AgroFlow.Api), no trailing
-// slash. Irrigation events, device claiming and the firmware version check
-// go here over HTTP. Sensor readings and command delivery moved to MQTT -
-// see MQTT_HOST below.
-const char *API_BASE_URL = "http://192.168.10.82:5000";
+// API_BASE_URL now lives in secrets.h alongside API_KEY and MQTT_PASSWORD -
+// see the #include above and secrets.example.h. It moved out of this file
+// because it changes per deployment, and leaving a hardcoded LAN address here
+// is what made every network change a reflash.
+//
+// IF YOUR BUILD FAILS WITH "API_BASE_URL was not declared in this scope",
+// your secrets.h predates this change. Add this line to it:
+//
+//     const char *API_BASE_URL = "https://agroflow-production-998d.up.railway.app";
+//
+// (secrets.h is gitignored, so it does not get updated by a git pull.)
 
 // API_KEY is defined in secrets.h (see the #include above). TODO: set it
 // there - copy secrets.example.h to secrets.h first. It must match the
@@ -303,18 +314,47 @@ void checkDurationDeadline() {
 }
 
 // ---------------------------------------------------------------------------
-// Supabase REST helpers
+// AgroFlow.Api HTTP helpers
 // ---------------------------------------------------------------------------
 
-void applySupabaseHeaders(HTTPClient &http) {
-  http.addHeader("apikey", SUPABASE_ANON_KEY);
-  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-  http.addHeader("Content-Type", "application/json");
-}
+// applySupabaseHeaders() is gone along with SUPABASE_URL/SUPABASE_ANON_KEY -
+// this board no longer talks to Supabase directly at all. See the config
+// section above and markCommandExecuted().
 
 void applyApiHeaders(HTTPClient &http) {
   http.addHeader("X-Api-Key", API_KEY);
   http.addHeader("Content-Type", "application/json");
+}
+
+// Opens an HTTPClient against API_BASE_URL over TLS.
+//
+// EVERY API CALL SITE MUST GO THROUGH THIS. API_BASE_URL is an https:// URL
+// now that the API is deployed on Railway, and a plain WiFiClient cannot
+// speak TLS - HTTPClient::begin() would fail outright, or (worse, on some
+// core versions) connect and return garbage. Before this change these call
+// sites each constructed their own plain WiFiClient, which was fine against
+// the old http:// LAN address and is not fine now.
+//
+// setInsecure() skips server certificate validation.
+//
+//   TODO (security): pin the root CA instead of calling setInsecure(). As it
+//   stands the connection is encrypted but unauthenticated, so an attacker
+//   positioned on the network could impersonate the API host and feed this
+//   board forged firmware-update URLs or swallow its irrigation events.
+//   This matches the existing MQTT approach (mqttTlsClient.setInsecure(),
+//   see setupMqtt()) and carries the same caveat - fixing one should fix
+//   both. The fix is to embed the ISRG Root X1 / Let's Encrypt certificate
+//   and call client.setCACert(); the cost is having to reflash when the root
+//   rotates, which is why it has not been done yet.
+bool beginApiRequest(WiFiClientSecure &client, HTTPClient &http, const String &url) {
+  client.setInsecure(); // TODO: setCACert() - see the note above.
+  if (!http.begin(client, url)) {
+    Serial.print("ERROR: could not open HTTP(S) connection to ");
+    Serial.println(url);
+    return false;
+  }
+  applyApiHeaders(http);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,11 +403,11 @@ bool claimDevice(const String &enrollmentCode) {
   }
   if (WiFi.status() != WL_CONNECTED) return false;
 
-  WiFiClient client; // TODO: see postSensorReading() re: HTTPS.
+  WiFiClientSecure client;
   HTTPClient http;
   String url = String(API_BASE_URL) + "/api/devices/claim";
-  if (!http.begin(client, url)) return false;
-  applyApiHeaders(http); // shared device secret, in addition to the code itself
+  // Sends X-Api-Key (the shared device secret) in addition to the code itself.
+  if (!beginApiRequest(client, http, url)) return false;
 
   JsonDocument doc;
   doc["deviceId"] = getDeviceId();
@@ -417,11 +457,10 @@ bool claimDevice(const String &enrollmentCode) {
 void checkFirmwareUpdate() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  WiFiClient client; // TODO: see postSensorReading() re: HTTPS for API_BASE_URL itself.
+  WiFiClientSecure client;
   HTTPClient http;
   String url = String(API_BASE_URL) + "/api/devices/firmware-check?currentVersion=" + FIRMWARE_VERSION;
-  if (!http.begin(client, url)) return;
-  applyApiHeaders(http);
+  if (!beginApiRequest(client, http, url)) return;
 
   int httpCode = http.GET();
   if (httpCode != 200) {
@@ -502,9 +541,9 @@ void reportSensorReadings() {
 
 // Fired by PubSubClient for any message on mqttCommandsTopic (subscribed in
 // reconnectMqtt()). Applies the command to the relay, exactly like the old
-// REST-polling checkForCommands() did, then PATCHes the row 'executed' via
-// Supabase REST (see markCommandExecuted() - that acknowledgement write
-// stayed on HTTP; only command DELIVERY moved to MQTT). On any parse
+// REST-polling checkForCommands() did, then acknowledges the command to
+// AgroFlow.Api over HTTP (see markCommandExecuted() - that acknowledgement
+// write stayed on HTTP; only command DELIVERY moved to MQTT). On any parse
 // failure, leaves relay state untouched entirely - never guesses start or
 // stop.
 void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
@@ -565,31 +604,69 @@ void reconnectMqtt() {
   }
 }
 
+// Acknowledges a command to AgroFlow.Api.
+//
+// WHAT THIS REPLACED, AND WHY
+// ---------------------------
+// This used to PATCH Supabase's REST API directly:
+//
+//     PATCH {SUPABASE_URL}/rest/v1/irrigation_commands?id=eq.{id}
+//
+// with the anon key. That never worked and never could have:
+//
+//   1. SUPABASE_URL and SUPABASE_ANON_KEY were still placeholders
+//      ("YOUR_PROJECT_REF") in the committed sketch.
+//   2. Even correctly filled in it would have been refused. Migration 0011
+//      turned RLS on for irrigation_commands and grants the anon role SELECT
+//      only - there is deliberately no UPDATE policy, because an anon write
+//      to that table drives a physical valve.
+//
+// So acknowledgements never landed, every executed command stayed 'pending'
+// forever, and the manual-override cooldown in SensorReadingProcessor - which
+// keys off status = 'pending' - treated every past manual command as still
+// outstanding.
+//
+// It now goes through AgroFlow.Api like every other call this board makes:
+// X-Api-Key gated, written server-side via Npgsql as the table owner. The
+// deviceId is sent so the API can verify this board is actually the one on
+// that command's zone - X-Api-Key is shared by every board and proves only
+// "a genuine AgroFlow device", so without it any board could acknowledge any
+// other board's commands.
+//
+// Non-fatal on failure: the pump has already done what it was told. A missed
+// ACK leaves the row 'pending', which means the API's replay sweep will
+// redeliver the command - the endpoint is idempotent, so running it again and
+// re-acknowledging is safe.
 void markCommandExecuted(const char *commandId) {
   if (!hasValidTime()) {
     Serial.println("WARN: system clock not NTP-synced when marking command executed - executed_at will be wrong");
   }
 
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WARN: offline, cannot acknowledge command - the API will redeliver it");
+    return;
+  }
+
   WiFiClientSecure client;
-  client.setInsecure();
   HTTPClient http;
 
-  String url = String(SUPABASE_URL) + "/rest/v1/irrigation_commands?id=eq." + String(commandId);
-  if (!http.begin(client, url)) return;
-  applySupabaseHeaders(http);
-  http.addHeader("Prefer", "return=minimal");
+  String url = String(API_BASE_URL) + "/api/devices/commands/" + String(commandId) + "/executed";
+  if (!beginApiRequest(client, http, url)) return;
 
   JsonDocument doc;
-  doc["status"] = "executed";
-  doc["executed_at"] = nowIso8601();
+  doc["deviceId"] = getDeviceId();
+  if (hasValidTime()) {
+    doc["executedAt"] = nowIso8601();
+  }
+  // executedAt omitted entirely when the clock is not NTP-synced, so the
+  // server falls back to its own now() rather than recording an epoch-1970
+  // timestamp - same fallback shape as started_at on irrigation events.
   String body;
   serializeJson(doc, body);
 
-  // .PATCH() requires a reasonably recent arduino-esp32 core; if yours
-  // predates it, swap this for: http.sendRequest("PATCH", body);
-  int httpCode = http.PATCH(body);
+  int httpCode = http.POST(body);
   if (httpCode < 200 || httpCode >= 300) {
-    Serial.print("WARN: failed to mark command executed, http=");
+    Serial.print("WARN: failed to acknowledge command, http=");
     Serial.println(httpCode);
   }
   http.end();
@@ -619,11 +696,11 @@ bool postIrrigationEvent(long zoneId, unsigned long runtimeSeconds, float estima
     Serial.println("WARN: posting irrigation event without a valid startedAt (NTP sync failed at cycle start) - AgroFlow.Api will fall back to insert time");
   }
 
-  WiFiClient client; // TODO: see postSensorReading() re: HTTPS.
+  WiFiClientSecure client;
   HTTPClient http;
 
   String url = String(API_BASE_URL) + "/api/irrigation-events";
-  if (!http.begin(client, url)) return false;
+  if (!beginApiRequest(client, http, url)) return false;
   applyApiHeaders(http);
 
   JsonDocument doc;

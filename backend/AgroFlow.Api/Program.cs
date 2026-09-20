@@ -165,6 +165,7 @@ app.UseAuthorization();
 app.MapSensorReadingEndpoints();
 app.MapIrrigationEventEndpoints();
 app.MapDeviceEnrollmentEndpoints();
+app.MapDeviceCommandEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 
