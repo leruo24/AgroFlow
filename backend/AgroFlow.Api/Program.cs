@@ -1,5 +1,6 @@
 using AgroFlow.Api.Endpoints;
 using AgroFlow.Api.Mqtt;
+using AgroFlow.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -119,6 +120,20 @@ builder.Services.AddSingleton<MqttConnectionService>();
 builder.Services.AddSingleton<IMqttPublisher>(sp => sp.GetRequiredService<MqttConnectionService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttConnectionService>());
 builder.Services.AddHostedService<IrrigationCommandNotifyService>();
+
+// Weather collection. Populates weather_daily (migration 0016) from
+// Open-Meteo every Weather:FetchIntervalHours (default 6) for every farm that
+// has coordinates - the foundation the FAO-56 ET0 / ETc advice engine needs,
+// since nothing in AgroFlow stored weather before this. Open-Meteo is free and
+// needs no API key, so there is no new secret to set on Railway.
+builder.Services.AddHostedService<WeatherCollectionService>();
+
+// Historical backfill. Registered so it can be resolved, but DELIBERATELY NOT
+// a hosted service and deliberately not called anywhere - weather_daily does
+// not exist in the live database until migration 0016 is applied, and the
+// backfill is a one-off to be triggered by hand afterwards. See the header of
+// WeatherBackfillService for how to run it.
+builder.Services.AddSingleton<WeatherBackfillService>();
 
 var app = builder.Build();
 
