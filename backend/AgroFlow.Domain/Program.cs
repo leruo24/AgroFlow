@@ -22,7 +22,12 @@ namespace AgroFlow.Presentation
 
             Pump waterPump = new Pump();
             waterPump.DeviceName = "Zone1-Pump";
-            waterPump.FlowRate = 2.5f;
+            // Display-only, for the polymorphism demo below: Pump.ReadValue()
+            // reports a pump's rated flow while running. This is NOT used to
+            // value any irrigation event - that is zone.flow_rate_lpm's job.
+            // Set to the measured test pump (500 ml in 20 s = 1.5 L/min) so the
+            // demo does not print a number that contradicts the database.
+            waterPump.FlowRate = 1.5f;
             waterPump.IsRunning = true;
             waterPump.Status = "Running";
 

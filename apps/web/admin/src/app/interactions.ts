@@ -135,7 +135,7 @@ async function exportCurrent(kind: string): Promise<void> {
         date: (e) => e.date, farm: (e) => e.farm, province: (e) => e.province,
         region: (e) => e.region, crop: (e) => e.crop,
       }).map((e) => [e.date, e.farm, e.zone, e.crop, e.province, e.region, e.litres, e.durationMin, e.onSchedule ? "Yes" : "No"]);
-      downloadCSV("agroflow-irrigation.csv", toCSV(["Date", "Farm", "Zone", "Crop", "Province", "Region", "Litres", "Minutes", "On schedule"], rows));
+      downloadCSV("agroflow-irrigation.csv", toCSV(["Date", "Farm", "Zone", "Crop", "Province", "Region", "Estimated litres", "Minutes", "On schedule"], rows));
       break;
     }
     case "activity": {
@@ -949,7 +949,7 @@ case "delete-user": {
       });
       const rows = events.slice(0, 500).map((e) => [e.date, e.farm, e.region, e.crop, e.litres]);
       downloadCSV(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
-        toCSV(["Date", "Farm", "Region", "Crop", "Litres"], rows));
+        toCSV(["Date", "Farm", "Region", "Crop", "Estimated litres"], rows));
       await api.logReportGenerated(`${name} (CSV)`);
       return toast(`${name} exported.`, "success");
     }

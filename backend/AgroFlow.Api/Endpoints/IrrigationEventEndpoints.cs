@@ -4,20 +4,26 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
+// EstimatedLitres is accepted but IGNORED, and is nullable so current firmware
+// can stop sending it altogether. It exists only so a board still running the
+// old sketch keeps posting successfully during the window before it is
+// reflashed. Nothing reads it: zone.flow_rate_lpm is the single source of
+// truth for turning runtime into litres. Once every board is reflashed this
+// field can be deleted outright.
 public record IrrigationEventRequest(
     long ZoneId,
     int RuntimeSeconds,
-    float EstimatedLitres,
     string TriggerSource,
     string SyncStatus,
-    DateTimeOffset? StartedAt);
+    DateTimeOffset? StartedAt,
+    float? EstimatedLitres = null);
 
-// EstimatedLitres is echoed back because the server may have recomputed it
-// from the zone's configured flow rate rather than using what the device
-// sent - see HandleAsync. IsMeasured is always false and is there to stop a
-// caller rendering this as a meter reading: no flow meter exists anywhere in
-// AgroFlow.
-public record IrrigationEventResponse(float WaterUsedTotal, float EstimatedLitres, bool IsMeasured, string LitresBasis);
+// EstimatedLitres is null when the zone has no flow_rate_lpm configured - that
+// is "no estimate can be made", which is the honest answer and is stored as
+// NULL rather than a zero that would read as "no water used". IsMeasured is
+// always false and is there to stop a caller rendering this as a meter
+// reading: no flow meter exists anywhere in AgroFlow.
+public record IrrigationEventResponse(float WaterUsedTotal, float? EstimatedLitres, bool IsMeasured, string LitresBasis);
 
 // Replaces the ESP32's direct POST to Supabase's irrigation_event REST
 // endpoint, and replaces the removed Postgres water-usage trigger
@@ -42,8 +48,13 @@ public static class IrrigationEventEndpoints
         // (IrrigationEventValidation) and are unit-tested there; the reason
         // string goes back in the 400 body so a device developer can see which
         // field was rejected instead of guessing.
+        // Structural validation first, BEFORE opening a connection or a
+        // transaction. Litres are passed as 0 here deliberately: the device no
+        // longer supplies a volume, so there is nothing of its to validate yet.
+        // Zero is always valid, so this call is exactly the zoneId / runtime /
+        // triggerSource / syncStatus checks.
         var validationError = IrrigationEventValidation.Validate(
-            request.ZoneId, request.RuntimeSeconds, request.EstimatedLitres,
+            request.ZoneId, request.RuntimeSeconds, 0f,
             request.TriggerSource, request.SyncStatus);
 
         if (validationError is not null)
@@ -54,28 +65,44 @@ public static class IrrigationEventEndpoints
         await using var connection = await dataSource.OpenConnectionAsync();
         await using var transaction = await connection.BeginTransactionAsync();
 
-        // Prefer the zone's configured flow rate over whatever the device
-        // sent.
+        // zone.flow_rate_lpm is THE source of truth for litres.
         //
-        // The firmware computes litres from PUMP_FLOW_LPS, a single hardcoded
-        // constant compiled into every board (0.05 L/s, marked a placeholder
-        // in the sketch). zone.flow_rate_lpm (migration 0018) is per zone and
-        // server-side, so it can be corrected for a zone whose emitters or
-        // line size differ WITHOUT reflashing anything. When it is set, it
-        // wins; when it is not, the device's own estimate is used unchanged.
+        // This used to fall back to whatever the device sent when the zone had
+        // no rate configured. That meant the same event could be valued two
+        // ways - the board's compiled-in constant or the zone's column -
+        // depending on a row nobody had filled in. The fallback is gone: with
+        // no configured rate there is no estimate, and the event is stored with
+        // estimated_litres NULL rather than a number derived from a guess.
         //
-        // Either way this is an ESTIMATE - there is no flow meter - which is
-        // why the response says so explicitly.
+        // Correcting a zone's rate is now a database update, not a reflash.
+        //
+        // Either way this is an ESTIMATE - there is no flow meter anywhere in
+        // AgroFlow - which is why the response says so explicitly.
         var flowRate = await FetchZoneFlowRateAsync(connection, transaction, request.ZoneId);
         var serverEstimate = WaterUsageEstimator.EstimateEventLitres(request.RuntimeSeconds, flowRate);
 
-        var estimatedLitres = serverEstimate is not null
-            ? (float)serverEstimate.Litres
-            : request.EstimatedLitres;
+        float? estimatedLitres = serverEstimate is not null ? (float)serverEstimate.Litres : null;
 
         var litresBasis = serverEstimate is not null
             ? serverEstimate.Basis
-            : "reported by the device from its compiled-in flow constant; zone.flow_rate_lpm is not configured for this zone";
+            : "no estimate available: zone.flow_rate_lpm is not configured for this zone, and no flow meter exists to measure the volume";
+
+        // Re-validate with the volume the server actually derived. The device's
+        // number never reaches this point, but an absurd flow_rate_lpm typed
+        // into the zone row could still produce an implausible volume, and that
+        // should be rejected rather than persisted.
+        if (estimatedLitres is not null)
+        {
+            var derivedError = IrrigationEventValidation.Validate(
+                request.ZoneId, request.RuntimeSeconds, estimatedLitres.Value,
+                request.TriggerSource, request.SyncStatus);
+
+            if (derivedError is not null)
+            {
+                return Results.BadRequest(
+                    "Derived from zone.flow_rate_lpm: " + derivedError);
+            }
+        }
 
         await InsertIrrigationEventAsync(connection, transaction, request, estimatedLitres);
 
@@ -87,12 +114,20 @@ public static class IrrigationEventEndpoints
         // application code instead.
         var currentTotal = await FetchZoneWaterUsedTotalForUpdateAsync(connection, transaction, request.ZoneId);
 
-        // The domain layer decides the new total - this endpoint's job is just
-        // to lock, fetch, persist.
-        var zone = new Zone { WaterUsedTotal = currentTotal };
-        var newTotal = zone.AddWaterUsage(estimatedLitres);
+        // Only a real estimate moves the running total. An unconfigured zone
+        // leaves water_used_total untouched rather than adding a zero that would
+        // later be indistinguishable from a cycle that genuinely delivered
+        // nothing.
+        var newTotal = currentTotal;
+        if (estimatedLitres is not null)
+        {
+            // The domain layer decides the new total - this endpoint's job is
+            // just to lock, fetch, persist.
+            var zone = new Zone { WaterUsedTotal = currentTotal };
+            newTotal = zone.AddWaterUsage(estimatedLitres.Value);
 
-        await UpdateZoneWaterUsedTotalAsync(connection, transaction, request.ZoneId, newTotal);
+            await UpdateZoneWaterUsedTotalAsync(connection, transaction, request.ZoneId, newTotal);
+        }
 
         await transaction.CommitAsync();
 
@@ -115,7 +150,7 @@ public static class IrrigationEventEndpoints
 
     private static async Task InsertIrrigationEventAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, IrrigationEventRequest request,
-        float estimatedLitres)
+        float? estimatedLitres)
     {
         // started_at omitted entirely (falls back to Postgres's own now()
         // default) when the firmware didn't have a valid NTP-synced clock at
@@ -128,7 +163,7 @@ public static class IrrigationEventEndpoints
         await using var cmd = new NpgsqlCommand(sql, connection, transaction);
         cmd.Parameters.AddWithValue(request.ZoneId);
         cmd.Parameters.AddWithValue(request.RuntimeSeconds);
-        cmd.Parameters.AddWithValue(estimatedLitres);
+        cmd.Parameters.AddWithValue((object?)estimatedLitres ?? DBNull.Value);
         cmd.Parameters.AddWithValue(request.TriggerSource);
         cmd.Parameters.AddWithValue(request.SyncStatus);
         if (request.StartedAt.HasValue)

@@ -159,9 +159,16 @@ const bool RELAY_ACTIVE_LOW = true;
 const int ADC_DRY = 3000; // raw reading in dry air ~= 0%
 const int ADC_WET = 1200; // raw reading fully submerged ~= 100%
 
-// No physical flow meter - litres are estimated from runtime. TODO: tune
-// against a real bucket-and-stopwatch measurement of your pump.
-const float PUMP_FLOW_LPS = 0.05f; // litres/second placeholder
+// NO FLOW CONSTANT LIVES HERE ANY MORE.
+//
+// This board used to carry PUMP_FLOW_LPS and compute litres itself. That made
+// two sources of truth for the same number - this constant, compiled into
+// every board, and zone.flow_rate_lpm in Postgres - so the same event could
+// be valued two different ways depending on who did the arithmetic.
+//
+// The board now reports only what it actually observes: how many seconds the
+// pump ran. AgroFlow.Api multiplies that by the zone's configured
+// flow_rate_lpm. Correcting a zone's rate is a database update, not a reflash.
 
 const unsigned long SENSOR_REPORT_INTERVAL_MS = 30000; // TODO: tune reporting cadence
 const unsigned long CONNECTIVITY_CHECK_INTERVAL_MS = 2000;
@@ -213,7 +220,6 @@ bool wasConnected = false;
 struct PendingEvent {
   long zoneId;
   unsigned long runtimeSeconds;
-  float estimatedLitres;
   String triggerSource;
   time_t startedAtEpoch; // 0 if the clock wasn't synced when the cycle started
 };
@@ -277,14 +283,12 @@ void stopPumpCycle() {
 
   unsigned long elapsedMs = millis() - pumpStartMillis; // unsigned wraparound
   unsigned long runtimeSeconds = elapsedMs / 1000;
-  float estimatedLitres = runtimeSeconds * PUMP_FLOW_LPS;
 
+  // Runtime only - litres are the server's to work out from the zone's rate.
   Serial.print("Pump OFF, runtime_seconds=");
-  Serial.print(runtimeSeconds);
-  Serial.print(" estimated_litres=");
-  Serial.println(estimatedLitres);
+  Serial.println(runtimeSeconds);
 
-  logIrrigationEvent(ZONE_ID, runtimeSeconds, estimatedLitres, currentCycleSource, cycleStartEpoch);
+  logIrrigationEvent(ZONE_ID, runtimeSeconds, currentCycleSource, cycleStartEpoch);
   currentCycleSource = "";
   cycleStartEpoch = 0;
 }
@@ -688,7 +692,7 @@ void markCommandExecuted(const char *commandId) {
 // startedAt field is omitted from the payload and AgroFlow.Api leaves it to
 // Postgres's own default now() - a wrong-but-plausible fallback is worse for
 // reporting than a visible gap, so we don't send a bogus 1970 timestamp.
-bool postIrrigationEvent(long zoneId, unsigned long runtimeSeconds, float estimatedLitres,
+bool postIrrigationEvent(long zoneId, unsigned long runtimeSeconds,
                           const String &source, const char *syncStatus, time_t startedAtEpoch) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
@@ -706,7 +710,8 @@ bool postIrrigationEvent(long zoneId, unsigned long runtimeSeconds, float estima
   JsonDocument doc;
   doc["zoneId"] = zoneId;
   doc["runtimeSeconds"] = runtimeSeconds;
-  doc["estimatedLitres"] = estimatedLitres;
+  // estimatedLitres is deliberately NOT sent. The server derives litres from
+  // zone.flow_rate_lpm; a value from here would be a second, competing answer.
   doc["triggerSource"] = source;
   doc["syncStatus"] = syncStatus;
   if (startedAtEpoch > MIN_VALID_EPOCH) {
@@ -725,7 +730,7 @@ bool postIrrigationEvent(long zoneId, unsigned long runtimeSeconds, float estima
 // Offline buffering
 // ---------------------------------------------------------------------------
 
-void bufferOfflineEvent(long zoneId, unsigned long runtimeSeconds, float estimatedLitres,
+void bufferOfflineEvent(long zoneId, unsigned long runtimeSeconds,
                          const String &source, time_t startedAtEpoch) {
   if (offlineCount == OFFLINE_BUFFER_CAPACITY) {
     Serial.println("WARN: offline event buffer full, dropping oldest queued event");
@@ -734,18 +739,18 @@ void bufferOfflineEvent(long zoneId, unsigned long runtimeSeconds, float estimat
   }
 
   int insertIndex = (offlineHead + offlineCount) % OFFLINE_BUFFER_CAPACITY;
-  offlineBuffer[insertIndex] = { zoneId, runtimeSeconds, estimatedLitres, source, startedAtEpoch };
+  offlineBuffer[insertIndex] = { zoneId, runtimeSeconds, source, startedAtEpoch };
   offlineCount++;
 
   Serial.print("Buffered offline irrigation event, queue depth=");
   Serial.println(offlineCount);
 }
 
-void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, float estimatedLitres,
+void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds,
                          const String &source, time_t startedAtEpoch) {
   if (WiFi.status() != WL_CONNECTED ||
-      !postIrrigationEvent(zoneId, runtimeSeconds, estimatedLitres, source, "synced", startedAtEpoch)) {
-    bufferOfflineEvent(zoneId, runtimeSeconds, estimatedLitres, source, startedAtEpoch);
+      !postIrrigationEvent(zoneId, runtimeSeconds, source, "synced", startedAtEpoch)) {
+    bufferOfflineEvent(zoneId, runtimeSeconds, source, startedAtEpoch);
   }
 }
 
@@ -757,7 +762,7 @@ void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, float estimat
 void flushOfflineBuffer() {
   while (offlineCount > 0 && WiFi.status() == WL_CONNECTED) {
     PendingEvent &ev = offlineBuffer[offlineHead];
-    bool ok = postIrrigationEvent(ev.zoneId, ev.runtimeSeconds, ev.estimatedLitres,
+    bool ok = postIrrigationEvent(ev.zoneId, ev.runtimeSeconds,
                                    ev.triggerSource, "offline_queued", ev.startedAtEpoch);
     if (!ok) break;
 

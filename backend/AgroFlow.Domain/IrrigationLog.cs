@@ -3,8 +3,16 @@ using System;
 namespace AgroFlow.Business
 {
     // No flow meter on the confirmed hardware, so water volume is split into
-    // runtimeSeconds (measured) and estimatedLitres (derived from a rated flow
-    // constant) - keeps the estimate auditable.
+    // runtimeSeconds (measured) and estimatedLitres (derived) - keeps the
+    // estimate auditable.
+    //
+    // This class NO LONGER DERIVES THE VOLUME ITSELF. It used to carry a
+    // RatedFlowLitresPerSecond constant flagged as an unverified placeholder,
+    // which made it a second source of truth competing with zone.flow_rate_lpm
+    // and with the firmware's own constant - three answers for one number.
+    // There is now exactly one: zone.flow_rate_lpm, applied by
+    // WaterUsageEstimator.EstimateEventLitres. EstimatedLitres here is a plain
+    // carrier, set by whoever already did that arithmetic.
     public class IrrigationLog
     {
         #region Data Members
@@ -14,10 +22,6 @@ namespace AgroFlow.Business
         private int runtimeSeconds;
         private float estimatedLitres;
         private string action;
-
-        // TODO: unverified placeholder - replace with the actual rated flow-rate
-        // constant for your pump/kit before relying on estimatedLitres.
-        private const float RatedFlowLitresPerSecond = 0.05f;
         #endregion
 
         #region Property Methods
@@ -36,13 +40,17 @@ namespace AgroFlow.Business
             action = "";
         }
 
+        // estimatedLitres is deliberately left at 0 here rather than derived:
+        // this constructor has no zone flow rate to work from. Set
+        // EstimatedLitres from WaterUsageEstimator.EstimateEventLitres, which
+        // takes the zone's configured rate and returns null when there isn't
+        // one.
         public IrrigationLog(int pLogID, int pZoneID, int pRuntimeSeconds, string pAction)
         {
             logId = pLogID;
             zoneId = pZoneID;
             dateTime = DateTime.Now;
             runtimeSeconds = pRuntimeSeconds;
-            estimatedLitres = pRuntimeSeconds * RatedFlowLitresPerSecond;
             action = pAction;
         }
         #endregion

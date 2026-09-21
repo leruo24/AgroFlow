@@ -18,11 +18,23 @@ export const fmtPct = (n: number | null | undefined): string =>
 export const fmtPct2 = (n: number | null | undefined): string =>
   `${Number(n ?? 0).toFixed(2)}%`;
 
+// Every water volume in AgroFlow is INFERRED from pump runtime and the zone's
+// configured flow_rate_lpm - there is no flow meter on any node. The "(est.)"
+// suffix is applied here, in the one formatter every caller goes through,
+// rather than at each call site, so a new table or card cannot accidentally
+// present an inferred number as a measured one.
+//
+// null/undefined is a genuinely absent estimate (a zone with no flow rate
+// configured, which the API stores as NULL) and renders as an em dash, not as
+// "0 L" - zero would claim the cycle delivered no water, which is a different
+// and false statement.
 export const fmtLitres = (n: number | null | undefined): string => {
-  const v = Number(n ?? 0);
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)} ML`;
-  if (v >= 1000) return `${(v / 1000).toFixed(1)} kL`;
-  return `${Math.round(v)} L`;
+  if (n == null) return "—";
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "—";
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)} ML (est.)`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)} kL (est.)`;
+  return `${Math.round(v)} L (est.)`;
 };
 
 export const fmtDate = (iso: string): string => (iso ? iso.slice(0, 10) : "—");

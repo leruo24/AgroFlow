@@ -356,11 +356,14 @@ export default function ZoneControlScreen() {
         environment.status === 'Online' ? `${environment.humidity}${environment.humidityUnit}` : 'Unavailable',
     },
     {
+      // "(est.)" is not decoration: no AgroFlow node has a flow meter, so this
+      // is runtime multiplied by the zone's configured flow_rate_lpm. Showing
+      // a bare litre figure would present an inference as a measurement.
       label:
         'Used Today',
       value:
         selectedZone.water.usedTodayLitres != null
-          ? `${selectedZone.water.usedTodayLitres} L`
+          ? `${selectedZone.water.usedTodayLitres} L (est.)`
           : 'No data',
     },
     {
@@ -368,7 +371,7 @@ export default function ZoneControlScreen() {
         'Water Saved',
       value:
         selectedZone.waterSavedLitres != null
-          ? `${selectedZone.waterSavedLitres} L`
+          ? `${selectedZone.waterSavedLitres} L (est.)`
           : 'No data',
     },
     {

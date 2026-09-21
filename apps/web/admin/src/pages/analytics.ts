@@ -92,7 +92,7 @@ export async function irrigationPage(): Promise<string> {
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Water Delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range" }, icon: Icon.droplet })}
+    ${kpiCard({ label: "Water Delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet })}
     ${kpiCard({ label: "Irrigation Events", value: filteredEvents.length, icon: Icon.repeat })}
     ${kpiCard({ label: "Total Duration", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
     ${kpiCard({ label: "Schedule Compliance", value: compliance, format: "pct", icon: Icon.circleCheck })}
