@@ -68,6 +68,21 @@ the QR code with Expo Go. You should land on the **login screen** (real
 Supabase Auth — see section 8), not a home screen — there's no
 guest/skip path.
 
+Run this from `apps/mobile`, not the repo root. There is no root
+`package.json` — this is not an npm-workspaces monorepo, each app owns its
+own dependencies — so `npx expo start` from the root fails with
+`ConfigError: The expected package.json path ... does not exist`.
+
+**No `expo-blur` — do not add it back.** The tab bar and the modal sheets
+used to be frosted glass via `expo-blur`. On Expo Go SDK 57 that crashed
+the app natively on startup on both iPhone and Android: the bundle built
+fine, then Expo Go dropped straight back to its home screen with no red
+error screen to catch. The frosted look is now a solid `tabBarSurface`
+token plus a hairline border and shadow on the bar, and a `scrim` token
+behind the sheets. Both tokens live in
+`apps/mobile/src/constants/colors.ts`. If the sheets or the tab bar look
+flat to you, that is deliberate — it is not a missing dependency.
+
 ### Admin dashboard (Vite)
 
 ```powershell

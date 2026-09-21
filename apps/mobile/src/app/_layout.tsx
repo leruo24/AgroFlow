@@ -23,7 +23,6 @@ import {
   ThemeProvider,
   useTheme,//allow components to access current theme
 } from '@/context/ThemeContext';
-import { BlurRoot } from '@/components/BlurSheet';
 
 function RootNavigator() {//decides which screens the user is permitted to access
   const {//reading authentication states
@@ -114,7 +113,7 @@ export default function RootLayout() {/*wraps the application with ThemeProvider
         {/* Farm data provider */}
         <AgroFlowProvider>
           <View style={Platform.OS === 'web' ? styles.webFrame : styles.nativeFrame}>
-            <BlurRoot><RootNavigator /></BlurRoot>
+            <RootNavigator />
           </View>
           {/*reads authentication state */}
         </AgroFlowProvider>

@@ -1,4 +1,3 @@
-import { BlurView } from 'expo-blur';
 // Defines the bottom tab navigation structure for AgroFlow.
 import { Tabs } from 'expo-router';
 
@@ -10,15 +9,13 @@ import {//importing icons for the bottom navigation bar
   Settings,
 } from 'lucide-react-native';
 import { useMemo, type ComponentType } from 'react';
-import {//tells the app if its running on android or IOS
+import {
   ColorValue,
-  Platform,
   View,
 } from 'react-native';
 
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
 import { useTheme } from '@/context/ThemeContext';//contains the colors
-import { FROSTED_BLUR_INTENSITY, useBlurTarget } from '@/components/BlurSheet';
 import { createTabsLayoutStyles, tabsLayoutStyles as styles } from '@/styles/tabsLayoutStyles';
 
 type TabIconProps = { size?: number; color?: ColorValue; strokeWidth?: number };
@@ -36,11 +33,9 @@ function TabIcon(Icon: ComponentType<TabIconProps>) {
 }
 
 export default function TabsLayout() {//creates layout component
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { alerts } = useAgroFlow();
-  const blurTarget = useBlurTarget();
   const themedStyles = useMemo(() => createTabsLayoutStyles(colors), [colors]);
-  const canBlurTabBar = Platform.OS !== 'android' || Number(Platform.Version) >= 31;
 
   const unreadAlerts = alerts.filter(//gets unread alerts count
     (alert) => !alert.read
@@ -52,20 +47,6 @@ export default function TabsLayout() {//creates layout component
       screenOptions={{
         headerShown: false,//hiding auto header
         tabBarHideOnKeyboard: true,
-
-        // The translucent surface remains legible if blur is unavailable.
-        tabBarBackground: () => canBlurTabBar ? (
-          <View style={styles.blurBackground}>
-            <BlurView
-              style={styles.blurLayer}
-              intensity={FROSTED_BLUR_INTENSITY}
-              tint={isDark ? 'dark' : 'light'}
-              blurTarget={blurTarget}
-              blurMethod={Platform.OS === 'android' ? 'dimezisBlurViewSdk31Plus' : undefined}
-            />
-            <View pointerEvents="none" style={themedStyles.frostedOverlay} />
-          </View>
-        ) : <View style={themedStyles.frostedFallback} />,
 
         // Aqua identifies the selected tab against the forest-green bar.
         tabBarActiveTintColor: colors.secondaryDark,

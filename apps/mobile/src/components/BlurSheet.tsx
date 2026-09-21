@@ -1,20 +1,13 @@
-// Reusable frosted-glass sheet, matching the Webex reference (docs/ui_reference):
-// content behind stays visible, blurred and dimmed; the sheet itself sits near-white
-// with a bold left-aligned title and a top-right dismiss control.
+// Reusable modal sheet, matching the Webex reference (docs/ui_reference):
+// the content behind is dimmed by a scrim, and the sheet itself sits on a
+// solid surface with a bold left-aligned title and a top-right dismiss control.
 //
-// Android note: real-time blur is only cheap on Android 12+ (SDK 31+), which is
-// where the OS gained the RenderNode API. Below that, the historical fallback is
-// RenderScript - measurably slower, a real concern on whatever low-end phone a
-// farmer owns. blurMethod="dimezisBlurViewSdk31Plus" sidesteps that entirely: fast
-// native blur on 12+, and expo-blur's own graceful degrade to a plain semi-transparent
-// view below that - never the slow path, never a broken opaque panel. iOS always gets
-// real blur via UIVisualEffectView (effectively free, no perf concern there).
-import {
-  BlurView,
-  BlurTargetView,
-} from 'expo-blur';
-import { createContext, useContext, useRef } from 'react';
-import type { RefObject } from 'react';
+// This previously used expo-blur for a frosted backdrop. That was removed: the
+// blur layer crashed the app natively on startup in Expo Go (SDK 57) on both
+// iOS and Android, with no JS error to catch. The scrim below is the permanent
+// replacement - it needs no native module, behaves identically on every
+// platform and Android API level, and costs nothing to composite. Do not
+// reintroduce expo-blur here without re-testing a native startup crash.
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -28,7 +21,6 @@ import type {
 
 import {
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -46,20 +38,6 @@ import { Type } from '@/constants/colors';
 import {
   useTheme,
 } from '@/context/ThemeContext';
-
-const BlurTargetContext = createContext<RefObject<View | null> | undefined>(undefined);
-export const FROSTED_BLUR_INTENSITY = 45;
-
-export function useBlurTarget() {
-  return useContext(BlurTargetContext);
-}
-
-export function BlurRoot({ children }: { children: ReactNode }) {
-  const target = useRef<View | null>(null);
-  return <BlurTargetContext.Provider value={target}>
-    {Platform.OS === 'android' ? <BlurTargetView ref={target} style={{ flex: 1 }}>{children}</BlurTargetView> : <View style={{ flex: 1 }}>{children}</View>}
-  </BlurTargetContext.Provider>;
-}
 
 type BlurSheetProps = {
   visible: boolean;
@@ -81,11 +59,9 @@ export function BlurSheet({
 }: BlurSheetProps) {
   const {
     colors,
-    isDark,
   } = useTheme();
 
   const styles = createStyles(colors);
-  const target = useBlurTarget();
   const insets = useSafeAreaInsets();
 
   return (
@@ -97,29 +73,8 @@ export function BlurSheet({
       onRequestClose={onClose}
     >
       <View style={StyleSheet.absoluteFill}>
-        {Platform.OS === 'web' ? (
-          // BlurView.web renders its own backdrop-filter layer; a plain dim
-          // behind it keeps contrast consistent with iOS/Android without
-          // double-applying opacity.
-          <View style={[StyleSheet.absoluteFill, styles.webDim]} />
-        ) : null}
-
-        <BlurView
-          style={StyleSheet.absoluteFill}
-          intensity={FROSTED_BLUR_INTENSITY}
-          blurTarget={target}
-          tint={isDark ? 'dark' : 'light'}
-          blurMethod={
-            Platform.OS === 'android'
-              ? 'dimezisBlurViewSdk31Plus'
-              : undefined
-          }
-        />
-
-        {/* Extra dim on top of the blur - the reference sheet's backdrop
-            reads as darkened, not just softened, and this keeps that true
-            even on the pre-Android-12 plain-tint fallback. */}
-        <View style={[StyleSheet.absoluteFill, styles.dim]} />
+        {/* One token-based scrim, identical on every platform. */}
+        <View style={[StyleSheet.absoluteFill, styles.scrim]} />
 
         <Pressable
           style={styles.backdropPress}
@@ -142,7 +97,7 @@ export function BlurSheet({
             <TouchableOpacity
               onPress={onClose}
               hitSlop={8}
-              style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
+              style={styles.closeButton}
               accessibilityRole="button"
               accessibilityLabel="Close"
             >
@@ -205,16 +160,19 @@ export function BlurSheetRow({
 
 function createStyles(colors: AppColors) {
   return StyleSheet.create({
-    dim: {
-      backgroundColor: 'rgba(0,0,0,0.22)',
-    },
-
-    webDim: {
-      backgroundColor: 'rgba(0,0,0,0.18)',
+    scrim: {
+      backgroundColor: colors.scrim,
     },
 
     backdropPress: {
       flex: 1,
+    },
+
+    closeButton: {
+      minWidth: 48,
+      minHeight: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
 
     sheet: {

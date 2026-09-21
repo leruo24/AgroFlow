@@ -1,5 +1,16 @@
 # Mobile device and desktop bug verification
 
+> **Superseded on 2026-09-21: `expo-blur` has been removed from the app.**
+> Everything below about frosted/blurred tab bars and sheet backdrops is a
+> record of how it worked then, not how it works now. The blur layer crashed
+> the app natively on startup in Expo Go SDK 57 on both iPhone and Android —
+> clean bundle, no red screen, straight back to the Expo Go home screen. The
+> tab bar is now a solid `tabBarSurface` token with a hairline border and
+> shadow, and sheet backdrops use a `scrim` token. The `BlurSheet` component
+> keeps its name and API but no longer blurs anything. Do not treat the blur
+> described below as a regression to be fixed. See section 2 of
+> `docs/ORIENTATION.md`.
+
 Captured on 2026-09-17 with a 390 × 844 Chromium viewport, isolated API fixtures, and Expo SDK 57. The fixture contains 12 zones, 24 alerts, and 24 history events so every tab can scroll. These images are browser renders, not physical device captures.
 
 ## 1. Metro startup
