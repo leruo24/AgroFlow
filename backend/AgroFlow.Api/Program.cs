@@ -1,3 +1,4 @@
+using AgroFlow.Api.Services;
 using AgroFlow.Api.Endpoints;
 using AgroFlow.Api.Mqtt;
 using AgroFlow.Api.Services;
@@ -9,6 +10,16 @@ using Npgsql;
 using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AdminFrontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5174", "http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 // The Windows Event Log provider can throw AccessDenied for an ordinary
 // developer account while a background service is reporting a recoverable
@@ -91,6 +102,16 @@ builder.Services
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpClient();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AdminFrontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 // Expo web runs on a separate origin from the API. Accept local browser
 // origins during development and explicitly configured origins in deployment.
@@ -120,6 +141,8 @@ builder.Services.AddSingleton<MqttConnectionService>();
 builder.Services.AddSingleton<IMqttPublisher>(sp => sp.GetRequiredService<MqttConnectionService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttConnectionService>());
 builder.Services.AddHostedService<IrrigationCommandNotifyService>();
+builder.Services.AddHttpClient<ResendEmailService>();
+builder.Services.AddScoped<IEmailService, ResendEmailService>();
 
 // Weather collection. Populates weather_daily (migration 0016) from
 // Open-Meteo every Weather:FetchIntervalHours (default 6) for every farm that
@@ -136,6 +159,7 @@ builder.Services.AddHostedService<WeatherCollectionService>();
 builder.Services.AddSingleton<WeatherBackfillService>();
 
 var app = builder.Build();
+app.UseCors("AdminFrontend");
 
 app.UseCors();
 
@@ -145,8 +169,11 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
     var isUserRoute = path.StartsWithSegments("/api/devices/enroll") ||
-                      path.StartsWithSegments("/api/farmers") ||
-                      path.StartsWithSegments("/api/farmer");
+                  path.StartsWithSegments("/api/farmers") ||
+                  path.StartsWithSegments("/api/farmer") ||
+                  path.StartsWithSegments("/api/farms")||
+                  path.StartsWithSegments("/api/users");
+                  
 
     if (!isUserRoute &&
         (!context.Request.Headers.TryGetValue("X-Api-Key", out var providedKey) || providedKey != apiKey))
@@ -168,6 +195,9 @@ app.MapDeviceEnrollmentEndpoints();
 app.MapDeviceCommandEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
+app.MapFarmEndpoints();
+app.MapUserEndpoints();
+
 
 app.Run();
 

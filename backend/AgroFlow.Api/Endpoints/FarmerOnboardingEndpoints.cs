@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using AgroFlow.Api.Auth;
+using AgroFlow.Api.Services;
 
 namespace AgroFlow.Api.Endpoints;
 
@@ -20,26 +22,20 @@ public record InviteFarmerRequest(
 public record FarmerOnboardingFarmer(
     string FullName,
     string Email,
-    string Phone,
-    string Password
+    string Phone
 );
 
 public record FarmerOnboardingZone(
     string Name,
-    double SizeHectares
+    double SizeHectares,
+    string CropType
 );
 
 public record FarmerOnboardingFarm(
     string FarmName,
     string Location,
     double SizeHectares,
-    List<FarmerOnboardingZone> Zones,
-    // Optional for now - manual entry until the admin dashboard geocodes
-    // Location automatically. Left null, farm.latitude/longitude stay NULL
-    // and the mobile app's WeatherSummary/FarmLocationMap have nothing to
-    // show for this farm.
-    double? Latitude = null,
-    double? Longitude = null
+    List<FarmerOnboardingZone> Zones
 );
 
 public record FarmerOnboardingRequest(
@@ -49,18 +45,35 @@ public record FarmerOnboardingRequest(
 
 public record FarmerOnboardingResponse(string Message);
 
-internal sealed record SupabaseAuthUserResponse(
-    Guid Id
-);
+internal sealed record SupabaseAuthUserResponse(Guid Id);
 
 internal sealed record SupabaseFarmResponse(
     [property: JsonPropertyName("farm_id")] long FarmId
 );
 
+// Open-Meteo geocoding response.
+// The admin enters a human-readable location such as
+// "Ceres, Western Cape". Open-Meteo resolves that location to
+// latitude and longitude so the weather service can use it.
+internal sealed record OpenMeteoGeocodingResponse(
+    [property: JsonPropertyName("results")]
+    List<OpenMeteoGeocodingResult>? Results
+);
+
+internal sealed record OpenMeteoGeocodingResult(
+    [property: JsonPropertyName("name")]
+    string Name,
+
+    [property: JsonPropertyName("latitude")]
+    double Latitude,
+
+    [property: JsonPropertyName("longitude")]
+    double Longitude
+);
 
 // Both onboarding paths go through Supabase's own Admin Auth API rather than
 // a hand-rolled invite-token table - see supabase/migrations/
-// 0008_device_enrollment_and_onboarding.sql's handle_new_auth_user() trigger,
+// 0008_device_enrollment_and_onboarding.sql's handle_new_auth_user(),
 // which creates the profile/farm_member rows for either path uniformly once
 // Supabase creates the underlying auth.users row.
 //
@@ -80,65 +93,62 @@ public static class FarmerOnboardingEndpoints
         group.MapPost("/onboard", OnboardAsync);
     }
 
-    // -------------------------------------------------------------------------
+    // ========================================================================
     // FULL FARMER ONBOARDING
-    // -------------------------------------------------------------------------
-    //
-    // The order here is important:
-    //
-    // 1. Create the farm first so we have a real farm_id.
-    // 2. Create the Supabase Auth user with invitedFarmId in metadata.
-    // 3. Supabase's handle_new_auth_user() trigger creates the profile and
-    //    farm_member rows automatically.
-    // 4. Link the new Auth user as the farm owner.
-    // 5. Create the farmer's zones.
-    //
-    // The Auth user cannot be created first because the trigger needs the
-    // farm_id in the user's metadata.
+    // ========================================================================
+
     private static async Task<IResult> OnboardAsync(
         FarmerOnboardingRequest request,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IEmailService emailService,
+        CancellationToken cancellationToken)
     {
-         var logger = loggerFactory.CreateLogger("FarmerOnboarding");
-        // ---------------------------------------------------------------------
-        // Validate the request server-side.
-        // Never rely only on frontend validation.
-        // ---------------------------------------------------------------------
+        var logger = loggerFactory.CreateLogger("FarmerOnboarding");
+
+        // --------------------------------------------------------------------
+        // SERVER-SIDE VALIDATION
+        // --------------------------------------------------------------------
 
         if (string.IsNullOrWhiteSpace(request.Farmer.FullName))
         {
-            return Results.BadRequest(new { error = "Farmer name is required." });
+            return Results.BadRequest(new
+            {
+                error = "Farmer name is required."
+            });
         }
 
         if (string.IsNullOrWhiteSpace(request.Farmer.Email))
         {
-            return Results.BadRequest(new { error = "Farmer email is required." });
+            return Results.BadRequest(new
+            {
+                error = "Farmer email is required."
+            });
         }
 
         if (string.IsNullOrWhiteSpace(request.Farmer.Phone))
         {
-            return Results.BadRequest(new { error = "Farmer phone number is required." });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Farmer.Password) ||
-            request.Farmer.Password.Length < 8)
-        {
             return Results.BadRequest(new
             {
-                error = "Farmer password must be at least 8 characters."
+                error = "Farmer phone number is required."
             });
         }
 
         if (string.IsNullOrWhiteSpace(request.Farm.FarmName))
         {
-            return Results.BadRequest(new { error = "Farm name is required." });
+            return Results.BadRequest(new
+            {
+                error = "Farm name is required."
+            });
         }
 
         if (string.IsNullOrWhiteSpace(request.Farm.Location))
         {
-            return Results.BadRequest(new { error = "Farm location is required." });
+            return Results.BadRequest(new
+            {
+                error = "Farm location is required."
+            });
         }
 
         if (request.Farm.SizeHectares <= 0)
@@ -146,22 +156,6 @@ public static class FarmerOnboardingEndpoints
             return Results.BadRequest(new
             {
                 error = "Farm size must be greater than 0."
-            });
-        }
-
-        if (request.Farm.Latitude is < -90 or > 90)
-        {
-            return Results.BadRequest(new
-            {
-                error = "Latitude must be between -90 and 90."
-            });
-        }
-
-        if (request.Farm.Longitude is < -180 or > 180)
-        {
-            return Results.BadRequest(new
-            {
-                error = "Longitude must be between -180 and 180."
             });
         }
 
@@ -196,58 +190,162 @@ public static class FarmerOnboardingEndpoints
             {
                 return Results.BadRequest(new
                 {
-                    error = $"Zone '{zone.Name}' must have a size greater than 0."
+                    error =
+                        $"Zone '{zone.Name}' must have a size greater than 0."
                 });
             }
+
+            if (string.IsNullOrWhiteSpace(zone.CropType))
+            {
+                return Results.BadRequest(new
+                {
+                    error =
+                        $"Zone '{zone.Name}' must have a crop type."
+                });
+            }
+        }
+
+        // --------------------------------------------------------------------
+        // VALIDATE TOTAL ZONE AREA
+        // --------------------------------------------------------------------
+        // The combined area of all irrigation zones cannot exceed
+        // the total farm area.
+
+        var totalZoneSize =
+            request.Farm.Zones.Sum(zone => zone.SizeHectares);
+
+        if (totalZoneSize > request.Farm.SizeHectares)
+        {
+            return Results.BadRequest(new
+            {
+                error =
+                    $"The total zone area ({totalZoneSize:0.##} ha) " +
+                    $"cannot exceed the farm size " +
+                    $"({request.Farm.SizeHectares:0.##} ha)."
+            });
+        }
+
+        // --------------------------------------------------------------------
+        // GEOCODE FARM LOCATION
+        // --------------------------------------------------------------------
+        // The admin enters a readable location such as:
+        // "Ceres, Western Cape"
+        //
+        // We use a separate HttpClient here so the Supabase service-role key
+        // is NOT sent to Open-Meteo.
+
+        var location = request.Farm.Location.Trim();
+
+        (string Location, double Latitude, double Longitude)? coordinates;
+
+        try
+        {
+            var geocodingClient =
+                httpClientFactory.CreateClient();
+
+            coordinates = await GeocodeLocationAsync(
+                geocodingClient,
+                location,
+                cancellationToken
+            );
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(
+                ex,
+                "Farm location geocoding request failed for '{Location}'.",
+                location
+            );
+
+            return Results.Problem(
+                title: "Farm location could not be verified.",
+                detail:
+                    "The location service could not be reached. Please try again.",
+                statusCode: StatusCodes.Status502BadGateway
+            );
+        }
+
+        if (coordinates is null)
+        {
+            return Results.BadRequest(new
+            {
+                error =
+                    $"Farm location '{location}' could not be found. " +
+                    "Enter a town or city and province, for example " +
+                    "'Ceres, Western Cape'."
+            });
         }
 
         var (supabaseUrl, serviceRoleKey) =
             GetSupabaseAdminConfig(configuration);
 
         using var client =
-            BuildAdminClient(httpClientFactory, serviceRoleKey);
+            BuildAdminClient(
+                httpClientFactory,
+                serviceRoleKey
+            );
+
+        // --------------------------------------------------------------------
+        // GENERATE TEMPORARY PASSWORD
+        // --------------------------------------------------------------------
+        // The actual password used for the Supabase Auth account is generated
+        // by the backend. The same password is later sent to the farmer in the
+        // welcome email.
+
+        var temporaryPassword = GenerateTemporaryPassword();
 
         long? farmId = null;
         Guid? userId = null;
 
         try
         {
-            // -----------------------------------------------------------------
-            // 1. CREATE THE FARM
-            // -----------------------------------------------------------------
+            // ----------------------------------------------------------------
+            // CREATE FARM
+            // ----------------------------------------------------------------
 
             var farmPayload = new
             {
                 name = request.Farm.FarmName.Trim(),
-                location = request.Farm.Location.Trim(),
+                location = location,
                 total_area = request.Farm.SizeHectares,
-                status = "Active",
-                latitude = request.Farm.Latitude,
-                longitude = request.Farm.Longitude
+
+                // These values come from Open-Meteo geocoding.
+                latitude = coordinates.Value.Latitude,
+                longitude = coordinates.Value.Longitude,
+
+                status = "Active"
             };
 
             using var farmRequest = new HttpRequestMessage(
                 HttpMethod.Post,
-                $"{supabaseUrl}/rest/v1/farm"
-            )
+                $"{supabaseUrl}/rest/v1/farm")
             {
                 Content = JsonContent.Create(farmPayload)
             };
 
-            farmRequest.Headers.Add("Prefer", "return=representation");
+            farmRequest.Headers.Add(
+                "Prefer",
+                "return=representation"
+            );
 
             using var farmResponse =
-                await client.SendAsync(farmRequest);
+                await client.SendAsync(
+                    farmRequest,
+                    cancellationToken
+                );
 
             if (!farmResponse.IsSuccessStatusCode)
             {
                 var error =
-                    await farmResponse.Content.ReadAsStringAsync();
+                    await farmResponse.Content.ReadAsStringAsync(
+                        cancellationToken
+                    );
 
                 return Results.Json(
                     new
                     {
-                        error = $"Supabase farm creation error: {error}"
+                        error =
+                            $"Supabase farm creation error: {error}"
                     },
                     statusCode: (int)farmResponse.StatusCode
                 );
@@ -255,9 +353,12 @@ public static class FarmerOnboardingEndpoints
 
             var farms =
                 await farmResponse.Content
-                    .ReadFromJsonAsync<List<SupabaseFarmResponse>>();
+                    .ReadFromJsonAsync<List<SupabaseFarmResponse>>(
+                        cancellationToken: cancellationToken
+                    );
 
-            farmId = farms?.FirstOrDefault()?.FarmId;
+            farmId =
+                farms?.FirstOrDefault()?.FarmId;
 
             if (farmId is null)
             {
@@ -266,24 +367,17 @@ public static class FarmerOnboardingEndpoints
                 );
             }
 
-            // -----------------------------------------------------------------
-            // 2. CREATE THE SUPABASE AUTH USER
-            // -----------------------------------------------------------------
-            //
-            // invitedFarmId is read by handle_new_auth_user().
-            // That trigger creates:
-            //
-            // profile
-            // farm_member
-            //
-            // The role is deliberately NOT supplied by the frontend.
-            // The trigger assigns farm_user.
-            // -----------------------------------------------------------------
+            // ----------------------------------------------------------------
+            // CREATE AUTH USER
+            // ----------------------------------------------------------------
 
             var authPayload = new
             {
                 email = request.Farmer.Email.Trim(),
-                password = request.Farmer.Password,
+
+                // Use the server-generated temporary password.
+                password = temporaryPassword,
+
                 email_confirm = true,
 
                 user_metadata = new
@@ -297,13 +391,16 @@ public static class FarmerOnboardingEndpoints
             using var authResponse =
                 await client.PostAsJsonAsync(
                     $"{supabaseUrl}/auth/v1/admin/users",
-                    authPayload
+                    authPayload,
+                    cancellationToken
                 );
 
             if (!authResponse.IsSuccessStatusCode)
             {
                 var error =
-                    await authResponse.Content.ReadAsStringAsync();
+                    await authResponse.Content.ReadAsStringAsync(
+                        cancellationToken
+                    );
 
                 await TryDeleteFarmAsync(
                     client,
@@ -315,7 +412,8 @@ public static class FarmerOnboardingEndpoints
                 return Results.Json(
                     new
                     {
-                        error = $"Supabase Auth API error: {error}"
+                        error =
+                            $"Supabase Auth API error: {error}"
                     },
                     statusCode: (int)authResponse.StatusCode
                 );
@@ -323,7 +421,9 @@ public static class FarmerOnboardingEndpoints
 
             var authUser =
                 await authResponse.Content
-                    .ReadFromJsonAsync<SupabaseAuthUserResponse>();
+                    .ReadFromJsonAsync<SupabaseAuthUserResponse>(
+                        cancellationToken: cancellationToken
+                    );
 
             if (authUser is null ||
                 authUser.Id == Guid.Empty)
@@ -335,9 +435,9 @@ public static class FarmerOnboardingEndpoints
 
             userId = authUser.Id;
 
-            // -----------------------------------------------------------------
-            // 3. LINK THE FARM OWNER
-            // -----------------------------------------------------------------
+            // ----------------------------------------------------------------
+            // ASSIGN FARM OWNER
+            // ----------------------------------------------------------------
 
             var ownerPayload = new
             {
@@ -346,30 +446,37 @@ public static class FarmerOnboardingEndpoints
 
             using var ownerRequest = new HttpRequestMessage(
                 HttpMethod.Patch,
-                $"{supabaseUrl}/rest/v1/farm?farm_id=eq.{farmId.Value}"
-            )
+                $"{supabaseUrl}/rest/v1/farm?farm_id=eq.{farmId.Value}")
             {
                 Content = JsonContent.Create(ownerPayload)
             };
 
-            ownerRequest.Headers.Add("Prefer", "return=minimal");
+            ownerRequest.Headers.Add(
+                "Prefer",
+                "return=minimal"
+            );
 
             using var ownerResponse =
-                await client.SendAsync(ownerRequest);
+                await client.SendAsync(
+                    ownerRequest,
+                    cancellationToken
+                );
 
             if (!ownerResponse.IsSuccessStatusCode)
             {
                 var error =
-                    await ownerResponse.Content.ReadAsStringAsync();
+                    await ownerResponse.Content.ReadAsStringAsync(
+                        cancellationToken
+                    );
 
                 throw new InvalidOperationException(
                     $"Unable to assign farmer as farm owner: {error}"
                 );
             }
 
-            // -----------------------------------------------------------------
-            // 4. CREATE THE ZONES
-            // -----------------------------------------------------------------
+            // ----------------------------------------------------------------
+            // CREATE ZONES
+            // ----------------------------------------------------------------
 
             var zonePayload = request.Farm.Zones
                 .Select(zone => new
@@ -377,36 +484,58 @@ public static class FarmerOnboardingEndpoints
                     farm_id = farmId.Value,
                     name = zone.Name.Trim(),
                     size_value = zone.SizeHectares,
-                    size_unit = "ha"
+                    size_unit = "ha",
+                    location = coordinates.Value.Location,
+                    crop_type = zone.CropType.Trim()
                 })
                 .ToList();
 
             using var zoneRequest = new HttpRequestMessage(
                 HttpMethod.Post,
-                $"{supabaseUrl}/rest/v1/zone"
-            )
+                $"{supabaseUrl}/rest/v1/zone")
             {
                 Content = JsonContent.Create(zonePayload)
             };
 
-            zoneRequest.Headers.Add("Prefer", "return=minimal");
+            zoneRequest.Headers.Add(
+                "Prefer",
+                "return=minimal"
+            );
 
             using var zoneResponse =
-                await client.SendAsync(zoneRequest);
+                await client.SendAsync(
+                    zoneRequest,
+                    cancellationToken
+                );
 
             if (!zoneResponse.IsSuccessStatusCode)
             {
                 var error =
-                    await zoneResponse.Content.ReadAsStringAsync();
+                    await zoneResponse.Content.ReadAsStringAsync(
+                        cancellationToken
+                    );
 
                 throw new InvalidOperationException(
                     $"Unable to create zones: {error}"
                 );
             }
 
-            // -----------------------------------------------------------------
-            // SUCCESS
-            // -----------------------------------------------------------------
+            // ----------------------------------------------------------------
+            // SEND FARMER WELCOME EMAIL
+            // ----------------------------------------------------------------
+            // The same server-generated temporary password used to create the
+            // Supabase Auth account is included in the welcome email.
+
+            await emailService.SendFarmerWelcomeEmailAsync(
+                new FarmerWelcomeEmail(
+                    request.Farmer.FullName.Trim(),
+                    request.Farmer.Email.Trim(),
+                    temporaryPassword,
+                    request.Farm.FarmName.Trim(),
+                    coordinates.Value.Location
+                ),
+                cancellationToken
+            );
 
             return Results.Ok(
                 new FarmerOnboardingResponse(
@@ -421,8 +550,9 @@ public static class FarmerOnboardingEndpoints
                 "Farmer onboarding failed."
             );
 
-            // Auth user first, because the trigger-created farm_member
-            // references the farmer/profile.
+            // If the Auth user was created, remove it.
+            // The Supabase trigger-created profile/farm_member records
+            // should be removed through the Auth user deletion cascade.
             if (userId.HasValue)
             {
                 await TryDeleteAuthUserAsync(
@@ -433,7 +563,7 @@ public static class FarmerOnboardingEndpoints
                 );
             }
 
-            // Delete any zones that may have been partially created.
+            // Remove zones and farm created during this onboarding attempt.
             if (farmId.HasValue)
             {
                 await TryDeleteZonesAsync(
@@ -453,18 +583,121 @@ public static class FarmerOnboardingEndpoints
 
             return Results.Problem(
                 title: "Farmer onboarding failed.",
-                detail: "The farmer could not be fully onboarded. No completed onboarding was saved.",
+                detail:
+                    "The farmer could not be fully onboarded. " +
+                    "No completed onboarding was saved.",
                 statusCode: StatusCodes.Status500InternalServerError
             );
         }
     }
 
+    // ========================================================================
+    // TEMPORARY PASSWORD GENERATION
+    // ========================================================================
 
-    // -------------------------------------------------------------------------
-    // EXISTING CREATE FARMER ENDPOINT
-    // -------------------------------------------------------------------------
+    private static string GenerateTemporaryPassword()
+    {
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnopqrstuvwxyz";
+        const string numbers = "23456789";
+        const string symbols = "!@#$%";
 
-    // Admin sets the farmer's email + a temporary password directly.
+        const string all =
+            upper +
+            lower +
+            numbers +
+            symbols;
+
+        var passwordChars = new char[16];
+
+        // Guarantee at least one character from each category.
+        passwordChars[0] =
+            upper[RandomNumberGenerator.GetInt32(upper.Length)];
+
+        passwordChars[1] =
+            lower[RandomNumberGenerator.GetInt32(lower.Length)];
+
+        passwordChars[2] =
+            numbers[RandomNumberGenerator.GetInt32(numbers.Length)];
+
+        passwordChars[3] =
+            symbols[RandomNumberGenerator.GetInt32(symbols.Length)];
+
+        // Fill the remaining characters securely.
+        for (var i = 4; i < passwordChars.Length; i++)
+        {
+            passwordChars[i] =
+                all[RandomNumberGenerator.GetInt32(all.Length)];
+        }
+
+        // Securely shuffle the characters so the required character
+        // categories are not always in predictable positions.
+        for (var i = passwordChars.Length - 1; i > 0; i--)
+        {
+            var j = RandomNumberGenerator.GetInt32(i + 1);
+
+            (passwordChars[i], passwordChars[j]) =
+                (passwordChars[j], passwordChars[i]);
+        }
+
+        return new string(passwordChars);
+    }
+
+    // ========================================================================
+    // OPEN-METEO GEOCODING
+    // ========================================================================
+
+    private static async Task<
+        (string Location, double Latitude, double Longitude)?
+    > GeocodeLocationAsync(
+        HttpClient client,
+        string location,
+        CancellationToken cancellationToken)
+    {
+        var url =
+            "https://geocoding-api.open-meteo.com/v1/search" +
+            $"?name={Uri.EscapeDataString(location)}" +
+            "&count=1" +
+            "&language=en" +
+            "&format=json" +
+            "&countryCode=ZA";
+
+        using var response =
+            await client.GetAsync(
+                url,
+                cancellationToken
+            );
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        var result =
+            await response.Content
+                .ReadFromJsonAsync<OpenMeteoGeocodingResponse>(
+                    cancellationToken: cancellationToken
+                );
+
+        var first =
+            result?.Results?.FirstOrDefault();
+
+        if (first is null)
+        {
+            return null;
+        }
+
+        return (
+            first.Name,
+            first.Latitude,
+            first.Longitude
+        );
+    }
+
+    // ========================================================================
+    // EXISTING CREATE FARMER
+    // ========================================================================
+
     private static async Task<IResult> CreateAsync(
         CreateFarmerRequest request,
         IHttpClientFactory httpClientFactory,
@@ -474,7 +707,10 @@ public static class FarmerOnboardingEndpoints
             GetSupabaseAdminConfig(configuration);
 
         using var client =
-            BuildAdminClient(httpClientFactory, serviceRoleKey);
+            BuildAdminClient(
+                httpClientFactory,
+                serviceRoleKey
+            );
 
         var payload = new
         {
@@ -503,7 +739,8 @@ public static class FarmerOnboardingEndpoints
             return Results.Json(
                 new
                 {
-                    error = $"Supabase Admin API error: {error}"
+                    error =
+                        $"Supabase Admin API error: {error}"
                 },
                 statusCode: (int)response.StatusCode
             );
@@ -516,18 +753,12 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
+    // ========================================================================
+    // EXISTING INVITE FARMER
+    // ========================================================================
+    // Supabase /auth/v1/invite creates the user and emails them a magic link
+    // to set their own password. Requires SMTP config to actually reach inbox.
 
-    // -------------------------------------------------------------------------
-    // EXISTING INVITE FARMER ENDPOINT
-    // -------------------------------------------------------------------------
-
-    // Generates a one-time invite via Supabase Auth's built-in mechanism -
-    // Supabase creates the user AND emails them a magic link to set their own
-    // password. TODO: this only actually reaches the farmer's inbox if the
-    // Supabase project has a real SMTP provider configured (Settings -> Auth
-    // -> SMTP Settings). The default shared Supabase dev SMTP works for
-    // testing but is low-volume/rate-limited - not something to rely on
-    // for real farmers.
     private static async Task<IResult> InviteAsync(
         InviteFarmerRequest request,
         IHttpClientFactory httpClientFactory,
@@ -537,7 +768,10 @@ public static class FarmerOnboardingEndpoints
             GetSupabaseAdminConfig(configuration);
 
         using var client =
-            BuildAdminClient(httpClientFactory, serviceRoleKey);
+            BuildAdminClient(
+                httpClientFactory,
+                serviceRoleKey
+            );
 
         var payload = new
         {
@@ -564,7 +798,8 @@ public static class FarmerOnboardingEndpoints
             return Results.Json(
                 new
                 {
-                    error = $"Supabase Admin API error: {error}"
+                    error =
+                        $"Supabase Admin API error: {error}"
                 },
                 statusCode: (int)response.StatusCode
             );
@@ -577,10 +812,9 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
-
-    // -------------------------------------------------------------------------
-    // SUPABASE HTTP HELPERS
-    // -------------------------------------------------------------------------
+    // ========================================================================
+    // SUPABASE ADMIN CLIENT
+    // ========================================================================
 
     private static HttpClient BuildAdminClient(
         IHttpClientFactory httpClientFactory,
@@ -602,10 +836,15 @@ public static class FarmerOnboardingEndpoints
         return client;
     }
 
+    // ========================================================================
+    // SUPABASE CONFIG
+    // ========================================================================
 
-    private static (string SupabaseUrl, string ServiceRoleKey)
-        GetSupabaseAdminConfig(
-            IConfiguration configuration)
+    private static (
+        string SupabaseUrl,
+        string ServiceRoleKey
+    ) GetSupabaseAdminConfig(
+        IConfiguration configuration)
     {
         var url =
             configuration["Supabase:Url"]
@@ -625,17 +864,9 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
-
-    // -------------------------------------------------------------------------
+    // ========================================================================
     // CLEANUP HELPERS
-    // -------------------------------------------------------------------------
-    //
-    // Auth + database operations cannot all happen inside one transaction
-    // because the Auth Admin API is a separate service.
-    //
-    // Therefore, if a later step fails, we perform best-effort cleanup so
-    // that a half-created farmer/farm is not left behind.
-    // -------------------------------------------------------------------------
+    // ========================================================================
 
     private static async Task TryDeleteAuthUserAsync(
         HttpClient client,
@@ -656,7 +887,7 @@ public static class FarmerOnboardingEndpoints
                     await response.Content.ReadAsStringAsync();
 
                 logger.LogWarning(
-                    "Failed to clean up Auth user {UserId}: {Error}",
+                    "Unable to clean up Auth user {UserId}: {Error}",
                     userId,
                     error
                 );
@@ -671,7 +902,6 @@ public static class FarmerOnboardingEndpoints
             );
         }
     }
-
 
     private static async Task TryDeleteZonesAsync(
         HttpClient client,
@@ -692,7 +922,7 @@ public static class FarmerOnboardingEndpoints
                     await response.Content.ReadAsStringAsync();
 
                 logger.LogWarning(
-                    "Failed to clean up zones for farm {FarmId}: {Error}",
+                    "Unable to clean up zones for farm {FarmId}: {Error}",
                     farmId,
                     error
                 );
@@ -707,7 +937,6 @@ public static class FarmerOnboardingEndpoints
             );
         }
     }
-
 
     private static async Task TryDeleteFarmAsync(
         HttpClient client,
@@ -728,7 +957,7 @@ public static class FarmerOnboardingEndpoints
                     await response.Content.ReadAsStringAsync();
 
                 logger.LogWarning(
-                    "Failed to clean up farm {FarmId}: {Error}",
+                    "Unable to clean up farm {FarmId}: {Error}",
                     farmId,
                     error
                 );

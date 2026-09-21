@@ -10,6 +10,7 @@ import { Icon } from "@/lib/icons";
 
 function farmCard(f: Farm): string {
   const hf = f.healthFactors;
+
   return `<article class="farm-card reveal" data-act="view-farm" data-id="${f.id}">
     <div class="farm-card-top">
       <div>
@@ -34,13 +35,30 @@ function farmCard(f: Farm): string {
 
     <div class="farm-conn">
       <span>Connectivity</span>
-      ${meter(hf.deviceConnectivity, hf.deviceConnectivity > 90 ? "good" : hf.deviceConnectivity > 80 ? "warn" : "bad")}
+      ${meter(
+        hf.deviceConnectivity,
+        hf.deviceConnectivity > 90
+          ? "good"
+          : hf.deviceConnectivity > 80
+            ? "warn"
+            : "bad",
+      )}
       <b>${fmtPct(hf.deviceConnectivity)}</b>
     </div>
 
     <div class="farm-card-foot">
       <span class="muted">Last activity ${esc(f.lastActivity)}</span>
-      ${badge(f.status)}
+      <div class="farm-card-actions">
+        ${badge(f.status)}
+        <button
+          type="button"
+          class="btn danger sm"
+          data-act="delete-farm"
+          data-id="${f.id}"
+        >
+          Delete
+        </button>
+      </div>
     </div>
   </article>`;
 }
@@ -64,34 +82,53 @@ export async function farmsPage(): Promise<string> {
   const recent = farms.filter((x) => x.registered >= "2026-05-01").length;
 
   return `
-  ${pageHeader("Farms", "Central overview of every farm registered on the platform.",
-    `<button class="btn" data-act="add-farm">+ Register Farm</button>`)}
+  ${pageHeader(
+    "Farms",
+    "Central overview of every farm registered on the platform.",
+    `<button class="btn" data-act="add-farm">+ Register Farm</button>`,
+  )}
 
   <div class="grid kpis five">
     ${kpiCard({ label: "Total Farms", value: total, icon: Icon.tractor })}
-    ${kpiCard({ label: "New Farms", value: recent, trend: { dir: "up", text: "since 1 May" }, icon: Icon.sparkles })}
+    ${kpiCard({
+      label: "New Farms",
+      value: recent,
+      trend: { dir: "up", text: "since 1 May" },
+      icon: Icon.sparkles,
+    })}
     ${kpiCard({ label: "Active Farms", value: active, icon: Icon.circleCheck })}
     ${kpiCard({ label: "Inactive Farms", value: inactive, icon: Icon.moon })}
-    ${kpiCard({ label: "Pending Approval", value: pending, icon: Icon.hourglass })}
+    ${kpiCard({
+      label: "Pending Approval",
+      value: pending,
+      icon: Icon.hourglass,
+    })}
   </div>
 
   ${filterBar({
     page: "farms",
     filter: f,
     showDateRange: true,
-    searchPlaceholder: "Search by farm name, owner or province…",
+    searchPlaceholder: "Search by farm name, owner or provinceâ€¦",
     selects: [
       { key: "province", label: "Province", options: [...PROVINCES] },
       { key: "region", label: "Region", options: [...REGIONS] },
-      { key: "status", label: "Status", options: ["Active", "Inactive", "Pending Approval"] },
+      {
+        key: "status",
+        label: "Status",
+        options: ["Active", "Inactive", "Pending Approval"],
+      },
     ],
     rightHtml: `<button class="btn ghost sm" data-act="export-farms">Export CSV</button>`,
   })}
 
-  ${panel("Farm Directory", "Health status is derived from connectivity, maintenance, alerts, gateway state and sensor availability",
+  ${panel(
+    "Farm Directory",
+    "Health status is derived from connectivity, maintenance, alerts, gateway state and sensor availability",
     resultCount(filtered.length, total, "farms"),
     filtered.length
       ? `<div class="farm-grid">${filtered.map(farmCard).join("")}</div>`
-      : `<div class="empty-state">No farms match the current filters.</div>`)}
+      : `<div class="empty-state">No farms match the current filters.</div>`,
+  )}
   `;
 }
