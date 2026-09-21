@@ -1,4 +1,3 @@
-using AgroFlow.Api.Services;
 using AgroFlow.Api.Endpoints;
 using AgroFlow.Api.Mqtt;
 using AgroFlow.Api.Services;
