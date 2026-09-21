@@ -150,12 +150,20 @@ builder.Services.AddScoped<IEmailService, ResendEmailService>();
 // needs no API key, so there is no new secret to set on Railway.
 builder.Services.AddHostedService<WeatherCollectionService>();
 
-// Historical backfill. Registered so it can be resolved, but DELIBERATELY NOT
-// a hosted service and deliberately not called anywhere - weather_daily does
-// not exist in the live database until migration 0016 is applied, and the
-// backfill is a one-off to be triggered by hand afterwards. See the header of
-// WeatherBackfillService for how to run it.
+// Historical backfill from Open-Meteo's archive (ERA5). The routine itself is
+// a plain singleton; WeatherBackfillStartupService below is what decides
+// whether to run it.
 builder.Services.AddSingleton<WeatherBackfillService>();
+
+// One-shot, config-triggered backfill. Does nothing unless Weather:BackfillDays
+// is set (Weather__BackfillDays on Railway), so an ordinary deploy is
+// unaffected. When it is set, the backfill runs once in the background AFTER
+// the app has started serving, then the service completes. The variable must be
+// removed afterwards or every redeploy repeats the run - harmless to the data,
+// because the (farm_id, date) upsert converges rather than duplicates, but a
+// waste of a free service's capacity. See the header of
+// WeatherBackfillStartupService.
+builder.Services.AddHostedService<WeatherBackfillStartupService>();
 
 var app = builder.Build();
 app.UseCors("AdminFrontend");
