@@ -1,4 +1,5 @@
 using AgroFlow.Api.Services;
+using AgroFlow.Api.Services.Notifications;
 using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
@@ -21,7 +22,11 @@ public static class SensorReadingEndpoints
         app.MapPost("/api/sensor-readings", HandleAsync);
     }
 
-    private static async Task<IResult> HandleAsync(SensorReadingRequest request, NpgsqlDataSource dataSource)
+    private static async Task<IResult> HandleAsync(
+        SensorReadingRequest request,
+        NpgsqlDataSource dataSource,
+        INotificationService notifications,
+        CancellationToken cancellationToken)
     {
         if (request.ZoneId <= 0 || !ValidSensorTypes.Contains(request.SensorType))
         {
@@ -29,7 +34,8 @@ public static class SensorReadingEndpoints
         }
 
         await using var connection = await dataSource.OpenConnectionAsync();
-        var result = await SensorReadingProcessor.ProcessAsync(connection, request.ZoneId, request.SensorType, request.Value);
+        var result = await SensorReadingProcessor.ProcessAsync(
+            connection, request.ZoneId, request.SensorType, request.Value, notifications, cancellationToken);
 
         return Results.Ok(new SensorReadingResponse(result.HealthStatus, result.CommandIssued));
     }

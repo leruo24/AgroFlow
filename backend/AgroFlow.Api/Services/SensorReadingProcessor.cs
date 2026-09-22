@@ -1,3 +1,4 @@
+using AgroFlow.Api.Services.Notifications;
 using AgroFlow.Business;
 using Npgsql;
 
@@ -17,18 +18,56 @@ public static class SensorReadingProcessor
     // manual command holds the floor against auto-issued ones.
     private static readonly TimeSpan ManualCooldown = TimeSpan.FromMinutes(30);
 
+    // notifications is optional so the two transports can opt in without
+    // every existing caller (and every test) having to hand one over. When it
+    // is null nothing is sent and the decision logic is completely unchanged.
+    // It is also, by contract, a service that never throws - see
+    // INotificationService - so no call below needs its own try/catch and a
+    // dead Telegram can never block a pump.
     public static async Task<SensorReadingResult> ProcessAsync(
-        NpgsqlConnection connection, long zoneId, string sensorType, float value)
+        NpgsqlConnection connection, long zoneId, string sensorType, float value,
+        INotificationService? notifications = null, CancellationToken cancellationToken = default)
     {
         await InsertSensorReadingAsync(connection, zoneId, sensorType, value);
 
         var (moisture, temperature, humidity, moistureThreshold, desiredMoisture) =
             await FetchZoneLatestReadingAsync(connection, zoneId);
 
+        // Read before the write: the difference between the stored status and
+        // the newly calculated one is the transition, and it is the only
+        // thing worth telling anyone about. Alerting on the status itself
+        // would message the farmer every ~30s for as long as a zone stayed
+        // dry, which is how farmers learn to ignore alerts.
+        var previousHealthStatus = await FetchZoneHealthStatusAsync(connection, zoneId);
+
         // The domain layer decides the health status - this method's job is
         // just to fetch inputs and persist the result.
         var healthStatus = Zone.CalculateHealthStatus(moisture, temperature, humidity);
         await UpdateZoneHealthAsync(connection, zoneId, healthStatus);
+
+        var enteredCritical = healthStatus == "Critical" && previousHealthStatus != "Critical";
+        var leftCritical = healthStatus != "Critical" && previousHealthStatus == "Critical";
+
+        if (enteredCritical)
+        {
+            // The alert table has existed since 0003 with nothing anywhere in
+            // the codebase writing to it, which is why the admin dashboard's
+            // alerts page has only ever shown an empty state. This is its
+            // first writer.
+            await InsertCriticalAlertAsync(connection, zoneId, moisture, temperature);
+
+            if (notifications is not null)
+            {
+                await notifications.NotifyZoneCriticalAsync(zoneId, moisture ?? value, cancellationToken);
+            }
+        }
+        else if (leftCritical)
+        {
+            // Close the alert the transition above opened, so the admin's
+            // open-alert count reflects what is actually wrong right now
+            // rather than everything that has ever been wrong.
+            await ResolveCriticalAlertsAsync(connection, zoneId);
+        }
 
         string? commandIssued = null;
 
@@ -79,6 +118,14 @@ public static class SensorReadingProcessor
             }
         }
 
+        // Only fires when a command was actually queued. The `lastCommand !=
+        // desired` guard above already means this is a change of state, not a
+        // repeat of the instruction already standing.
+        if (commandIssued is not null && notifications is not null)
+        {
+            await notifications.NotifyIrrigationAsync(zoneId, commandIssued, "auto", cancellationToken);
+        }
+
         return new SensorReadingResult(healthStatus, commandIssued);
     }
 
@@ -114,6 +161,51 @@ public static class SensorReadingProcessor
             reader.IsDBNull(3) ? null : reader.GetFloat(3),
             reader.IsDBNull(4) ? null : reader.GetFloat(4)
         );
+    }
+
+    // Null when the zone row has no stored status yet (a zone that has never
+    // had a reading). Null is treated as "not Critical", so the first reading
+    // that lands in the critical range does alert - which is right: that
+    // farmer genuinely has a dry zone.
+    private static async Task<string?> FetchZoneHealthStatusAsync(NpgsqlConnection connection, long zoneId)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select health_status from zone where id = $1", connection);
+        cmd.Parameters.AddWithValue(zoneId);
+        var result = await cmd.ExecuteScalarAsync();
+        return result as string;
+    }
+
+    private static async Task InsertCriticalAlertAsync(
+        NpgsqlConnection connection, long zoneId, float? moisture, float? temperature)
+    {
+        // Zone.CalculateHealthStatus reaches Critical on either low moisture
+        // or high temperature, so the message says which one it was rather
+        // than assuming dryness.
+        var reasons = new List<string>();
+        if (moisture is not null && moisture < Zone.MoistureCriticalMax)
+            reasons.Add($"soil moisture {moisture:0.#}%");
+        if (temperature is not null && temperature >= Zone.TemperatureCriticalMin)
+            reasons.Add($"temperature {temperature:0.#}C");
+
+        var message = reasons.Count > 0
+            ? $"Zone entered Critical: {string.Join(", ", reasons)}."
+            : "Zone entered Critical.";
+
+        await using var cmd = new NpgsqlCommand(
+            "insert into alert (zone_id, severity, message) values ($1, 'Critical', $2)", connection);
+        cmd.Parameters.AddWithValue(zoneId);
+        cmd.Parameters.AddWithValue(message);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static async Task ResolveCriticalAlertsAsync(NpgsqlConnection connection, long zoneId)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "update alert set status = 'Resolved' " +
+            "where zone_id = $1 and severity = 'Critical' and status = 'Open'", connection);
+        cmd.Parameters.AddWithValue(zoneId);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task UpdateZoneHealthAsync(NpgsqlConnection connection, long zoneId, string healthStatus)

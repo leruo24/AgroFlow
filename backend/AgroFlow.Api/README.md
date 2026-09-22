@@ -14,6 +14,7 @@ dotnet user-secrets set "ConnectionStrings:Supabase" "Host=...;Password=...;..."
 dotnet user-secrets set "Supabase:ServiceRoleKey" "sb_secret_..."
 dotnet user-secrets set "ApiKey" "<shared device key>"
 dotnet user-secrets set "Mqtt:Password" "<HiveMQ password>"
+dotnet user-secrets set "Telegram:BotToken" "<from @BotFather>"
 dotnet build
 dotnet run
 ```
@@ -25,7 +26,9 @@ the exact web origin (for example via `Cors__AllowedOrigins__0`). Restart the
 API after changing its code or CORS configuration; rebuilding alone does not
 update an already-running process.
 
-The four secrets above must be set first — the app throws on startup if the
+`Telegram:BotToken` is optional locally: with no token the API starts
+normally and every farmer notification becomes a logged no-op. The other four
+secrets must be set first — the app throws on startup if the
 connection string, `ApiKey`, `Supabase:JwksUrl`, or any `Mqtt:*` value is
 missing. Everything else is in the committed `appsettings.json`. See
 Configuration below.
@@ -42,6 +45,12 @@ Configuration below.
 | OTA version check | HTTP, device shared-secret | `GET /api/devices/firmware-check` |
 | Farmer onboarding (direct create) | HTTP, admin-only | `POST /api/farmers/create` |
 | Farmer onboarding (invite link) | HTTP, admin-only | `POST /api/farmers/invite` |
+| Farmer onboarding (full, on-site) | HTTP, admin-only | `POST /api/farmers/onboard` — creates farm + auth user + zones, then returns a one-time temporary password and a Telegram QR deep link |
+| Telegram link codes | HTTP, admin-only | `POST /api/telegram/admin/codes/{profileId}` (regenerate), `POST /api/telegram/admin/password/{profileId}` (reset temporary password) |
+| Telegram self-service | HTTP, signed-in farmer | `GET/POST/DELETE /api/telegram/me*` — link, alert toggle, unlink |
+| Farmer notifications (out) | Telegram Bot API | `Services/Notifications/` — welcome, critical moisture, irrigation start/stop, device offline/online, request status |
+| Inbound bot commands | Telegram long poll | `Services/Notifications/TelegramPollingService.cs` — `/start <code>`, `/status`, `/alerts on\|off`, `/help` |
+| Device liveness | Background sweep | `Services/DeviceStatusMonitorService.cs` — marks hardware Offline/Online and alerts on the transition |
 | Sensor readings (fallback) | HTTP | `POST /api/sensor-readings` — same processing as the MQTT path, shared via `Services/SensorReadingProcessor.cs` |
 
 ## Auth model
@@ -83,6 +92,11 @@ Config is split by sensitivity:
 | `Firmware:LatestVersion` / `Firmware:DownloadUrl` | `appsettings.json` | You set these per release | `DownloadUrl` must point at an actual hosted `.bin` — this project doesn't host firmware binaries itself |
 | `Mqtt:Host` / `Mqtt:Port` / `Mqtt:Username` | `appsettings.json` | HiveMQ Cloud console → your cluster → Access Management | Endpoint identity, not a credential |
 | `Cors:AllowedOrigins` | deployment configuration | Your Expo web origin(s) | Exact browser origins allowed to call the API; local loopback origins are allowed only in Development |
+| `Telegram:BotToken` | **user-secrets / Railway** | @BotFather → `/newbot` or `/token` | Never commit. Absent ⇒ notifications become no-ops instead of failing |
+| `Telegram:BotUsername` | `appsettings.json` | The bot's @name, without the `@` | Only used to build the `t.me/<bot>?start=<code>` deep link the admin screen renders as a QR |
+| `Telegram:EnablePolling` | deployment configuration | — | **Exactly one running instance may set this true.** Defaults to `false`; Railway sets `Telegram__EnablePolling=true`. Two pollers on one token steal each other's `/start` messages (HTTP 409) |
+| `Apk:DownloadUrl` | `appsettings.json` / Railway | Wherever the built APK is hosted | Empty ⇒ the bot tells new farmers the app is "coming soon" rather than sending a dead link |
+| `DeviceMonitor:*` | `appsettings.json` | — | `OfflineAfterMinutes` (default 30), `CheckIntervalMinutes` (default 5), `Enabled` |
 
 > A real `appsettings.json` with live secrets (DB password, `ApiKey`,
 > `service_role` key, HiveMQ password) was committed under the old
@@ -98,8 +112,19 @@ Endpoints/
   IrrigationEventEndpoints.cs           Irrigation event logging + water-usage update
   DeviceEnrollmentEndpoints.cs          Enroll / claim / firmware-check
   FarmerOnboardingEndpoints.cs          Admin-triggered farmer create/invite via Supabase Admin Auth API
+  TelegramEndpoints.cs                  Admin code regeneration / password reset, and farmer self-service linking
 Services/
   SensorReadingProcessor.cs             Shared insert + health/auto-irrigation logic (HTTP and MQTT both call this)
+  DeviceStatusMonitorService.cs         Offline/Online transition detection for hardware
+  SupabaseAdminService.cs               Supabase Admin Auth API (temporary password resets)
+  TemporaryPasswordGenerator.cs         The one generator for every temporary password
+  Notifications/
+    INotificationService.cs             Channel-independent farmer notifications; implementations never throw
+    TelegramClient.cs                   sendMessage / getUpdates
+    TelegramNotificationService.cs      Message composition + recipient resolution
+    TelegramOnboardingService.cs        Single-use link codes (issue / redeem)
+    TelegramPollingService.cs           Inbound long poll - ONE instance only
+    TelegramOptions.cs                  Telegram / Apk / DeviceMonitor options
 Mqtt/
   MqttConnectionService.cs              Owns the single HiveMQ connection (pub + sub)
   IrrigationCommandNotifyService.cs     Postgres LISTEN/NOTIFY → MQTT publish bridge

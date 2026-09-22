@@ -1,0 +1,428 @@
+using System.Net;
+using Microsoft.Extensions.Options;
+using Npgsql;
+
+namespace AgroFlow.Api.Services.Notifications;
+
+// Receives inbound Telegram messages by long-polling getUpdates.
+//
+// WHY POLLING AND NOT A WEBHOOK
+// A webhook would need a public HTTPS endpoint that accepts unauthenticated
+// POSTs from Telegram's IP ranges, plus a secret-token check, plus a way to
+// keep it out of the device X-Api-Key gate in Program.cs. AgroFlow.Api is
+// already always-on on Railway, so an outbound long poll gets the same
+// messages with no new public surface at all.
+//
+// ONLY ONE INSTANCE MAY RUN THIS. Telegram gives each update to a single
+// getUpdates consumer, and a second poll on the same token evicts the first
+// with HTTP 409. Two pollers steal each other's messages, so a farmer's
+// /start can vanish into a developer's laptop. Telegram:EnablePolling
+// therefore defaults to FALSE and is set to true only on Railway.
+public sealed class TelegramPollingService : BackgroundService
+{
+    private readonly TelegramClient _client;
+    private readonly TelegramOnboardingService _onboarding;
+    private readonly INotificationService _notifications;
+    private readonly SupabaseAdminService _supabaseAdmin;
+    private readonly NpgsqlDataSource _dataSource;
+    private readonly TelegramOptions _options;
+    private readonly ILogger<TelegramPollingService> _logger;
+
+    // getUpdates is acknowledged by asking for the next id: passing
+    // lastUpdateId + 1 is what tells Telegram the previous batch was handled
+    // and may be dropped. Held in memory only - on restart Telegram replays
+    // anything unacknowledged from the last 24 hours, which is the behaviour
+    // we want.
+    private long _offset;
+
+    public TelegramPollingService(
+        TelegramClient client,
+        TelegramOnboardingService onboarding,
+        INotificationService notifications,
+        SupabaseAdminService supabaseAdmin,
+        NpgsqlDataSource dataSource,
+        IOptions<TelegramOptions> options,
+        ILogger<TelegramPollingService> logger)
+    {
+        _client = client;
+        _onboarding = onboarding;
+        _notifications = notifications;
+        _supabaseAdmin = supabaseAdmin;
+        _dataSource = dataSource;
+        _options = options.Value;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (!_options.IsConfigured || !_options.EnablePolling)
+        {
+            _logger.LogInformation(
+                "Telegram polling is off (BotToken configured: {Configured}, EnablePolling: {Enabled}). " +
+                "Outbound messages still work; inbound /start will not be received by this instance.",
+                _options.IsConfigured, _options.EnablePolling);
+
+            return;
+        }
+
+        _logger.LogInformation("Telegram polling started. This must be the only instance polling this bot token.");
+
+        var consecutiveFailures = 0;
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                var updates = await _client.GetUpdatesAsync(_offset, stoppingToken);
+                consecutiveFailures = 0;
+
+                foreach (var update in updates)
+                {
+                    // Advance the offset BEFORE handling, so one poisonous
+                    // message cannot be redelivered forever and wedge the
+                    // loop. A dropped message is far cheaper than a bot that
+                    // stops responding to everyone.
+                    _offset = Math.Max(_offset, update.UpdateId + 1);
+
+                    try
+                    {
+                        await HandleUpdateAsync(update, stoppingToken);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogError(ex, "Failed to handle Telegram update {UpdateId}.", update.UpdateId);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (TelegramApiException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
+            {
+                // The single most likely cause of "onboarding silently did
+                // nothing", so it is logged as an error with the remedy in
+                // the message rather than as a generic failure.
+                _logger.LogError(
+                    "Telegram returned 409 Conflict: another process is polling this same bot token. " +
+                    "Two pollers steal each other's messages. Stop the local API, or unset " +
+                    "Telegram__EnablePolling there, and leave polling on exactly one instance. {Message}",
+                    ex.Message);
+
+                consecutiveFailures++;
+            }
+            catch (Exception ex)
+            {
+                consecutiveFailures++;
+                _logger.LogWarning(ex, "Telegram getUpdates failed (attempt {Attempt}).", consecutiveFailures);
+            }
+
+            if (consecutiveFailures > 0)
+            {
+                // Capped exponential backoff: 2s, 4s, 8s ... 60s. Keeps a
+                // Telegram outage or a token typo from turning into a hot
+                // loop against their API.
+                var delay = TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, Math.Min(consecutiveFailures, 6))));
+
+                try
+                {
+                    await Task.Delay(delay, stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+        }
+
+        _logger.LogInformation("Telegram polling stopped.");
+    }
+
+    private async Task HandleUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken)
+    {
+        var chatId = update.Message?.Chat?.Id;
+        var text = update.Message?.Text?.Trim();
+
+        if (chatId is null || string.IsNullOrEmpty(text)) return;
+
+        // "/start CODE" or "/start@AgroFlowBot CODE" - Telegram appends the
+        // bot username when a command is sent in a group.
+        var parts = text.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        var command = parts[0].Split('@')[0].ToLowerInvariant();
+        var argument = parts.Length > 1 ? parts[1].Trim() : null;
+
+        switch (command)
+        {
+            case "/start":
+                await HandleStartAsync(chatId.Value, argument, cancellationToken);
+                break;
+
+            case "/status":
+                await HandleStatusAsync(chatId.Value, cancellationToken);
+                break;
+
+            case "/alerts":
+                await HandleAlertsAsync(chatId.Value, argument, cancellationToken);
+                break;
+
+            case "/help":
+                await SendHelpAsync(chatId.Value, cancellationToken);
+                break;
+
+            default:
+                await SendHelpAsync(chatId.Value, cancellationToken);
+                break;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // /start - the only path that links a chat to a profile
+    // ------------------------------------------------------------------
+
+    private async Task HandleStartAsync(long chatId, string? code, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            var existing = await _onboarding.GetProfileIdForChatAsync(chatId, cancellationToken);
+
+            await _client.SendMessageAsync(
+                chatId,
+                existing is null
+                    ? "Hello from AgroFlow.\n\n" +
+                      "This chat is not linked to an AgroFlow account yet. Please scan the QR code " +
+                      "your AgroFlow installer shows you, or ask them for a new one."
+                    : "This chat is already linked to your AgroFlow account.\n\n" +
+                      "Send /status to see your open requests, or /help for what else I can do.",
+                cancellationToken);
+
+            return;
+        }
+
+        var profileId = await _onboarding.RedeemCodeAsync(code, chatId, cancellationToken);
+
+        if (profileId is null)
+        {
+            _logger.LogInformation("Rejected a Telegram onboarding code from chat {ChatId}.", chatId);
+
+            await _client.SendMessageAsync(
+                chatId,
+                "That link has already been used, or it has expired.\n\n" +
+                "Please ask your AgroFlow installer to generate a new QR code for you.",
+                cancellationToken);
+
+            return;
+        }
+
+        var farmer = await _onboarding.GetFarmerContextAsync(profileId.Value, cancellationToken);
+
+        if (farmer is null)
+        {
+            _logger.LogWarning(
+                "Redeemed a code for profile {ProfileId} but found no profile row to describe.", profileId);
+
+            await _client.SendMessageAsync(
+                chatId,
+                "Your Telegram is now linked to AgroFlow, but we could not load your account details. " +
+                "Please contact your AgroFlow installer.",
+                cancellationToken);
+
+            return;
+        }
+
+        // A NEW temporary password is minted here rather than replayed from
+        // onboarding, because AgroFlow never stores the one the admin saw.
+        // The consequence is deliberate and is spelled out on the admin
+        // screen: once the farmer links Telegram, the password shown at
+        // onboarding stops working and this one takes over.
+        var temporaryPassword = await _supabaseAdmin.ResetTemporaryPasswordAsync(profileId.Value, cancellationToken);
+
+        if (temporaryPassword is null)
+        {
+            await _client.SendMessageAsync(
+                chatId,
+                "Your Telegram is now linked to AgroFlow.\n\n" +
+                "We could not issue your password just now. Please ask your AgroFlow installer " +
+                "for it - your account itself is fine.",
+                cancellationToken);
+
+            return;
+        }
+
+        await _onboarding.SetMustChangePasswordAsync(profileId.Value, true, cancellationToken);
+
+        await _notifications.NotifyFarmerWelcomeAsync(
+            profileId.Value,
+            new FarmerWelcomeNotification(
+                farmer.Name,
+                farmer.Email,
+                temporaryPassword,
+                string.IsNullOrWhiteSpace(farmer.FarmName) ? "your farm" : farmer.FarmName,
+                string.IsNullOrWhiteSpace(farmer.FarmLocation) ? "not set" : farmer.FarmLocation),
+            cancellationToken);
+    }
+
+    // ------------------------------------------------------------------
+    // /status - request tracking
+    // ------------------------------------------------------------------
+
+    private async Task HandleStatusAsync(long chatId, CancellationToken cancellationToken)
+    {
+        var profileId = await _onboarding.GetProfileIdForChatAsync(chatId, cancellationToken);
+
+        if (profileId is null)
+        {
+            await _client.SendMessageAsync(
+                chatId,
+                "This chat is not linked to an AgroFlow account yet. " +
+                "Please scan the QR code your AgroFlow installer shows you.",
+                cancellationToken);
+
+            return;
+        }
+
+        var requests = await FetchOpenRequestsAsync(profileId.Value, cancellationToken);
+
+        if (requests is null)
+        {
+            await _client.SendMessageAsync(
+                chatId,
+                "Request tracking is not switched on yet.\n\n" +
+                "Once it is, you will be able to send requests from the AgroFlow app " +
+                "and I will message you here every time one moves along.",
+                cancellationToken);
+
+            return;
+        }
+
+        if (requests.Count == 0)
+        {
+            await _client.SendMessageAsync(
+                chatId,
+                "You have no open requests.\n\n" +
+                "You can send a new one - a new zone, a new farm, or a fault - from the AgroFlow app.",
+                cancellationToken);
+
+            return;
+        }
+
+        var lines = new List<string> { "Your open requests", "" };
+
+        foreach (var request in requests)
+        {
+            lines.Add($"{request.RequestType}: {TelegramNotificationService.DescribeRequestStatus(request.Status)}");
+
+            if (!string.IsNullOrWhiteSpace(request.Description))
+            {
+                lines.Add($"  {request.Description}");
+            }
+
+            lines.Add("");
+        }
+
+        await _client.SendMessageAsync(chatId, string.Join("\n", lines), cancellationToken);
+    }
+
+    // ------------------------------------------------------------------
+    // THE ONE PLACE TO CHANGE WHEN LUBA'S REQUEST TABLE LANDS ON dev
+    // ------------------------------------------------------------------
+    // Farmers raise requests in the MOBILE APP, not over Telegram - the bot
+    // only tracks them. That table is not on dev at the time of writing, so
+    // this returns null, meaning "the feature does not exist yet" (as opposed
+    // to an empty list, which means "you have none"), and /status says so
+    // honestly rather than claiming the farmer has nothing open.
+    //
+    // To switch it on: replace the body below with a query against the real
+    // table, filtered to this profile and to not-yet-closed statuses. The
+    // admin's status-change write then needs one call to
+    // INotificationService.NotifyRequestStatusAsync - nothing else in this
+    // file or in TelegramNotificationService has to change.
+    //
+    // The existence probe means a half-deployed database (migration applied,
+    // code not yet redeployed, or the reverse) degrades to the "coming soon"
+    // message instead of throwing inside the polling loop.
+    private async Task<List<OpenRequest>?> FetchOpenRequestsAsync(
+        Guid profileId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        await using var probe = new NpgsqlCommand(
+            "select to_regclass('public.request') is not null", connection);
+
+        var exists = await probe.ExecuteScalarAsync(cancellationToken);
+
+        if (exists is not true)
+        {
+            return null;
+        }
+
+        _logger.LogInformation(
+            "A public.request table now exists, but FetchOpenRequestsAsync has not been pointed at it yet " +
+            "(profile {ProfileId} asked for /status). See the comment above this method.",
+            profileId);
+
+        return null;
+    }
+
+    private sealed record OpenRequest(string RequestType, string Description, string Status);
+
+    // ------------------------------------------------------------------
+    // /alerts on|off
+    // ------------------------------------------------------------------
+
+    private async Task HandleAlertsAsync(long chatId, string? argument, CancellationToken cancellationToken)
+    {
+        var profileId = await _onboarding.GetProfileIdForChatAsync(chatId, cancellationToken);
+
+        if (profileId is null)
+        {
+            await _client.SendMessageAsync(
+                chatId,
+                "This chat is not linked to an AgroFlow account yet.",
+                cancellationToken);
+
+            return;
+        }
+
+        var wanted = argument?.Trim().ToLowerInvariant();
+
+        if (wanted is not ("on" or "off"))
+        {
+            await _client.SendMessageAsync(
+                chatId,
+                "Send /alerts on to get zone and device alerts here, or /alerts off to stop them.\n\n" +
+                "Updates about your requests are always sent, either way.",
+                cancellationToken);
+
+            return;
+        }
+
+        var enabled = wanted == "on";
+        await _onboarding.SetAlertsEnabledAsync(profileId.Value, enabled, cancellationToken);
+
+        await _client.SendMessageAsync(
+            chatId,
+            enabled
+                ? "Alerts are on. I will message you when a zone gets too dry, when irrigation " +
+                  "starts or stops, and if a device goes offline."
+                : "Alerts are off. I will not message you about zones, irrigation or devices. " +
+                  "Updates about your requests will still come through.",
+            cancellationToken);
+    }
+
+    private Task SendHelpAsync(long chatId, CancellationToken cancellationToken) =>
+        _client.SendMessageAsync(
+            chatId,
+            string.Join("\n", new[]
+            {
+                "AgroFlow bot",
+                "",
+                "/status - your open requests",
+                "/alerts on - get zone, irrigation and device alerts here",
+                "/alerts off - stop those alerts",
+                "/help - this message",
+                "",
+                "To send a new request, use the AgroFlow app on your phone.",
+            }),
+            cancellationToken);
+}

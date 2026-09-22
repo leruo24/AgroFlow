@@ -27,6 +27,10 @@ import {
 } from 'react-native-safe-area-context';
 
 import {
+  useAuth,
+} from '@/context/AuthContext';
+
+import {
   useTheme,
 } from '@/context/ThemeContext';
 
@@ -72,6 +76,16 @@ export default function UpdatePasswordScreen() {
 
   const openedFromProfile =
     source === 'profile';
+
+  //The forced first-login change. The farmer arrives here straight after
+  //signing in with the temporary password they were given at onboarding, and
+  //cannot reach the rest of the app until this is done - see _layout.tsx.
+  const openedAsFirstLogin =
+    source === 'first-login';
+
+  const {
+    clearMustChangePassword,
+  } = useAuth();
 
   const {
     colors,
@@ -389,6 +403,40 @@ export default function UpdatePasswordScreen() {
 
   async function handleSuccessNavigation() {
     if (
+      openedAsFirstLogin
+    ) {
+      //Clearing the flag is what unlocks the rest of the app. If the call
+      //fails the farmer keeps their new password but stays on this screen,
+      //which is the safe way round - they can try again, and nothing is lost.
+      try {
+        await clearMustChangePassword();
+      } catch (
+        caughtError: unknown
+      ) {
+        console.log(
+          'Could not clear the forced password change:',
+          caughtError
+        );
+
+        setError(
+          'Your password was changed, but the app could not confirm it. Please try again.'
+        );
+
+        setSuccess(
+          false
+        );
+
+        return;
+      }
+
+      router.replace(
+        '/'
+      );
+
+      return;
+    }
+
+    if (
       openedFromProfile
     ) {
       router.replace(
@@ -477,7 +525,9 @@ export default function UpdatePasswordScreen() {
             >
               {success
                 ? 'Password Updated'
-                : 'Choose New Password'}
+                : openedAsFirstLogin
+                  ? 'Set Your Own Password'
+                  : 'Choose New Password'}
             </Text>
 
             <Text
@@ -487,7 +537,9 @@ export default function UpdatePasswordScreen() {
             >
               {success
                 ? 'Your AgroFlow password has been changed successfully.'
-                : 'Enter and confirm the new password for your account.'}
+                : openedAsFirstLogin
+                  ? 'The password you signed in with was a temporary one. Anyone who saw it - or who can scroll back through your Telegram chat - could use it, so please choose your own now.'
+                  : 'Enter and confirm the new password for your account.'}
             </Text>
 
             {error ? (

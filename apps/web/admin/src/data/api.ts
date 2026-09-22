@@ -101,29 +101,6 @@ async function getAuthorized<T>(path: string): Promise<T> {
 
   return response.json() as Promise<T>;
 }
-async function postAuthorized<T>(path: string): Promise<T> {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-
-  if (!token) {
-    throw new Error("Not signed in.");
-  }
-
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed (${response.status}).`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
 async function fetchFarmNameMap(): Promise<Map<number, string>> {
   const { data, error } = await supabase.from("farm").select("farm_id, name");
   if (error) throw error;
@@ -167,9 +144,6 @@ export function recordActivity(): void {
 
 export const api = {
   /* ------------------------------- reads ------------------------------- */
-  async testResendEmail(): Promise<{ message: string }> {
-  return postAuthorized<{ message: string }>("/api/test/email");
- },
   async getKpis(): Promise<Kpis> {
     const [u, f, h, a, m] = await Promise.all([
       api.getUsers(), api.getFarms(), api.getHardware(), api.getAlerts(), api.getMaintenance(),

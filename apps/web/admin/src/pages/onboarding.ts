@@ -165,6 +165,71 @@ ${panel(
       </button>
     </div>
   </div>
+
+  <div
+    data-step="3"
+    class="onboarding-panel"
+    style="display:none"
+  >
+    <h3 class="onboarding-handover-title">Farmer created. Hand over now.</h3>
+
+    <p class="onboarding-handover-lead">
+      Have the farmer scan this with their phone's camera while you are still
+      on site. It opens the AgroFlow bot in Telegram, and pressing Start sends
+      them their login details and the app download link.
+    </p>
+
+    <div class="onboarding-handover">
+      <div class="onboarding-qr">
+        <canvas id="telegramQr" width="240" height="240"></canvas>
+
+        <p class="onboarding-qr-link">
+          Or type this in:<br />
+          <a id="telegramLink" href="#" target="_blank" rel="noreferrer"></a>
+        </p>
+
+        <p class="onboarding-qr-expiry" id="telegramExpiry"></p>
+      </div>
+
+      <div class="onboarding-credentials">
+        <h4>If they have no Telegram</h4>
+
+        <p class="onboarding-handover-lead">
+          Read these out and have them sign in on the app. They will be asked
+          to choose their own password straight away.
+        </p>
+
+        <dl class="onboarding-cred-list">
+          <dt>Email</dt>
+          <dd id="handoverEmail"></dd>
+
+          <dt>Temporary password</dt>
+          <dd><code id="handoverPassword"></code></dd>
+        </dl>
+
+        <p class="onboarding-warning">
+          This password is shown once and is not stored anywhere. If you lose
+          it, use Reset password below to issue a new one. If the farmer does
+          scan the QR code, the bot issues them a fresh password and the one
+          above stops working.
+        </p>
+      </div>
+    </div>
+
+    <div id="handoverNotice" class="onboarding-error" style="display:none"></div>
+
+    <div class="form-foot">
+      <button class="btn ghost" data-act="handover-regenerate">
+        Regenerate code
+      </button>
+      <button class="btn ghost" data-act="handover-reset-password">
+        Reset password
+      </button>
+      <button class="btn" data-act="handover-done">
+        Done
+      </button>
+    </div>
+  </div>
 `,
 )}
 `;

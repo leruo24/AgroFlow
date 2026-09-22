@@ -22,6 +22,10 @@ import {
 } from '@/lib/supabase';
 
 import {
+  confirmPasswordChanged,
+} from '@/services/agroFlowApi';
+
+import {
   AuthUser,
   loginUser,
   logoutUser,
@@ -47,6 +51,15 @@ type AuthContextType = {
   updateProfile: (
     profile: UpdateProfileInput
   ) => Promise<void>;
+
+  //True while the farmer is still on the temporary password they were given
+  //at onboarding. That password is read off an admin screen or sits in their
+  //Telegram chat history, so the app forces a change before letting them in.
+  mustChangePassword: boolean;
+
+  //Called once the farmer has actually set a new password.
+  clearMustChangePassword:
+    () => Promise<void>;
 };
 
 const AuthContext =
@@ -80,6 +93,62 @@ export function AuthProvider({
     setIsLoading,
   ] =
     useState(true);
+
+  const [
+    mustChangePassword,
+    setMustChangePassword,
+  ] =
+    useState(false);
+
+  //Reads the flag straight from the farmer's own profile row. Failing to
+  //read it is treated as "no forced change": a network blip must lock nobody
+  //out of their own farm, and the admin can always reset the password again.
+  async function loadMustChangePassword(
+    userId: string | undefined
+  ) {
+    if (
+      !userId
+    ) {
+      setMustChangePassword(
+        false
+      );
+
+      return;
+    }
+
+    try {
+      const {
+        data,
+        error,
+      } =
+        await supabase
+          .from('profile')
+          .select('must_change_password')
+          .eq('id', userId)
+          .maybeSingle();
+
+      if (
+        error
+      ) {
+        throw error;
+      }
+
+      setMustChangePassword(
+        data?.must_change_password === true
+      );
+    } catch (
+      error: unknown
+    ) {
+      console.log(
+        'Could not read must_change_password:',
+        error
+      );
+
+      setMustChangePassword(
+        false
+      );
+    }
+  }
 
   useEffect(() => {
     let isMounted =
@@ -117,6 +186,10 @@ export function AuthProvider({
                 data.session.user
               )
             : null
+        );
+
+        await loadMustChangePassword(
+          data.session?.user.id
         );
       } catch (
         error: unknown
@@ -180,6 +253,10 @@ export function AuthProvider({
                 : null
             );
 
+            void loadMustChangePassword(
+              newSession?.user.id
+            );
+
             setIsLoading(
               false
             );
@@ -210,6 +287,18 @@ export function AuthProvider({
 
     setUser(
       response.user
+    );
+
+    await loadMustChangePassword(
+      response.session?.user.id
+    );
+  }
+
+  async function clearMustChangePassword() {
+    await confirmPasswordChanged();
+
+    setMustChangePassword(
+      false
     );
   }
 
@@ -244,6 +333,10 @@ export function AuthProvider({
     setUser(
       null
     );
+
+    setMustChangePassword(
+      false
+    );
   }
 
   const accessToken =
@@ -267,6 +360,8 @@ export function AuthProvider({
         signIn,
         signOut,
         updateProfile,
+        mustChangePassword,
+        clearMustChangePassword,
       }}
     >
       {children}

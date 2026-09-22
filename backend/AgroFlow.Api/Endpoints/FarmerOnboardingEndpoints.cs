@@ -1,8 +1,8 @@
 using System.Net.Http.Json;
-using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using AgroFlow.Api.Auth;
 using AgroFlow.Api.Services;
+using AgroFlow.Api.Services.Notifications;
 
 namespace AgroFlow.Api.Endpoints;
 
@@ -44,6 +44,27 @@ public record FarmerOnboardingRequest(
 );
 
 public record FarmerOnboardingResponse(string Message);
+
+// What /onboard returns now that there is no welcome email.
+//
+// TemporaryPassword is returned EXACTLY ONCE, here, and is never stored by
+// AgroFlow. The admin screen shows it so the installer can read it out to a
+// farmer who has no Telegram; there is no endpoint that can retrieve it
+// later, because there is nothing to retrieve. "Show it again" is a reset
+// that mints a new one.
+//
+// TelegramDeepLink is what the admin screen renders as a QR code. It is null
+// when Telegram:BotUsername is not configured, in which case onboarding still
+// succeeded and the password above is the whole delivery mechanism.
+public record FarmerOnboardedResponse(
+    string Message,
+    Guid ProfileId,
+    string Email,
+    string TemporaryPassword,
+    string? TelegramDeepLink,
+    string? TelegramCode,
+    DateTimeOffset? TelegramCodeExpiresAt,
+    string? Warning);
 
 internal sealed record SupabaseAuthUserResponse(Guid Id);
 
@@ -102,7 +123,7 @@ public static class FarmerOnboardingEndpoints
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         ILoggerFactory loggerFactory,
-        IEmailService emailService,
+        TelegramOnboardingService telegramOnboarding,
         CancellationToken cancellationToken)
     {
         var logger = loggerFactory.CreateLogger("FarmerOnboarding");
@@ -289,10 +310,12 @@ public static class FarmerOnboardingEndpoints
         // GENERATE TEMPORARY PASSWORD
         // --------------------------------------------------------------------
         // The actual password used for the Supabase Auth account is generated
-        // by the backend. The same password is later sent to the farmer in the
-        // welcome email.
+        // by the backend and returned to the admin screen exactly once. It is
+        // not persisted anywhere. If the farmer links Telegram, the bot
+        // replaces it with a fresh one at that moment (see
+        // TelegramPollingService) - the admin screen says so.
 
-        var temporaryPassword = GenerateTemporaryPassword();
+        var temporaryPassword = TemporaryPasswordGenerator.Generate();
 
         long? farmId = null;
         Guid? userId = null;
@@ -520,28 +543,10 @@ public static class FarmerOnboardingEndpoints
                 );
             }
 
-            // ----------------------------------------------------------------
-            // SEND FARMER WELCOME EMAIL
-            // ----------------------------------------------------------------
-            // The same server-generated temporary password used to create the
-            // Supabase Auth account is included in the welcome email.
-
-            await emailService.SendFarmerWelcomeEmailAsync(
-                new FarmerWelcomeEmail(
-                    request.Farmer.FullName.Trim(),
-                    request.Farmer.Email.Trim(),
-                    temporaryPassword,
-                    request.Farm.FarmName.Trim(),
-                    coordinates.Value.Location
-                ),
-                cancellationToken
-            );
-
-            return Results.Ok(
-                new FarmerOnboardingResponse(
-                    "Farmer onboarded successfully."
-                )
-            );
+            // Onboarding is COMPLETE at this point: the farm, the Auth user
+            // and every zone exist and are staying. Everything after this
+            // line is delivery, and delivery is deliberately outside the try
+            // block below - see the note there.
         }
         catch (Exception ex)
         {
@@ -589,58 +594,76 @@ public static class FarmerOnboardingEndpoints
                 statusCode: StatusCodes.Status500InternalServerError
             );
         }
-    }
 
-    // ========================================================================
-    // TEMPORARY PASSWORD GENERATION
-    // ========================================================================
+        // --------------------------------------------------------------------
+        // TELEGRAM ONBOARDING CODE - AFTER THE COMMIT, OUTSIDE THE ROLLBACK
+        // --------------------------------------------------------------------
+        // This is the fix for the behaviour the Resend welcome email had: that
+        // send sat INSIDE the try block above, so an email provider outage
+        // landed in the catch and deleted the Auth user, the farm and every
+        // zone that had just been created on-site. A messaging failure used to
+        // destroy a completed onboarding.
+        //
+        // Nothing below may do that. The farmer, the farm and the zones exist
+        // and are staying, whatever happens here. The worst case is a response
+        // carrying a warning and no QR code, which the admin resolves with the
+        // "Regenerate code" button - or by reading the temporary password out
+        // loud, which is right there in the same response.
 
-    private static string GenerateTemporaryPassword()
-    {
-        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-        const string lower = "abcdefghijkmnopqrstuvwxyz";
-        const string numbers = "23456789";
-        const string symbols = "!@#$%";
+        string? deepLink = null;
+        string? code = null;
+        DateTimeOffset? expiresAt = null;
+        string? warning = null;
 
-        const string all =
-            upper +
-            lower +
-            numbers +
-            symbols;
-
-        var passwordChars = new char[16];
-
-        // Guarantee at least one character from each category.
-        passwordChars[0] =
-            upper[RandomNumberGenerator.GetInt32(upper.Length)];
-
-        passwordChars[1] =
-            lower[RandomNumberGenerator.GetInt32(lower.Length)];
-
-        passwordChars[2] =
-            numbers[RandomNumberGenerator.GetInt32(numbers.Length)];
-
-        passwordChars[3] =
-            symbols[RandomNumberGenerator.GetInt32(symbols.Length)];
-
-        // Fill the remaining characters securely.
-        for (var i = 4; i < passwordChars.Length; i++)
+        try
         {
-            passwordChars[i] =
-                all[RandomNumberGenerator.GetInt32(all.Length)];
+            var issued = await telegramOnboarding.IssueCodeAsync(
+                userId!.Value,
+                cancellationToken
+            );
+
+            code = issued.Code;
+            expiresAt = issued.ExpiresAt;
+            deepLink = issued.DeepLink;
+
+            if (deepLink is null)
+            {
+                warning =
+                    "Telegram:BotUsername is not configured, so no QR link could be built. " +
+                    "Give the farmer the temporary password directly.";
+
+                logger.LogWarning(
+                    "Issued an onboarding code for {UserId} but Telegram:BotUsername is unset.",
+                    userId.Value
+                );
+            }
+        }
+        catch (Exception ex)
+        {
+            warning =
+                "The farmer was created successfully, but the Telegram onboarding code " +
+                "could not be generated. Use Regenerate code, or give the farmer the " +
+                "temporary password directly.";
+
+            logger.LogError(
+                ex,
+                "Onboarding for {UserId} succeeded but issuing a Telegram code failed.",
+                userId!.Value
+            );
         }
 
-        // Securely shuffle the characters so the required character
-        // categories are not always in predictable positions.
-        for (var i = passwordChars.Length - 1; i > 0; i--)
-        {
-            var j = RandomNumberGenerator.GetInt32(i + 1);
-
-            (passwordChars[i], passwordChars[j]) =
-                (passwordChars[j], passwordChars[i]);
-        }
-
-        return new string(passwordChars);
+        return Results.Ok(
+            new FarmerOnboardedResponse(
+                "Farmer onboarded successfully.",
+                userId!.Value,
+                request.Farmer.Email.Trim(),
+                temporaryPassword,
+                deepLink,
+                code,
+                expiresAt,
+                warning
+            )
+        );
     }
 
     // ========================================================================

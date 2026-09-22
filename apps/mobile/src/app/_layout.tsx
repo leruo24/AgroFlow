@@ -1,7 +1,12 @@
 //root of the app that sets up the main navigation structure and provides context providers for theme, authentication, and farm state. It uses Expo Router's Stack navigator to define protected routes based on the user's authentication status. The RootLayout component wraps the RootNavigator with ThemeProvider, AuthProvider, and AgroFlowProvider to make the respective contexts available throughout the application.
 import {//creates stack navigation
+  router,
   Stack,
 } from 'expo-router';
+
+import {
+  useEffect,
+} from 'react';
 
 import {
   ActivityIndicator,
@@ -28,7 +33,36 @@ function RootNavigator() {//decides which screens the user is permitted to acces
   const {//reading authentication states
     isAuthenticated,
     isLoading,
+    mustChangePassword,
   } = useAuth();
+
+  //A farmer still on their onboarding password goes straight to the
+  //password screen and nowhere else. That password was read off an admin's
+  //screen or sent over Telegram, where it stays in the chat history, so it
+  //must not remain the thing guarding the account.
+  //
+  //The guard on the tab routes below is what actually enforces this - this
+  //effect only performs the navigation. Both are needed: the guard stops the
+  //farmer navigating back into the app, the redirect gets them somewhere
+  //useful rather than a blank stack.
+  useEffect(
+    () => {
+      if (
+        !isLoading &&
+        isAuthenticated &&
+        mustChangePassword
+      ) {
+        router.replace(
+          '/update-password?source=first-login'
+        );
+      }
+    },
+    [
+      isLoading,
+      isAuthenticated,
+      mustChangePassword,
+    ]
+  );
 
   const {//use current theme colors
     colors,
@@ -85,7 +119,8 @@ function RootNavigator() {//decides which screens the user is permitted to acces
 
       <Stack.Protected
         guard={
-          isAuthenticated
+          isAuthenticated &&
+          !mustChangePassword
         }
       >
         <Stack.Screen

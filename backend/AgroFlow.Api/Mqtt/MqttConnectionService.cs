@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgroFlow.Api.Services;
+using AgroFlow.Api.Services.Notifications;
 using MQTTnet;
 using Npgsql;
 
@@ -35,6 +36,7 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly IConfiguration _configuration;
+    private readonly INotificationService _notifications;
     private readonly ILogger<MqttConnectionService> _logger;
     private IMqttClient? _client;
     private MqttClientOptions? _options;
@@ -48,10 +50,15 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    public MqttConnectionService(NpgsqlDataSource dataSource, IConfiguration configuration, ILogger<MqttConnectionService> logger)
+    public MqttConnectionService(
+        NpgsqlDataSource dataSource,
+        IConfiguration configuration,
+        INotificationService notifications,
+        ILogger<MqttConnectionService> logger)
     {
         _dataSource = dataSource;
         _configuration = configuration;
+        _notifications = notifications;
         _logger = logger;
     }
 
@@ -156,14 +163,22 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
             if (payload is null) return;
 
             await using var connection = await _dataSource.OpenConnectionAsync();
-            var zoneId = await ResolveZoneIdAsync(connection, deviceId, farmId);
-            if (zoneId is null)
+            var device = await ResolveDeviceAsync(connection, deviceId, farmId);
+            if (device is null)
             {
                 _logger.LogWarning("Ignoring sensor message - no active device {DeviceId} on farm {FarmId}", deviceId, farmId);
                 return;
             }
 
-            await SensorReadingProcessor.ProcessAsync(connection, zoneId.Value, payload.SensorType, payload.Value);
+            // The only place in AgroFlow that knows which physical device a
+            // reading came from, so it is the only place that can stamp
+            // last_seen accurately. DeviceStatusMonitorService reads this to
+            // decide a device has gone quiet; without it, liveness could only
+            // ever be guessed from the zone.
+            await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId);
+
+            await SensorReadingProcessor.ProcessAsync(
+                connection, device.Value.ZoneId, payload.SensorType, payload.Value, _notifications);
         }
         catch (Exception ex)
         {
@@ -175,19 +190,29 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
     // real zone/farm rather than just trusting whatever the topic says - a
     // device publishing to the wrong farm's topic (misconfigured or
     // otherwise) is ignored, not silently trusted.
-    private static async Task<long?> ResolveZoneIdAsync(NpgsqlConnection connection, string deviceId, long claimedFarmId)
+    private static async Task<(long HardwareId, long ZoneId)?> ResolveDeviceAsync(
+        NpgsqlConnection connection, string deviceId, long claimedFarmId)
     {
         await using var cmd = new NpgsqlCommand(
-            "select h.zone_id, z.farm_id from hardware h join zone z on z.id = h.zone_id " +
+            "select h.hardware_id, h.zone_id, z.farm_id from hardware h join zone z on z.id = h.zone_id " +
             "where h.device_id = $1 and h.enrollment_status = 'active'", connection);
         cmd.Parameters.AddWithValue(deviceId);
 
         await using var reader = await cmd.ExecuteReaderAsync();
         if (!await reader.ReadAsync()) return null;
 
-        var zoneId = reader.GetInt64(0);
-        var actualFarmId = reader.GetInt64(1);
-        return actualFarmId == claimedFarmId ? zoneId : null;
+        var hardwareId = reader.GetInt64(0);
+        var zoneId = reader.GetInt64(1);
+        var actualFarmId = reader.GetInt64(2);
+        return actualFarmId == claimedFarmId ? (hardwareId, zoneId) : null;
+    }
+
+    private static async Task TouchDeviceLastSeenAsync(NpgsqlConnection connection, long hardwareId)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "update hardware set last_seen = now() where hardware_id = $1", connection);
+        cmd.Parameters.AddWithValue(hardwareId);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public async Task PublishAsync(string topic, string payload)

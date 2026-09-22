@@ -10,8 +10,11 @@ import {
   getFarmers,
   inviteFarmer,
   onboardFarmer,
+  regenerateTelegramCode,
   registerFarm,
+  resetTemporaryPassword,
 } from "@/services/agroFlowApi";
+import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
@@ -635,7 +638,7 @@ case "delete-user": {
 );
 
   try {
-    await onboardFarmer({
+    const result = await onboardFarmer({
       farmer: {
         fullName: v["fullName"] ?? "",
         email: v["email"] ?? "",
@@ -656,7 +659,16 @@ case "delete-user": {
       "success",
     );
 
-    return void go("farms");
+    /* Do NOT navigate away. The temporary password in this response exists
+       nowhere else - the server never stored it - so leaving this screen
+       without reading it means it is gone for good, and the only recovery is
+       to reset it. The handover step is where the installer finishes the
+       job. */
+    handoverProfileId = result.profileId;
+
+    await renderHandover(result);
+
+    return void goToOnboardingStep(3);
     } catch (e) {
     showErrorModal(
       e instanceof Error
@@ -668,6 +680,48 @@ case "delete-user": {
     return;
   }
 }
+    case "handover-regenerate": {
+      if (!handoverProfileId) return;
+
+      try {
+        const issued = await regenerateTelegramCode(handoverProfileId);
+
+        await renderQr(issued.deepLink, issued.expiresAt);
+
+        showHandoverNotice(
+          "New code generated. The previous QR code no longer works.",
+        );
+      } catch (e) {
+        showHandoverNotice(
+          e instanceof Error ? e.message : "Could not regenerate the code.",
+        );
+      }
+
+      return;
+    }
+    case "handover-reset-password": {
+      if (!handoverProfileId) return;
+
+      try {
+        const reset = await resetTemporaryPassword(handoverProfileId);
+
+        const field = document.getElementById("handoverPassword");
+        if (field) field.textContent = reset.temporaryPassword;
+
+        showHandoverNotice(
+          "A new temporary password was issued. The previous one no longer works.",
+        );
+      } catch (e) {
+        showHandoverNotice(
+          e instanceof Error ? e.message : "Could not reset the password.",
+        );
+      }
+
+      return;
+    }
+    case "handover-done":
+      handoverProfileId = null;
+      return void go("farms");
     /* hardware */
     case "view-device": {
       const h = api.findHardware(idAttr);
@@ -1043,6 +1097,89 @@ function collectFields(): Record<string, string> {
   return values;
 }
 
+/* The farmer whose handover screen is currently open - needed by Regenerate
+   code and Reset password, which act on that profile. */
+let handoverProfileId: string | null = null;
+
+async function renderHandover(result: {
+  email: string;
+  temporaryPassword: string;
+  telegramDeepLink: string | null;
+  telegramCodeExpiresAt: string | null;
+  warning: string | null;
+}): Promise<void> {
+  const email = document.getElementById("handoverEmail");
+  if (email) email.textContent = result.email;
+
+  const password = document.getElementById("handoverPassword");
+  if (password) password.textContent = result.temporaryPassword;
+
+  await renderQr(result.telegramDeepLink, result.telegramCodeExpiresAt);
+
+  if (result.warning) {
+    showHandoverNotice(result.warning);
+  } else {
+    clearHandoverNotice();
+  }
+}
+
+/* Draws the t.me deep link as a QR code. A null link means the server has no
+   bot username configured - the farmer is then onboarded by reading the
+   credentials out, so the QR area says so instead of rendering a dead code. */
+async function renderQr(
+  deepLink: string | null,
+  expiresAt: string | null,
+): Promise<void> {
+  const canvas = document.getElementById("telegramQr") as HTMLCanvasElement | null;
+  const link = document.getElementById("telegramLink") as HTMLAnchorElement | null;
+  const expiry = document.getElementById("telegramExpiry");
+
+  if (!deepLink) {
+    if (canvas) canvas.style.display = "none";
+    if (link) {
+      link.removeAttribute("href");
+      link.textContent = "Telegram is not configured on the server.";
+    }
+    if (expiry) expiry.textContent = "";
+    return;
+  }
+
+  if (link) {
+    link.href = deepLink;
+    link.textContent = deepLink;
+  }
+
+  if (expiry && expiresAt) {
+    expiry.textContent = `This code stops working on ${fmtDate(expiresAt)}.`;
+  }
+
+  if (!canvas) return;
+
+  canvas.style.display = "";
+
+  try {
+    await QRCode.toCanvas(canvas, deepLink, { width: 240, margin: 1 });
+  } catch {
+    /* A QR that will not draw is not a failed onboarding - the link text
+       above it still works, and so does the password. */
+    canvas.style.display = "none";
+  }
+}
+
+function showHandoverNotice(message: string): void {
+  const box = document.getElementById("handoverNotice");
+  if (!box) return;
+  box.textContent = message;
+  box.style.display = "block";
+}
+
+function clearHandoverNotice(): void {
+  const box = document.getElementById("handoverNotice");
+  if (!box) return;
+  box.style.display = "none";
+  box.textContent = "";
+}
+
 function showOnboardingError(message: string): void {
   const box = document.getElementById("onboardingError");
   if (!box) return;
@@ -1057,7 +1194,7 @@ function clearOnboardingError(): void {
   box.textContent = "";
 }
 
-function goToOnboardingStep(step: 1 | 2): void {
+function goToOnboardingStep(step: 1 | 2 | 3): void {
   document.querySelectorAll<HTMLElement>("[data-step]").forEach((el) => {
     el.style.display = el.dataset["step"] === String(step) ? "" : "none";
   });

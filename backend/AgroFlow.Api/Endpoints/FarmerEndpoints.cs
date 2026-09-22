@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Globalization;
+using AgroFlow.Api.Services.Notifications;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -35,6 +36,7 @@ public static class FarmerEndpoints
         group.MapGet("/dashboard", GetDashboardAsync);
         group.MapGet("/weather/current", GetCurrentWeatherAsync);
         group.MapPut("/profile", UpdateProfileAsync);
+        group.MapPost("/password-changed", ClearMustChangePasswordAsync);
         group.MapPut("/zones/{zoneId:long}/settings", UpdateZoneSettingsAsync);
         group.MapPost("/zones/{zoneId:long}/commands", CreateManualCommandAsync);
     }
@@ -89,6 +91,28 @@ public static class FarmerEndpoints
         command.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)request.Phone?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue(userId);
         return await command.ExecuteScalarAsync() is null ? Results.NotFound() : Results.NoContent();
+    }
+
+    // Called by the mobile app immediately after a farmer sets their own
+    // password, which is what takes them off the forced-change screen.
+    //
+    // The flag is cleared HERE rather than by the client writing to profile
+    // directly: 0024 deliberately does not grant authenticated an UPDATE on
+    // must_change_password, precisely so a farmer cannot dismiss the forced
+    // change without actually changing anything. This endpoint runs as the
+    // table owner and only ever clears the caller's own flag.
+    private static async Task<IResult> ClearMustChangePasswordAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            "update profile set must_change_password = false where id = $1", connection);
+        command.Parameters.AddWithValue(userId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+
+        return Results.NoContent();
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>
@@ -171,7 +195,8 @@ public static class FarmerEndpoints
     }
 
     private static async Task<IResult> CreateManualCommandAsync(
-        long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource)
+        long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        INotificationService notifications, CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         if (request.Command is not ("start" or "stop")) return Results.BadRequest(new { error = "Command must be start or stop." });
@@ -191,6 +216,14 @@ public static class FarmerEndpoints
         command.Parameters.AddWithValue(NpgsqlDbType.Integer, (object?)request.DurationSeconds ?? DBNull.Value);
         command.Parameters.AddWithValue(zoneId);
         var id = await command.ExecuteScalarAsync();
-        return id is null ? Results.NotFound() : Results.Accepted(value: new { id });
+        if (id is null) return Results.NotFound();
+
+        // Everyone on the farm hears about it, including whoever pressed the
+        // button - on a farm with several members, "who started the pump" is
+        // exactly the thing the others need to know. Never throws, so a
+        // Telegram problem cannot turn an accepted command into an error.
+        await notifications.NotifyIrrigationAsync(zoneId, request.Command, "manual", cancellationToken);
+
+        return Results.Accepted(value: new { id });
     }
 }

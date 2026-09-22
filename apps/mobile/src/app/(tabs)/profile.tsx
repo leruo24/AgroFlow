@@ -24,6 +24,8 @@ import {
 
 import { FarmSelector } from '@/components/FarmSelector';
 
+import { TelegramSection } from '@/components/TelegramSection';
+
 import {
   useAuth,
 } from '@/context/AuthContext';
@@ -956,6 +958,10 @@ export default function ProfileScreen() {
             last
           />
         </View>
+
+        {!editing && (
+          <TelegramSection />
+        )}
 
         {!editing && (
           <>

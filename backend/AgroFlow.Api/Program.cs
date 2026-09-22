@@ -1,6 +1,7 @@
 using AgroFlow.Api.Endpoints;
 using AgroFlow.Api.Mqtt;
 using AgroFlow.Api.Services;
+using AgroFlow.Api.Services.Notifications;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
@@ -140,8 +141,54 @@ builder.Services.AddSingleton<MqttConnectionService>();
 builder.Services.AddSingleton<IMqttPublisher>(sp => sp.GetRequiredService<MqttConnectionService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttConnectionService>());
 builder.Services.AddHostedService<IrrigationCommandNotifyService>();
-builder.Services.AddHttpClient<ResendEmailService>();
-builder.Services.AddScoped<IEmailService, ResendEmailService>();
+// ---------------------------------------------------------------------------
+// FARMER NOTIFICATIONS (Telegram) - replaces the Resend welcome email.
+// ---------------------------------------------------------------------------
+// A Telegram bot cannot message anyone first, so onboarding no longer pushes
+// anything at a new farmer. The admin, already on-site installing hardware,
+// shows a QR code; the farmer scanning it is what creates a chat the bot may
+// use from then on, for the welcome message and for every alert afterwards.
+//
+// SECRETS: Telegram__BotToken is a Railway variable and a local user-secret.
+// It is deliberately absent from appsettings.json and must never be committed.
+builder.Services.Configure<TelegramOptions>(
+    builder.Configuration.GetSection(TelegramOptions.SectionName));
+builder.Services.Configure<ApkOptions>(
+    builder.Configuration.GetSection(ApkOptions.SectionName));
+builder.Services.Configure<DeviceMonitorOptions>(
+    builder.Configuration.GetSection(DeviceMonitorOptions.SectionName));
+
+builder.Services.AddSingleton<TelegramClient>();
+builder.Services.AddSingleton<TelegramOnboardingService>();
+builder.Services.AddSingleton<SupabaseAdminService>();
+
+// Singleton rather than scoped because MqttConnectionService and the two
+// hosted services below are singletons and hold this for the process
+// lifetime. Nothing in the implementation keeps per-request state.
+//
+// With no bot token configured, every notification becomes a logged no-op
+// instead of a startup crash - a developer can run the whole API with no
+// Telegram set up at all.
+if (builder.Configuration.GetSection(TelegramOptions.SectionName)["BotToken"] is { Length: > 0 })
+{
+    builder.Services.AddSingleton<INotificationService, TelegramNotificationService>();
+}
+else
+{
+    builder.Services.AddSingleton<INotificationService, NullNotificationService>();
+}
+
+// Inbound /start messages. Gated on Telegram:EnablePolling, which defaults to
+// FALSE: Telegram hands each update to exactly one getUpdates consumer, so a
+// local API running alongside Railway would steal farmers' onboarding
+// messages at random. Railway sets Telegram__EnablePolling=true; nowhere else
+// should.
+builder.Services.AddHostedService<TelegramPollingService>();
+
+// Marks devices Offline when they go quiet and Online when they return,
+// messaging the farmer on the transition only. Nothing wrote hardware.status
+// after enrolment before this.
+builder.Services.AddHostedService<DeviceStatusMonitorService>();
 
 // Weather collection. Populates weather_daily (migration 0016) from
 // Open-Meteo every Weather:FetchIntervalHours (default 6) for every farm that
@@ -176,6 +223,7 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
     var isUserRoute = path.StartsWithSegments("/api/devices/enroll") ||
+                  path.StartsWithSegments("/api/telegram") ||
                   path.StartsWithSegments("/api/farmers") ||
                   path.StartsWithSegments("/api/farmer") ||
                   path.StartsWithSegments("/api/farms")||
@@ -204,6 +252,7 @@ app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
+app.MapTelegramEndpoints();
 
 
 app.Run();

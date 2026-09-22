@@ -209,3 +209,71 @@ export function updateProfileThroughApi(
     }
   );
 }
+
+export type TelegramLinkStatus = {
+  linked: boolean;
+  alertsEnabled: boolean;
+};
+
+export type TelegramCode = {
+  code: string;
+  deepLink: string | null;
+  expiresAt: string;
+};
+
+export function fetchTelegramLinkStatus() {
+  return authorizedRequest<TelegramLinkStatus>(
+    '/api/telegram/me'
+  );
+}
+
+/* Generates this farmer's own single-use link code and returns the t.me deep
+   link for it. This is how farmers who were onboarded before Telegram existed
+   connect themselves: they are already holding the phone, so tapping the link
+   opens the bot with the code filled in - no QR code and no admin needed. */
+export function requestTelegramLinkCode() {
+  return authorizedRequest<TelegramCode>(
+    '/api/telegram/me/code',
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }
+  );
+}
+
+export function setTelegramAlerts(
+  enabled: boolean
+) {
+  return authorizedRequest<void>(
+    '/api/telegram/me/alerts',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        enabled,
+      }),
+    }
+  );
+}
+
+export function disconnectTelegram() {
+  return authorizedRequest<void>(
+    '/api/telegram/me',
+    {
+      method: 'DELETE',
+    }
+  );
+}
+
+/* Clears the forced-password-change flag after the farmer has actually set
+   their own password. The flag lives server-side and is not client-writable
+   (migration 0024 withholds the column grant on purpose), so this is the only
+   way off the forced-change screen. */
+export function confirmPasswordChanged() {
+  return authorizedRequest<void>(
+    '/api/farmer/password-changed',
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }
+  );
+}
