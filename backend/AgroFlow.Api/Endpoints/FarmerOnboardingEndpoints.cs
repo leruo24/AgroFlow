@@ -615,6 +615,33 @@ public static class FarmerOnboardingEndpoints
         DateTimeOffset? expiresAt = null;
         string? warning = null;
 
+        // The temporary password below is about to be read off an admin's
+        // screen, and possibly written on a piece of paper. That applies
+        // whether or not the farmer ever links Telegram, so the forced change
+        // is set here rather than only on the bot's redemption path.
+        //
+        // The profile row exists by now: handle_new_auth_user() (migration
+        // 0008) creates it from the auth.users insert above.
+        try
+        {
+            await telegramOnboarding.SetMustChangePasswordAsync(
+                userId!.Value,
+                true,
+                cancellationToken
+            );
+        }
+        catch (Exception ex)
+        {
+            // Not worth failing or warning the admin over: the farmer can
+            // still sign in and change their password themselves, and the
+            // account is otherwise complete.
+            logger.LogWarning(
+                ex,
+                "Could not set must_change_password for {UserId} after onboarding.",
+                userId!.Value
+            );
+        }
+
         try
         {
             var issued = await telegramOnboarding.IssueCodeAsync(
