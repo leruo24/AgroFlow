@@ -97,6 +97,14 @@ Config is split by sensitivity:
 | `Telegram:EnablePolling` | deployment configuration | — | **Exactly one running instance may set this true.** Defaults to `false`; Railway sets `Telegram__EnablePolling=true`. Two pollers on one token steal each other's `/start` messages (HTTP 409) |
 | `Apk:DownloadUrl` | `appsettings.json` / Railway | Wherever the built APK is hosted | Empty ⇒ the bot tells new farmers the app is "coming soon" rather than sending a dead link |
 | `DeviceMonitor:*` | `appsettings.json` | — | `OfflineAfterMinutes` (default 30), `CheckIntervalMinutes` (default 5), `Enabled` |
+| `Logging:LogLevel:Npgsql` | `appsettings.json` | — | `Warning`. Npgsql logs connection waits and command text per statement; with sensor ingestion, the LISTEN/NOTIFY bridge and the device-status sweep all running, that buries everything worth reading. Raise to `Information` temporarily when debugging a query |
+| `Logging:LogLevel:AgroFlow.Api` | `appsettings.json` | — | `Information`, stated explicitly so that lowering `Default` to quieten a dependency cannot silently take our own services (Telegram, weather, MQTT, irrigation) with it |
+
+> Three endpoint loggers use bare category names — `FarmerOnboarding`,
+> `FarmEndpoints`, `UserEndpoints` — rather than `AgroFlow.Api.*`, so they
+> follow `Logging:LogLevel:Default` rather than the `AgroFlow.Api` rule above.
+> Worth knowing before lowering `Default`: `FarmerOnboarding` is the category
+> a failed farmer handover is diagnosed from.
 
 > A real `appsettings.json` with live secrets (DB password, `ApiKey`,
 > `service_role` key, HiveMQ password) was committed under the old
