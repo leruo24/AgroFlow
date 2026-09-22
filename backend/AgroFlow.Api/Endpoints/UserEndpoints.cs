@@ -87,7 +87,7 @@ public static class UserEndpoints
         IConfiguration configuration,
         ILoggerFactory loggerFactory)
     {
-        var logger = loggerFactory.CreateLogger("UserEndpoints");
+        var logger = loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.UserEndpoints");
 
         await using var connection = await dataSource.OpenConnectionAsync();
 

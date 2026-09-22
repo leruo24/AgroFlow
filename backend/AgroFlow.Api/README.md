@@ -100,11 +100,12 @@ Config is split by sensitivity:
 | `Logging:LogLevel:Npgsql` | `appsettings.json` | — | `Warning`. Npgsql logs connection waits and command text per statement; with sensor ingestion, the LISTEN/NOTIFY bridge and the device-status sweep all running, that buries everything worth reading. Raise to `Information` temporarily when debugging a query |
 | `Logging:LogLevel:AgroFlow.Api` | `appsettings.json` | — | `Information`, stated explicitly so that lowering `Default` to quieten a dependency cannot silently take our own services (Telegram, weather, MQTT, irrigation) with it |
 
-> Three endpoint loggers use bare category names — `FarmerOnboarding`,
-> `FarmEndpoints`, `UserEndpoints` — rather than `AgroFlow.Api.*`, so they
-> follow `Logging:LogLevel:Default` rather than the `AgroFlow.Api` rule above.
-> Worth knowing before lowering `Default`: `FarmerOnboarding` is the category
-> a failed farmer handover is diagnosed from.
+> Every logger in this project sits under the `AgroFlow.Api.*` category, so
+> that one rule covers all of them. The few endpoints that build a logger from
+> `ILoggerFactory` rather than `ILogger<T>` name their category explicitly to
+> match — `AgroFlow.Api.Endpoints.FarmerOnboarding` and friends. Keep that
+> convention when adding one, or the new logger silently falls under `Default`
+> instead.
 
 > A real `appsettings.json` with live secrets (DB password, `ApiKey`,
 > `service_role` key, HiveMQ password) was committed under the old

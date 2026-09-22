@@ -126,7 +126,7 @@ public static class FarmerOnboardingEndpoints
         TelegramOnboardingService telegramOnboarding,
         CancellationToken cancellationToken)
     {
-        var logger = loggerFactory.CreateLogger("FarmerOnboarding");
+        var logger = loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmerOnboarding");
 
         // --------------------------------------------------------------------
         // SERVER-SIDE VALIDATION

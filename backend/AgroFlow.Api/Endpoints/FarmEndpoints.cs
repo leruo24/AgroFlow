@@ -41,7 +41,7 @@ private static async Task<IResult> RegisterFarmAsync(
     ILoggerFactory loggerFactory)
 {
     var logger =
-        loggerFactory.CreateLogger("FarmEndpoints");
+        loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmEndpoints");
 
     if (request.OwnerId == Guid.Empty)
     {
@@ -389,7 +389,7 @@ private static async Task<IResult> RegisterFarmAsync(
         ILoggerFactory loggerFactory)
     {
         var logger =
-            loggerFactory.CreateLogger("FarmEndpoints");
+            loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmEndpoints");
 
         await using var connection =
             await dataSource.OpenConnectionAsync();
