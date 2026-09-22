@@ -3,6 +3,7 @@ using AgroFlow.Api.Mqtt;
 using AgroFlow.Api.Services;
 using AgroFlow.Api.Services.Notifications;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -153,6 +154,16 @@ builder.Services.AddHostedService<IrrigationCommandNotifyService>();
 // It is deliberately absent from appsettings.json and must never be committed.
 builder.Services.Configure<TelegramOptions>(
     builder.Configuration.GetSection(TelegramOptions.SectionName));
+
+// A token pasted out of @BotFather, or a username pasted out of a chat,
+// routinely arrives with a trailing newline or a leading @. Both would
+// otherwise be baked straight into an API URL or a t.me link and fail in a
+// way that looks like a wrong token rather than a stray character.
+builder.Services.PostConfigure<TelegramOptions>(options =>
+{
+    options.BotToken = options.BotToken?.Trim();
+    options.BotUsername = options.BotUsername?.Trim().TrimStart('@');
+});
 builder.Services.Configure<ApkOptions>(
     builder.Configuration.GetSection(ApkOptions.SectionName));
 builder.Services.Configure<DeviceMonitorOptions>(
@@ -213,6 +224,17 @@ builder.Services.AddSingleton<WeatherBackfillService>();
 builder.Services.AddHostedService<WeatherBackfillStartupService>();
 
 var app = builder.Build();
+
+// Prints, once, whether the container was actually given the Telegram
+// variables and which configuration provider supplied each one. "Telegram
+// polling is off" on its own cannot distinguish a variable Railway never
+// passed from one our code read under the wrong key, and those have opposite
+// fixes. Secret values are reported as a length, never printed.
+StartupConfigurationDiagnostics.Log(
+    app.Configuration,
+    app.Services.GetRequiredService<IOptions<TelegramOptions>>(),
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AgroFlow.Api.Startup"));
+
 app.UseCors("AdminFrontend");
 
 app.UseCors();
