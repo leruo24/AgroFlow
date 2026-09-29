@@ -272,6 +272,7 @@ app.MapDeviceEnrollmentEndpoints();
 app.MapDeviceCommandEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
+app.MapReportEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();
