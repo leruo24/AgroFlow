@@ -24,6 +24,7 @@ public static class ReportEndpoints
         group.MapGet("/schedule", GetScheduleAsync);
         group.MapGet("/water-usage/pdf", GetWaterUsagePdfAsync);
         group.MapGet("/moisture/pdf", GetMoisturePdfAsync);
+        group.MapGet("/schedule/pdf", GetSchedulePdfAsync);
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>
@@ -406,10 +407,10 @@ public static class ReportEndpoints
                     kc = advice.Stage is { IsWithinSeason: true } ? (double?)Math.Round(advice.Stage.Kc, 2) : null,
                     et0MmPerDay = advice.Et0MmPerDay is { } e0 ? Math.Round(e0, 1) : (double?)null,
                     etcMmPerDay = advice.EtcMmPerDay is { } ec ? Math.Round(ec, 1) : (double?)null,
-                    forecastRainMm = rain,
+                                        forecastRainMm = rain is { } rainMm ? Math.Round(rainMm, 1) : (double?)null,
                     weatherIsForecast = w?.IsForecast,
                     note = i == 0 ? advice.Reasoning.FirstOrDefault()
-                        : rain >= 1.0 ? $"{rain:0.#} mm rain forecast. Check soil moisture before irrigating."
+                                                : rain >= 1.0 ? $"{Math.Round(rain.Value, 1).ToString(CultureInfo.InvariantCulture)} mm rain forecast. Check soil moisture before irrigating."
                         : "Check soil moisture this morning; irrigate if below the zone threshold.",
                 });
             }
@@ -676,6 +677,137 @@ public static class ReportEndpoints
         })).GeneratePdf();
 
         return Results.File(bytes, "application/pdf", $"moisture-zone{zoneId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
+    }
+
+        private static async Task<IResult> GetSchedulePdfAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId)
+    {
+        // Reuse the on-screen report so the PDF can never disagree with it.
+        var result = await GetScheduleAsync(user, dataSource, farmId);
+        if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
+        if (result is not IValueHttpResult { Value: { } value }) return result;
+
+        using var json = JsonSerializer.SerializeToDocument(value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var root = json.RootElement;
+
+        static string Str(JsonElement e) => e.ValueKind == JsonValueKind.String ? e.GetString() ?? "-" : "-";
+        static string Num(JsonElement e, string suffix = "") =>
+            e.ValueKind == JsonValueKind.Number
+                ? e.GetDouble().ToString("0.#", CultureInfo.InvariantCulture) + suffix
+                : "-";
+        static string ActionText(string? a) => a switch
+        {
+            "IrrigateNow" => "Irrigate today",
+            "NoActionNeeded" => "No irrigation needed",
+            "InsufficientData" => "No recommendation possible",
+            "RainExpectedCheckMoisture" => "Rain expected: check moisture",
+            "CheckMoisture" => "Check moisture",
+            _ => a ?? "-",
+        };
+
+        var farmName = root.GetProperty("farmName").GetString();
+        var generated = root.GetProperty("generatedAt").GetDateTimeOffset().ToOffset(TimeSpan.FromHours(2));
+        var today = root.GetProperty("today").GetString();
+        var hasZones = root.GetProperty("status").GetString() == "ok";
+
+        var bytes = Document.Create(container => container.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.Margin(36);
+            page.DefaultTextStyle(t => t.FontSize(10));
+
+            page.Header().Column(col =>
+            {
+                col.Item().Text("Suggested irrigation schedule").FontSize(18).SemiBold();
+                col.Item().Text($"{farmName}  |  next 7 days from {today}");
+                col.Item().Text($"Generated {generated:yyyy-MM-dd HH:mm} (SAST)").FontColor(Colors.Grey.Darken1);
+            });
+
+            page.Content().PaddingVertical(12).Column(col =>
+            {
+                col.Spacing(8);
+                col.Item().Text(
+                    "Rule-based advice from FAO-56 crop water guidance, the farm's weather records and the zone's own moisture threshold. " +
+                    "Soil moisture can only be measured today, so later days show a prompt to check moisture, not a watering decision.")
+                    .Italic();
+
+                if (!hasZones)
+                {
+                    col.Item().Text(root.GetProperty("message").GetString());
+                    return;
+                }
+
+                foreach (var z in root.GetProperty("zones").EnumerateArray())
+                {
+                    col.Item().PaddingTop(8).Text($"{Str(z.GetProperty("name"))} ({Str(z.GetProperty("cropType"))})").FontSize(13).SemiBold();
+                    col.Item().Text(Str(z.GetProperty("summary"))).SemiBold();
+
+                    var lm = z.GetProperty("latestMoisture");
+                    col.Item().Text(
+                        lm.GetProperty("pct").ValueKind == JsonValueKind.Number
+                            ? $"Latest soil moisture reading: {Num(lm.GetProperty("pct"), "%")} at {Str(lm.GetProperty("recordedAt"))} (UTC)." +
+                              (lm.GetProperty("usedForToday").GetBoolean() ? "" : " " + Str(lm.GetProperty("note")))
+                            : "No soil moisture reading recorded for this zone.");
+
+                    var reasoning = z.GetProperty("reasoning");
+                    if (reasoning.GetArrayLength() > 0)
+                    {
+                        col.Item().Text("Why").SemiBold();
+                        foreach (var r in reasoning.EnumerateArray()) col.Item().Text("- " + Str(r));
+                    }
+
+                    var facts = z.GetProperty("facts");
+                    if (facts.GetArrayLength() > 0)
+                    {
+                        col.Item().Text("Figures and their sources").SemiBold();
+                        foreach (var f in facts.EnumerateArray())
+                            col.Item().Text($"- {Str(f.GetProperty("label"))}: {Str(f.GetProperty("value"))}  [{Str(f.GetProperty("source"))}]").FontSize(9);
+                    }
+
+                    var limitations = z.GetProperty("limitations");
+                    if (limitations.GetArrayLength() > 0)
+                    {
+                        col.Item().Text("What could not be determined").SemiBold();
+                        foreach (var l in limitations.EnumerateArray()) col.Item().Text("- " + Str(l)).FontSize(9);
+                    }
+
+                    col.Item().Text("7-day outlook").SemiBold();
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(c =>
+                        {
+                            c.RelativeColumn(1.4f); c.RelativeColumn(2.2f); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(3f);
+                        });
+                        table.Header(h =>
+                        {
+                            h.Cell().Text("Date").SemiBold();
+                            h.Cell().Text("Action").SemiBold();
+                            h.Cell().Text("ET0 mm").SemiBold();
+                            h.Cell().Text("ETc mm").SemiBold();
+                            h.Cell().Text("Rain mm").SemiBold();
+                            h.Cell().Text("Note").SemiBold();
+                        });
+                        foreach (var d in z.GetProperty("days").EnumerateArray())
+                        {
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Str(d.GetProperty("date")));
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(ActionText(d.GetProperty("action").GetString()));
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(d.GetProperty("et0MmPerDay")));
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(d.GetProperty("etcMmPerDay")));
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(d.GetProperty("forecastRainMm")));
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Str(d.GetProperty("note"))).FontSize(9);
+                        }
+                    });
+                }
+            });
+
+            page.Footer().AlignCenter().Text(t =>
+            {
+                t.Span("Page ");
+                t.CurrentPageNumber();
+            });
+        })).GeneratePdf();
+
+        return Results.File(bytes, "application/pdf", $"schedule-farm{farmId}-{today}.pdf");
     }
 
 
