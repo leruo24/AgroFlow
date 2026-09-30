@@ -1,6 +1,11 @@
 using System.Security.Claims;
+using System.Globalization;
+using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using AgroFlow.Business.Agronomy;
 
 namespace AgroFlow.Api.Endpoints;
@@ -17,6 +22,7 @@ public static class ReportEndpoints
         group.MapGet("/water-usage", GetWaterUsageAsync);
         group.MapGet("/moisture", GetMoistureAsync);
         group.MapGet("/schedule", GetScheduleAsync);
+        group.MapGet("/water-usage/pdf", GetWaterUsagePdfAsync);
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>
@@ -440,6 +446,107 @@ public static class ReportEndpoints
             message = zones.Count == 0 ? "Not enough data yet: this farm has no zones." : null,
             zones,
         });
+    }
+
+        private static async Task<IResult> GetWaterUsagePdfAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to)
+    {
+        // Reuse the on-screen report so the PDF can never disagree with it.
+        var result = await GetWaterUsageAsync(user, dataSource, farmId, from, to);
+        if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
+        if (result is not IValueHttpResult { Value: { } value }) return result;
+
+        using var json = JsonSerializer.SerializeToDocument(value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var root = json.RootElement;
+
+        static string Litres1(JsonElement e) =>
+            e.ValueKind == JsonValueKind.Number ? e.GetDouble().ToString("0.0", CultureInfo.InvariantCulture) + " L" : "n/a";
+
+        var farmName = root.GetProperty("farmName").GetString();
+        var generated = root.GetProperty("generatedAt").GetDateTimeOffset().ToOffset(TimeSpan.FromHours(2));
+        var note = root.GetProperty("estimateNote").GetString();
+
+        double total = 0; int zonesCounted = 0, zonesExcluded = 0;
+        foreach (var z in root.GetProperty("zones").EnumerateArray())
+        {
+            if (z.GetProperty("status").GetString() == "ok")
+            {
+                total += z.GetProperty("estimatedLitres").GetDouble();
+                zonesCounted++;
+            }
+            else zonesExcluded++;
+        }
+
+        var bytes = Document.Create(container => container.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.Margin(36);
+            page.DefaultTextStyle(t => t.FontSize(10));
+
+            page.Header().Column(col =>
+            {
+                col.Item().Text("Water usage report (estimated)").FontSize(18).SemiBold();
+                col.Item().Text($"{farmName}  |  {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
+                col.Item().Text($"Generated {generated:yyyy-MM-dd HH:mm} (SAST)").FontColor(Colors.Grey.Darken1);
+            });
+
+            page.Content().PaddingVertical(12).Column(col =>
+            {
+                col.Spacing(10);
+                col.Item().Text(note).Italic();
+                col.Item().Text(
+                    $"Total estimated: {total.ToString("0.0", CultureInfo.InvariantCulture)} L across {zonesCounted} zone(s)." +
+                    (zonesExcluded > 0 ? $" {zonesExcluded} zone(s) had no usable data and are not included." : ""))
+                    .SemiBold();
+
+                foreach (var z in root.GetProperty("zones").EnumerateArray())
+                {
+                    col.Item().PaddingTop(6).Text(z.GetProperty("name").GetString()).FontSize(12).SemiBold();
+
+                    if (z.GetProperty("status").GetString() != "ok")
+                    {
+                        col.Item().Text(z.GetProperty("message").GetString());
+                        continue;
+                    }
+
+                    col.Item().Text(
+                        $"{z.GetProperty("eventCount").GetInt64()} irrigation event(s), " +
+                        $"{(z.GetProperty("runtimeSecondsTotal").GetInt64() / 60.0).ToString("0.#", CultureInfo.InvariantCulture)} min pump time, " +
+                        $"estimated {Litres1(z.GetProperty("estimatedLitres"))} " +
+                        $"(flow rate {z.GetProperty("flowRateLpm").GetDouble().ToString("0.0#", CultureInfo.InvariantCulture)} L/min)");
+
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(c =>
+                        {
+                            c.RelativeColumn(2); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(2);
+                        });
+                        table.Header(h =>
+                        {
+                            h.Cell().Text("Date").SemiBold();
+                            h.Cell().Text("Events").SemiBold();
+                            h.Cell().Text("Pump min").SemiBold();
+                            h.Cell().Text("Estimated litres").SemiBold();
+                        });
+                        foreach (var d in z.GetProperty("days").EnumerateArray())
+                        {
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(d.GetProperty("date").GetString());
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(d.GetProperty("eventCount").GetInt64().ToString());
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text((d.GetProperty("runtimeSeconds").GetInt64() / 60.0).ToString("0.#", CultureInfo.InvariantCulture));
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Litres1(d.GetProperty("estimatedLitres")));
+                        }
+                    });
+                }
+            });
+
+            page.Footer().AlignCenter().Text(t =>
+            {
+                t.Span("Page ");
+                t.CurrentPageNumber();
+            });
+        })).GeneratePdf();
+
+        return Results.File(bytes, "application/pdf", $"water-usage-farm{farmId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
     }
 
     private static double? Litres(long runtimeSeconds, float? flowRateLpm)
