@@ -23,6 +23,7 @@ public static class ReportEndpoints
         group.MapGet("/moisture", GetMoistureAsync);
         group.MapGet("/schedule", GetScheduleAsync);
         group.MapGet("/water-usage/pdf", GetWaterUsagePdfAsync);
+        group.MapGet("/moisture/pdf", GetMoisturePdfAsync);
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>
@@ -548,6 +549,135 @@ public static class ReportEndpoints
 
         return Results.File(bytes, "application/pdf", $"water-usage-farm{farmId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
     }
+
+        private static async Task<IResult> GetMoisturePdfAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to)
+    {
+        // Reuse the on-screen report so the PDF can never disagree with it.
+        var result = await GetMoistureAsync(user, dataSource, zoneId, from, to);
+        if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
+        if (result is not IValueHttpResult { Value: { } value }) return result;
+
+        using var json = JsonSerializer.SerializeToDocument(value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var root = json.RootElement;
+
+        static string Num(JsonElement e, string suffix) =>
+            e.ValueKind == JsonValueKind.Number
+                ? e.GetDouble().ToString("0.#", CultureInfo.InvariantCulture) + suffix
+                : "not set";
+
+        var zoneName = root.GetProperty("zoneName").GetString();
+        var generated = root.GetProperty("generatedAt").GetDateTimeOffset().ToOffset(TimeSpan.FromHours(2));
+        var note = root.GetProperty("estimateNote").GetString();
+        var hasData = root.GetProperty("status").GetString() == "ok";
+        var thresholds = root.GetProperty("thresholds");
+
+        var bytes = Document.Create(container => container.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.Margin(36);
+            page.DefaultTextStyle(t => t.FontSize(10));
+
+            page.Header().Column(col =>
+            {
+                col.Item().Text("Soil moisture and irrigation report").FontSize(18).SemiBold();
+                col.Item().Text($"{zoneName}  |  {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
+                col.Item().Text($"Generated {generated:yyyy-MM-dd HH:mm} (SAST)").FontColor(Colors.Grey.Darken1);
+            });
+
+            page.Content().PaddingVertical(12).Column(col =>
+            {
+                col.Spacing(10);
+
+                if (!hasData)
+                {
+                    col.Item().Text(root.GetProperty("message").GetString());
+                    return;
+                }
+
+                var s = root.GetProperty("summary");
+                col.Item().Text(
+                    $"Dry threshold: {Num(thresholds.GetProperty("dryPct"), "%")}  |  " +
+                    $"Target moisture: {Num(thresholds.GetProperty("targetPct"), "%")}");
+                col.Item().Text(
+                    $"{s.GetProperty("readingCount").GetInt64()} readings. " +
+                    $"Average {Num(s.GetProperty("averagePct"), "%")}, " +
+                    $"lowest {Num(s.GetProperty("lowestPct"), "%")}, " +
+                    $"highest {Num(s.GetProperty("highestPct"), "%")}.");
+                col.Item().Text(s.GetProperty("action").GetString()).SemiBold();
+
+                col.Item().PaddingTop(6).Text("Irrigation events").FontSize(12).SemiBold();
+                col.Item().Text(note).Italic();
+                var events = root.GetProperty("irrigationEvents");
+                if (events.GetArrayLength() == 0)
+                {
+                    col.Item().Text("No irrigation recorded in this period.");
+                }
+                else
+                {
+                    col.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(c =>
+                        {
+                            c.RelativeColumn(2); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(2);
+                        });
+                        table.Header(h =>
+                        {
+                            h.Cell().Text("Started (SAST)").SemiBold();
+                            h.Cell().Text("Minutes").SemiBold();
+                            h.Cell().Text("Trigger").SemiBold();
+                            h.Cell().Text("Estimated litres").SemiBold();
+                        });
+                        foreach (var e in events.EnumerateArray())
+                        {
+                            var trigger = e.GetProperty("triggerSource");
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(e.GetProperty("startedAt").GetString());
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text((e.GetProperty("runtimeSeconds").GetInt64() / 60.0).ToString("0.#", CultureInfo.InvariantCulture));
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(trigger.ValueKind == JsonValueKind.String ? trigger.GetString() : "unknown");
+                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(
+                                e.GetProperty("estimatedLitres").ValueKind == JsonValueKind.Number
+                                    ? Num(e.GetProperty("estimatedLitres"), " L (estimated)")
+                                    : "not enough data yet");
+                        }
+                    });
+                }
+
+                col.Item().PaddingTop(6).Text("Soil moisture by hour").FontSize(12).SemiBold();
+                col.Item().Table(table =>
+                {
+                    table.ColumnsDefinition(c =>
+                    {
+                        c.RelativeColumn(2); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn();
+                    });
+                    table.Header(h =>
+                    {
+                        h.Cell().Text("Hour (SAST)").SemiBold();
+                        h.Cell().Text("Average").SemiBold();
+                        h.Cell().Text("Min").SemiBold();
+                        h.Cell().Text("Max").SemiBold();
+                        h.Cell().Text("Readings").SemiBold();
+                    });
+                    foreach (var p in root.GetProperty("series").EnumerateArray())
+                    {
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("time").GetString());
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("avgMoisturePct"), "%"));
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("minMoisturePct"), "%"));
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("maxMoisturePct"), "%"));
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("readings").GetInt64().ToString());
+                    }
+                });
+            });
+
+            page.Footer().AlignCenter().Text(t =>
+            {
+                t.Span("Page ");
+                t.CurrentPageNumber();
+            });
+        })).GeneratePdf();
+
+        return Results.File(bytes, "application/pdf", $"moisture-zone{zoneId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
+    }
+
 
     private static double? Litres(long runtimeSeconds, float? flowRateLpm)
     {
