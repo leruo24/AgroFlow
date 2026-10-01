@@ -84,6 +84,7 @@ export type Zone = {
   name: string;
   location: string;
   crop: string;
+  plantingDate: string | null;
   healthStatus: string;
   // null means the zone's water_saved column has never been set - distinct
   // from a real, tracked 0.
@@ -202,6 +203,7 @@ type ZoneRow = {
   name?: string | null;
   location?: string | null;
   crop_type?: string | null;
+  planting_date?: string | null;
   water_saved?:
     | number
     | string
@@ -280,6 +282,7 @@ export type UpdateZoneSettingsInput = {
   name: string;
   location: string;
   crop: string;
+  plantingDate: string | null;
   moistureThreshold: number;
   desiredMoisture: number;
   automationEnabled: boolean;
@@ -431,6 +434,9 @@ function mapZoneRow(
     crop:
       row.crop_type?.trim() ||
       'Not configured',
+    plantingDate:
+      row.planting_date ??
+      null,
     healthStatus:
       row.health_status ??
       'Unknown',
@@ -1620,6 +1626,8 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
             cleanedLocation,
           cropType:
             cleanedCrop,
+          plantingDate:
+            settings.plantingDate,
           automationEnabled:
             settings.automationEnabled,
           moistureThreshold:
@@ -1649,6 +1657,8 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
                     cleanedLocation,
                   crop:
                     cleanedCrop,
+                  plantingDate:
+                    settings.plantingDate,
                   irrigation: {
                     ...zone.irrigation,
                     automation: {

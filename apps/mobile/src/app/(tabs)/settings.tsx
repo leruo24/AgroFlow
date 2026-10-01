@@ -246,6 +246,15 @@ export default function SettingsScreen() {
 
           <TouchableOpacity
             style={styles.profileButton}
+            onPress={() => router.push('/request')}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.profileText}>Farm Requests</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.profileButton}
             onPress={() => router.push('/profile')}
             activeOpacity={0.75}
           >

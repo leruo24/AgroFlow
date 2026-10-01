@@ -44,6 +44,7 @@ import type {
   User, Farm, Hardware, AdminAlert, MaintenanceJob,
   IrrigationSchedule, IrrigationEvent, ActivityEntry,
   AlertStatus, AlertPriority, UserStatus,
+  ServiceRequest, ServiceRequestStatus,
 } from "@/types/models";
 
 /* ------------------------------- real row shapes ------------------------------- */
@@ -65,6 +66,20 @@ type MaintenanceRow = {
 type IrrigationEventRow = {
   id: number; zone_id: number; started_at: string;
   runtime_seconds: number; estimated_litres: number;
+};
+
+type ServiceRequestRow = {
+  id: number;
+  farmer_id: string;
+  farm_id: number | null;
+  request_type: ServiceRequest["requestType"];
+  location: string | null;
+  rough_size: number | null;
+  crop_type: ServiceRequest["cropType"];
+  notes: string | null;
+  status: ServiceRequestStatus;
+  created_at: string;
+  updated_at: string;
 };
 
 /** location is stored as one text field ("Region, Province" by
@@ -285,6 +300,82 @@ export const api = {
 
   return farms;
 },
+  async getServiceRequests(): Promise<ServiceRequest[]> {
+    const { data, error } = await supabase
+      .from("service_request")
+      .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const rows = (data ?? []) as ServiceRequestRow[];
+    const farmerIds = [...new Set(rows.map((r) => r.farmer_id))];
+    const farmIds = [...new Set(rows.map((r) => r.farm_id).filter((id): id is number => id !== null))];
+
+    const [{ data: farmers, error: farmerError }, { data: farmRows, error: farmError }] =
+      await Promise.all([
+        farmerIds.length
+          ? supabase.from("profile").select("id, name, email").in("id", farmerIds)
+          : Promise.resolve({ data: [], error: null }),
+        farmIds.length
+          ? supabase.from("farm").select("farm_id, name").in("farm_id", farmIds)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
+
+    if (farmerError) throw farmerError;
+    if (farmError) throw farmError;
+
+    const farmerMap = new Map(
+      (farmers ?? []).map((farmer: { id: string; name: string; email: string }) => [
+        farmer.id,
+        farmer,
+      ])
+    );
+
+    const farmMap = new Map(
+      (farmRows ?? []).map((farm: { farm_id: number; name: string }) => [
+        farm.farm_id,
+        farm.name,
+      ])
+    );
+
+    return rows.map((row) => {
+      const farmer = farmerMap.get(row.farmer_id);
+
+      return {
+        id: row.id,
+        farmerId: row.farmer_id,
+        farmerName: farmer?.name || "(no name on file)",
+        farmerEmail: farmer?.email || "",
+        farmId: row.farm_id,
+        farmName: row.farm_id === null ? null : farmMap.get(row.farm_id) ?? null,
+        requestType: row.request_type,
+        location: row.location,
+        roughSize: row.rough_size,
+        cropType: row.crop_type,
+        notes: row.notes,
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
+  },
+
+  async updateServiceRequestStatus(
+    id: number,
+    status: ServiceRequestStatus,
+  ): Promise<void> {
+    const { error } = await supabase
+      .from("service_request")
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (error) throw error;
+  },
+
   async getHardware(): Promise<Hardware[]> {
     const [{ data, error }, zoneMap, farmNames] = await Promise.all([
       supabase.from("hardware").select("hardware_id, device_name, device_type, zone_id, status, last_seen, created_at"),

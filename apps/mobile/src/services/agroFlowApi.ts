@@ -342,3 +342,30 @@ export async function requestPasswordReset(
     clearTimeout(timeout);
   }
 }
+
+export type FarmerServiceRequestInput = {
+  requestType: 'new_farm' | 'new_zone';
+  farmId?: number;
+  location?: string;
+  roughSize?: number;
+  cropType:
+    | 'potato'
+    | 'tomato'
+    | 'citrus'
+    | 'leafy_veg'
+    | 'maize'
+    | 'dry_beans';
+  notes?: string;
+};
+
+export function createFarmerServiceRequest(
+  request: FarmerServiceRequestInput
+) {
+  return authorizedRequest<{ id: number }>(
+    '/api/farmer/requests',
+    {
+      method: 'POST',
+      body: JSON.stringify(request),
+    }
+  );
+}
