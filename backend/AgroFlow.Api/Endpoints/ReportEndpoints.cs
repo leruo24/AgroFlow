@@ -25,6 +25,7 @@ public static class ReportEndpoints
         group.MapGet("/water-usage/pdf", GetWaterUsagePdfAsync);
         group.MapGet("/moisture/pdf", GetMoisturePdfAsync);
         group.MapGet("/schedule/pdf", GetSchedulePdfAsync);
+        group.MapGet("/zones", GetZonesAsync);
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>
@@ -811,6 +812,43 @@ public static class ReportEndpoints
 
         return Results.File(bytes, "application/pdf", $"schedule-farm{farmId}-{today}.pdf");
     }
+
+        private static async Task<IResult> GetZonesAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId)
+    {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+        if (farmId is null) return Results.BadRequest(new { error = "farmId is required." });
+
+        const string sql = """
+            select z.id, z.name, z.crop_type
+            from zone z
+            where z.farm_id = $1
+              and (exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $2)
+                or exists (select 1 from farm_member fm where fm.farm_id = z.farm_id and fm.profile_id = $2)
+                or exists (select 1 from profile p where p.id = $2 and p.role = 'admin'))
+            order by z.id;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync();
+        await using var cmd = new NpgsqlCommand(sql, connection);
+        cmd.Parameters.AddWithValue(farmId.Value);
+        cmd.Parameters.AddWithValue(userId);
+        await using var r = await cmd.ExecuteReaderAsync();
+
+        var zones = new List<object>();
+        while (await r.ReadAsync())
+        {
+            var id = r.GetInt64(0);
+            zones.Add(new
+            {
+                zoneId = id,
+                name = r.IsDBNull(1) ? $"Zone {id}" : r.GetString(1),
+                cropType = r.IsDBNull(2) ? null : r.GetString(2),
+            });
+        }
+        return Results.Ok(zones);
+    }
+
 
 
     private static double? Litres(long runtimeSeconds, float? flowRateLpm)
