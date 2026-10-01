@@ -31,7 +31,15 @@ public static class UserEndpoints
                 p.role,
                 p.created_at,
                 fm.farm_id,
-                f.name as farm_name
+                f.name as farm_name,
+
+                -- Read-only, for the admin list's "is this farmer actually
+                -- reachable?" column. A farmer who never pressed Start in the
+                -- bot has no chat id and receives nothing, and until now there
+                -- was no way for anyone to notice that until a storm warning
+                -- failed to arrive.
+                p.telegram_chat_id is not null as telegram_linked,
+                p.telegram_alerts_enabled
             from profile p
             left join farm_member fm
                 on fm.profile_id = p.id
@@ -73,7 +81,16 @@ public static class UserEndpoints
                 farm_id = farmId,
                 farm_name = reader.IsDBNull(7)
                     ? null
-                    : reader.GetString(7)
+                    : reader.GetString(7),
+
+                telegram_linked = !reader.IsDBNull(8) && reader.GetBoolean(8),
+
+                // The column is NOT NULL DEFAULT TRUE, so null is only
+                // reachable through an outer join that did not match. Reading
+                // it as "alerts on" keeps an unlinked farmer from also looking
+                // like one who deliberately muted their alerts - those are
+                // different problems with different follow-ups.
+                telegram_alerts_enabled = reader.IsDBNull(9) || reader.GetBoolean(9)
             });
         }
 

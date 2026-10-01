@@ -34,6 +34,17 @@ export async function dashboardPage(): Promise<string> {
     ${kpiCard({ label: "Total Users", value: kpis.totalUsers, trend: trends["totalUsers"] ?? undefined, icon: Icon.users })}
     ${kpiCard({ label: "Connected Hardware", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: Icon.radio })}
     ${kpiCard({ label: "Active Alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: Icon.bell })}
+    ${/* Shown only when there is something to act on, so it reads as a task
+          rather than as another number that is always zero. Clicking through
+          lands on the users list already filtered to exactly these farmers. */
+      kpis.farmersNotReceivingAlerts > 0
+      ? kpiCard({
+          label: "Not Receiving Alerts",
+          value: kpis.farmersNotReceivingAlerts,
+          trend: { dir: "down", text: "Telegram not connected" },
+          icon: Icon.userX,
+        })
+      : ""}
     ${kpiCard({ label: "Open Maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: Icon.wrench })}
     ${kpiCard({ label: "System Uptime", value: kpis.systemUptime, format: "pct", trend: trends["systemUptime"] ?? undefined, icon: Icon.circleCheck })}
   </div>

@@ -74,6 +74,11 @@ export interface FilterState {
   deviceType: string;
   maintenanceState: string;
   crop: string;
+
+  /** Telegram reachability on the users page: "Connected",
+      "Connected, alerts off", or "Not connected". Chasing up everyone who
+      never connected is the view the team actually works from. */
+  telegram: string;
 }
 
 /* ---------------------------------- users ----------------------------------- */
@@ -103,6 +108,18 @@ export interface User {
   phone: string;
   farm: string;
   status: UserStatus;
+
+  /** Whether this farmer has actually connected Telegram (profile.
+      telegram_chat_id is not null). False means they receive NOTHING -
+      no weather warnings, no equipment failures, no password resets -
+      and nobody finds out until something urgent fails to arrive. */
+  telegramLinked: boolean;
+
+  /** profile.telegram_alerts_enabled. Only meaningful when telegramLinked
+      is true: a farmer who muted their alerts is a deliberate choice, which
+      is a different situation from one who never connected at all. */
+  telegramAlerts: boolean;
+
   dateJoined: string;
   lastActive: string;
   hardware: string[];
@@ -271,6 +288,11 @@ export interface Kpis {
   platformAvailability: number;
   newFarmsThisMonth: number;
   newUsersThisWeek: number;
+
+  /** Farmers with no Telegram connected. They receive no weather warnings,
+      no equipment failures and no password resets, and nothing else in the
+      dashboard would reveal that until an urgent message failed to arrive. */
+  farmersNotReceivingAlerts: number;
 }
 
 /** Trend per KPI key (dashboard looks these up by string key, so keep it a map). */

@@ -46,6 +46,7 @@ public static class TelegramEndpoints
             .AddEndpointFilter<AdminOnlyFilter>();
 
         admin.MapPost("/codes/{profileId:guid}", IssueCodeForFarmerAsync);
+        admin.MapPost("/codes/{profileId:guid}/link", IssueLinkCodeForFarmerAsync);
         admin.MapPost("/password/{profileId:guid}", ResetTemporaryPasswordAsync);
         admin.MapPost("/password/{profileId:guid}/send", SendTemporaryPasswordAsync);
 
@@ -80,6 +81,42 @@ public static class TelegramEndpoints
         // forces a change - the farmer has no usable password of their own yet.
         var issued = await onboarding.IssueCodeAsync(
             profileId, TelegramCodePurpose.Onboarding, cancellationToken);
+
+        return Results.Ok(new TelegramCodeResponse(issued.Code, issued.DeepLink, issued.ExpiresAt));
+    }
+
+    // Chasing up a farmer who never connected Telegram, from the admin list.
+    //
+    // Deliberately a LINK code and not an onboarding one. The farmer already
+    // has an account and a password they use; they simply never pressed Start
+    // in the bot. Issuing an onboarding code here would reset that working
+    // password and force a change they never asked for - exactly the problem
+    // migration 0025 exists to prevent. Redeeming this attaches the chat and
+    // touches nothing else.
+    //
+    // Code generation itself is untouched: this calls the same IssueCodeAsync
+    // the other paths do, with the other purpose.
+    private static async Task<IResult> IssueLinkCodeForFarmerAsync(
+        Guid profileId,
+        TelegramOnboardingService onboarding,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        if (!await ProfileExistsAsync(dataSource, profileId, cancellationToken))
+        {
+            return Results.NotFound(new { error = "No such farmer." });
+        }
+
+        var issued = await onboarding.IssueCodeAsync(
+            profileId, TelegramCodePurpose.Link, cancellationToken);
+
+        if (issued.DeepLink is null)
+        {
+            return Results.Problem(
+                title: "Telegram is not configured.",
+                detail: "The AgroFlow bot username is not set on the server, so no link can be built.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
 
         return Results.Ok(new TelegramCodeResponse(issued.Code, issued.DeepLink, issued.ExpiresAt));
     }

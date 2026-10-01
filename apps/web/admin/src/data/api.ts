@@ -152,6 +152,7 @@ export const api = {
       totalFarms: f.length,
       totalUsers: u.length,
       activeUsers: u.filter((x) => x.status === "Active").length,
+      farmersNotReceivingAlerts: u.filter((x) => !x.telegramLinked).length,
       disabledUsers: u.filter((x) => x.status === "Disabled").length,
       connectedHardware: h.filter((x) => x.status === "Online").length,
       totalHardware: h.length,
@@ -204,6 +205,8 @@ export const api = {
     created_at: string | null;
     farm_id: number | null;
     farm_name: string | null;
+    telegram_linked: boolean;
+    telegram_alerts_enabled: boolean;
   };
 
   const rows = await getAuthorized<ApiUserRow[]>("/api/users");
@@ -219,6 +222,12 @@ export const api = {
     // as Active. There is currently no way to represent Disabled/
     // Pending for a real user; see setUserStatus()'s note.
     status: "Active" as UserStatus,
+
+    /* Real columns, unlike status above: a farmer either connected Telegram
+       or did not, and that is the difference between receiving alerts and
+       receiving nothing at all. */
+    telegramLinked: u.telegram_linked,
+    telegramAlerts: u.telegram_alerts_enabled,
 
     dateJoined: u.created_at?.slice(0, 10) ?? "",
 

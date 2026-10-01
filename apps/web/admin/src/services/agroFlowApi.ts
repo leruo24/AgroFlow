@@ -132,6 +132,21 @@ export async function regenerateTelegramCode(
   );
 }
 
+/* Chasing up a farmer who never connected Telegram, from the users list.
+
+   A LINK code, not an onboarding one: this farmer already has an account and
+   a password they use, and redeeming it must attach their chat and touch
+   nothing else. Issuing an onboarding code here would reset their working
+   password - see migration 0025. */
+export async function issueLinkCodeForFarmer(
+  profileId: string,
+): Promise<TelegramCodeResult> {
+  return postAuthorized<TelegramCodeResult>(
+    `/api/telegram/admin/codes/${profileId}/link`,
+    {},
+  );
+}
+
 /* Sends a NEW temporary password to the farmer's own Telegram chat - the same
    thing they would get from "Forgot password?" in the app, triggered by an
    administrator for a farmer who phones in instead.

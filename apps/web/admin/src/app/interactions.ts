@@ -10,6 +10,7 @@ import {
   getFarmers,
   inviteFarmer,
   onboardFarmer,
+  issueLinkCodeForFarmer,
   regenerateTelegramCode,
   registerFarm,
   sendTemporaryPasswordViaTelegram,
@@ -17,6 +18,7 @@ import {
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
+import { showQrModal } from "@/lib/qrModal";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
 import {
@@ -26,6 +28,7 @@ import { esc, fmtInt, fmtPct, fmtDate, fmtLitres } from "@/lib/format";
 import { TECHNICIANS } from "@/data/referenceData";
 import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
+import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile } from "@/app/auth";
 
 /* ----------------------------- filter toolbar ---------------------------- */
@@ -92,11 +95,16 @@ async function exportCurrent(kind: string): Promise<void> {
 
   switch (kind) {
     case "users": {
+      /* The telegram mapper has to be here too, or filtering the list to
+         "Not connected" and hitting Export would quietly hand back every
+         user - and that export is exactly the chase list someone wants. */
       const rows = applyFilters(await api.getUsers(), f, {
         search: (u) => `${u.name} ${u.email} ${u.farm}`,
         date: (u) => u.dateJoined, farm: (u) => u.farm, status: (u) => u.status,
-      }).map((u) => [u.name, u.email, u.farm, u.status, u.dateJoined, u.lastActive]);
-      downloadCSV("agroflow-users.csv", toCSV(["Name", "Email", "Farm", "Status", "Joined", "Last active"], rows));
+        telegram: (u) => telegramState(u),
+      }).map((u) => [u.name, u.email, u.phone, u.farm, u.status, telegramState(u), u.dateJoined, u.lastActive]);
+      downloadCSV("agroflow-users.csv", toCSV(
+        ["Name", "Email", "Phone", "Farm", "Status", "Alerts", "Joined", "Last active"], rows));
       break;
     }
     case "farms": {
@@ -323,6 +331,34 @@ async function handleAction(el: HTMLElement): Promise<void> {
       await api.setUserStatus(idAttr, "Active");
       toast("Account enabled.", "success");
       return void refresh();
+    case "send-link-code": {
+      /* Follow-up for a farmer who never pressed Start in the bot. Reuses the
+         handover screen's QR renderer so the team sees exactly what the
+         farmer needs to scan, and can read the link out over the phone
+         instead if that is easier. */
+      const u = api.findUser(idAttr);
+
+      try {
+        const issued = await issueLinkCodeForFarmer(idAttr);
+
+        showQrModal(
+          u?.name ?? "this farmer",
+          issued.deepLink,
+          issued.expiresAt,
+        );
+
+        return;
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error
+            ? e.message
+            : "Unable to generate a Telegram link.",
+          "Unable to generate a Telegram link",
+        );
+
+        return;
+      }
+    }
     case "reset-password": {
       /* Used to call a no-op that toasted "Password reset link sent." while
          sending nothing at all. It now really does send: the bot delivers a

@@ -10,7 +10,7 @@ export const EMPTY_FILTER: FilterState = {
   search: "", from: "", to: "", preset: "all",
   farm: "All", province: "All", region: "All", eventType: "All",
   administrator: "All", status: "All", priority: "All",
-  deviceType: "All", maintenanceState: "All", crop: "All",
+  deviceType: "All", maintenanceState: "All", crop: "All", telegram: "All",
 };
 
 /** Filter state per page, so navigating away and back keeps context. */
@@ -114,6 +114,7 @@ export interface FieldMap<T> {
   deviceType?: (row: T) => string;
   maintenanceState?: (row: T) => string;
   crop?: (row: T) => string;
+  telegram?: (row: T) => string;
 }
 
 const matches = (selected: string, actual: string | undefined): boolean =>
@@ -140,6 +141,7 @@ export function applyFilters<T>(rows: T[], f: FilterState, map: FieldMap<T>): T[
     if (map.deviceType && !matches(f.deviceType, map.deviceType(row))) return false;
     if (map.maintenanceState && !matches(f.maintenanceState, map.maintenanceState(row))) return false;
     if (map.crop && !matches(f.crop, map.crop(row))) return false;
+    if (map.telegram && !matches(f.telegram, map.telegram(row))) return false;
     return true;
   });
 }
@@ -151,7 +153,7 @@ export function activeFilterCount(f: FilterState): number {
   if (f.preset !== "all") n++;
   for (const key of [
     "farm", "province", "region", "eventType", "administrator",
-    "status", "priority", "deviceType", "maintenanceState", "crop",
+    "status", "priority", "deviceType", "maintenanceState", "crop", "telegram",
   ] as const) {
     if (f[key] !== "All") n++;
   }
