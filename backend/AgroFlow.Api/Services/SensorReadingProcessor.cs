@@ -54,12 +54,12 @@ public static class SensorReadingProcessor
             // the codebase writing to it, which is why the admin dashboard's
             // alerts page has only ever shown an empty state. This is its
             // first writer.
+            //
+            // The alert row is written for EVERY entry into Critical, because
+            // the app and the admin dashboard should show everything that
+            // happened. Whether the farmer is also messaged is decided further
+            // down, and is a much narrower question - see the note there.
             await InsertCriticalAlertAsync(connection, zoneId, moisture, temperature);
-
-            if (notifications is not null)
-            {
-                await notifications.NotifyZoneCriticalAsync(zoneId, moisture ?? value, cancellationToken);
-            }
         }
         else if (leftCritical)
         {
@@ -70,6 +70,11 @@ public static class SensorReadingProcessor
         }
 
         string? commandIssued = null;
+
+        // Why the farmer could not be left to AgroFlow on this one. Null means
+        // either the zone is fine, or AgroFlow is handling it - both of which
+        // are app-only. See the note above the send at the end of this method.
+        ZoneCriticalReason? couldNotActReason = null;
 
         if (sensorType == "SoilMoisture")
         {
@@ -87,6 +92,17 @@ public static class SensorReadingProcessor
             {
                 // Health status above is still updated - observing a zone is
                 // always allowed. Only the command is suppressed.
+                //
+                // A zone the farmer put on manual that has just gone Critical
+                // is the clearest case of "something needs you": nobody else
+                // is going to water it.
+                if (enteredCritical)
+                {
+                    couldNotActReason = ZoneCriticalReason.ManualMode;
+                    await NotifyIfCouldNotActAsync(
+                        notifications, zoneId, moisture ?? value, couldNotActReason, cancellationToken);
+                }
+
                 return new SensorReadingResult(healthStatus, null);
             }
 
@@ -118,15 +134,60 @@ public static class SensorReadingProcessor
             }
         }
 
-        // Only fires when a command was actually queued. The `lastCommand !=
-        // desired` guard above already means this is a change of state, not a
-        // repeat of the instruction already standing.
-        if (commandIssued is not null && notifications is not null)
+        // ROUTINE IRRIGATION IS NOT MESSAGED. A zone that went dry and was
+        // watered automatically is the system working, and there is nothing
+        // for the farmer to do about it - it belongs in the app, with the rest
+        // of their usage history. This used to send a message on every auto
+        // start and stop; it was removed deliberately, because a channel that
+        // carries things you do not need to act on gets muted, and then the
+        // frost warning goes unread too.
+        //
+        // What IS worth a message is a zone that needed water and did not get
+        // it. By this point the zone is on automatic, so the remaining way
+        // AgroFlow can fail to act is having nothing to send the command to.
+        if (enteredCritical && couldNotActReason is null)
         {
-            await notifications.NotifyIrrigationAsync(zoneId, commandIssued, "auto", cancellationToken);
+            if (!await HasActiveDeviceAsync(connection, zoneId))
+            {
+                couldNotActReason = ZoneCriticalReason.NoDevice;
+            }
         }
 
+        await NotifyIfCouldNotActAsync(
+            notifications, zoneId, moisture ?? value, couldNotActReason, cancellationToken);
+
         return new SensorReadingResult(healthStatus, commandIssued);
+    }
+
+    // A pump that was sent a command and never acknowledged it is the third
+    // way AgroFlow can fail to water a zone, but it cannot be detected from
+    // here - the command has only just been queued. DeviceStatusMonitorService
+    // picks that up once the acknowledgement is overdue and raises
+    // SystemFailureKind.PumpUnresponsive.
+    private static async Task NotifyIfCouldNotActAsync(
+        INotificationService? notifications,
+        long zoneId,
+        float moisture,
+        ZoneCriticalReason? reason,
+        CancellationToken cancellationToken)
+    {
+        if (notifications is null || reason is null) return;
+
+        await notifications.NotifyZoneCriticalAsync(zoneId, moisture, reason.Value, cancellationToken);
+    }
+
+    // "Active" means enrolled and in service. A zone whose only device was
+    // unassigned or never enrolled cannot be watered by AgroFlow however dry
+    // it gets, which is precisely the failure the farmer needs telling about.
+    private static async Task<bool> HasActiveDeviceAsync(NpgsqlConnection connection, long zoneId)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select exists (select 1 from hardware where zone_id = $1 and enrollment_status = 'active')",
+            connection);
+
+        cmd.Parameters.AddWithValue(zoneId);
+
+        return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 
     private static async Task InsertSensorReadingAsync(

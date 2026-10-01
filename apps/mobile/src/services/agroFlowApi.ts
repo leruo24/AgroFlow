@@ -277,3 +277,68 @@ export function confirmPasswordChanged() {
     }
   );
 }
+
+/* Self-service password recovery, delivered over Telegram.
+
+   This endpoint is anonymous - a farmer who has forgotten their password
+   cannot authenticate to ask for a new one - so it is the one call here that
+   does not go through authorizedRequest.
+
+   The response is deliberately identical whether the address exists, has no
+   Telegram connected, or was rate limited. The screen must not try to be more
+   helpful than that: telling the farmer "no such account" would tell anyone
+   else the same thing about any address they cared to try. */
+export async function requestPasswordReset(
+  email: string
+): Promise<string> {
+  const apiBase =
+    resolveApiBase();
+
+  if (
+    !apiBase
+  ) {
+    throw new Error(
+      'AgroFlow.Api could not be located. Set EXPO_PUBLIC_AGROFLOW_API_BASE.'
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+
+  try {
+    const response =
+      await fetch(
+        `${apiBase}/api/auth/forgot-password`,
+        {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            Accept:
+              'application/json',
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            email,
+          }),
+        }
+      );
+
+    if (
+      !response.ok
+    ) {
+      throw new Error(
+        'We could not reach AgroFlow. Please check your connection and try again.'
+      );
+    }
+
+    const body =
+      await response.json() as {
+        message?: string;
+      };
+
+    return body.message ?? '';
+  } finally {
+    clearTimeout(timeout);
+  }
+}

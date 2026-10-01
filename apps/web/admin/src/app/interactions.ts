@@ -12,6 +12,7 @@ import {
   onboardFarmer,
   regenerateTelegramCode,
   registerFarm,
+  sendTemporaryPasswordViaTelegram,
   resetTemporaryPassword,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
@@ -322,9 +323,26 @@ async function handleAction(el: HTMLElement): Promise<void> {
       await api.setUserStatus(idAttr, "Active");
       toast("Account enabled.", "success");
       return void refresh();
-    case "reset-password":
-      await api.resetPassword(idAttr);
-      return toast("Password reset link sent.", "success");
+    case "reset-password": {
+      /* Used to call a no-op that toasted "Password reset link sent." while
+         sending nothing at all. It now really does send: the bot delivers a
+         new temporary password to the farmer's own Telegram, and the app
+         forces them to change it at their next sign-in. */
+      try {
+        const result = await sendTemporaryPasswordViaTelegram(idAttr);
+
+        return toast(result.message, "success");
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error
+            ? e.message
+            : "Unable to send a new password.",
+          "Unable to send a new password",
+        );
+
+        return;
+      }
+    }
     
 case "delete-user": {
   const u = api.findUser(idAttr);

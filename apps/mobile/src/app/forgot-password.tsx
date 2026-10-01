@@ -22,15 +22,13 @@ import {
   SafeAreaView,
 } from 'react-native-safe-area-context';
 
-import * as Linking from 'expo-linking';
-
 import {
   useTheme,
 } from '@/context/ThemeContext';
 
 import {
-  supabase,
-} from '@/lib/supabase';
+  requestPasswordReset,
+} from '@/services/agroFlowApi';
 
 import {
   createForgotPasswordStyles,
@@ -75,6 +73,17 @@ export default function ForgotPasswordScreen() {
     setSubmitted,
   ] =
     useState(false);
+
+  //The server's own wording is shown rather than anything composed here. It
+  //is deliberately identical whether the account exists, has no Telegram
+  //connected, or was rate limited - this screen must not be more specific
+  //than that, or it becomes a way to test which email addresses are real
+  //AgroFlow farmers.
+  const [
+    notice,
+    setNotice,
+  ] =
+    useState('');
 
   function validateEmail() {
     const cleanedEmail =
@@ -129,36 +138,29 @@ export default function ForgotPasswordScreen() {
         true
       );
 
-      const redirectTo =
-        Linking.createURL(
-          '/update-password'
+      //Recovery goes over Telegram, not email. Supabase's own
+      //resetPasswordForEmail - which this screen used to call - needs SMTP
+      //that AgroFlow has never configured, so it silently did nothing and a
+      //farmer who forgot their password had no self-service path at all.
+      //
+      //The bot sends a new temporary password to the chat already linked to
+      //that account, and the app forces a change at the next sign-in.
+      const message =
+        await requestPasswordReset(
+          cleanedEmail
         );
-
-      console.log(
-        'Password recovery redirect URL:',
-        redirectTo
-      );
-
-      const {
-        error: resetError,
-      } =
-        await supabase.auth
-          .resetPasswordForEmail(
-            cleanedEmail,
-            {
-              redirectTo,
-            }
-          );
-
-      if (
-        resetError
-      ) {
-        throw resetError;
-      }
 
       setEmail(
         cleanedEmail
       );
+
+      if (
+        message
+      ) {
+        setNotice(
+          message
+        );
+      }
 
       setSubmitted(//react state variable that indicates whether the password reset request has been submitted. When the user submits their email address for password recovery, this state is set to true, triggering a change in the UI to show a confirmation message and options to return to login or try another email address.
         true
@@ -174,7 +176,7 @@ export default function ForgotPasswordScreen() {
       setError(
         error instanceof Error
           ? error.message
-          : 'Unable to send password recovery instructions.'
+          : 'Unable to request a new password.'
       );
     } finally {
       setLoading(
@@ -459,7 +461,7 @@ export default function ForgotPasswordScreen() {
                       styles.title
                     }
                   >
-                    Check Your Email
+                    Check Telegram
                   </Text>
 
                   <Text
@@ -467,7 +469,8 @@ export default function ForgotPasswordScreen() {
                       styles.description
                     }
                   >
-                    If an AgroFlow account exists for the email below, recovery instructions will be sent there.
+                    {notice ||
+                      'If that email address belongs to an AgroFlow account with Telegram connected, a new temporary password has been sent to that Telegram chat. If nothing arrives, please contact your administrator.'}
                   </Text>
                 </View>
 
@@ -481,7 +484,7 @@ export default function ForgotPasswordScreen() {
                       styles.successLabel
                     }
                   >
-                    Reset request sent
+                    Requested for
                   </Text>
 
                   <Text

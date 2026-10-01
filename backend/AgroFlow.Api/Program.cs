@@ -168,10 +168,24 @@ builder.Services.Configure<ApkOptions>(
     builder.Configuration.GetSection(ApkOptions.SectionName));
 builder.Services.Configure<DeviceMonitorOptions>(
     builder.Configuration.GetSection(DeviceMonitorOptions.SectionName));
+builder.Services.Configure<WeatherAlertOptions>(
+    builder.Configuration.GetSection(WeatherAlertOptions.SectionName));
+builder.Services.Configure<PasswordResetOptions>(
+    builder.Configuration.GetSection(PasswordResetOptions.SectionName));
 
 builder.Services.AddSingleton<TelegramClient>();
 builder.Services.AddSingleton<TelegramOnboardingService>();
 builder.Services.AddSingleton<SupabaseAdminService>();
+
+// Stops a repeatedly-observed event becoming a repeatedly-sent message. The
+// forecast refreshes every 6 hours with 8 days of data, so without this one
+// storm would be announced about 20 times. See migration 0026.
+builder.Services.AddSingleton<NotificationLedger>();
+
+// Self-service password recovery over Telegram. Supabase's own email reset
+// needs SMTP that this project has never configured, so the mobile
+// forgot-password screen silently did nothing before this.
+builder.Services.AddSingleton<PasswordResetService>();
 
 // Singleton rather than scoped because MqttConnectionService and the two
 // hosted services below are singletons and hold this for the process
@@ -196,10 +210,17 @@ else
 // should.
 builder.Services.AddHostedService<TelegramPollingService>();
 
-// Marks devices Offline when they go quiet and Online when they return,
-// messaging the farmer on the transition only. Nothing wrote hardware.status
-// after enrolment before this.
+// Equipment that has stopped working: devices gone quiet, pumps that never
+// acknowledged a command, zones whose sensor has gone silent or that have
+// nothing able to control them. Transition-based where possible and
+// ledger-deduplicated where not. Nothing wrote hardware.status after enrolment
+// before this.
 builder.Services.AddHostedService<DeviceStatusMonitorService>();
+
+// Crop-damaging weather, interpreted from the forecast rows
+// WeatherCollectionService already stores. Thresholds are configurable because
+// what counts as dangerous is regional.
+builder.Services.AddHostedService<WeatherAlertService>();
 
 // Weather collection. Populates weather_daily (migration 0016) from
 // Open-Meteo every Weather:FetchIntervalHours (default 6) for every farm that
@@ -246,6 +267,12 @@ app.Use(async (context, next) =>
     var path = context.Request.Path;
     var isUserRoute = path.StartsWithSegments("/api/devices/enroll") ||
                   path.StartsWithSegments("/api/telegram") ||
+                  // Anonymous by necessity: a farmer who has forgotten their
+                  // password can present neither a JWT nor the device key.
+                  // What makes it safe is that the new password goes only to
+                  // the Telegram chat already linked to that account - see
+                  // PasswordResetEndpoints.
+                  path.StartsWithSegments("/api/auth") ||
                   path.StartsWithSegments("/api/farmers") ||
                   path.StartsWithSegments("/api/farmer") ||
                   path.StartsWithSegments("/api/farms")||
@@ -275,6 +302,7 @@ app.MapFarmerEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();
+app.MapPasswordResetEndpoints();
 
 
 app.Run();

@@ -132,6 +132,23 @@ export async function regenerateTelegramCode(
   );
 }
 
+/* Sends a NEW temporary password to the farmer's own Telegram chat - the same
+   thing they would get from "Forgot password?" in the app, triggered by an
+   administrator for a farmer who phones in instead.
+
+   Different from resetTemporaryPassword below: this one never shows the
+   password to the admin, so the credential only ever reaches the account's
+   owner. It fails if the farmer has no Telegram connected, which is when the
+   read-it-out version below is the right tool. */
+export async function sendTemporaryPasswordViaTelegram(
+  profileId: string,
+): Promise<{ message: string }> {
+  return postAuthorized<{ message: string }>(
+    `/api/telegram/admin/password/${profileId}/send`,
+    {},
+  );
+}
+
 /* The fallback for a farmer with no Telegram at all, and the only possible
    answer to "what was their password again?" - AgroFlow never stored it, so
    this mints a new one and returns it once. */

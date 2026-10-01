@@ -103,6 +103,24 @@ public sealed class TelegramPollingService : BackgroundService
             {
                 break;
             }
+            catch (TelegramApiException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                // A 401 means the token does not match any bot: wrong value,
+                // revoked, or a deleted bot. No amount of retrying fixes that,
+                // and retrying anyway is how one bad token produced 11,320
+                // identical warnings over a week - noise that buried every
+                // real event in the log.
+                //
+                // Stop polling. The next deploy restarts this service, which
+                // is exactly when a corrected token would arrive.
+                _logger.LogCritical(
+                    "Telegram rejected the bot token (401 Unauthorized). INBOUND MESSAGES ARE NOW OFF: " +
+                    "farmers scanning an onboarding QR code will get no reply until this is fixed. " +
+                    "Check Telegram__BotToken against @BotFather (/mybots -> API Token); a token that " +
+                    "has been revoked gives exactly this. Polling will not retry until the next restart.");
+
+                return;
+            }
             catch (TelegramApiException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
                 // The single most likely cause of "onboarding silently did
@@ -424,8 +442,10 @@ public sealed class TelegramPollingService : BackgroundService
         {
             await _client.SendMessageAsync(
                 chatId,
-                "Send /alerts on to get zone and device alerts here, or /alerts off to stop them.\n\n" +
-                "Updates about your requests are always sent, either way.",
+                "Send /alerts on to get weather and equipment messages here, or " +
+                "/alerts off to stop them." + NewLine + NewLine +
+                "Your sign-in details and updates about your requests are always sent, " +
+                "either way.",
                 cancellationToken);
 
             return;
@@ -437,23 +457,33 @@ public sealed class TelegramPollingService : BackgroundService
         await _client.SendMessageAsync(
             chatId,
             enabled
-                ? "Alerts are on. I will message you when a zone gets too dry, when irrigation " +
-                  "starts or stops, and if a device goes offline."
-                : "Alerts are off. I will not message you about zones, irrigation or devices. " +
-                  "Updates about your requests will still come through.",
+                ? "Alerts are on. I will message you about weather that could damage your " +
+                  "crop, equipment that stops working, and any zone that needs water but " +
+                  "cannot be watered automatically."
+                : "Alerts are off. I will not message you about weather or equipment. " +
+                  "Your sign-in details and updates about your requests will still come through.",
             cancellationToken);
     }
 
     private Task SendHelpAsync(long chatId, CancellationToken cancellationToken) =>
         _client.SendMessageAsync(
             chatId,
-            string.Join("\n", new[]
+            string.Join(NewLine, new[]
             {
                 "AgroFlow bot",
                 "",
+                "I only message you about things that need you:",
+                "- your sign-in details",
+                "- weather that could damage your crop",
+                "- equipment that has stopped working",
+                "- a zone that needed water and could not be watered automatically",
+                "",
+                "Everything else - watering that worked, your usage and your history -",
+                "is in the AgroFlow app.",
+                "",
                 "/status - your open requests",
-                "/alerts on - get zone, irrigation and device alerts here",
-                "/alerts off - stop those alerts",
+                "/alerts on - weather and equipment messages on",
+                "/alerts off - weather and equipment messages off",
                 "/help - this message",
                 "",
                 "To send a new request, use the AgroFlow app on your phone.",

@@ -420,10 +420,6 @@ export const api = {
     users = users.filter((x) => x.id !== id);
     return users;
   },
-  async resetPassword(_id: string): Promise<void> {
-    return undefined;
-  },
-
   /* ------------------------------ farm actions -------------------------- */
   async approveFarm(id: number): Promise<Farm[]> {
     const f = farms.find((x) => x.id === id);

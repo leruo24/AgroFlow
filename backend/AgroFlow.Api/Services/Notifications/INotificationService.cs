@@ -1,57 +1,78 @@
 namespace AgroFlow.Api.Services.Notifications;
 
-// Outbound messages to a farmer, independent of the channel that carries
-// them. This replaces IEmailService/ResendEmailService: AgroFlow now reaches
-// farmers over a Telegram bot instead of email, but everything that wants to
-// tell a farmer something still talks to this interface, so swapping the
-// channel back (or adding a second one) is a DI registration change in
-// Program.cs rather than an edit to every caller.
+// Outbound messages to a farmer, independent of the channel that carries them.
+// This replaced IEmailService/ResendEmailService; the implementation is
+// Telegram, but everything that wants to tell a farmer something talks to this
+// interface, so swapping or adding a channel is a DI change in Program.cs
+// rather than an edit to every caller.
+//
+// WHAT BELONGS ON THIS CHANNEL
+// Only things the farmer must act on, or that the app physically cannot
+// deliver. Specifically:
+//   - sign-in details they have no other way of receiving (onboarding, and a
+//     forgotten password)
+//   - weather that could damage the crop
+//   - equipment that has stopped working
+//   - a zone that needed watering and could NOT be watered automatically
+//
+// Everything routine - irrigation that worked, usage history, summaries,
+// account changes - stays in the app. The moment this channel carries things
+// the farmer does not need to act on, they mute it, and then they miss the
+// frost warning. Routine irrigation start/stop notifications were deliberately
+// REMOVED for exactly that reason.
 //
 // THE CONTRACT EVERY IMPLEMENTATION MUST HONOUR: none of these methods may
 // throw, ever. A farmer who never linked the bot, a blocked bot, a Telegram
 // outage and a malformed chat id are all ordinary, expected conditions - they
 // are logged and swallowed. The old Resend service did the opposite: a failed
 // send threw, and because the send sat inside farmer onboarding's try block,
-// an email outage rolled back a completed on-site onboarding (the Auth user,
-// the farm and every zone were deleted). Nothing in irrigation, onboarding or
-// sensor ingestion may ever fail because a message did.
+// an email outage rolled back a completed on-site onboarding. Nothing in
+// irrigation, onboarding or sensor ingestion may ever fail because a message
+// did.
 //
-// Addressing is by AgroFlow identity - a profile id, a zone id, a hardware id
-// - never by chat id or email address. Resolving that to a channel address,
-// and deciding the farmer has no address at all, is the implementation's job.
+// Addressing is by AgroFlow identity - a profile id, a zone id, a farm id -
+// never by chat id or email address. Resolving that to a channel address, and
+// deciding the farmer has no address at all, is the implementation's job.
 public interface INotificationService
 {
-    // Sent by the bot at the moment a farmer redeems their onboarding code,
-    // not by the onboarding endpoint - see TelegramPollingService. A bot
-    // cannot message anyone who has not messaged it first, so there is no
-    // earlier moment at which this could be delivered.
+    // Sent by the bot at the moment a farmer redeems an ONBOARDING code - see
+    // TelegramPollingService. A bot cannot message anyone who has not messaged
+    // it first, so there is no earlier moment at which this could be
+    // delivered.
     Task NotifyFarmerWelcomeAsync(
         Guid profileId,
         FarmerWelcomeNotification notification,
         CancellationToken cancellationToken);
 
-    // Fired only on the transition INTO Critical, never on every reading
-    // while a zone stays dry - see SensorReadingProcessor.
+    // A farmer who forgot their password. The temporary password is generated,
+    // sent and forgotten - AgroFlow never stores one.
+    Task NotifyPasswordResetAsync(
+        Guid profileId,
+        string temporaryPassword,
+        CancellationToken cancellationToken);
+
+    // A zone that went Critical AND that AgroFlow could not water itself. A
+    // zone that went Critical and was watered automatically is app-only: the
+    // farmer has nothing to do, so messaging them trains them to ignore the
+    // channel. See ZoneCriticalReason.
     Task NotifyZoneCriticalAsync(
         long zoneId,
         float moisture,
+        ZoneCriticalReason reason,
         CancellationToken cancellationToken);
 
-    // command is "start" or "stop"; source is "auto" or "manual", as stored
-    // on irrigation_commands.
-    Task NotifyIrrigationAsync(
-        long zoneId,
-        string command,
-        string source,
+    // Weather that could damage the crop, from the forecast rows
+    // WeatherCollectionService already stores.
+    Task NotifyWeatherAsync(
+        long farmId,
+        WeatherAlertNotification notification,
         CancellationToken cancellationToken);
 
-    // Both directions: online=false when a device stops reporting, and
-    // online=true when it comes back. Transition-only, from
-    // DeviceStatusMonitorService.
-    Task NotifyDeviceStatusAsync(
-        long hardwareId,
-        bool online,
-        DateTimeOffset? lastSeen,
+    // Equipment that has stopped working: a device gone quiet, a pump that
+    // never acknowledged a command, a zone with nothing able to control it.
+    Task NotifySystemFailureAsync(
+        long farmId,
+        SystemFailureNotification notification,
         CancellationToken cancellationToken);
 
     // Farmers raise requests (new zone, new farm, a fault) in the mobile app,
@@ -64,9 +85,42 @@ public interface INotificationService
         CancellationToken cancellationToken);
 }
 
+// Why AgroFlow could not water a Critical zone itself. Each value is a
+// different thing for the farmer to do, so each produces a different message.
+public enum ZoneCriticalReason
+{
+    // The zone is on manual: the farmer deliberately took control, so only
+    // they can start it.
+    ManualMode,
+
+    // No active enrolled device is attached to the zone, so there is nothing
+    // to send a command to. Usually means hardware was never installed or has
+    // been unassigned.
+    NoDevice,
+
+    // A command was issued but the pump never acknowledged it.
+    PumpUnresponsive,
+}
+
+public enum WeatherAlertKind
+{
+    HeavyRain,
+    Frost,
+    Heat,
+}
+
+public enum SystemFailureKind
+{
+    DeviceOffline,
+    DeviceRecovered,
+    PumpUnresponsive,
+    SensorSilent,
+    ZoneUncontrollable,
+}
+
 // The temporary password is passed in and never persisted anywhere. The bot
-// generates a fresh one at redemption time (via the Supabase Admin API),
-// sends it here, and forgets it - see SupabaseAdminService.ResetPasswordAsync.
+// generates a fresh one at redemption time (via the Supabase Admin API), sends
+// it, and forgets it - see SupabaseAdminService.ResetTemporaryPasswordAsync.
 public sealed record FarmerWelcomeNotification(
     string FarmerName,
     string Email,
@@ -74,22 +128,37 @@ public sealed record FarmerWelcomeNotification(
     string FarmName,
     string FarmLocation);
 
+// Value carries the number the threshold was measured against - millimetres of
+// rain, or degrees Celsius - so the message can state what is actually
+// expected rather than just "bad weather".
+public sealed record WeatherAlertNotification(
+    WeatherAlertKind Kind,
+    DateOnly Date,
+    double Value,
+    string FarmName);
+
+// Subject is what broke, in words the farmer recognises: a device name, a zone
+// name. Detail is the supporting fact, such as when it was last heard from.
+public sealed record SystemFailureNotification(
+    SystemFailureKind Kind,
+    string Subject,
+    string FarmName,
+    string? Detail);
+
 // Mirrors the shape of a farmer request as the mobile app and admin will
 // exchange it. Nothing constructs this yet: the request table is Luba's work
 // and is not on dev at the time of writing, so the notification path is built
-// and wired but unreachable. When that table lands, the admin's
-// status-change write is the only place that needs to call
-// NotifyRequestStatusAsync - everything downstream of it already works.
+// and wired but unreachable.
 public sealed record RequestStatusNotification(
     string RequestType,
     string Description,
     string Status,
     string? ScheduledFor);
 
-// Used when no channel is configured at all (no Telegram:BotToken). Every
-// call is a no-op, so a developer running the API with no bot token gets a
-// working API with silent notifications rather than a startup crash or a
-// stream of errors.
+// Used when no channel is configured at all (no Telegram:BotToken). Every call
+// is a no-op, so a developer running the API with no bot token gets a working
+// API with silent notifications rather than a startup crash or a stream of
+// errors.
 public sealed class NullNotificationService : INotificationService
 {
     private readonly ILogger<NullNotificationService> _logger;
@@ -107,16 +176,24 @@ public sealed class NullNotificationService : INotificationService
         Guid profileId, FarmerWelcomeNotification notification, CancellationToken cancellationToken)
         => LogDiscarded("welcome", profileId.ToString());
 
-    public Task NotifyZoneCriticalAsync(long zoneId, float moisture, CancellationToken cancellationToken)
-        => LogDiscarded("zone-critical", $"zone {zoneId}");
+    public Task NotifyPasswordResetAsync(
+        Guid profileId, string temporaryPassword, CancellationToken cancellationToken)
+        => LogDiscarded("password-reset", profileId.ToString());
 
-    public Task NotifyIrrigationAsync(long zoneId, string command, string source, CancellationToken cancellationToken)
-        => LogDiscarded($"irrigation-{command}", $"zone {zoneId}");
+    public Task NotifyZoneCriticalAsync(
+        long zoneId, float moisture, ZoneCriticalReason reason, CancellationToken cancellationToken)
+        => LogDiscarded($"zone-critical-{reason}", $"zone {zoneId}");
 
-    public Task NotifyDeviceStatusAsync(long hardwareId, bool online, DateTimeOffset? lastSeen, CancellationToken cancellationToken)
-        => LogDiscarded(online ? "device-online" : "device-offline", $"hardware {hardwareId}");
+    public Task NotifyWeatherAsync(
+        long farmId, WeatherAlertNotification notification, CancellationToken cancellationToken)
+        => LogDiscarded($"weather-{notification.Kind}", $"farm {farmId}");
 
-    public Task NotifyRequestStatusAsync(Guid profileId, RequestStatusNotification notification, CancellationToken cancellationToken)
+    public Task NotifySystemFailureAsync(
+        long farmId, SystemFailureNotification notification, CancellationToken cancellationToken)
+        => LogDiscarded($"system-{notification.Kind}", $"farm {farmId}");
+
+    public Task NotifyRequestStatusAsync(
+        Guid profileId, RequestStatusNotification notification, CancellationToken cancellationToken)
         => LogDiscarded("request-status", profileId.ToString());
 
     private Task LogDiscarded(string kind, string target)

@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using System.Globalization;
-using AgroFlow.Api.Services.Notifications;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -195,8 +194,7 @@ public static class FarmerEndpoints
     }
 
     private static async Task<IResult> CreateManualCommandAsync(
-        long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource,
-        INotificationService notifications, CancellationToken cancellationToken)
+        long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         if (request.Command is not ("start" or "stop")) return Results.BadRequest(new { error = "Command must be start or stop." });
@@ -216,14 +214,13 @@ public static class FarmerEndpoints
         command.Parameters.AddWithValue(NpgsqlDbType.Integer, (object?)request.DurationSeconds ?? DBNull.Value);
         command.Parameters.AddWithValue(zoneId);
         var id = await command.ExecuteScalarAsync();
-        if (id is null) return Results.NotFound();
 
-        // Everyone on the farm hears about it, including whoever pressed the
-        // button - on a farm with several members, "who started the pump" is
-        // exactly the thing the others need to know. Never throws, so a
-        // Telegram problem cannot turn an accepted command into an error.
-        await notifications.NotifyIrrigationAsync(zoneId, request.Command, "manual", cancellationToken);
-
-        return Results.Accepted(value: new { id });
+        // No notification. The farmer pressing this button is standing in the
+        // app and can see the result there; messaging them about their own
+        // action is the definition of routine traffic, and a channel carrying
+        // routine traffic gets muted. If the pump fails to acknowledge this
+        // command, DeviceStatusMonitorService raises that as an equipment
+        // failure - which is the part that actually needs them.
+        return id is null ? Results.NotFound() : Results.Accepted(value: new { id });
     }
 }

@@ -47,6 +47,7 @@ public static class TelegramEndpoints
 
         admin.MapPost("/codes/{profileId:guid}", IssueCodeForFarmerAsync);
         admin.MapPost("/password/{profileId:guid}", ResetTemporaryPasswordAsync);
+        admin.MapPost("/password/{profileId:guid}/send", SendTemporaryPasswordAsync);
 
         var me = app.MapGroup("/api/telegram/me")
             .RequireAuthorization();
@@ -115,6 +116,43 @@ public static class TelegramEndpoints
         return Results.Ok(new TemporaryPasswordResponse(
             password,
             "This password is shown once and is not stored. The farmer must change it when they sign in."));
+    }
+
+    // The same thing the farmer gets from "Forgot password?" in the app, but
+    // triggered by an administrator - for a farmer who phones in rather than
+    // using the app, or who cannot work the screen.
+    //
+    // Different from ResetTemporaryPasswordAsync above: that one RETURNS the
+    // password for the admin to read out, and is the path for a farmer with no
+    // Telegram. This one sends it to the farmer's own chat and never shows it
+    // to the admin, so the credential goes only to the account's owner.
+    private static async Task<IResult> SendTemporaryPasswordAsync(
+        Guid profileId,
+        PasswordResetService passwordReset,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        if (!await ProfileExistsAsync(dataSource, profileId, cancellationToken))
+        {
+            return Results.NotFound(new { error = "No such farmer." });
+        }
+
+        var sent = await passwordReset.ResetForProfileAsync(profileId, cancellationToken);
+
+        if (!sent)
+        {
+            return Results.BadRequest(new
+            {
+                error =
+                    "This farmer has no Telegram connected, so a password cannot be sent to them. " +
+                    "Use Reset password instead and read the new one out to them.",
+            });
+        }
+
+        return Results.Ok(new
+        {
+            message = "A new temporary password has been sent to the farmer's Telegram.",
+        });
     }
 
     // ------------------------------------------------------------------
