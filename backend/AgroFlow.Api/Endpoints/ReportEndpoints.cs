@@ -47,8 +47,9 @@ public static class ReportEndpoints
         const string farmSql = """
             select f.name from farm f
             where f.farm_id = $1
-              and (f.owner_id = $2 or exists (
-                select 1 from farm_member fm where fm.farm_id = f.farm_id and fm.profile_id = $2));
+                            and (f.owner_id = $2
+                or exists (select 1 from farm_member fm where fm.farm_id = f.farm_id and fm.profile_id = $2)
+                or exists (select 1 from profile p where p.id = $2 and p.role = 'admin'));
             """;
         string farmName;
         await using (var farmCmd = new NpgsqlCommand(farmSql, connection))
@@ -166,7 +167,8 @@ public static class ReportEndpoints
             from zone z
             where z.id = $1
               and (exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $2)
-                or exists (select 1 from farm_member fm where fm.farm_id = z.farm_id and fm.profile_id = $2));
+                or exists (select 1 from farm_member fm where fm.farm_id = z.farm_id and fm.profile_id = $2)
+                or exists (select 1 from profile p where p.id = $2 and p.role = 'admin'));
             """;
         string zoneName; double? dryThreshold, targetMoisture; float? flowRate;
         await using (var zoneCmd = new NpgsqlCommand(zoneSql, connection))
