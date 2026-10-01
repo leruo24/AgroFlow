@@ -26,6 +26,8 @@ import { TECHNICIANS } from "@/data/referenceData";
 import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
 import { signOut, getAdminProfile } from "@/app/auth";
+import { getReportZones, getReportJson, downloadReportPdf } from "@/services/agroFlowApi";
+
 
 /* ----------------------------- filter toolbar ---------------------------- */
 
@@ -1007,7 +1009,9 @@ case "delete-user": {
       await api.logReportGenerated(`${name} (CSV)`);
       return toast(`${name} exported.`, "success");
     }
-    case "run-comparison": return runComparison();
+    case "run-comparison": return runComparison();    
+    case "live-report-view": return liveReportRun(el.dataset["report"] ?? "", false);
+    case "live-report-pdf": return liveReportRun(el.dataset["report"] ?? "", true);
     case "export-comparison": return toast("Comparison exported (demo).", "info");
 
     /* exports */
@@ -1290,8 +1294,96 @@ function wireRegisterFarmZones(): void {
   renderZones();
 }
 
+/* ---- Live farm reports (real endpoints; the cards above are demo data) ---- */
+
+function liveEsc(s: unknown): string {
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function liveVal(id: string): string {
+  return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
+}
+
+function wireLiveReports(): void {
+  const farm = document.getElementById("liveFarm") as HTMLSelectElement | null;
+  const zone = document.getElementById("liveZone") as HTMLSelectElement | null;
+  if (!farm || !zone || farm.dataset["bound"]) return;
+  farm.dataset["bound"] = "1";
+  farm.addEventListener("change", async () => {
+    zone.innerHTML = `<option value="">Select a zone</option>`;
+    const id = Number(farm.value);
+    if (!id) return;
+    try {
+      const zones = await getReportZones(id);
+      zone.innerHTML = `<option value="">Select a zone</option>` + zones.map((z) =>
+        `<option value="${z.zoneId}">${liveEsc(z.name)}${z.cropType ? " (" + liveEsc(z.cropType) + ")" : ""}</option>`).join("");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not load zones.", "info");
+    }
+  });
+}
+
+function liveRender(kind: string, d: any): string {
+  if (kind === "water-usage") {
+    const rows = (d.zones as any[]).map((z) => `<tr><td>${liveEsc(z.name)}</td><td>${liveEsc(z.eventCount)}</td>
+      <td>${z.status === "ok" ? liveEsc(z.estimatedLitres) + " L (estimated)" : liveEsc(z.message)}</td></tr>`).join("");
+    return `<p><em>${liveEsc(d.estimateNote)}</em></p>
+      <table><thead><tr><th>Zone</th><th>Events</th><th>Water</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  if (kind === "moisture") {
+    if (d.status !== "ok") return `<p>${liveEsc(d.message)}</p>`;
+    const s = d.summary;
+    return `<p><strong>${liveEsc(d.zoneName)}</strong>: ${liveEsc(s.readingCount)} readings, average ${liveEsc(s.averagePct)}%,
+      lowest ${liveEsc(s.lowestPct)}%, highest ${liveEsc(s.highestPct)}%.</p>
+      <p>${liveEsc(s.action)}</p>
+      <p>${liveEsc((d.irrigationEvents as any[]).length)} irrigation event(s) in this period. <em>${liveEsc(d.estimateNote)}</em></p>`;
+  }
+  const blocks = (d.zones as any[]).map((z) => `<h5>${liveEsc(z.name)} (${liveEsc(z.cropType ?? "no crop set")})</h5>
+    <p>${liveEsc(z.summary)}</p>
+    ${(z.limitations as string[]).map((l) => `<p><small>${liveEsc(l)}</small></p>`).join("")}
+    <table><thead><tr><th>Date</th><th>Action</th><th>ET0 mm</th><th>Rain mm</th><th>Note</th></tr></thead><tbody>
+    ${(z.days as any[]).map((day) => `<tr><td>${liveEsc(day.date)}</td><td>${liveEsc(day.action)}</td>
+      <td>${liveEsc(day.et0MmPerDay ?? "-")}</td><td>${liveEsc(day.forecastRainMm ?? "-")}</td><td>${liveEsc(day.note)}</td></tr>`).join("")}
+    </tbody></table>`).join("");
+  return d.status === "ok" ? blocks : `<p>${liveEsc(d.message)}</p>`;
+}
+
+async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
+  const farmId = Number(liveVal("liveFarm"));
+  const zoneId = Number(liveVal("liveZone"));
+  const from = liveVal("liveFrom"), to = liveVal("liveTo");
+
+  let path: string;
+  if (kind === "moisture") {
+    if (!zoneId) return toast("Pick a farm and a zone first.", "info");
+    if (!from || !to) return toast("Pick a from and to date.", "info");
+    path = `moisture?zoneId=${zoneId}&from=${from}&to=${to}`;
+  } else if (kind === "water-usage") {
+    if (!farmId) return toast("Pick a farm first.", "info");
+    if (!from || !to) return toast("Pick a from and to date.", "info");
+    path = `water-usage?farmId=${farmId}&from=${from}&to=${to}`;
+  } else if (kind === "schedule") {
+    if (!farmId) return toast("Pick a farm first.", "info");
+    path = `schedule?farmId=${farmId}`;
+  } else return;
+
+  try {
+    if (pdf) {
+      await downloadReportPdf(path.replace("?", "/pdf?"), `${kind}-report.pdf`);
+      return toast("PDF downloaded.", "success");
+    }
+    const data = await getReportJson<any>(path);
+    const out = document.getElementById("liveReportResult");
+    if (out) out.innerHTML = liveRender(kind, data);
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Report failed.", "info");
+  }
+}
+
 export function wirePageInteractions(): void {
   wireFilters();
+  wireLiveReports();
  wireOnboardingZones();
 
   document.querySelectorAll<HTMLElement>("[data-go]").forEach((a) => {
