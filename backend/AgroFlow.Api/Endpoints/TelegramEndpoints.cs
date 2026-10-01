@@ -75,7 +75,10 @@ public static class TelegramEndpoints
             return Results.NotFound(new { error = "No such farmer." });
         }
 
-        var issued = await onboarding.IssueCodeAsync(profileId, cancellationToken);
+        // Admin-issued, so redeeming it mints a fresh temporary password and
+        // forces a change - the farmer has no usable password of their own yet.
+        var issued = await onboarding.IssueCodeAsync(
+            profileId, TelegramCodePurpose.Onboarding, cancellationToken);
 
         return Results.Ok(new TelegramCodeResponse(issued.Code, issued.DeepLink, issued.ExpiresAt));
     }
@@ -152,7 +155,11 @@ public static class TelegramEndpoints
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
-        var issued = await onboarding.IssueCodeAsync(userId, cancellationToken);
+        // Farmer-issued: they are signed in with a password they already use
+        // and only want their alerts delivered here, so redeeming this links
+        // the chat and leaves the account untouched.
+        var issued = await onboarding.IssueCodeAsync(
+            userId, TelegramCodePurpose.Link, cancellationToken);
 
         if (issued.DeepLink is null)
         {

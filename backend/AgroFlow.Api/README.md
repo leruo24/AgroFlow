@@ -47,7 +47,7 @@ Configuration below.
 | Farmer onboarding (invite link) | HTTP, admin-only | `POST /api/farmers/invite` |
 | Farmer onboarding (full, on-site) | HTTP, admin-only | `POST /api/farmers/onboard` — creates farm + auth user + zones, then returns a one-time temporary password and a Telegram QR deep link |
 | Telegram link codes | HTTP, admin-only | `POST /api/telegram/admin/codes/{profileId}` (regenerate), `POST /api/telegram/admin/password/{profileId}` (reset temporary password) |
-| Telegram self-service | HTTP, signed-in farmer | `GET/POST/DELETE /api/telegram/me*` — link, alert toggle, unlink |
+| Telegram self-service | HTTP, signed-in farmer | `GET/POST/DELETE /api/telegram/me*` — link, alert toggle, unlink. Issues a `link` code, which does **not** touch the farmer's password; admin-issued codes are `onboarding` codes and do reset it (migration 0025) |
 | Farmer notifications (out) | Telegram Bot API | `Services/Notifications/` — welcome, critical moisture, irrigation start/stop, device offline/online, request status |
 | Inbound bot commands | Telegram long poll | `Services/Notifications/TelegramPollingService.cs` — `/start <code>`, `/status`, `/alerts on\|off`, `/help` |
 | Device liveness | Background sweep | `Services/DeviceStatusMonitorService.cs` — marks hardware Offline/Online and alerts on the transition |

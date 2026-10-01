@@ -646,6 +646,7 @@ public static class FarmerOnboardingEndpoints
         {
             var issued = await telegramOnboarding.IssueCodeAsync(
                 userId!.Value,
+                TelegramCodePurpose.Onboarding,
                 cancellationToken
             );
 

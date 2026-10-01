@@ -35,6 +35,11 @@ public sealed class TelegramPollingService : BackgroundService
     // we want.
     private long _offset;
 
+    // Telegram renders message text literally, so this is a line break in the
+    // chat. Deliberately not Environment.NewLine, which would be CRLF on a
+    // Windows developer machine and LF on the deployed Linux container.
+    private const string NewLine = "\n";
+
     public TelegramPollingService(
         TelegramClient client,
         TelegramOnboardingService onboarding,
@@ -198,9 +203,9 @@ public sealed class TelegramPollingService : BackgroundService
             return;
         }
 
-        var profileId = await _onboarding.RedeemCodeAsync(code, chatId, cancellationToken);
+        var redemption = await _onboarding.RedeemCodeAsync(code, chatId, cancellationToken);
 
-        if (profileId is null)
+        if (redemption is null)
         {
             _logger.LogInformation("Rejected a Telegram onboarding code from chat {ChatId}.", chatId);
 
@@ -213,7 +218,36 @@ public sealed class TelegramPollingService : BackgroundService
             return;
         }
 
-        var farmer = await _onboarding.GetFarmerContextAsync(profileId.Value, cancellationToken);
+        var profileId = redemption.ProfileId;
+
+        // A farmer who linked from the app already has an account and a
+        // password they use every day. They asked for their alerts to arrive
+        // here, nothing more - so the chat is linked and the account is left
+        // completely alone. Resetting their password here would invalidate a
+        // working one and force a change they never asked for, which is what
+        // every existing farmer would have hit when connecting for alerts.
+        if (redemption.Purpose == TelegramCodePurpose.Link)
+        {
+            await _client.SendMessageAsync(
+                chatId,
+                string.Join(NewLine, new[]
+                {
+                    "Your AgroFlow account is now connected.",
+                    "",
+                    "This is where I will message you when a zone gets too dry, when",
+                    "irrigation starts or stops, and when one of your requests moves along.",
+                    "",
+                    "Your sign-in details have not changed.",
+                    "",
+                    "Send /alerts off at any time to stop the zone and device messages,",
+                    "or /help to see everything I can do.",
+                }),
+                cancellationToken);
+
+            return;
+        }
+
+        var farmer = await _onboarding.GetFarmerContextAsync(profileId, cancellationToken);
 
         if (farmer is null)
         {
@@ -234,7 +268,7 @@ public sealed class TelegramPollingService : BackgroundService
         // The consequence is deliberate and is spelled out on the admin
         // screen: once the farmer links Telegram, the password shown at
         // onboarding stops working and this one takes over.
-        var temporaryPassword = await _supabaseAdmin.ResetTemporaryPasswordAsync(profileId.Value, cancellationToken);
+        var temporaryPassword = await _supabaseAdmin.ResetTemporaryPasswordAsync(profileId, cancellationToken);
 
         if (temporaryPassword is null)
         {
@@ -248,10 +282,10 @@ public sealed class TelegramPollingService : BackgroundService
             return;
         }
 
-        await _onboarding.SetMustChangePasswordAsync(profileId.Value, true, cancellationToken);
+        await _onboarding.SetMustChangePasswordAsync(profileId, true, cancellationToken);
 
         await _notifications.NotifyFarmerWelcomeAsync(
-            profileId.Value,
+            profileId,
             new FarmerWelcomeNotification(
                 farmer.Name,
                 farmer.Email,

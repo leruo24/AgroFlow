@@ -31,8 +31,14 @@ public sealed class TelegramOnboardingService
     // farmer, so "Regenerate code" cannot leave two live QR codes pointing at
     // one profile - the older printout stops working the moment a new one is
     // produced.
+    //
+    // purpose decides what redeeming it does to the farmer's account - see
+    // TelegramCodePurpose. It is chosen by the endpoint that issues the code,
+    // never by the farmer, so somebody cannot turn a link request into a
+    // password reset on someone else's account.
     public async Task<TelegramOnboardingCode> IssueCodeAsync(
         Guid profileId,
+        TelegramCodePurpose purpose,
         CancellationToken cancellationToken)
     {
         var code = GenerateCode();
@@ -51,20 +57,21 @@ public sealed class TelegramOnboardingService
         }
 
         await using (var insert = new NpgsqlCommand(
-            "insert into telegram_onboarding_code (code, profile_id, expires_at) values ($1, $2, $3)",
+            "insert into telegram_onboarding_code (code, profile_id, expires_at, purpose) values ($1, $2, $3, $4)",
             connection, transaction))
         {
             insert.Parameters.AddWithValue(code);
             insert.Parameters.AddWithValue(profileId);
             insert.Parameters.AddWithValue(expiresAt);
+            insert.Parameters.AddWithValue(purpose.ToDatabaseValue());
             await insert.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Issued a Telegram onboarding code for profile {ProfileId}, valid until {ExpiresAt}.",
-            profileId, expiresAt);
+            "Issued a {Purpose} Telegram code for profile {ProfileId}, valid until {ExpiresAt}.",
+            purpose.ToDatabaseValue(), profileId, expiresAt);
 
         return new TelegramOnboardingCode(code, expiresAt, BuildDeepLink(code));
     }
@@ -73,7 +80,7 @@ public sealed class TelegramOnboardingService
     // expires_at > now()` predicate plus `returning` means two farmers
     // scanning the same QR at the same moment cannot both win: Postgres
     // serialises the update and the loser gets zero rows back.
-    public async Task<Guid?> RedeemCodeAsync(
+    public async Task<TelegramRedemption?> RedeemCodeAsync(
         string code,
         long chatId,
         CancellationToken cancellationToken)
@@ -82,24 +89,29 @@ public sealed class TelegramOnboardingService
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         Guid profileId;
+        TelegramCodePurpose purpose;
 
         await using (var redeem = new NpgsqlCommand(
             "update telegram_onboarding_code set used_at = now() " +
             "where code = $1 and used_at is null and expires_at > now() " +
-            "returning profile_id",
+            "returning profile_id, purpose",
             connection, transaction))
         {
             redeem.Parameters.AddWithValue(code);
 
-            var result = await redeem.ExecuteScalarAsync(cancellationToken);
+            await using var reader = await redeem.ExecuteReaderAsync(cancellationToken);
 
-            if (result is not Guid redeemed)
+            if (!await reader.ReadAsync(cancellationToken))
             {
+                await reader.CloseAsync();
                 await transaction.RollbackAsync(cancellationToken);
                 return null;
             }
 
-            profileId = redeemed;
+            profileId = reader.GetGuid(0);
+            purpose = TelegramCodePurposeExtensions.FromDatabaseValue(reader.GetString(1));
+
+            await reader.CloseAsync();
         }
 
         // profile.telegram_chat_id is uniquely indexed, so a farmer who
@@ -127,9 +139,10 @@ public sealed class TelegramOnboardingService
         await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Telegram chat linked to profile {ProfileId}.", profileId);
+            "Telegram chat linked to profile {ProfileId} from a {Purpose} code.",
+            profileId, purpose.ToDatabaseValue());
 
-        return profileId;
+        return new TelegramRedemption(profileId, purpose);
     }
 
     // Everything the welcome message needs, read after redemption. Returns
@@ -243,6 +256,45 @@ public sealed class TelegramOnboardingService
             .TrimEnd('=');
     }
 }
+
+// Why a code was issued, which is what decides whether redeeming it touches
+// the farmer's password. Chosen by the issuing endpoint, never by the farmer.
+public enum TelegramCodePurpose
+{
+    // Issued by an admin: on-site farmer onboarding, or "Regenerate code" for
+    // a QR that expired or was lost. The farmer has no usable password yet (or
+    // the one they were given is loose in the world), so redemption mints a
+    // fresh one, sends it, and forces a change at next sign-in.
+    Onboarding,
+
+    // Issued by the farmer themselves from the mobile app's Connect Telegram
+    // option. They are already signed in with a password they know, and they
+    // only want their alerts here - so redemption links the chat and leaves
+    // the account completely alone.
+    Link,
+}
+
+public static class TelegramCodePurposeExtensions
+{
+    public static string ToDatabaseValue(this TelegramCodePurpose purpose) => purpose switch
+    {
+        TelegramCodePurpose.Link => "link",
+        _ => "onboarding",
+    };
+
+    // Anything unrecognised falls back to onboarding, matching the column
+    // default in migration 0025: the louder behaviour is the safer default,
+    // because a farmer who unexpectedly has to set a password is a nuisance,
+    // while one who silently never receives their credentials is stuck.
+    public static TelegramCodePurpose FromDatabaseValue(string value) =>
+        string.Equals(value, "link", StringComparison.OrdinalIgnoreCase)
+            ? TelegramCodePurpose.Link
+            : TelegramCodePurpose.Onboarding;
+}
+
+public sealed record TelegramRedemption(
+    Guid ProfileId,
+    TelegramCodePurpose Purpose);
 
 public sealed record TelegramOnboardingCode(
     string Code,
