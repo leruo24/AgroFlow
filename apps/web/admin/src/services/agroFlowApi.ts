@@ -291,3 +291,62 @@ export async function deleteFarm(id: number): Promise<void> {
     }
   }
 }
+
+/* ---------------- Reports (live data) ---------------- */
+
+async function reportError(response: Response): Promise<Error> {
+  const text = await response.text();
+  try {
+    const problem = JSON.parse(text);
+    return new Error(
+      problem.error || problem.detail || problem.title || problem.message ||
+      `Request failed (${response.status}).`,
+    );
+  } catch {
+    return new Error(text || `Request failed (${response.status}).`);
+  }
+}
+
+async function reportFetch(path: string): Promise<Response> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw await reportError(response);
+  return response;
+}
+
+export type ReportFarm = { farm_id: number; name: string; owner_name: string | null };
+export type ReportZone = { zoneId: number; name: string; cropType: string | null };
+
+export async function getReportFarms(): Promise<ReportFarm[]> {
+  return (await reportFetch("/api/farms")).json() as Promise<ReportFarm[]>;
+}
+
+export async function getReportZones(farmId: number): Promise<ReportZone[]> {
+  return (await reportFetch(`/api/farmer/reports/zones?farmId=${farmId}`)).json() as Promise<ReportZone[]>;
+}
+
+/* Fetches a report as JSON (for on-screen viewing). */
+export async function getReportJson<T = unknown>(path: string): Promise<T> {
+  return (await reportFetch(`/api/farmer/reports/${path}`)).json() as Promise<T>;
+}
+
+/* Downloads a report PDF. A plain link cannot be used because the endpoint
+   needs the login token in a header, so the file is fetched as a blob and
+   saved through a temporary link. */
+export async function downloadReportPdf(path: string, fileName: string): Promise<void> {
+  const response = await reportFetch(`/api/farmer/reports/${path}`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
