@@ -41,7 +41,7 @@ export default function HomeScreen() {
   ];
   return <SafeAreaView style={styles.page} edges={['top']}>
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <ScreenHeader title="AgroFlow" subtitle="Your farm at a glance." />
+      <ScreenHeader title="AgroFlow" subtitle="Your farm at a glance." help="home" />
       <FarmSelector />
       {isFarmLoading ? <DataState kind="loading" title="Loading farm information" />
         : farmError ? <DataState kind="error" title="Farm information unavailable" description="We couldn’t load the latest farm details. Your navigation and saved settings are still available." onRetry={refreshFarms} />

@@ -1,4 +1,5 @@
 import { AppAlert as Alert } from '@/components/AppAlert';
+import { HelpButton } from '@/components/HelpButton';
 //profile screen
 import {
   router,
@@ -587,6 +588,8 @@ export default function ProfileScreen() {
               Back
             </Text>
           </TouchableOpacity>
+
+          <HelpButton screen="profile" />
 
           {!editing ? (
             <TouchableOpacity

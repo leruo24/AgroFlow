@@ -15,6 +15,8 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import type { ThemePreference } from '@/context/ThemeContext';
 import { useTheme } from '@/context/ThemeContext';
 import { createSettingsStyles } from '@/styles/settingsStyles';
+import { HelpButton } from '@/components/HelpButton';
+import { useAppPreferences } from '@/hooks/useAppPreferences';
 
 const NOTIFICATION_PREFERENCES_KEY =
   'agroflow_notification_preferences';
@@ -86,6 +88,15 @@ export default function SettingsScreen() {
   const [preferencesLoaded, setPreferencesLoaded] =
     useState(false);
 
+  // In-app help preferences, stored on this device by useAppPreferences.
+  // Deliberately separate from the notification preferences above: these are
+  // display choices, those are about messages being sent.
+  const {
+    preferences: appPreferences,
+    setPreference: setAppPreference,
+    ready: appPreferencesReady,
+  } = useAppPreferences();
+
   useEffect(() => {
     async function loadPreferences() {
       try {
@@ -155,7 +166,7 @@ export default function SettingsScreen() {
         stickyHeaderIndices={[]}
         contentContainerStyle={styles.scrollContent}
       >
-          <ScreenHeader title="Settings" subtitle="Manage your AgroFlow preferences." />
+          <ScreenHeader title="Settings" subtitle="Manage your AgroFlow preferences." help="settings" />
 
           <Text style={styles.sectionTitle}>Appearance</Text>
 
@@ -240,6 +251,65 @@ export default function SettingsScreen() {
 
           <Text style={styles.note}>
             Notification preferences are currently saved on this device.
+          </Text>
+
+          <Text style={styles.sectionTitle}>Help</Text>
+
+          <View style={styles.sectionCard}>
+            <View style={styles.notificationRow}>
+              <View style={styles.notificationText}>
+                <Text style={styles.settingTitle}>
+                  Show page help
+                </Text>
+                <Text style={styles.settingDescription}>
+                  Shows a &quot;?&quot; button on each page that explains what it does.
+                </Text>
+              </View>
+
+              <Switch
+                accessibilityLabel="Show page help"
+                disabled={!appPreferencesReady}
+                value={appPreferences.showPageHelp}
+                onValueChange={(value) =>
+                  setAppPreference('showPageHelp', value)
+                }
+                trackColor={{
+                  false: colors.border,
+                  true: colors.primary,
+                }}
+                thumbColor={colors.white}
+              />
+            </View>
+
+            <View style={styles.notificationRow}>
+              <View style={styles.notificationText}>
+                <Text style={styles.settingTitle}>
+                  Raindrop helper
+                </Text>
+                <Text style={styles.settingDescription}>
+                  A friendly raindrop that greets you and points out the one thing
+                  that needs you most.
+                </Text>
+              </View>
+
+              <Switch
+                accessibilityLabel="Raindrop helper"
+                disabled={!appPreferencesReady}
+                value={appPreferences.showRaindropHelper}
+                onValueChange={(value) =>
+                  setAppPreference('showRaindropHelper', value)
+                }
+                trackColor={{
+                  false: colors.border,
+                  true: colors.primary,
+                }}
+                thumbColor={colors.white}
+              />
+            </View>
+          </View>
+
+          <Text style={styles.note}>
+            Help settings are saved on this device.
           </Text>
 
           <Text style={styles.sectionTitle}>Account</Text>

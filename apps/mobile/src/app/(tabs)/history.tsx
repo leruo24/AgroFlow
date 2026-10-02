@@ -15,7 +15,7 @@ export default function HistoryScreen() {
   const error = farmError || zonesError;
   const ordered = [...history].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
   return <SafeAreaView style={styles.page} edges={['top']}><ScrollView contentContainerStyle={styles.content}>
-    <ScreenHeader title="History" subtitle={farm ? farm.name : 'Review irrigation and system activity.'} />
+    <ScreenHeader title="History" subtitle={farm ? farm.name : 'Review irrigation and system activity.'} help="history" />
     <View style={styles.summary}><View style={styles.stat}><Text style={styles.statValue}>{loading || error ? '—' : history.length}</Text><Text style={styles.caption}>Recorded events</Text></View></View>
     <Text accessibilityRole="header" style={styles.sectionTitle}>Recent activity</Text>
     {loading ? <DataState kind="loading" title="Loading activity" />

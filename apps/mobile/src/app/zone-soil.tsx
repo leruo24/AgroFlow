@@ -24,6 +24,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { useTheme } from '@/context/ThemeContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { HelpButton } from '@/components/HelpButton';
 import { createZoneSoilStyles } from '@/styles/zoneSoilStyles';
 import { saveZoneSoilType, type ZoneSoilType } from '@/services/agroFlowApi';
 
@@ -116,6 +117,7 @@ export default function ZoneSoilScreen() {
             subtitle={params.zoneName ? String(params.zoneName) : undefined}
           />
         </View>
+        <HelpButton screen="zoneSoil" />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { HelpButton } from '@/components/HelpButton';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -277,6 +278,8 @@ export default function ServiceRequestScreen() {
                 Request a new farm or zone from AgroFlow.
               </Text>
             </View>
+
+            <HelpButton screen="farmRequests" />
           </View>
 
           <Text style={styles.sectionTitle}>
