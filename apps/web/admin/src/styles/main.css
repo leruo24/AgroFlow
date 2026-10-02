@@ -845,3 +845,129 @@ tbody tr:last-child td{border-bottom:none}
   color:var(--text-2);
 }
 .liveWeatherCompare table{ font-size:.78rem; }
+
+/* ============================================================================
+   Welcome screen (Phase E). Shown to anyone who is not signed in, before the
+   login form. Uses the existing tokens only - no new colours, no new fonts, no
+   external images and no CDN, so it works on GitHub Pages under any base path.
+   ========================================================================== */
+.welcome-screen{
+  position:relative;
+  min-height:100vh;
+  min-height:100dvh;
+  display:grid;
+  place-items:center;
+  padding:24px 16px;
+  overflow:hidden;
+  /* #184D35, the mobile app's navigation colour, already a token here. */
+  background:
+    radial-gradient(circle at 18% 12%, rgba(66,195,199,0.22), transparent 55%),
+    radial-gradient(circle at 82% 78%, rgba(22,143,153,0.28), transparent 60%),
+    var(--bg-grad-1);
+  color:var(--side-text-strong);
+}
+
+/* Decorative contour bands, behind the card. */
+.welcome-bg{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+}
+
+.welcome-card{
+  position:relative;
+  width:100%;
+  max-width:520px;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  text-align:center;
+}
+
+.welcome-brand{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+.welcome-leaf{ display:inline-flex; color:var(--accent); }
+.welcome-leaf svg{ width:28px; height:28px; }
+.welcome-eyebrow{
+  margin:0;
+  font-size:13px;
+  font-weight:600;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--side-text);
+}
+
+.welcome-headline{
+  margin:0;
+  font-size:clamp(1.75rem, 5vw, 2.5rem);
+  line-height:1.15;
+  color:var(--side-text-strong);
+}
+
+.welcome-sub{
+  margin:0 auto;
+  max-width:42ch;
+  font-size:1rem;
+  line-height:1.6;
+  color:var(--side-text);
+}
+
+.welcome-points{
+  margin:4px 0 0;
+  padding:0;
+  list-style:none;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  text-align:left;
+}
+.welcome-points li{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 14px;
+  border:1px solid rgba(255,255,255,0.16);
+  border-radius:10px;
+  background:rgba(255,255,255,0.07);
+  font-size:.95rem;
+  color:var(--side-text-strong);
+}
+/* The marker is a CSS pseudo-element, so there is no image to load and nothing
+   for a screen reader to read out. */
+.welcome-points li::before{
+  content:"";
+  flex:0 0 auto;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:var(--accent);
+}
+
+.welcome-login{
+  align-self:center;
+  margin-top:8px;
+  min-width:180px;
+  padding:12px 28px;
+  font-size:1rem;
+  background:var(--side-text-strong);
+  color:var(--bg-grad-1);
+  border:1px solid transparent;
+}
+.welcome-login:hover{ background:var(--accent); color:var(--bg-grad-1); }
+/* A visible focus ring that survives on the dark background - the button is the
+   only control on the screen, so a keyboard user must be able to see it. */
+.welcome-login:focus-visible{
+  outline:3px solid var(--accent);
+  outline-offset:3px;
+}
+
+@media (max-width:420px){
+  .welcome-points li{ font-size:.9rem; padding:9px 12px; }
+  .welcome-login{ width:100%; }
+}

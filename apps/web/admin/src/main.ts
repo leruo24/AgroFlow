@@ -15,6 +15,7 @@ import { initNav, bootRouter, setAfterRender } from "@/app/router";
 import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/interactions";
 import { initAuth, onAuthChange, isAdminAuthenticated } from "@/app/auth";
 import { LOGIN_HTML, wireLogin } from "@/pages/login";
+import { WELCOME_HTML, wireWelcome } from "@/pages/welcome";
 
 // Wires up every page's own interactions after each in-session navigation
 // (go() -> swapContent -> this) - unrelated to the loading/signed-out/
@@ -22,7 +23,17 @@ import { LOGIN_HTML, wireLogin } from "@/pages/login";
 // exists, i.e. while signed in.
 setAfterRender(wirePageInteractions);
 
-type ViewState = "loading" | "signed-out" | "signed-in";
+type ViewState = "loading" | "welcome" | "signed-out" | "signed-in";
+
+/* Whether the visitor has asked to see the login form yet.
+
+   A visitor with no session starts on "welcome" and moves to "signed-out"
+   (the login form) only by pressing Log in. It is NOT persisted: a reload is
+   a fresh arrival and should land on the welcome screen again.
+
+   Someone who already has a valid admin session never touches this -
+   currentState() returns "signed-in" before this is consulted. */
+let loginRequested = false;
 
 function getRoot(): HTMLElement {
   const root = document.getElementById("root");
@@ -31,7 +42,8 @@ function getRoot(): HTMLElement {
 }
 
 function currentState(): ViewState {
-  return isAdminAuthenticated() ? "signed-in" : "signed-out";
+  if (isAdminAuthenticated()) return "signed-in";
+  return loginRequested ? "signed-out" : "welcome";
 }
 
 function render(state: ViewState): void {
@@ -40,6 +52,15 @@ function render(state: ViewState): void {
 
   if (state === "loading") {
     root.innerHTML = `<div class="boot-loading" aria-live="polite">Loading…</div>`;
+    return;
+  }
+
+  if (state === "welcome") {
+    root.innerHTML = WELCOME_HTML;
+    wireWelcome(root, () => {
+      loginRequested = true;
+      render(currentState());
+    });
     return;
   }
 
@@ -71,7 +92,12 @@ async function boot(): Promise<void> {
   render("loading"); // explicit, even though index.html's static #root content already shows this - every state this app can be in goes through render(), no exceptions
   await initAuth();
   render(currentState());
-  onAuthChange(() => render(currentState()));
+  onAuthChange(() => {
+    // Signing out returns to the welcome screen, not straight back to a login
+    // form - the same thing a new visitor sees.
+    if (!isAdminAuthenticated()) loginRequested = false;
+    render(currentState());
+  });
 }
 
 void boot();
