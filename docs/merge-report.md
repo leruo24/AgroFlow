@@ -1,14 +1,63 @@
-# Merge report — every branch into local `dev`
+# Merge report — every branch into `dev`
 
-Run on 2026-10-02. **Nothing was pushed.** `dev` exists only on this machine; `main` was never touched.
+Run on 2026-10-02. **`dev` has been pushed to `origin`.** `main` was never touched.
 
-Backup tag, if `dev` needs restoring: **`pre-merge-backup-20261002`** → `7ee8e9c`
+## Final state
+
+| | |
+|---|---|
+| **Final `dev` commit** | **`599fb0b`** — `Merge branch 'feature/drip-and-soil' into dev` |
+| **Pushed to** | `origin/dev` (`7ee8e9c..599fb0b`, fast-forward, no force) |
+| **Backup tag pushed** | `pre-merge-backup-20261002` → `7ee8e9c` |
+| **Remote** | `https://github.com/leruo24/AgroFlow.git` |
+| **Verified after push** | `git rev-list --count origin/dev..dev` = **0** |
+
+A documentation commit containing this section sits directly on top of `599fb0b` and was pushed after it.
+
+To undo everything, back to where `origin/dev` stood before this work:
 
 ```
-git reset --hard pre-merge-backup-20261002   # only if you want to undo all of this
+git reset --hard pre-merge-backup-20261002
 ```
 
-Local `dev` now ends at **`04b5960`**.
+### What `dev` now contains, in order
+
+```
+599fb0b  Merge branch 'feature/drip-and-soil' into dev
+1cc53e4  docs(engine): eight crops confirmed, Phase D complete, migration checks
+c7baf7d  feat(mobile): raindrop helper and soil icons
+e61011e  feat(mobile): add Drip mascot and soil icon assets
+d1fdcde  docs: merge and FAO-56 engine reports
+635f3d2  feat(admin): add welcome screen before login
+3e5ee53  feat(mobile): page help
+6eccd95  feat(engine): FAO-56 soil water balance, insights and reports
+04b5960  Merge remote-tracking branch 'origin/feature/olwethu-reports' into dev
+d79d4f3  Merge remote-tracking branch 'origin/feature/luba-requests' into dev
+29f3ede  Merge remote-tracking branch 'origin/fix/expo-cors' into dev
+7985f85  feat(mobile): replace Google map with free OpenStreetMap WebView   <- Leruo's, now pushed
+```
+
+**`7985f85` is no longer unpushed** — the OpenStreetMap commit went up with this push.
+
+### Checks run on `dev` immediately before pushing — all passed
+
+| Check | Where | Result |
+|---|---|---|
+| Conflict markers (anchored) | repo | **none** |
+| `dotnet build` | `backend/AgroFlow.Api` | **succeeded**, 0 warnings, 0 errors |
+| `dotnet test` | `backend/AgroFlow.Domain.Tests` | **313 passed**, 0 failed, 0 skipped |
+| `npx tsc --noEmit` | `apps/mobile` | **clean** |
+| `npx expo-doctor` | `apps/mobile` | **21/21 checks passed** |
+| `npx tsc --noEmit` | `apps/web/admin` | **clean** |
+| `npm run build` | `apps/web/admin` | **succeeded** |
+
+### The final merge
+
+`feature/drip-and-soil` (7 commits) merged into `dev` with `git merge --no-ff` → **`599fb0b`**. **No conflicts**, so the section 1 conflict policy was not needed. That merge brought the whole stack with it: the engine, page help, the admin welcome screen, and the Drip mascot and soil icons.
+
+### Still open
+
+PR #1 on `fix/expo-cors` can now be **closed** — its commit (`1f4a192`) is in the pushed `dev`.
 
 ---
 
@@ -196,7 +245,7 @@ Normalising (lower-case, trim, `_`→space, `corn`→`maize`, `cucumbers`→`cuc
 
 **They differ.** The spec says to align everything to its six keys "because only these have sourced FAO-56 values".
 
-**That premise is false in this repo, so I did not narrow her constraint.** `backend/AgroFlow.Domain/Agronomy/fao56-crop-knowledge.json` already holds fully sourced FAO-56 values for citrus and leafy_veg — Table 11 rows, Table 12 Kc values, Table 22 rooting depth and p, each with page numbers and in citrus's case a quoted FAO footnote — and `GrowthStageCalculatorTests` pins them. Narrowing the list would have deleted sourced work and broken passing tests. The engine instead **adds** spinach and cucumber and **keeps** citrus and leafy_veg. Full reasoning in `fao56-engine-report.md`.
+**Decision taken: all eight crops are kept and her constraint is unchanged.** The spec's premise is false in this repo. `backend/AgroFlow.Domain/Agronomy/fao56-crop-knowledge.json` already holds fully sourced FAO-56 values for citrus and leafy_veg — Table 11 rows, Table 12 Kc values, Table 22 rooting depth and p, each with page numbers and in citrus's case a quoted FAO footnote — and `GrowthStageCalculatorTests` pins them. Narrowing the list would have deleted sourced work and broken passing tests. The engine instead **adds** spinach and cucumber and **keeps** citrus and leafy_veg. Full reasoning in `fao56-engine-report.md`.
 
 ### Live check that could not be run
 
@@ -205,7 +254,11 @@ select crop_type, count(*) from service_request group by 1;
 select distinct crop_type from public.zone;
 ```
 
-**Not run.** The connection string lives in a gitignored user-secrets file, and §0 says never to touch credential or secret files (the sandbox blocked the read too). So I could not prove that no existing `service_request` row would be rejected by a narrowed constraint — which is the spec's own precondition for changing it. Please run both queries before deciding.
+**Not run.** The connection string lives in a gitignored user-secrets file, and §0 says never to touch credential or secret files (the sandbox blocked the read too). So I could not prove that no existing `service_request` row would be rejected by a narrowed constraint — which is the spec's own precondition for changing it.
+
+Since all eight crops are being kept, nothing now depends on that query. It is still worth running to see what is actually in the column.
+
+**Migration 0027 has been applied to live by Leruo.** A read-only script to confirm the applied schema matches the code — columns, tables, views, indexes, RLS, policies, GRANTs, `security_invoker`, and that no FK to irrigation commands exists — is at the end of `fao56-engine-report.md` under **Verify the applied migration**.
 
 ---
 
@@ -269,4 +322,4 @@ select count(*) from service_request;
 
 **None.** All three merges were clean, and both build failures turned out to be local artifacts (`node_modules`, `.expo/types/`) rather than repo content. No `fix(merge): ...` commit was needed.
 
-The three merge commits are the entire content of Phase A.
+The three merge commits (`29f3ede`, `d79d4f3`, `04b5960`) are the entire content of Phase A. Everything after `04b5960` in the log above is Phases B–E and the Drip/soil work, which landed through the `599fb0b` merge.
