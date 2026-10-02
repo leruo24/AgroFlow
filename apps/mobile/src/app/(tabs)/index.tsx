@@ -12,6 +12,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { DataState } from '@/components/DataState';
 import { FarmLocationMap } from '@/components/FarmLocationMap';
 import { WeatherSummary } from '@/components/WeatherSummary';
+import { DripHelper } from '@/components/DripHelper';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -72,5 +73,13 @@ export default function HomeScreen() {
         <ChevronRight size={19} color={colors.textSecondary} />
       </TouchableOpacity>)}
     </ScrollView>
+    {/* Floats over the page, clear of the tab bar. Waits for the farm and zone
+        data so the greeting never lands on a half-drawn screen, and renders
+        nothing when the farmer has the helper switched off. */}
+    <DripHelper
+      zones={zones.map(z => ({ id: z.id, name: z.name }))}
+      unreadAlertCount={unread}
+      ready={!isFarmLoading && !isZonesLoading && !!farm}
+    />
   </SafeAreaView>;
 }

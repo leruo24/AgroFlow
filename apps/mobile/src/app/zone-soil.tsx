@@ -5,11 +5,9 @@
 // Three large cards, plain words, loam pre-selected because it is the most common
 // garden soil and the documented assumption for the demo tubs.
 //
-// ICONS: the spec asked for three SVG icons from a soil/ folder beside it. That
-// folder was not present, so each card carries a plain coloured swatch instead -
-// no artwork was redrawn or invented. Dropping the three SVGs into
-// assets/soil/ and rendering them with react-native-svg (already a dependency)
-// in place of the swatch is all that is needed later.
+// ICONS: each card carries its soil icon, rendered with react-native-svg by
+// components/SoilIcon.tsx from the artwork in assets/soil/soil_*.svg. The
+// drawing commands are the provided ones, unchanged.
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +23,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/ThemeContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { HelpButton } from '@/components/HelpButton';
+import { SoilIcon } from '@/components/SoilIcon';
 import { createZoneSoilStyles } from '@/styles/zoneSoilStyles';
 import { saveZoneSoilType, type ZoneSoilType } from '@/services/agroFlowApi';
 
@@ -36,28 +35,24 @@ const SOILS: {
   title: string;
   feel: string;
   means: string;
-  swatch: string;
 }[] = [
   {
     key: 'sandy',
     title: 'Sandy',
     feel: 'Gritty, falls apart when squeezed.',
     means: 'Drains fast. Needs water more often, in smaller amounts.',
-    swatch: '#D9C08C',
   },
   {
     key: 'loam',
     title: 'Loam / garden soil',
     feel: 'Soft and crumbly, holds shape loosely.',
     means: 'Holds water well. The best all-rounder.',
-    swatch: '#8B6A4B',
   },
   {
     key: 'clay',
     title: 'Clay',
     feel: 'Sticky when wet, hard and cracked when dry.',
     means: 'Holds water a long time. Water less often, but slowly.',
-    swatch: '#A6584A',
   },
 ];
 
@@ -137,7 +132,7 @@ export default function ZoneSoilScreen() {
               onPress={() => setSelected(soil.key)}
               style={[styles.card, isSelected && styles.cardSelected]}
             >
-              <View style={[styles.swatch, { backgroundColor: soil.swatch }]} />
+              <SoilIcon kind={soil.key} size={48} />
               <View style={styles.cardBody}>
                 <View style={styles.cardHeading}>
                   <Text style={styles.cardTitle}>{soil.title}</Text>

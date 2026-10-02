@@ -34,17 +34,6 @@ export function createZoneSoilStyles(colors: AppColors) {
       backgroundColor: colors.surfaceSecondary,
     },
 
-    // Stand-in for the SVG icons: a plain coloured swatch per soil type. The
-    // soil/ icon folder named in the spec was not present, so these are flat
-    // colour cards rather than redrawn artwork.
-    swatch: {
-      width: 48,
-      height: 48,
-      borderRadius: Radius.sm,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-
     cardBody: { flex: 1, gap: Spacing.one },
     cardHeading: { ...sharedLayout.inlineRow, justifyContent: 'space-between' },
     cardTitle: { fontSize: Type.title, fontWeight: '600', color: colors.text },
