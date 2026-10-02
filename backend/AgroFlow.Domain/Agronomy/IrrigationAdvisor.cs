@@ -87,6 +87,19 @@ namespace AgroFlow.Business.Agronomy
 
         // Forward-looking rows, used only for the rainfall outlook sentence.
         public IReadOnlyList<DailyWeather> Forecast { get; set; } = Array.Empty<DailyWeather>();
+
+        // ------------------------------------------------------------------
+        // Water-balance inputs (added with the FAO-56 water-balance engine).
+        //
+        // Every one is OPTIONAL and defaults to "not known", so existing callers
+        // that only set the fields above keep compiling and keep getting exactly
+        // the advice they got before. The engine runs only when WaterBalance is
+        // supplied; without it this class behaves as it always did.
+        // ------------------------------------------------------------------
+        public ZoneEngineInput? WaterBalance { get; set; }
+
+        // Timing and pump-derived fault signals. Optional for the same reason.
+        public ZoneFaultSignals? FaultSignals { get; set; }
     }
 
     public sealed class ZoneAdvice
@@ -115,6 +128,41 @@ namespace AgroFlow.Business.Agronomy
         // What the engine could not determine and why. Empty when it had
         // everything it needed.
         public IReadOnlyList<string> Limitations { get; internal set; } = Array.Empty<string>();
+
+        // ------------------------------------------------------------------
+        // Water-balance results (added with the FAO-56 water-balance engine).
+        //
+        // Additive: Summary, Reasoning, Facts, Insights and Limitations above all
+        // keep their existing meaning and content, so the schedule report and the
+        // admin dashboard need no changes for them.
+        //
+        // Insights above stays the FAO-56 narrative, every line carrying a
+        // citation. FarmerInsights below is the separate, farmer-facing set from
+        // spec section 7 - short, plain, no jargon - which is what the app shows
+        // and what the reports render as { text, source }.
+        // ------------------------------------------------------------------
+        public IReadOnlyList<ZoneInsight> FarmerInsights { get; internal set; } = Array.Empty<ZoneInsight>();
+
+        // The one plain sentence spec section 9a asks for, e.g. "Water about
+        // 2 min today." Null when the water balance could not run. Summary is left
+        // untouched for callers already rendering it.
+        public string? PlainSummary { get; internal set; }
+
+        // Today's water-balance state, for reports. Null where unavailable.
+        public double? TotalAvailableWaterMm { get; internal set; }
+        public double? ReadilyAvailableWaterMm { get; internal set; }
+        public double? DepletionMm { get; internal set; }
+        public double? RecommendedLitres { get; internal set; }
+        public int? RecommendedMinutes { get; internal set; }
+        public double? RelativeMoisturePercent { get; internal set; }
+        public int? DayOfSeason { get; internal set; }
+        public int? SeasonLengthDays { get; internal set; }
+        public string? SeasonStageLabel { get; internal set; }
+        public int? DaysToNextWatering { get; internal set; }
+        public string? EtoSource { get; internal set; }
+
+        // True when the balance ran end to end for today.
+        public bool WaterBalanceAvailable { get; internal set; }
     }
 
     public static class IrrigationAdvisor
@@ -280,6 +328,16 @@ namespace AgroFlow.Business.Agronomy
                     Fao56Knowledge.Format(daysOfDemandCovered, 1) + " days of demand at the current ETc, so it may cover the next cycle.");
             }
 
+            // ---- Water balance -------------------------------------------------
+            // The FAO-56 root-zone water balance (Eq. 82-88), which is what turns
+            // the figures above into "water for 4 minutes". Runs only when the
+            // caller supplied the inputs for it; everything above is unchanged
+            // either way, so a caller that has not been updated still works.
+            if (input.WaterBalance != null)
+            {
+                ApplyWaterBalance(input, advice, reasoning, facts, limitations);
+            }
+
             advice.Reasoning = reasoning;
             advice.Facts = facts;
             advice.Insights = insights;
@@ -287,6 +345,80 @@ namespace AgroFlow.Business.Agronomy
             advice.Summary = BuildSummary(input, advice, crop, stage, et0, etc, nextMeaningfulRain, moisture, threshold);
 
             return advice;
+        }
+
+        // The adapter over the water-balance engine. Everything it produces is
+        // ADDED to the advice: nothing existing is overwritten.
+        private static void ApplyWaterBalance(
+            ZoneAdviceInput input, ZoneAdvice advice,
+            List<string> reasoning, List<AdviceFact> facts, List<string> limitations)
+        {
+            var engineInput = input.WaterBalance!;
+            var result = Fao56Engine.Run(engineInput);
+
+            advice.WaterBalanceAvailable = result.BalanceRan;
+            advice.TotalAvailableWaterMm = result.TawMm;
+            advice.ReadilyAvailableWaterMm = result.RawMm;
+            advice.DepletionMm = result.DepletionMm;
+            advice.RecommendedLitres = result.RecommendedLitres;
+            advice.RecommendedMinutes = result.RecommendedMinutes;
+            advice.RelativeMoisturePercent = result.RelativeMoisturePercent;
+            advice.DayOfSeason = result.DayOfSeason;
+            advice.SeasonLengthDays = result.Crop?.TotalDays;
+            advice.DaysToNextWatering = result.DaysToNextWatering;
+            advice.SeasonStageLabel = result.Stage.HasValue
+                ? Fao56EngineReference.StageLabel(result.Stage.Value)
+                : null;
+
+            var todayRow = result.Days.FirstOrDefault(d => d.Day == engineInput.Today);
+            advice.EtoSource = todayRow?.EtoSource;
+
+            facts.AddRange(result.Facts);
+
+            foreach (var limitation in result.Limitations)
+            {
+                if (!limitations.Contains(limitation)) limitations.Add(limitation);
+            }
+
+            // The farmer-facing insight set (spec section 7).
+            var insights = ZoneInsightBuilder.Build(
+                engineInput, result, input.FaultSignals ?? new ZoneFaultSignals());
+            advice.FarmerInsights = insights;
+
+            // The plain sentence. Taken from the highest-priority act_now insight
+            // so the app, the report and the farmer all read the same words.
+            advice.PlainSummary = BuildPlainSummary(result, insights);
+
+            if (result.BalanceRan && result.DepletionMm.HasValue && result.RawMm.HasValue)
+            {
+                reasoning.Add(result.DepletionMm.Value >= result.RawMm.Value
+                    ? "The soil has dried past what this crop can comfortably draw from, so it needs water now."
+                    : "The soil still holds enough water for this crop today.");
+            }
+        }
+
+        private static string? BuildPlainSummary(ZoneEngineResult result, IReadOnlyList<ZoneInsight> insights)
+        {
+            var waterNow = insights.FirstOrDefault(i => i.InsightType == InsightType.WaterNow);
+            if (waterNow != null)
+            {
+                return result.RecommendedMinutes.HasValue
+                    ? "Water about " + result.RecommendedMinutes.Value + " min today."
+                    : waterNow.Message;
+            }
+
+            var skipRain = insights.FirstOrDefault(i => i.InsightType == InsightType.SkipRain);
+            if (skipRain != null) return "Rain is expected, so skip watering today.";
+
+            var setupMissing = insights.FirstOrDefault(i => i.InsightType == InsightType.SetupMissing);
+            if (setupMissing != null) return setupMissing.Message;
+
+            if (result.DaysToNextWatering.HasValue)
+            {
+                return "No watering needed today; about " + result.DaysToNextWatering.Value + " days until the next one.";
+            }
+
+            return result.BalanceRan ? "No watering needed today." : null;
         }
 
         private static AdviceAction Decide(double? moisture, double? threshold, out string sentence)

@@ -194,9 +194,14 @@ public class WeatherCollectionService : BackgroundService
         NpgsqlConnection connection, long farmId, WeatherDailyRow row, string source, CancellationToken ct)
     {
         await using var cmd = new NpgsqlCommand(
+            // rh_min_pct / rh_max_pct / wind_ms / wind_height_m were added for
+            // FAO-56 Penman-Monteith (migration 0027). Additive: the same call
+            // already returned them, and every existing column behaves exactly
+            // as before.
             "insert into weather_daily " +
-            "  (farm_id, date, tmin_c, tmax_c, precipitation_mm, humidity_mean, is_forecast, fetched_at, source) " +
-            "values ($1, $2, $3, $4, $5, $6, $7, now(), $8) " +
+            "  (farm_id, date, tmin_c, tmax_c, precipitation_mm, humidity_mean, is_forecast, fetched_at, source, " +
+            "   rh_min_pct, rh_max_pct, wind_ms, wind_height_m) " +
+            "values ($1, $2, $3, $4, $5, $6, $7, now(), $8, $9, $10, $11, $12) " +
             "on conflict (farm_id, date) do update set " +
             "  tmin_c = excluded.tmin_c, " +
             "  tmax_c = excluded.tmax_c, " +
@@ -204,7 +209,11 @@ public class WeatherCollectionService : BackgroundService
             "  humidity_mean = excluded.humidity_mean, " +
             "  is_forecast = excluded.is_forecast, " +
             "  fetched_at = excluded.fetched_at, " +
-            "  source = excluded.source " +
+            "  source = excluded.source, " +
+            "  rh_min_pct = excluded.rh_min_pct, " +
+            "  rh_max_pct = excluded.rh_max_pct, " +
+            "  wind_ms = excluded.wind_ms, " +
+            "  wind_height_m = excluded.wind_height_m " +
             "where excluded.is_forecast = false or weather_daily.is_forecast = true",
             connection);
 
@@ -216,6 +225,10 @@ public class WeatherCollectionService : BackgroundService
         cmd.Parameters.AddWithValue((object?)(float?)row.HumidityMean ?? DBNull.Value);
         cmd.Parameters.AddWithValue(row.IsForecast);
         cmd.Parameters.AddWithValue(source);
+        cmd.Parameters.AddWithValue((object?)(float?)row.RhMinPct ?? DBNull.Value);
+        cmd.Parameters.AddWithValue((object?)(float?)row.RhMaxPct ?? DBNull.Value);
+        cmd.Parameters.AddWithValue((object?)(float?)row.WindMs ?? DBNull.Value);
+        cmd.Parameters.AddWithValue((object?)(float?)row.WindHeightM ?? DBNull.Value);
 
         await cmd.ExecuteNonQueryAsync(ct);
     }

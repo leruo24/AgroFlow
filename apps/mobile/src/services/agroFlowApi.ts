@@ -369,3 +369,77 @@ export function createFarmerServiceRequest(
     }
   );
 }
+
+// ---------------------------------------------------------------------------
+// FAO-56 insight engine (migration 0027).
+//
+// These are NEW endpoints in a NEW backend file. Luba's
+// PUT /api/farmer/zones/{id}/settings is in flight and is deliberately not
+// extended - the soil type has its own endpoint.
+// ---------------------------------------------------------------------------
+
+export type ZoneSoilType = 'sandy' | 'loam' | 'clay';
+
+export type ZoneInsight = {
+  insightType: string;
+  severity: 'act_now' | 'heads_up' | 'info';
+  message: string;
+};
+
+export function fetchZoneInsights(zoneId: number) {
+  return authorizedRequest<{
+    zoneId: number;
+    day: string;
+    insights: ZoneInsight[];
+  }>(`/api/farmer/zones/${zoneId}/insights`);
+}
+
+export function dismissZoneInsight(
+  zoneId: number,
+  insightType: string
+) {
+  return authorizedRequest<{ message: string }>(
+    `/api/farmer/insights/${encodeURIComponent(insightType)}/dismiss?zoneId=${zoneId}`,
+    { method: 'POST' }
+  );
+}
+
+// Saves the zone's soil type and recalculates today's advice for it. The
+// farmer's own saved thresholds are not changed.
+export function saveZoneSoilType(
+  zoneId: number,
+  soilType: ZoneSoilType
+) {
+  return authorizedRequest<{ message: string; soilType: ZoneSoilType }>(
+    `/api/farmer/zones/${zoneId}/soil`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ soil_type: soilType }),
+    }
+  );
+}
+
+// Saves the latest valid soil reading as this zone's wet or dry point.
+// Rejected when the two points would end up too close together.
+export function saveZoneCalibration(
+  zoneId: number,
+  point: 'wet' | 'dry'
+) {
+  return authorizedRequest<{ message: string; reading: number }>(
+    `/api/farmer/zones/${zoneId}/calibration`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ point }),
+    }
+  );
+}
+
+// Resets this zone's watering levels to the FAO-56 recommendation for its crop
+// and soil. Returns a plain message explaining what is missing if it cannot.
+export function resetZoneToRecommended(zoneId: number) {
+  return authorizedRequest<{
+    message: string;
+    threshold: number;
+    desired: number;
+  }>(`/api/farmer/zones/${zoneId}/reset-recommended`, { method: 'POST' });
+}

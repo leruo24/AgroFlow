@@ -16,8 +16,22 @@ namespace AgroFlow.Business.Agronomy
         public double? HumidityMean { get; }
         public bool IsForecast { get; }
 
+        // Added for FAO-56 Penman-Monteith (Eq. 6), which needs humidity and wind
+        // as well as temperature. All nullable: the archive endpoint does not
+        // serve them, and Eq. 6 has documented fallbacks for each (see
+        // DailyEtoResolver).
+        //
+        // WindHeightM travels with WindMs because Open-Meteo measures wind at
+        // 10 m while Eq. 6 is defined at 2 m - Eq. 47 converts, but only if the
+        // height is known rather than assumed.
+        public double? RhMinPct { get; }
+        public double? RhMaxPct { get; }
+        public double? WindMs { get; }
+        public double? WindHeightM { get; }
+
         public WeatherDailyRow(
-            DateOnly date, double? tMinC, double? tMaxC, double? precipitationMm, double? humidityMean, bool isForecast)
+            DateOnly date, double? tMinC, double? tMaxC, double? precipitationMm, double? humidityMean, bool isForecast,
+            double? rhMinPct = null, double? rhMaxPct = null, double? windMs = null, double? windHeightM = null)
         {
             Date = date;
             TMinC = tMinC;
@@ -25,6 +39,10 @@ namespace AgroFlow.Business.Agronomy
             PrecipitationMm = precipitationMm;
             HumidityMean = humidityMean;
             IsForecast = isForecast;
+            RhMinPct = rhMinPct;
+            RhMaxPct = rhMaxPct;
+            WindMs = windMs;
+            WindHeightM = windHeightM;
         }
 
         // A row with no temperatures cannot produce ET0, so there is no point
@@ -60,14 +78,22 @@ namespace AgroFlow.Business.Agronomy
     public static class OpenMeteoDailyParser
     {
         public const string ForecastSource = "open-meteo-forecast";
+
+        // Open-Meteo's wind_speed_10m_max is measured at 10 m above ground.
+        // FAO-56 Eq. 6 wants 2 m, so Eq. 47 converts using this height.
+        public const double WindMeasurementHeightM = 10.0;
         public const string ArchiveSource = "open-meteo-archive";
 
         // The daily variables AgroFlow asks for. temperature_2m_max/min are
         // what FAO-56 Eq. 52 needs; precipitation_sum drives the rainfall
         // outlook. Humidity is collected because it is free from the same call
         // and useful for display - Hargreaves does not use it.
+        // relative_humidity_2m_min/max and wind_speed_10m_max were added for
+        // FAO-56 Eq. 6 (Penman-Monteith). They come from the same free call that
+        // already fetched the temperatures, so this costs nothing extra.
         public const string DailyVariables =
-            "temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_mean";
+            "temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_mean," +
+            "relative_humidity_2m_min,relative_humidity_2m_max,wind_speed_10m_max";
 
         // Archive (ERA5) does not serve relative_humidity_2m_mean as a daily
         // aggregate, so the backfill asks for a narrower set rather than
@@ -109,6 +135,9 @@ namespace AgroFlow.Business.Agronomy
             var minTemps = ReadOptionalNumberArray(daily, "temperature_2m_min");
             var precipitation = ReadOptionalNumberArray(daily, "precipitation_sum");
             var humidity = ReadOptionalNumberArray(daily, "relative_humidity_2m_mean");
+            var humidityMin = ReadOptionalNumberArray(daily, "relative_humidity_2m_min");
+            var humidityMax = ReadOptionalNumberArray(daily, "relative_humidity_2m_max");
+            var windMax = ReadOptionalNumberArray(daily, "wind_speed_10m_max");
 
             var rows = new List<WeatherDailyRow>();
             var index = 0;
@@ -128,7 +157,13 @@ namespace AgroFlow.Business.Agronomy
                         ValueAt(maxTemps, index),
                         ValueAt(precipitation, index),
                         ValueAt(humidity, index),
-                        isForecast: !treatAllAsActuals && date >= today));
+                        isForecast: !treatAllAsActuals && date >= today,
+                        rhMinPct: ValueAt(humidityMin, index),
+                        rhMaxPct: ValueAt(humidityMax, index),
+                        windMs: ValueAt(windMax, index),
+                        // Only claim a measurement height when there is a wind
+                        // figure to attach it to.
+                        windHeightM: ValueAt(windMax, index).HasValue ? WindMeasurementHeightM : (double?)null));
                 }
 
                 index++;
@@ -173,6 +208,9 @@ namespace AgroFlow.Business.Agronomy
                    + "&daily=" + DailyVariables
                    + "&past_days=2"
                    + "&forecast_days=8"
+                   // FAO-56 works in m/s; Open-Meteo defaults to km/h, so ask
+                   // for the unit rather than converting after the fact.
+                   + "&wind_speed_unit=ms"
                    + "&timezone=auto";
         }
 

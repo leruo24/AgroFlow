@@ -32,7 +32,8 @@ public static class ReportEndpoints
         Guid.TryParse(user.FindFirstValue("sub"), out userId);
 
     private static async Task<IResult> GetWaterUsageAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to,
+        AgroFlow.Business.Fao56EngineController engine)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
@@ -136,6 +137,8 @@ public static class ReportEndpoints
             };
         });
 
+        var zoneDtoList = zoneDtos.ToList();
+
         return Results.Ok(new
         {
             farmId,
@@ -145,12 +148,16 @@ public static class ReportEndpoints
             generatedAt = DateTimeOffset.UtcNow,
             isEstimate = true,
             estimateNote = "Estimated: pump run time x zone flow rate. No flow meter is installed.",
-            zones = zoneDtos,
+            zones = zoneDtoList,
+
+            // Spec 9b: the water usage report carries the efficiency insights.
+            insights = CollectInsights(engine, zones.Select(z => z.ZoneId), WaterUsageReportInsights),
         });
     }
 
         private static async Task<IResult> GetMoistureAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to,
+        AgroFlow.Business.Fao56EngineController engine)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
@@ -282,13 +289,21 @@ public static class ReportEndpoints
             irrigationEvents = events,
             isEstimate = true,
             estimateNote = "Irrigation litres are estimated: pump run time x zone flow rate. No flow meter is installed.",
+
+            // Spec 9b: the moisture report carries the sensor- and dryness-related
+            // insights. Each item is { text, source }.
+            insights = CollectInsights(engine, new[] { zoneId.Value }, MoistureReportInsights),
+
+            // Spec 3b: the probe is resistive and will drift as it corrodes.
+            calibrationNote = "The soil sensor is resistive, so its readings are relative, not a measured volume of water. They react to salts and fertiliser and drift as the probe corrodes. Redo the wet/dry setup if readings drift over weeks.",
         });
     }
 
     private const int MaxReadingAgeHours = 24;
 
     private static async Task<IResult> GetScheduleAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId,
+        AgroFlow.Business.Fao56EngineController engine)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         if (farmId is null) return Results.BadRequest(new { error = "farmId is required." });
@@ -379,6 +394,30 @@ public static class ReportEndpoints
             var days = new List<object>();
             ZoneAdvice? todayAdvice = null;
 
+            // The FAO-56 water balance is a time series, not a per-day figure, so
+            // it is assembled once per zone and handed to today's Advise call.
+            // Future days keep the forecast-only outlook they always had.
+            AgroFlow.Business.Agronomy.ZoneEngineInput? balanceInput = null;
+            AgroFlow.Business.Agronomy.ZoneFaultSignals? faultSignals = null;
+            try
+            {
+                var engineZone = engine.Data.GetZone(z.Id);
+                if (engineZone != null)
+                {
+                    balanceInput = engine.BuildInput(engineZone, today);
+                    faultSignals = engine.BuildFaultSignals(engineZone, today);
+                }
+            }
+            catch (Exception)
+            {
+                // The report must still render if the engine's own columns are
+                // missing - migration 0027 may not be applied yet. The advice then
+                // degrades to exactly what it was before the engine existed, and
+                // the zone's limitations say what is unavailable.
+                balanceInput = null;
+                faultSignals = null;
+            }
+
             for (var i = 0; i < 7; i++)
             {
                 var asOf = today.AddDays(i);
@@ -395,6 +434,8 @@ public static class ReportEndpoints
                     FarmLatitudeDegrees = latitude,
                     LatestWeather = w,
                     Forecast = weather.Values.Where(x => x.Date > asOf).ToList(),
+                    WaterBalance = i == 0 ? balanceInput : null,
+                    FaultSignals = i == 0 ? faultSignals : null,
                 });
                 if (i == 0) todayAdvice = advice;
 
@@ -433,13 +474,54 @@ public static class ReportEndpoints
                         : $"Latest reading is older than {MaxReadingAgeHours} hours, so it was not used.",
                 },
                 summary = todayAdvice!.Summary,
+
+                // The one plain sentence for a farmer, from the water balance.
+                // Null when the balance could not run.
+                plainSummary = todayAdvice.PlainSummary,
+
                 reasoning = todayAdvice.Reasoning,
                 facts = todayAdvice.Facts.Select(f => new { f.Label, f.Value, f.Source }),
-                insights = todayAdvice.Insights,
+
+                // The farmer-facing insight set, each as { text, source } per spec
+                // section 9a. Farmers see text; reports always show source.
+                insights = todayAdvice.FarmerInsights.Select(i => new
+                {
+                    text = i.Message,
+                    source = i.Source,
+                    insightType = i.InsightType,
+                    severity = i.Severity,
+                }),
+
+                // The FAO-56 narrative notes that `insights` used to carry. Kept
+                // so nothing that was published is lost - every line still cites
+                // the textbook.
+                faoNotes = todayAdvice.Insights,
+
                 limitations = todayAdvice.Limitations,
+
+                // Today's water-balance figures, for the report tables.
+                waterBalance = todayAdvice.WaterBalanceAvailable ? new
+                {
+                    soilCanHoldMm = Round1(todayAdvice.TotalAvailableWaterMm),
+                    standsBeforeWateringMm = Round1(todayAdvice.ReadilyAvailableWaterMm),
+                    shortOfFullMm = Round1(todayAdvice.DepletionMm),
+                    recommendedLitres = Round1(todayAdvice.RecommendedLitres),
+                    recommendedMinutes = todayAdvice.RecommendedMinutes,
+                    relativeMoisturePct = Round1(todayAdvice.RelativeMoisturePercent),
+                    dayOfSeason = todayAdvice.DayOfSeason,
+                    seasonLengthDays = todayAdvice.SeasonLengthDays,
+                    stage = todayAdvice.SeasonStageLabel,
+                    daysToNextWatering = todayAdvice.DaysToNextWatering,
+                    etoSource = todayAdvice.EtoSource,
+                } : null,
+
                 days,
             });
         }
+
+        // Spec 9c: the last 7 observed days, area against tub.
+        var weatherComparison = await ReadWeatherComparisonAsync(
+            connection, farmId.Value, today.AddDays(-7), today);
 
         return Results.Ok(new
         {
@@ -450,14 +532,24 @@ public static class ReportEndpoints
             status = zones.Count == 0 ? "no_zones" : "ok",
             message = zones.Count == 0 ? "Not enough data yet: this farm has no zones." : null,
             zones,
+            weatherComparison = new
+            {
+                caption = WeatherComparisonCaption,
+                days = weatherComparison,
+                available = weatherComparison.Count > 0,
+                message = weatherComparison.Count == 0
+                    ? "No observed weather days to compare yet."
+                    : null,
+            },
         });
     }
 
         private static async Task<IResult> GetWaterUsagePdfAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to,
+        AgroFlow.Business.Fao56EngineController engine)
     {
         // Reuse the on-screen report so the PDF can never disagree with it.
-        var result = await GetWaterUsageAsync(user, dataSource, farmId, from, to);
+        var result = await GetWaterUsageAsync(user, dataSource, farmId, from, to, engine);
         if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
         if (result is not IValueHttpResult { Value: { } value }) return result;
 
@@ -503,6 +595,8 @@ public static class ReportEndpoints
                     $"Total estimated: {total.ToString("0.0", CultureInfo.InvariantCulture)} L across {zonesCounted} zone(s)." +
                     (zonesExcluded > 0 ? $" {zonesExcluded} zone(s) had no usable data and are not included." : ""))
                     .SemiBold();
+
+                WriteInsightsBlock(col, root);
 
                 foreach (var z in root.GetProperty("zones").EnumerateArray())
                 {
@@ -555,10 +649,11 @@ public static class ReportEndpoints
     }
 
         private static async Task<IResult> GetMoisturePdfAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to,
+        AgroFlow.Business.Fao56EngineController engine)
     {
         // Reuse the on-screen report so the PDF can never disagree with it.
-        var result = await GetMoistureAsync(user, dataSource, zoneId, from, to);
+        var result = await GetMoistureAsync(user, dataSource, zoneId, from, to, engine);
         if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
         if (result is not IValueHttpResult { Value: { } value }) return result;
 
@@ -609,6 +704,15 @@ public static class ReportEndpoints
                     $"lowest {Num(s.GetProperty("lowestPct"), "%")}, " +
                     $"highest {Num(s.GetProperty("highestPct"), "%")}.");
                 col.Item().Text(s.GetProperty("action").GetString()).SemiBold();
+
+                WriteInsightsBlock(col, root);
+
+                // Spec 3b: say in the report that a resistive probe drifts.
+                if (root.TryGetProperty("calibrationNote", out var calibrationNote)
+                    && calibrationNote.ValueKind == JsonValueKind.String)
+                {
+                    col.Item().PaddingTop(4).Text(calibrationNote.GetString()!).FontSize(8).Italic();
+                }
 
                 col.Item().PaddingTop(6).Text("Irrigation events").FontSize(12).SemiBold();
                 col.Item().Text(note).Italic();
@@ -683,10 +787,11 @@ public static class ReportEndpoints
     }
 
         private static async Task<IResult> GetSchedulePdfAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId,
+        AgroFlow.Business.Fao56EngineController engine)
     {
         // Reuse the on-screen report so the PDF can never disagree with it.
-        var result = await GetScheduleAsync(user, dataSource, farmId);
+        var result = await GetScheduleAsync(user, dataSource, farmId, engine);
         if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
         if (result is not IValueHttpResult { Value: { } value }) return result;
 
@@ -767,6 +872,23 @@ public static class ReportEndpoints
                             col.Item().Text($"- {Str(f.GetProperty("label"))}: {Str(f.GetProperty("value"))}  [{Str(f.GetProperty("source"))}]").FontSize(9);
                     }
 
+                    // Spec 9b: the insights block sits after "Figures and their
+                    // sources" and before the 7-day outlook. Each line shows its
+                    // source in smaller text underneath, because a report reader
+                    // must be able to check where the advice came from.
+                    if (z.TryGetProperty("insights", out var zoneInsights)
+                        && zoneInsights.ValueKind == JsonValueKind.Array
+                        && zoneInsights.GetArrayLength() > 0)
+                    {
+                        col.Item().PaddingTop(4).Text("What to do").SemiBold();
+                        foreach (var insight in zoneInsights.EnumerateArray())
+                        {
+                            col.Item().Text("- " + Str(insight.GetProperty("text")));
+                            col.Item().PaddingLeft(10).Text("Source: " + Str(insight.GetProperty("source")))
+                                .FontSize(8).FontColor(Colors.Grey.Darken1);
+                        }
+                    }
+
                     var limitations = z.GetProperty("limitations");
                     if (limitations.GetArrayLength() > 0)
                     {
@@ -800,6 +922,80 @@ public static class ReportEndpoints
                             table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Str(d.GetProperty("note"))).FontSize(9);
                         }
                     });
+                }
+
+                // Spec 9c: "Weather: area vs tub", after the 7-day outlook. One
+                // table for the farm, not per zone - weather_daily is per farm.
+                if (root.TryGetProperty("weatherComparison", out var comparison))
+                {
+                    col.Item().PaddingTop(10).Text("Weather: area vs tub").FontSize(13).SemiBold();
+                    col.Item().Text(Str(comparison.GetProperty("caption"))).FontSize(9).Italic();
+
+                    var comparisonDays = comparison.GetProperty("days");
+                    if (comparisonDays.GetArrayLength() == 0)
+                    {
+                        col.Item().Text(comparison.TryGetProperty("message", out var cm) && cm.ValueKind == JsonValueKind.String
+                            ? cm.GetString()!
+                            : "No observed weather days to compare yet.");
+                    }
+                    else
+                    {
+                        col.Item().PaddingTop(4).Table(table =>
+                        {
+                            table.ColumnsDefinition(c =>
+                            {
+                                c.RelativeColumn(1.4f);                      // date
+                                c.RelativeColumn(); c.RelativeColumn();      // app tmin/tmax
+                                c.RelativeColumn();                          // app RH
+                                c.RelativeColumn();                          // app wind
+                                c.RelativeColumn();                          // app rain
+                                c.RelativeColumn(); c.RelativeColumn();      // tub tmin/tmax
+                                c.RelativeColumn();                          // tub RH
+                                c.RelativeColumn();                          // diff tmax
+                                c.RelativeColumn(2f);                        // note
+                            });
+                            table.Header(h =>
+                            {
+                                h.Cell().Text("Date").SemiBold().FontSize(8);
+                                h.Cell().Text("Area min").SemiBold().FontSize(8);
+                                h.Cell().Text("Area max").SemiBold().FontSize(8);
+                                h.Cell().Text("Area RH").SemiBold().FontSize(8);
+                                h.Cell().Text("Wind m/s").SemiBold().FontSize(8);
+                                h.Cell().Text("Rain mm").SemiBold().FontSize(8);
+                                h.Cell().Text("Tub min").SemiBold().FontSize(8);
+                                h.Cell().Text("Tub max").SemiBold().FontSize(8);
+                                h.Cell().Text("Tub RH").SemiBold().FontSize(8);
+                                h.Cell().Text("Max diff").SemiBold().FontSize(8);
+                                h.Cell().Text("Note").SemiBold().FontSize(8);
+                            });
+
+                            foreach (var d in comparisonDays.EnumerateArray())
+                            {
+                                var app = d.GetProperty("app");
+                                var dht = d.GetProperty("dht");
+                                var diff = d.GetProperty("difference");
+
+                                void Cell(string text) =>
+                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2)
+                                        .Text(text).FontSize(8);
+
+                                Cell(Str(d.GetProperty("date")));
+                                Cell(Num(app.GetProperty("tminC")));
+                                Cell(Num(app.GetProperty("tmaxC")));
+                                Cell(Num(app.GetProperty("rhMeanPct")));
+                                Cell(Num(app.GetProperty("windMs")));
+                                Cell(Num(app.GetProperty("rainMm")));
+                                Cell(Num(dht.GetProperty("tminC")));
+                                Cell(Num(dht.GetProperty("tmaxC")));
+                                Cell(Num(dht.GetProperty("rhMeanPct")));
+                                // Difference is left blank rather than zero when
+                                // there is nothing to compare.
+                                Cell(Num(diff.GetProperty("tmaxC")));
+                                Cell(d.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String
+                                    ? n.GetString()! : "");
+                            }
+                        });
+                    }
                 }
             });
 
@@ -850,6 +1046,174 @@ public static class ReportEndpoints
     }
 
 
+
+    // Spec 9b: each report gets the subset of the engine's insights that belongs
+    // to it, in the { text, source } shape. Insights come from the engine rather
+    // than from the report's own numbers so the farmer sees the same words
+    // everywhere.
+    //
+    // Returns an empty list when the engine's columns are not there yet, so a
+    // report never fails because migration 0027 has not been applied.
+    private static List<object> CollectInsights(
+        AgroFlow.Business.Fao56EngineController engine, IEnumerable<long> zoneIds, string[] wantedTypes)
+    {
+        var collected = new List<object>();
+        var today = AgroFlow.Business.Fao56EngineController.TodayInSast();
+
+        foreach (var zoneId in zoneIds)
+        {
+            try
+            {
+                var zone = engine.Data.GetZone(zoneId);
+                if (zone == null) continue;
+
+                var input = engine.BuildInput(zone, today);
+                var result = AgroFlow.Business.Agronomy.Fao56Engine.Run(input);
+                var signals = engine.BuildFaultSignals(zone, today);
+
+                foreach (var insight in AgroFlow.Business.Agronomy.ZoneInsightBuilder.Build(input, result, signals))
+                {
+                    if (wantedTypes.Length > 0 && !wantedTypes.Contains(insight.InsightType)) continue;
+
+                    collected.Add(new
+                    {
+                        text = insight.Message,
+                        source = insight.Source,
+                        insightType = insight.InsightType,
+                        severity = insight.Severity,
+                        zoneId = insight.ZoneId,
+                    });
+                }
+            }
+            catch (Exception)
+            {
+                // Per zone, so one zone cannot empty the whole report's insights.
+            }
+        }
+
+        return collected;
+    }
+
+    // Which insight types belong on which report (spec 9b).
+    private static readonly string[] MoistureReportInsights =
+    {
+        AgroFlow.Business.Agronomy.InsightType.WateringFailed,
+        AgroFlow.Business.Agronomy.InsightType.SensorDrift,
+        AgroFlow.Business.Agronomy.InsightType.StressDays,
+        AgroFlow.Business.Agronomy.InsightType.ThresholdUnsafe,
+    };
+
+    private static readonly string[] WaterUsageReportInsights =
+    {
+        AgroFlow.Business.Agronomy.InsightType.Overwatering,
+        AgroFlow.Business.Agronomy.InsightType.SkipRain,
+        AgroFlow.Business.Agronomy.InsightType.WaterNow,
+    };
+
+    // Spec 9b: a top-level insights block, each line with its source in small
+    // text underneath. Shared by the moisture and water-usage PDFs so the two
+    // cannot drift apart.
+    private static void WriteInsightsBlock(ColumnDescriptor col, JsonElement root)
+    {
+        if (!root.TryGetProperty("insights", out var insights)
+            || insights.ValueKind != JsonValueKind.Array
+            || insights.GetArrayLength() == 0)
+        {
+            return;
+        }
+
+        col.Item().PaddingTop(6).Text("What to do").FontSize(12).SemiBold();
+
+        foreach (var insight in insights.EnumerateArray())
+        {
+            var text = insight.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String
+                ? t.GetString()! : "";
+            var source = insight.TryGetProperty("source", out var sr) && sr.ValueKind == JsonValueKind.String
+                ? sr.GetString()! : "";
+
+            col.Item().Text("- " + text);
+            if (source.Length > 0)
+            {
+                col.Item().PaddingLeft(10).Text("Source: " + source)
+                    .FontSize(8).FontColor(Colors.Grey.Darken1);
+            }
+        }
+    }
+
+    private static double? Round1(double? value) =>
+        value is { } v ? Math.Round(v, 1) : (double?)null;
+
+    // Spec 9c: the weather app beside the tub sensor, from the report_daily_weather
+    // view. Observed days only - a forecast has nothing measured to compare to.
+    //
+    // Returns an empty list rather than throwing when the view does not exist yet
+    // (migration 0027 unapplied), so the report still renders.
+    private static async Task<List<object>> ReadWeatherComparisonAsync(
+        NpgsqlConnection connection, long farmId, DateOnly from, DateOnly to)
+    {
+        var rows = new List<object>();
+
+        const string sql = """
+            select day, app_tmin_c, app_tmax_c, app_rh_min_pct, app_rh_max_pct, app_rh_mean_pct,
+                   app_wind_ms, app_wind_height_m, app_rain_mm, eto_mm, eto_source,
+                   dht_tmin_c, dht_tmax_c, dht_rh_mean_pct, dht_zone_count,
+                   diff_tmin_c, diff_tmax_c, diff_rh_mean_pct
+            from report_daily_weather
+            where farm_id = $1 and day between $2 and $3
+            order by day;
+            """;
+
+        try
+        {
+            await using var cmd = new NpgsqlCommand(sql, connection);
+            cmd.Parameters.AddWithValue(farmId);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, to);
+
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                double? Val(int i) => r.IsDBNull(i) ? (double?)null : Math.Round(Convert.ToDouble(r.GetValue(i)), 1);
+
+                var dhtZoneCount = r.IsDBNull(14) ? 0 : Convert.ToInt64(r.GetValue(14));
+
+                rows.Add(new
+                {
+                    date = r.GetFieldValue<DateOnly>(0).ToString("yyyy-MM-dd"),
+                    app = new
+                    {
+                        tminC = Val(1), tmaxC = Val(2),
+                        rhMinPct = Val(3), rhMaxPct = Val(4), rhMeanPct = Val(5),
+                        windMs = Val(6), windHeightM = Val(7), rainMm = Val(8),
+                    },
+                    eto = new { mm = Val(9), source = r.IsDBNull(10) ? null : r.GetString(10) },
+                    dht = new
+                    {
+                        tminC = Val(11), tmaxC = Val(12), rhMeanPct = Val(13),
+                        zoneCount = dhtZoneCount,
+                    },
+                    // Null, never zero, when either side is missing - a missing
+                    // sensor must not read as perfect agreement.
+                    difference = new { tminC = Val(15), tmaxC = Val(16), rhMeanPct = Val(17) },
+                    // What to show in the cell when there is nothing to compare.
+                    note = dhtZoneCount == 0
+                        ? "Sensor offline"
+                        : (r.IsDBNull(10) ? null : (r.GetString(10) == "dht11_fallback" ? "DHT11 used (weather app incomplete)" : null)),
+                });
+            }
+        }
+        catch (PostgresException)
+        {
+            // View missing (0027 not applied). An empty comparison is the honest
+            // answer; the caller renders the section as unavailable.
+            return rows;
+        }
+
+        return rows;
+    }
+
+    private const string WeatherComparisonCaption =
+        "The weather app shows conditions for the area. The DHT11 sensor sits in the tub, so it shows conditions right at the plants. Differences are normal.";
 
     private static double? Litres(long runtimeSeconds, float? flowRateLpm)
     {

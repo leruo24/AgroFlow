@@ -794,3 +794,54 @@ tbody tr:last-child td{border-bottom:none}
 }
 .qr-modal-link{font-size:12px;color:var(--text-2);margin:var(--space-2) 0 0;word-break:break-all}
 .qr-modal-expiry{font-size:12px;color:var(--muted);margin:var(--space-1) 0 var(--space-3)}
+
+/* ============================================================================
+   Report insights and the weather comparison (FAO-56 engine, spec 9b/9c).
+   Additive: uses the existing colour tokens above, adds no new ones.
+   ========================================================================== */
+.liveInsights{
+  margin:12px 0;
+  padding:10px 12px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:8px;
+}
+.liveInsights h6{
+  margin:0 0 6px;
+  font-size:.8rem;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  color:var(--text-2);
+}
+.liveInsights__list{ margin:0; padding:0; list-style:none; }
+
+.liveInsight{
+  padding:6px 0 6px 10px;
+  border-left:3px solid var(--neutral);
+}
+.liveInsight + .liveInsight{ border-top:1px solid var(--divider); }
+.liveInsight__text{ display:block; color:var(--text); }
+
+/* The source line is deliberately quiet: reports must always show it, but it
+   is reference material, not the message. */
+.liveInsight__source{
+  display:block;
+  margin-top:2px;
+  color:var(--muted);
+  font-size:.72rem;
+}
+
+/* Severity reuses the existing status colours rather than introducing new ones. */
+.liveInsight--act_now{ border-left-color:var(--bad); }
+.liveInsight--heads_up{ border-left-color:var(--warn); }
+.liveInsight--info{ border-left-color:var(--info); }
+
+.liveWeatherCompare{ margin-top:16px; }
+.liveWeatherCompare h6{
+  margin:0 0 4px;
+  font-size:.8rem;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+  color:var(--text-2);
+}
+.liveWeatherCompare table{ font-size:.78rem; }
