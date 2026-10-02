@@ -199,18 +199,28 @@ namespace AgroFlow.Business.Agronomy
                 // already holds FAO-56-sourced values for these two with page
                 // citations. Kept so that zones already growing them keep working
                 // advice instead of degrading to setup_missing.
+                // FAO-56 has no "leafy veg" entry - it tabulates specific crops.
+                // This key maps to LETTUCE throughout: Table 11 "Lettuce" (p. 104),
+                // Table 12 "Lettuce" (p. 110) with Kc_ini from its group row
+                // "a. Small Vegetables", and Table 22 "Lettuce" (p. 163).
                 ["leafy_veg"] = new Fao56EngineCrop(
-                    "leafy_veg", "Leafy vegetables", "Lettuce",
-                    20, 30, 15, 10, "Table 11, Apr, Mediterranean (Lettuce)",
-                    0.70, 1.00, 0.95, "Table 12 group row 'a. Small Vegetables'",
-                    0.3, 0.30, null),
+                    "leafy_veg", "Leafy vegetables (lettuce)", "Lettuce",
+                    20, 30, 15, 10, "Table 11, Apr, Mediterranean (Lettuce), p. 104",
+                    0.70, 1.00, 0.95, "Table 12 group row 'a. Small Vegetables', p. 110 (omitted on the lettuce row itself)",
+                    0.3, 0.30,
+                    "FAO-56 does not tabulate \"leafy vegetables\". These are the published figures for LETTUCE (Table 11 p. 104, Table 12 p. 110, Table 22 p. 163). Spinach, chard and other leafy crops are not identical to lettuce - spinach has its own row and its own key here."),
 
+                // FAO-56 splits citrus six ways: with or without active ground
+                // cover, each at 70%, 50% and 20% canopy. These values are the
+                // "Citrus, no ground cover - 70% canopy" variant - a mature,
+                // clean-floor orchard. A younger planting or a grassed orchard
+                // floor is a DIFFERENT row and these numbers would not apply.
                 ["citrus"] = new Fao56EngineCrop(
-                    "citrus", "Citrus", "Citrus, 70% canopy, no ground cover",
-                    60, 90, 120, 95, "Table 11, Jan, Mediterranean",
-                    0.70, 0.65, 0.70, "Table 12, citrus 70% canopy no ground cover row",
+                    "citrus", "Citrus", "Citrus, no ground cover - 70% canopy",
+                    60, 90, 120, 95, "Table 11, Jan, Mediterranean, p. 107",
+                    0.70, 0.65, 0.70, "Table 12 'Citrus, no ground cover - 70% canopy', p. 113",
                     1.2, 0.50,
-                    "Citrus is the one crop here whose Kc_mid (0.65) is below its Kc_ini (0.70) - FAO-56 attributes this to stomatal closure at peak ET. Kc therefore falls through development and rises again late season, which is correct. Citrus is an evergreen perennial: its planting date means the start of the annual cycle."),
+                    "These are the figures for a mature citrus orchard at 70% canopy with no ground cover (Table 12 p. 113, Table 22 'Citrus - 70% canopy' p. 165); FAO-56 publishes five other citrus variants for different canopies and orchard floors. Kc_mid (0.65) is below Kc_ini (0.70) because of stomatal closure at peak ET, so Kc falls through development and rises again late season - that is correct, not a sign error. Citrus is an evergreen perennial, so its 365-day season means the planting date is the start of the annual cycle, not the year the tree went in."),
             };
 
         // Free-text zone.crop_type / service_request.crop_type -> engine key.

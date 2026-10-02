@@ -1,29 +1,38 @@
 # FAO-56 insight engine — what was built
 
-Run on 2026-10-02. **Nothing was pushed. The migration was not applied. The live database was never written to.**
+Run on 2026-10-02. Migration `0027` has been applied to live by Leruo; nothing in this work applied it or wrote to live itself.
 
 Source for every FAO number: Allen et al. (1998), *FAO Irrigation and Drainage Paper 56* — <https://www.fao.org/4/x0490e/x0490e00.htm>
 
-## Branches (stacked, local only)
+## Branches (stacked)
 
 ```
-dev                        04b5960  (Phase A: three merges)
- └─ feature/fao56-engine   6eccd95  feat(engine): FAO-56 soil water balance, insights and reports
-     └─ feature/help-mascot 3e5ee53  feat(mobile): page help
+dev                            (Phase A: three merges, then the stack below merged in)
+ └─ feature/fao56-engine        6eccd95  feat(engine): FAO-56 soil water balance, insights and reports
+     └─ feature/help-mascot     3e5ee53  feat(mobile): page help
          └─ feature/admin-welcome 635f3d2  feat(admin): add welcome screen before login
+             └─ feature/drip-and-soil
+                                e61011e  feat(mobile): add Drip mascot and soil icon assets
+                                c7baf7d  feat(mobile): raindrop helper and soil icons
 ```
+
+See `merge-report.md` for the final `dev` hash and what was pushed.
 
 ---
 
-## Read this first — three things that did not go to plan
+## Read this first — two decisions you should know about
 
-### 1. The raindrop helper was not built (Phase D stopped, as instructed)
+### 1. Phase D is now complete — the raindrop helper is built
 
-`mascot/Drip.tsx` **does not exist**. Not beside the spec, not anywhere in `~/Downloads` (searched recursively), not anywhere in this repo's history (`git log --all --diff-filter=A`). The spec says to use the provided design, not to redraw it, and to **STOP Phase D and report it** if the file is missing. So there is no `Drip` component, no moods, no speech bubble, no shake animation.
+On the first pass `mascot/Drip.tsx` was missing, so Phase D stopped at the mascot as the spec requires. The artwork has since been supplied and is committed **unchanged** on `feature/drip-and-soil`:
 
-Everything the mascot needs is in place and waiting: the **"Raindrop helper" toggle ships, defaults on, and persists**, and `react-native-svg` (15.15.4) is already a dependency, so no native rebuild will be required.
+```
+apps/mobile/src/components/mascot/Drip.tsx          (4 moods, exports MASCOT_NAME)
+apps/mobile/assets/mascot/drip_{happy,alert,thirsty,wave}.svg
+apps/mobile/assets/soil/soil_{sandy,loam,clay}.svg
+```
 
-I read that STOP as scoped to Phase D, because it says "STOP **Phase D**" rather than stop outright, and Phase E is a separate phase on a separate branch that does not depend on the mascot. **Phase E was therefore built.** If you meant the whole run to halt there, Phase E is one commit (`635f3d2`) and drops off cleanly.
+The helper is wired up in full — greeting wave, mood matching, speech-bubble priority, reduce-motion path, auto-hide — and the soil screen now shows the three real icons instead of plain coloured cards. Details in the Phase D section below.
 
 ### 2. The crop lists were not narrowed to the spec's six keys
 
@@ -36,6 +45,8 @@ Separately, **Luba's `service_request` crop CHECK was left alone**, for a second
 ### 3. No live SELECT could be run
 
 The Supabase connection string lives in a gitignored user-secrets file. §0 says never to touch credential or secret files, and the sandbox blocked reading it as well. Every live-data item in Phase B — seeded row counts, live `crop_type` values, live column lists — is therefore answered **from the migrations and the code**, which give the schema authoritatively, with the exact SQL for you to run yourself. The queries are listed in `merge-report.md` §6 and §8.
+
+**Migration 0027 has since been applied to live by Leruo.** A read-only verification script, to confirm the applied schema matches the code, is at the end of this report under **Verify the applied migration**.
 
 ---
 
@@ -277,15 +288,58 @@ They are kept separate on purpose: editing the JSON would have silently moved th
 
 ---
 
-## Crops with no FAO values
+## Crops — the eight keys, confirmed
+
+**Decision taken: keep all eight.** The engine holds the spec's six plus `citrus` and `leafy_veg`, and Luba's `service_request` crop CHECK is left as it is. Nothing was narrowed and nothing was deleted.
+
+| Key | FAO-56 entry used | Offered in the pickers? |
+|---|---|---|
+| `maize` | Maize, field (grain) | yes |
+| `potato` | Potato | yes |
+| `tomato` | Tomato | yes |
+| `dry beans` | Beans, dry and pulses | yes |
+| `spinach` | Spinach | yes |
+| `cucumber` | Cucumber, fresh market | yes |
+| `leafy_veg` | **Lettuce** — see below | resolvable, not offered as a new choice |
+| `citrus` | **Citrus, no ground cover – 70% canopy** — see below | resolvable, not offered as a new choice |
+
+### What `leafy_veg` actually is
+
+**FAO-56 has no "leafy veg" entry — it tabulates named crops.** This key maps to **Lettuce**, in all three tables:
+
+| Value | FAO-56 source | Page |
+|---|---|---|
+| Stage lengths 20 / 30 / 15 / 10 = 75 d | Table 11, **Lettuce**, planted April, Mediterranean | **p. 104** |
+| Kc_ini 0.70 | Table 12, **group row "a. Small Vegetables"** — Table 12 omits Kc_ini on the lettuce line itself | **p. 110** |
+| Kc_mid 1.00, Kc_end 0.95 | Table 12, **Lettuce** | **p. 110** |
+| Zr 0.3–0.5 m (0.3 used), p 0.30 | Table 22, **Lettuce** | **p. 163** |
+
+So a zone recorded as "leafy veg" is being advised **as lettuce**. That matters: spinach, chard and cabbage are not lettuce, and FAO-56 gives spinach its own row — which is why `spinach` is now its own key rather than an alias of this one, as it was previously. If a farmer is growing something leafy that is not lettuce, the honest options are to add that crop's own FAO-56 row or to leave the zone resolving to nothing and get `setup_missing`. The crop's farmer-facing label is now **"Leafy vegetables (lettuce)"** so this is visible in the app rather than buried here.
+
+### What the citrus values represent
+
+**FAO-56 publishes six citrus variants** — with or without active ground cover, each at 70%, 50% and 20% canopy. The engine uses exactly one of them:
+
+| Value | FAO-56 source | Page |
+|---|---|---|
+| Stage lengths 60 / 90 / 120 / 95 = 365 d | Table 11, Citrus, planted Jan, Mediterranean (the only citrus row published) | **p. 107** |
+| Kc_ini 0.70, Kc_mid 0.65, Kc_end 0.70 | Table 12, **"Citrus, no ground cover – 70% canopy"** | **p. 113** |
+| Zr 1.2–1.5 m (1.2 used), p 0.50 | Table 22, **"Citrus – 70% canopy"** | **p. 165** |
+
+Which is to say: a **mature orchard at 70% canopy with a clean floor and no ground cover**. A younger planting, or an orchard with grass between the rows, is a *different published row* and these numbers do not apply to it. The other five variants are recorded in `fao56-crop-knowledge.json` so switching is a data edit, not a code change.
+
+Two things about citrus that are correct and look wrong:
+
+- **Kc_mid (0.65) is *below* Kc_ini (0.70).** FAO-56 p. 113: *"The midseason value is lower than initial and ending values due to the effects of stomatal closure during periods of peak ET."* So Kc interpolates **downward** through development and **upward** through late season. Not a sign error.
+- **The season totals 365 days.** Citrus is an evergreen perennial, so `planting_date` here means **the start of the annual cycle**, not the year the tree went into the ground.
+
+### Crops with no FAO-56 values
 
 | Crop string | Where it appears | Status |
 |---|---|---|
-| `citrus` | Luba's list, the knowledge JSON | **Has** sourced FAO-56 values — carried into the engine |
-| `leafy_veg` | Luba's list, the knowledge JSON | **Has** sourced FAO-56 values (Lettuce) — carried into the engine |
-| `grapes`, `wheat`, `apples` | admin `referenceData.ts` only | **No FAO-56 values.** Resolve to null; zones with them get `setup_missing`. Please supply the Table 11/12/22 rows if you want them |
+| `grapes`, `wheat`, `apples` | admin `referenceData.ts` only | **No FAO-56 values.** Resolve to null; zones with them get `setup_missing`. Supply the Table 11/12/22 rows if you want them |
 
-`spinach` and `cucumber` were **added** from the spec's sourced rows. Note that `spinach` previously aliased to `leafy_veg` (Lettuce); in the engine it is now its own crop with its own FAO row, which is more accurate. `leafy_veg` still resolves, for lettuce and salad greens.
+Nothing is ever substituted: an unrecognised crop resolves to null and the zone is told what is missing, rather than being advised on some other crop's Kc curve.
 
 ---
 
@@ -396,9 +450,11 @@ router.push({
 
 `helpContent.ts` already has `zoneDetail`, `zoneInsights`, `zoneCalibration`, `zoneResetRecommended` and `zoneSoil` entries ready.
 
-### Soil icons: the folder was missing
+### Soil icons
 
-The spec asks for three SVGs from a `soil/` folder beside it, copied unchanged. **That folder does not exist**, so each card carries a plain coloured swatch instead. No artwork was redrawn or invented. Dropping the three SVGs into `apps/mobile/assets/soil/` and rendering them with `react-native-svg` (already a dependency) in place of the swatch is all that is needed.
+The three provided SVGs are committed unchanged at `apps/mobile/assets/soil/soil_{sandy,loam,clay}.svg`, and each card now shows its icon instead of a plain coloured swatch.
+
+They are rendered by `src/components/SoilIcon.tsx` using `react-native-svg`, with the drawing commands transcribed **verbatim** from those files — nothing redrawn or restyled. It is a `.tsx` rather than a direct `.svg` import because importing SVG files as components needs `react-native-svg-transformer` plus a `metro.config.js`, neither of which this repo has and neither of which anything else needs. That is the same arrangement the mascot already uses: `components/mascot/Drip.tsx` is what the app renders, `assets/mascot/drip_*.svg` is the design source for docs and slides. If a transformer is added later, the three branches in `SoilIcon.tsx` can be replaced by direct imports with no other change.
 
 **Source note:** FAO-56 Table 19 supplies the soil water-holding values. The "how it feels" lines are the ordinary hand texture check, **not** from FAO-56, and the screen says so in small print at the bottom.
 
@@ -406,7 +462,7 @@ The spec asks for three SVGs from a `soil/` folder beside it, copied unchanged. 
 
 ## Phase D and E results
 
-### Phase D — `feature/help-mascot` (`3e5ee53`)
+### Phase D — `feature/help-mascot` (`3e5ee53`) and `feature/drip-and-soil` (`e61011e`, `c7baf7d`)
 
 **Built:** `src/constants/helpContent.ts` (all copy, one file, keyed by screen); `HelpButton` (circled "?", accessible label "Help for this page", renders nothing when the setting is off); `useAppPreferences()`; two additive Settings toggles.
 
@@ -416,7 +472,16 @@ The spec asks for three SVGs from a `soil/` folder beside it, copied unchanged. 
 
 **Checks:** `npx tsc --noEmit` clean, `npx expo-doctor` 21/21. Both toggles persist across restart (written to AsyncStorage on change, read on first mount). With help off, no "?" icons render at all — `HelpButton` returns `null` before anything else.
 
-**Not built:** the raindrop helper, the reduce-motion path and the speech bubble — `mascot/Drip.tsx` is missing. See the top of this report.
+**Raindrop helper** (`src/components/DripHelper.tsx`), using `Drip.tsx` exactly as provided:
+
+- **Greeting:** waves for ~2 s, then switches to the mood matching the message — `thirsty` for water now / water soon, `alert` for alerts or unfinished setup, `happy` when there is nothing to report.
+- **Speech bubble:** one message, by the spec's priority — an `act_now` insight, then unread alerts, then `water_soon`, then `setup_missing`, then "All your zones look good today." `setup_missing` is deliberately excluded from the first rule so it keeps its own gentler wording ("Finish setting up {zone} to get watering advice.") at priority 4 instead of surfacing the raw "add the area and the flow rate" list.
+- **Interaction:** tapping opens what it is about (Alerts, or that zone); the "×" hides it for the session; it auto-hides after ~8 s. Accessible label is `"{MASCOT_NAME} says: {message}"`, with `MASCOT_NAME` read from `Drip.tsx` rather than hard-coded.
+- **Animation:** built-in React Native `Animated` — three small wiggles (±5 px) over about a second, then idle. **No new dependencies.** When `AccessibilityInfo.isReduceMotionEnabled()` is true it fades in with no shake; it also takes the no-shake path if that call throws, so a platform that cannot answer gets less motion rather than more.
+- **When it appears:** once per app open or login, after Home's data has loaded, bottom-right above the tab bar, and only when the "Raindrop helper" toggle is on. The once-per-session flag is module-level so returning to the Home tab does not re-greet; `AuthContext.signOut()` calls `resetDripHelperSession()` so the next farmer to log in gets their own greeting. Switching the toggle off mid-session hides it immediately.
+- **Not on the web admin.**
+
+**Insight data** comes from `src/services/insightsService.ts`, reading `ai_recommendation` directly from Supabase under RLS for the farmer's own zones, for today's SAST date, excluding dismissed rows. This follows the project rule that the apps read ordinary data themselves and the API only does what a client cannot. **Every failure path returns an empty list** — a missing table, older columns, or no network all fall back to alerts and then to "all good". Never a crash, never placeholder text pretending to be advice.
 
 ### Phase E — `feature/admin-welcome` (`635f3d2`)
 
@@ -440,7 +505,7 @@ Disease risk, yield prediction, and best time of day to water — as instructed.
 2. **Run the live SELECTs** listed in `merge-report.md` §6 and §8 — seeded `estimated_litres` counts, `select distinct crop_type from public.zone`, and `select crop_type, count(*) from service_request group by 1`. I could not run them without touching the secrets file.
 3. **Decide the crop-list question** (§2 at the top of this report): keep eight crops, or narrow to six. If narrowing, the `service_request` CHECK statement is written out as a comment at the end of migration 0027.
 4. **Decide the maize/potato Table 11 divergence** between `fao56-crop-knowledge.json` and `Fao56EngineReference.cs`.
-5. **Apply migration `0027_fao56_engine.sql`** in the Supabase SQL editor, after reading it. It is idempotent.
+5. **Migration `0027_fao56_engine.sql` is applied.** ✅ Run the read-only verification at the end of this report to confirm the applied schema matches the code.
 6. **Measure each tub's area and depth**, and set them:
 
 ```sql
@@ -469,8 +534,268 @@ update farm set latitude = <lat>, longitude = <lon> where farm_id = 21;
 
 10. **Mount the components** — exact lines above. Nothing in `zone/[id].tsx` was touched.
 11. **Set the soil type per zone** if the loam default is wrong — the farmer can now do this themselves on the Soil type screen.
-12. **Supply `mascot/Drip.tsx`** if you still want the raindrop helper, and the three `soil_*.svg` icons if you want real soil artwork.
+12. **Nothing further on the artwork** — `Drip.tsx` and all seven SVGs are in and wired up.
 
 ### Installer-set fields
 
 `area_m2`, `flow_rate_lpm` and `root_depth_limit_m` are team-set at installation. **The admin dashboard has no zone edit form** to add them to, so none was built — the SQL above sets them by hand. `soil_type` is team-set at install *and* farmer-changeable on the new screen.
+
+---
+
+## Verify the applied migration
+
+Read-only. Every statement below is a `SELECT` — nothing writes, nothing locks, and there is no `$$` dollar-quoting anywhere, so the Supabase SQL editor will take them one at a time.
+
+Each check returns a `verdict` column so you can read the answer without counting rows.
+
+### 1. The new `zone` columns
+
+```sql
+select c.column_name, c.data_type, c.is_nullable, c.column_default, 'OK - present' as verdict
+from information_schema.columns c
+where c.table_schema = 'public'
+  and c.table_name = 'zone'
+  and c.column_name in ('soil_type','area_m2','root_depth_limit_m','calibration_wet','calibration_dry','flow_rate_lpm')
+order by c.column_name;
+```
+
+Expect **6 rows**: `area_m2`, `calibration_dry`, `calibration_wet`, `flow_rate_lpm`, `root_depth_limit_m`, `soil_type`. `soil_type` should be `NO` for nullable with default `'loam'::text`; `flow_rate_lpm` should default to `1.5` (it predates this migration — 0018, default set in 0020). Anything missing is a column the engine expects and will not find.
+
+### 2. The new `zone` CHECK constraints
+
+```sql
+select con.conname, pg_get_constraintdef(con.oid) as definition
+from pg_constraint con
+join pg_class rel on rel.oid = con.conrelid
+join pg_namespace nsp on nsp.oid = rel.relnamespace
+where nsp.nspname = 'public'
+  and rel.relname = 'zone'
+  and con.conname in ('zone_soil_type_check','zone_area_m2_check','zone_root_depth_limit_check')
+order by con.conname;
+```
+
+Expect **3 rows**, with `zone_soil_type_check` reading `CHECK (soil_type = ANY (ARRAY['sandy'::text, 'loam'::text, 'clay'::text]))`.
+
+### 3. The new `weather_daily` columns
+
+```sql
+select c.column_name, c.data_type, c.is_nullable, 'OK - present' as verdict
+from information_schema.columns c
+where c.table_schema = 'public'
+  and c.table_name = 'weather_daily'
+  and c.column_name in ('rh_min_pct','rh_max_pct','wind_ms','wind_height_m','eto_mm','eto_source','rs_source')
+order by c.column_name;
+```
+
+Expect **7 rows**, all nullable `YES`. `eto_source` and `rs_source` are `text`; the rest `real`.
+
+### 4. The new tables and views exist
+
+```sql
+select c.relname as object_name,
+       case c.relkind when 'r' then 'table' when 'v' then 'view' else c.relkind::text end as kind,
+       'OK - present' as verdict
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relname in ('zone_water_balance','ai_recommendation','dht_daily','report_daily_weather')
+order by c.relname;
+```
+
+Expect **4 rows**: `ai_recommendation` (table), `dht_daily` (view), `report_daily_weather` (view), `zone_water_balance` (table).
+
+### 5. The new `ai_recommendation` columns, and the uniqueness indexes
+
+```sql
+select c.column_name, c.data_type, 'OK - present' as verdict
+from information_schema.columns c
+where c.table_schema = 'public'
+  and c.table_name = 'ai_recommendation'
+  and c.column_name in ('insight_type','severity','data','valid_for','dismissed_at')
+order by c.column_name;
+```
+
+Expect **5 rows**; `data` must be `jsonb`, `valid_for` must be `date`.
+
+```sql
+select i.tablename, i.indexname, i.indexdef
+from pg_indexes i
+where i.schemaname = 'public'
+  and i.tablename in ('ai_recommendation','zone_water_balance')
+order by i.tablename, i.indexname;
+```
+
+Expect `uq_ai_recommendation_zone_type_day` (unique, partial, on `zone_id, insight_type, valid_for`) and `uq_zone_water_balance_zone_day` (unique on `zone_id, day`). These two are what make the engine's re-runs idempotent — without them a daily pass would stack duplicate rows instead of correcting yesterday's.
+
+### 6. RLS, policies, and no FK to irrigation commands
+
+```sql
+select c.relname as table_name, c.relrowsecurity as rls_enabled, c.relforcerowsecurity as rls_forced,
+       case when c.relrowsecurity then 'OK - RLS on' else 'PROBLEM - RLS off' end as verdict
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relname in ('zone_water_balance','ai_recommendation','weather_daily','zone')
+order by c.relname;
+```
+
+Expect `rls_enabled = true` on all four. `rls_forced` should be **false** — deliberate: AgroFlow.Api connects as the table owner and so bypasses the policies, which is how the engine writes rows without needing a write policy.
+
+```sql
+select rel.relname as table_name, pol.polname, pol.polcmd,
+       pg_get_expr(pol.polqual, pol.polrelid) as using_expression
+from pg_policy pol
+join pg_class rel on rel.oid = pol.polrelid
+join pg_namespace nsp on nsp.oid = rel.relnamespace
+where nsp.nspname = 'public'
+  and rel.relname in ('zone_water_balance','ai_recommendation')
+order by rel.relname, pol.polname;
+```
+
+Expect `zone_water_balance_select_member` and `zone_water_balance_all_admin`, plus on `ai_recommendation` the pre-existing select/admin policies from 0011 and the new `ai_recommendation_dismiss_member`.
+
+```sql
+select con.conname, pg_get_constraintdef(con.oid) as definition
+from pg_constraint con
+join pg_class rel on rel.oid = con.conrelid
+join pg_namespace nsp on nsp.oid = rel.relnamespace
+where nsp.nspname = 'public'
+  and rel.relname = 'ai_recommendation'
+  and con.contype = 'f';
+```
+
+**Expect no row mentioning an irrigation-command table.** BR 6.9: insights are advisory only and must have no FK path to irrigation commands. A row here naming one is a real problem.
+
+### 7. GRANTs to `authenticated`
+
+```sql
+select table_name, privilege_type, 'OK - granted' as verdict
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and grantee = 'authenticated'
+  and table_name in ('zone_water_balance','dht_daily','report_daily_weather','ai_recommendation')
+order by table_name, privilege_type;
+```
+
+Expect `SELECT` on all four, plus `UPDATE` on `ai_recommendation` (the farmer's dismiss). **There should be no `INSERT` or `DELETE` on `zone_water_balance`** — only the engine writes it.
+
+```sql
+select table_name, column_name, privilege_type
+from information_schema.column_privileges
+where table_schema = 'public'
+  and grantee = 'authenticated'
+  and table_name = 'ai_recommendation'
+order by column_name, privilege_type;
+```
+
+Expect `UPDATE` on **`dismissed_at` only**. If `message` or `severity` show up here, a farmer could rewrite an insight rather than just dismiss it.
+
+### 8. The views are `security_invoker = true`
+
+```sql
+select c.relname as view_name, c.reloptions,
+       case when c.reloptions::text like '%security_invoker=true%'
+            then 'OK - security_invoker on'
+            else 'PROBLEM - security_invoker NOT set' end as verdict
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind = 'v'
+  and c.relname in ('dht_daily','report_daily_weather')
+order by c.relname;
+```
+
+Expect **2 rows, both OK**. This one matters: without `security_invoker` the views run with the owner's rights and could show one farm's sensor readings to another farm's user.
+
+### 9. One combined pass/fail, if you want a single answer
+
+```sql
+select 'zone columns' as check_name, count(*) as found, 6 as expected,
+       case when count(*) = 6 then 'PASS' else 'FAIL' end as verdict
+from information_schema.columns
+where table_schema = 'public' and table_name = 'zone'
+  and column_name in ('soil_type','area_m2','root_depth_limit_m','calibration_wet','calibration_dry','flow_rate_lpm')
+union all
+select 'weather_daily columns', count(*), 7,
+       case when count(*) = 7 then 'PASS' else 'FAIL' end
+from information_schema.columns
+where table_schema = 'public' and table_name = 'weather_daily'
+  and column_name in ('rh_min_pct','rh_max_pct','wind_ms','wind_height_m','eto_mm','eto_source','rs_source')
+union all
+select 'ai_recommendation columns', count(*), 5,
+       case when count(*) = 5 then 'PASS' else 'FAIL' end
+from information_schema.columns
+where table_schema = 'public' and table_name = 'ai_recommendation'
+  and column_name in ('insight_type','severity','data','valid_for','dismissed_at')
+union all
+select 'tables and views', count(*), 4,
+       case when count(*) = 4 then 'PASS' else 'FAIL' end
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relname in ('zone_water_balance','ai_recommendation','dht_daily','report_daily_weather')
+union all
+select 'RLS enabled', count(*), 2,
+       case when count(*) = 2 then 'PASS' else 'FAIL' end
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relrowsecurity
+  and c.relname in ('zone_water_balance','ai_recommendation')
+union all
+select 'views security_invoker', count(*), 2,
+       case when count(*) = 2 then 'PASS' else 'FAIL' end
+from pg_class c join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind = 'v'
+  and c.relname in ('dht_daily','report_daily_weather')
+  and c.reloptions::text like '%security_invoker=true%'
+union all
+select 'authenticated SELECT grants', count(distinct table_name), 4,
+       case when count(distinct table_name) = 4 then 'PASS' else 'FAIL' end
+from information_schema.role_table_grants
+where table_schema = 'public' and grantee = 'authenticated' and privilege_type = 'SELECT'
+  and table_name in ('zone_water_balance','dht_daily','report_daily_weather','ai_recommendation')
+order by check_name;
+```
+
+Seven rows, all `PASS`, and the applied schema matches what the code expects.
+
+---
+
+## Set the demo zones' flow rate
+
+Measured on the test rig: **500 mL in 20 s**, so 0.5 L ÷ 20 s × 60 = **1.5 L/min**.
+
+First find the ids, so you are not guessing:
+
+```sql
+select z.id, z.name, f.name as farm_name, z.flow_rate_lpm, z.area_m2, z.root_depth_limit_m, z.soil_type
+from zone z join farm f on f.farm_id = z.farm_id
+order by z.id;
+```
+
+Then fill in your two ids and run:
+
+```sql
+-- Replace <ZONE_ID_1> and <ZONE_ID_2> with your two demo zone ids.
+update zone
+set flow_rate_lpm = 1.5
+where id in (<ZONE_ID_1>, <ZONE_ID_2>);
+```
+
+Confirm it took:
+
+```sql
+select id, name, flow_rate_lpm
+from zone
+where id in (<ZONE_ID_1>, <ZONE_ID_2>);
+```
+
+Both rows should read `1.5`. Note `flow_rate_lpm` already **defaults** to 1.5 (migration 0020), so zones created after that may already be correct — the `update` is harmless either way. Any zone on different pump hardware must get its real measured rate instead: every litre figure in the app and in the reports derives from this column, so a wrong value here is confidently wrong everywhere.
+
+While you are in there, the other two installer-set fields the engine needs (there is no admin form for them yet):
+
+```sql
+-- Replace with your measurements: wetted area in square metres, tub depth in metres.
+update zone set area_m2 = <AREA_M2>, root_depth_limit_m = <DEPTH_M> where id = <ZONE_ID_1>;
+update zone set area_m2 = <AREA_M2>, root_depth_limit_m = <DEPTH_M> where id = <ZONE_ID_2>;
+```
+
+Without `area_m2` the engine cannot turn a water depth into litres, and without `root_depth_limit_m` a 1.0 m maize root zone in a 0.3 m tub would claim three times the water the tub can hold.
