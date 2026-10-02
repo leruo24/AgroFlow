@@ -22,6 +22,14 @@ public record ZoneSettingsRequest(
 public record ManualIrrigationRequest(string Command, int? DurationSeconds);
 public record ProfileUpdateRequest(string Name, string? Phone);
 
+public record FarmerServiceRequest(
+    string RequestType,
+    long? FarmId,
+    string? Location,
+    float? RoughSize,
+    string CropType,
+    string? Notes);
+
 public static class FarmerEndpoints
 {
     private const string FarmAccessSql = """
@@ -36,9 +44,198 @@ public static class FarmerEndpoints
         group.MapGet("/weather/current", GetCurrentWeatherAsync);
         group.MapPut("/profile", UpdateProfileAsync);
         group.MapPost("/password-changed", ClearMustChangePasswordAsync);
+
+        group.MapPost("/requests", CreateFarmerServiceRequestAsync);
         group.MapPut("/zones/{zoneId:long}/settings", UpdateZoneSettingsAsync);
         group.MapPost("/zones/{zoneId:long}/commands", CreateManualCommandAsync);
     }
+
+    private static async Task<IResult> CreateFarmerServiceRequestAsync(
+        FarmerServiceRequest request,
+        ClaimsPrincipal user,
+        NpgsqlDataSource dataSource)
+    {
+        if (!TryGetUserId(user, out var userId))
+            return Results.Unauthorized();
+
+        var requestType = request.RequestType?.Trim().ToLowerInvariant();
+        var cropType = request.CropType?.Trim().ToLowerInvariant();
+        var location = request.Location?.Trim();
+        var notes = request.Notes?.Trim();
+
+        if (requestType is not ("new_farm" or "new_zone"))
+        {
+            return Results.BadRequest(new
+            {
+                error = "Request type must be new_farm or new_zone."
+            });
+        }
+
+        var allowedCrops = new[]
+        {
+            "potato",
+            "tomato",
+            "citrus",
+            "leafy_veg",
+            "maize",
+            "dry_beans"
+        };
+
+        if (cropType is null || !allowedCrops.Contains(cropType))
+        {
+            return Results.BadRequest(new
+            {
+                error = "Please select a valid crop."
+            });
+        }
+
+        if (request.RoughSize.HasValue && request.RoughSize.Value <= 0)
+        {
+            return Results.BadRequest(new
+            {
+                error = "Rough size must be greater than 0."
+            });
+        }
+
+        if (requestType == "new_farm" &&
+            string.IsNullOrWhiteSpace(location))
+        {
+            return Results.BadRequest(new
+            {
+                error = "Location is required for a new farm request."
+            });
+        }
+
+        if (requestType == "new_zone" &&
+            !request.FarmId.HasValue)
+        {
+            return Results.BadRequest(new
+            {
+                error = "An existing farm must be selected for a new zone request."
+            });
+        }
+
+        await using var connection =
+            await dataSource.OpenConnectionAsync();
+
+        if (requestType == "new_zone")
+        {
+            const string farmOwnershipSql = """
+                select 1
+                from farm
+                where farm_id = $1
+                  and owner_id = $2
+                limit 1
+                """;
+
+            await using var ownershipCommand =
+                new NpgsqlCommand(
+                    farmOwnershipSql,
+                    connection);
+
+            ownershipCommand.Parameters.AddWithValue(
+                request.FarmId!.Value);
+
+            ownershipCommand.Parameters.AddWithValue(
+                userId);
+
+            var farmExists =
+                await ownershipCommand.ExecuteScalarAsync();
+
+            if (farmExists is null)
+            {
+                return Results.BadRequest(new
+                {
+                    error =
+                        "You can only submit a new-zone request for a farm you own."
+                });
+            }
+        }
+
+        const string insertSql = """
+            insert into service_request (
+                farmer_id,
+                farm_id,
+                request_type,
+                location,
+                rough_size,
+                crop_type,
+                notes
+            )
+            values (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7
+            )
+            returning
+                id,
+                status,
+                created_at
+            """;
+
+        await using var command =
+            new NpgsqlCommand(
+                insertSql,
+                connection);
+
+        command.Parameters.AddWithValue(
+            userId);
+
+        command.Parameters.AddWithValue(
+            NpgsqlDbType.Bigint,
+            (object?)request.FarmId ?? DBNull.Value);
+
+        command.Parameters.AddWithValue(
+            requestType);
+
+        command.Parameters.AddWithValue(
+            NpgsqlDbType.Text,
+            (object?)location ?? DBNull.Value);
+
+        command.Parameters.AddWithValue(
+            NpgsqlDbType.Real,
+            (object?)request.RoughSize ?? DBNull.Value);
+
+        command.Parameters.AddWithValue(
+            cropType);
+
+        command.Parameters.AddWithValue(
+            NpgsqlDbType.Text,
+            (object?)notes ?? DBNull.Value);
+
+        await using var reader =
+            await command.ExecuteReaderAsync();
+
+        if (!await reader.ReadAsync())
+        {
+            return Results.Problem(
+                "The service request could not be created.");
+        }
+
+        var requestId =
+            reader.GetInt64(0);
+
+        var status =
+            reader.GetString(1);
+
+        var createdAt =
+            reader.GetDateTime(2);
+
+        return Results.Created(
+            $"/api/farmer/requests/{requestId}",
+            new
+            {
+                id = requestId,
+                status,
+                created_at = createdAt,
+                message = "Your request was submitted successfully."
+            });
+    }
+
 
     private static async Task<IResult> GetCurrentWeatherAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, IHttpClientFactory httpClientFactory, long? farmId)

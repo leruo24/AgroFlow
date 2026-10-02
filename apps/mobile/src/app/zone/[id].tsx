@@ -168,6 +168,12 @@ export default function ZoneControlScreen() {
     useState('');
 
   const [
+    plantingDate,
+    setPlantingDate,
+  ] =
+    useState('');
+
+  const [
     moistureThreshold,
     setMoistureThreshold,
   ] =
@@ -645,6 +651,10 @@ export default function ZoneControlScreen() {
         : selectedZone.crop
     );
 
+    setPlantingDate(
+      selectedZone.plantingDate ?? ''
+    );
+
     setMoistureThreshold(
       String(
         automation.moistureThreshold
@@ -686,6 +696,9 @@ export default function ZoneControlScreen() {
     const cleanedCrop =
       zoneCrop.trim();
 
+    const cleanedPlantingDate =
+      plantingDate.trim();
+
     const startThreshold =
       Number(
         moistureThreshold
@@ -699,11 +712,50 @@ export default function ZoneControlScreen() {
     if (
       !cleanedName ||
       !cleanedLocation ||
-      !cleanedCrop
+      !cleanedCrop ||
+      !cleanedPlantingDate
     ) {
       Alert.alert(
         'Missing Zone Details',
         'Enter a zone name, location, and crop type.'
+      );
+
+      return;
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanedPlantingDate)) {
+      Alert.alert(
+        'Invalid Planting Date',
+        'Enter the planting date in YYYY-MM-DD format.'
+      );
+
+      return;
+    }
+
+    const plantingDateValue =
+      new Date(`${cleanedPlantingDate}T00:00:00`);
+
+    const todayValue = new Date();
+
+    const today =
+      `${todayValue.getFullYear()}-${String(
+        todayValue.getMonth() + 1
+      ).padStart(2, '0')}-${String(
+        todayValue.getDate()
+      ).padStart(2, '0')}`;
+
+    const isRealDate =
+      plantingDateValue.getFullYear() ===
+        Number(cleanedPlantingDate.slice(0, 4)) &&
+      plantingDateValue.getMonth() + 1 ===
+        Number(cleanedPlantingDate.slice(5, 7)) &&
+      plantingDateValue.getDate() ===
+        Number(cleanedPlantingDate.slice(8, 10));
+
+    if (!isRealDate || cleanedPlantingDate > today) {
+      Alert.alert(
+        'Invalid Planting Date',
+        'Planting date must be a valid date that is not in the future.'
       );
 
       return;
@@ -759,6 +811,8 @@ export default function ZoneControlScreen() {
             cleanedLocation,
           crop:
             cleanedCrop,
+          plantingDate:
+            cleanedPlantingDate,
           moistureThreshold:
             startThreshold,
           desiredMoisture:
@@ -1550,6 +1604,18 @@ export default function ZoneControlScreen() {
                   placeholder="Tomatoes"
                   placeholderTextColor={colors.text}
                   style={styles.input}
+                />
+
+                <Text style={styles.inputLabel}>Planting Date</Text>
+                <TextInput
+                  value={plantingDate}
+                  onChangeText={setPlantingDate}
+                  editable={!settingsSaving}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.text}
+                  style={styles.input}
+                  maxLength={10}
+                  autoCapitalize="none"
                 />
 
                 <View style={styles.inputRow}>

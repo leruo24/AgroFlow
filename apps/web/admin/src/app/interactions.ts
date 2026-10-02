@@ -1394,6 +1394,36 @@ export function wirePageInteractions(): void {
     });
   });
 
+  document.querySelectorAll<HTMLSelectElement>(".request-status-select").forEach((select) => {
+    if (select.dataset["bound"]) return;
+    select.dataset["bound"] = "1";
+
+    select.addEventListener("change", () => {
+      const id = Number(select.dataset["requestId"]);
+      const status = select.value as "pending" | "scheduled" | "completed";
+
+      if (!id) {
+        toast("Invalid request selected.", "warn");
+        return;
+      }
+
+      void api.updateServiceRequestStatus(id, status)
+        .then(() => {
+          toast("Request status updated.", "success");
+          void refresh();
+        })
+        .catch((error) => {
+          console.error("Failed to update request status:", error);
+          toast(
+            error instanceof Error
+              ? error.message
+              : "Unable to update request status.",
+            "warn",
+          );
+        });
+    });
+  });
+
   // Header search mirrors the active page's search filter.
   const headerSearch = document.getElementById("headerSearch") as HTMLInputElement | null;
   const pageSearch = document.querySelector<HTMLInputElement>('[data-filter-key="search"]');

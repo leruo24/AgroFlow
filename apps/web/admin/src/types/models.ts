@@ -13,7 +13,8 @@ export type PageId =
   | "irrigation"
   | "activity"
   | "settings"
-  | "onboarding";
+  | "onboarding"
+  | "requests";
 
 export interface NavItem {
   id: PageId;
@@ -126,6 +127,35 @@ export interface User {
   scheduleIds: number[];
   support: SupportTicket[];
   notes: Note[];
+}
+
+/* ---------------------------- service requests -------------------------------- */
+
+export type ServiceRequestType = "new_farm" | "new_zone";
+export type ServiceRequestStatus = "pending" | "scheduled" | "completed";
+export type ServiceRequestCrop =
+  | "potato"
+  | "tomato"
+  | "citrus"
+  | "leafy_veg"
+  | "maize"
+  | "dry_beans";
+
+export interface ServiceRequest {
+  id: number;
+  farmerId: string;
+  farmerName: string;
+  farmerEmail: string;
+  farmId: number | null;
+  farmName: string | null;
+  requestType: ServiceRequestType;
+  location: string | null;
+  roughSize: number | null;
+  cropType: ServiceRequestCrop;
+  notes: string | null;
+  status: ServiceRequestStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /* ---------------------------------- farms ------------------------------------ */
