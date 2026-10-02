@@ -10,6 +10,7 @@ import {
 } from "@/ui/components";
 import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
+import { getReportFarms, type ReportFarm } from "@/services/agroFlowApi";
 
 /* ============================ IRRIGATION DATA ============================ */
 /* Historical analytics for administrators — NOT live irrigation control.   */
@@ -157,11 +158,45 @@ const REPORT_TYPES = [
   { id: "water-usage", name: "Water Usage Trends", desc: "Volume delivered by farm and region", icon: Icon.barChart },
 ];
 
+function liveReportsPanel(farms: ReportFarm[] | null): string {
+  const iso = (d: Date): string => d.toISOString().slice(0, 10);
+  const to = new Date();
+  const from = new Date(Date.now() - 30 * 86400000);
+
+  const body = farms === null
+    ? `<div class="empty-state">The live farm list could not load. Check that you are signed in as an administrator and that the API is running.</div>`
+    : `
+    <div class="compare-grid">
+      <div class="filter-field"><label>Farm</label>
+        <select id="liveFarm"><option value="">Select a farm</option>${farms.map((f) =>
+          `<option value="${f.farm_id}">${esc(f.name)}${f.owner_name ? " · " + esc(f.owner_name) : ""}</option>`).join("")}</select></div>
+      <div class="filter-field"><label>Zone (moisture report only)</label>
+        <select id="liveZone"><option value="">Select a farm first</option></select></div>
+      <div class="filter-field"><label>From</label><input type="date" id="liveFrom" value="${iso(from)}" /></div>
+      <div class="filter-field"><label>To</label><input type="date" id="liveTo" value="${iso(to)}" /></div>
+    </div>
+    ${[
+      ["moisture", "Moisture and irrigation over time"],
+      ["water-usage", "Water usage per zone (estimated)"],
+      ["schedule", "Suggested 7-day irrigation schedule"],
+    ].map(([id, label]) => `
+      <div class="filter-buttons" style="margin-top:12px">
+        <span style="min-width:260px;display:inline-block">${esc(label ?? "")}</span>
+        <button class="btn sm" data-act="live-report-view" data-report="${id}">View</button>
+        <button class="btn ghost sm" data-act="live-report-pdf" data-report="${id}">PDF</button>
+      </div>`).join("")}
+    <div id="liveReportResult" class="cmp-result"></div>`;
+
+  return panel("Farm Reports (live data)",
+    "Real sensor, weather and irrigation records. Water figures are estimated: pump run time x zone flow rate.", "", body);
+}
+
 export async function reportsPage(): Promise<string> {
   const [growth, kpis, events, maintenance] = await Promise.all([
     api.getGrowth(), api.getKpis(), api.getIrrigationEvents(), api.getMaintenance(),
   ]);
   const f = getFilter("reports");
+  const liveFarms = await getReportFarms().catch(() => null);
 
   const filteredEvents = applyFilters(events, f, {
     date: (e) => e.date,
@@ -253,6 +288,7 @@ export async function reportsPage(): Promise<string> {
     </div>
     <div id="cmpResult" class="cmp-result"></div>
   `)}
+    ${liveReportsPanel(liveFarms)}
   `;
 }
 
