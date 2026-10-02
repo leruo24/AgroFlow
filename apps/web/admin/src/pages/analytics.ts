@@ -155,7 +155,7 @@ const REPORT_TYPES = [
   { id: "alert-trends", name: "Alert Trends", desc: "Volume and category breakdown", icon: Icon.bell },
   { id: "support-performance", name: "Support Performance", desc: "Response and resolution times", icon: Icon.headphones },
   { id: "irrigation-history", name: "Irrigation History", desc: "Scheduled vs actual irrigation runs", icon: Icon.droplet },
-  { id: "water-usage", name: "Water Usage Trends", desc: "Volume delivered by farm and region", icon: Icon.barChart },
+  { id: "water-usage", name: "Water Usage Trends", desc: "Estimated volume delivered by farm and region", icon: Icon.barChart },
 ];
 
 function liveReportsPanel(farms: ReportFarm[] | null): string {

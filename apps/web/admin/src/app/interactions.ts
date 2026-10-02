@@ -1378,11 +1378,59 @@ function wireLiveReports(): void {
   });
 }
 
+// One insight, with its source in small text underneath. Farmers never see the
+// source; reports always show it (spec 9b).
+function liveInsight(i: any): string {
+  const severity = typeof i?.severity === "string" ? i.severity : "info";
+  return `<li class="liveInsight liveInsight--${liveEsc(severity)}">
+    <span class="liveInsight__text">${liveEsc(i?.text ?? "")}</span>
+    ${i?.source ? `<small class="liveInsight__source">Source: ${liveEsc(i.source)}</small>` : ""}
+  </li>`;
+}
+
+function liveInsights(insights: any, heading = "What to do"): string {
+  if (!Array.isArray(insights) || insights.length === 0) return "";
+  return `<div class="liveInsights"><h6>${liveEsc(heading)}</h6>
+    <ul class="liveInsights__list">${insights.map(liveInsight).join("")}</ul></div>`;
+}
+
+// Spec 9c: weather app (the area) beside the DHT11 (in the tub), with the
+// difference. A missing value shows as "-" and a missing sensor as the row's own
+// note, never as a zero that would read as perfect agreement.
+function liveWeatherComparison(comparison: any): string {
+  if (!comparison) return "";
+  const days = Array.isArray(comparison.days) ? comparison.days : [];
+
+  if (days.length === 0) {
+    return `<div class="liveWeatherCompare"><h6>Weather: area vs tub</h6>
+      <p><small>${liveEsc(comparison.message ?? "No observed weather days to compare yet.")}</small></p></div>`;
+  }
+
+  const n = (v: any) => (v === null || v === undefined ? "-" : liveEsc(v));
+
+  const rows = days.map((day: any) => `<tr>
+      <td>${liveEsc(day.date)}</td>
+      <td>${n(day.app?.tminC)}</td><td>${n(day.app?.tmaxC)}</td>
+      <td>${n(day.app?.rhMeanPct)}</td><td>${n(day.app?.windMs)}</td><td>${n(day.app?.rainMm)}</td>
+      <td>${n(day.dht?.tminC)}</td><td>${n(day.dht?.tmaxC)}</td><td>${n(day.dht?.rhMeanPct)}</td>
+      <td>${n(day.difference?.tmaxC)}</td>
+      <td>${day.note ? liveEsc(day.note) : ""}</td>
+    </tr>`).join("");
+
+  return `<div class="liveWeatherCompare"><h6>Weather: area vs tub</h6>
+    <p><small>${liveEsc(comparison.caption ?? "")}</small></p>
+    <table><thead><tr>
+      <th>Date</th><th>Area min</th><th>Area max</th><th>Area RH</th><th>Wind m/s</th><th>Rain mm</th>
+      <th>Tub min</th><th>Tub max</th><th>Tub RH</th><th>Max diff</th><th>Note</th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 function liveRender(kind: string, d: any): string {
   if (kind === "water-usage") {
     const rows = (d.zones as any[]).map((z) => `<tr><td>${liveEsc(z.name)}</td><td>${liveEsc(z.eventCount)}</td>
       <td>${z.status === "ok" ? liveEsc(z.estimatedLitres) + " L (estimated)" : liveEsc(z.message)}</td></tr>`).join("");
     return `<p><em>${liveEsc(d.estimateNote)}</em></p>
+      ${liveInsights(d.insights)}
       <table><thead><tr><th>Zone</th><th>Events</th><th>Water</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
   if (kind === "moisture") {
@@ -1391,16 +1439,22 @@ function liveRender(kind: string, d: any): string {
     return `<p><strong>${liveEsc(d.zoneName)}</strong>: ${liveEsc(s.readingCount)} readings, average ${liveEsc(s.averagePct)}%,
       lowest ${liveEsc(s.lowestPct)}%, highest ${liveEsc(s.highestPct)}%.</p>
       <p>${liveEsc(s.action)}</p>
+      ${liveInsights(d.insights)}
+      ${d.calibrationNote ? `<p><small>${liveEsc(d.calibrationNote)}</small></p>` : ""}
       <p>${liveEsc((d.irrigationEvents as any[]).length)} irrigation event(s) in this period. <em>${liveEsc(d.estimateNote)}</em></p>`;
   }
   const blocks = (d.zones as any[]).map((z) => `<h5>${liveEsc(z.name)} (${liveEsc(z.cropType ?? "no crop set")})</h5>
     <p>${liveEsc(z.summary)}</p>
+    ${z.plainSummary ? `<p><strong>${liveEsc(z.plainSummary)}</strong></p>` : ""}
+    ${liveInsights(z.insights)}
     ${(z.limitations as string[]).map((l) => `<p><small>${liveEsc(l)}</small></p>`).join("")}
     <table><thead><tr><th>Date</th><th>Action</th><th>ET0 mm</th><th>Rain mm</th><th>Note</th></tr></thead><tbody>
     ${(z.days as any[]).map((day) => `<tr><td>${liveEsc(day.date)}</td><td>${liveEsc(day.action)}</td>
       <td>${liveEsc(day.et0MmPerDay ?? "-")}</td><td>${liveEsc(day.forecastRainMm ?? "-")}</td><td>${liveEsc(day.note)}</td></tr>`).join("")}
     </tbody></table>`).join("");
-  return d.status === "ok" ? blocks : `<p>${liveEsc(d.message)}</p>`;
+  return d.status === "ok"
+    ? blocks + liveWeatherComparison(d.weatherComparison)
+    : `<p>${liveEsc(d.message)}</p>`;
 }
 
 async function liveReportRun(kind: string, pdf: boolean): Promise<void> {

@@ -229,6 +229,21 @@ builder.Services.AddHostedService<WeatherAlertService>();
 // needs no API key, so there is no new secret to set on Railway.
 builder.Services.AddHostedService<WeatherCollectionService>();
 
+// ---------------------------------------------------------------------------
+// FAO-56 insight engine (migration 0027). Runs the per-zone soil water balance
+// and writes the farmer's insights: a full pass just after midnight SAST, and
+// the act_now checks every 15 minutes in between.
+//
+// The controller is registered as a singleton holding only a connection string,
+// in the project's DB/XDB/Controller shape; the endpoints resolve it directly.
+// Set Fao56Engine:Enabled=false to turn the background passes off without
+// disabling the endpoints.
+// ---------------------------------------------------------------------------
+builder.Services.AddSingleton(sp => new AgroFlow.Business.Fao56EngineController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for the FAO-56 engine.")));
+builder.Services.AddHostedService<Fao56EngineService>();
+
 // Historical backfill from Open-Meteo's archive (ERA5). The routine itself is
 // a plain singleton; WeatherBackfillStartupService below is what decides
 // whether to run it.
@@ -300,6 +315,7 @@ app.MapDeviceCommandEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 app.MapReportEndpoints();
+app.MapFao56EngineEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

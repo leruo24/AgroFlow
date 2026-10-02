@@ -34,6 +34,10 @@ import {
   updateAuthenticatedUser,
 } from '@/services/authService';
 
+import {
+  resetDripHelperSession,
+} from '@/components/DripHelper';
+
 type AuthContextType = {
   user: AuthUser | null;
   accessToken: string | null;
@@ -325,6 +329,11 @@ export function AuthProvider({
 
   async function signOut() {
     await logoutUser();
+
+    // The raindrop helper greets once per login; clearing the flag here means
+    // the next farmer to sign in on this device gets their own greeting rather
+    // than inheriting the previous session's "already shown".
+    resetDripHelperSession();
 
     setSession(
       null

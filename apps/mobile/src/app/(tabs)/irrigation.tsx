@@ -20,7 +20,7 @@ export default function IrrigationScreen() {
   const scheduled = zones.filter(z => z.irrigation.mode === 'scheduled' && z.irrigation.schedule.enabled).length;
   const openZone = (id: string) => router.push({ pathname: '/zone/[id]', params: { id } });
   return <SafeAreaView style={styles.page} edges={['top']}><ScrollView contentContainerStyle={styles.content}>
-    <ScreenHeader title="Irrigation" subtitle="Monitor and manage your farm’s zones." />
+    <ScreenHeader title="Irrigation" subtitle="Monitor and manage your farm’s zones." help="irrigation" />
     <FarmSelector />
     <View style={styles.summary}>{[
       ['Total zones', loading || error ? '—' : String(zones.length)],
