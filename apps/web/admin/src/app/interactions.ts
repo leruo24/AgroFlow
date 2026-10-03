@@ -20,6 +20,8 @@ import {
   deviceRevoke,
   addMqttLogins,
   createEnrollmentCode,
+  getReportSchedule,
+  saveReportSchedule,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
@@ -223,13 +225,20 @@ async function openUserProfile(id: string): Promise<void> {
 async function openFarmDetail(id: number): Promise<void> {
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules, alertHistory] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
     // Read-only, and allowed to fail: the rest of the drawer must still open
     // if 0033 has not been applied or the query is refused.
     getFarmAlertHistory(id).catch((e: unknown) => {
       console.warn("Could not load alert history for farm", id, e);
       return [];
+    }),
+    // A farm with no schedule row is the NORMAL state - automatic reports are
+    // off until an admin turns them on - so this failing must not stop the
+    // drawer opening either.
+    getReportSchedule(id).catch((e: unknown) => {
+      console.warn("Could not load the report schedule for farm", id, e);
+      return null;
     }),
   ]);
 
@@ -307,6 +316,29 @@ async function openFarmDetail(id: number): Promise<void> {
              </p>
            </div>`
           : `<p class="muted">Nothing has been sent to this farm yet.</p>`),
+      // AUTO REPORTS. Shown as a summary with an Edit action rather than an
+      // inline form: the drawer is already long, and this is a setting
+      // changed once when a farm is set up, not something read on every
+      // visit.
+      section("Automatic reports", `
+        <div class="detail-list">
+          <div class="detail-row">
+            <span>Status</span>
+            <b>${autoReports?.enabled ? esc(autoReports.description) : "Off"}</b>
+          </div>
+          <div class="detail-row">
+            <span>Last sent</span>
+            <b>${autoReports?.lastRunAt ? esc(fmtDate(autoReports.lastRunAt)) : "Never"}</b>
+          </div>
+        </div>
+        <p class="muted">
+          Off by default. The farmer can stop these themselves from the app at any time;
+          only an administrator can switch them back on.
+        </p>
+        <button class="btn ghost sm" data-act="edit-auto-reports" data-id="${id}">
+          ${autoReports?.enabled ? "Change automatic reports" : "Set up automatic reports"}
+        </button>`),
+
       section("Device inventory", `
         <div class="detail-list">
           ${Object.entries(farmHw.reduce<Record<string, number>>((acc, h) => {
@@ -958,6 +990,133 @@ case "delete-user": {
               showErrorModal(
                 "Could not revoke the device",
                 error instanceof Error ? error.message : "The device could not be revoked.",
+              );
+            });
+        },
+      });
+    }
+
+    case "edit-auto-reports": {
+      const farmId = Number(idAttr);
+      if (!farmId) return;
+
+      const [current, zones] = await Promise.all([
+        getReportSchedule(farmId).catch(() => null),
+        getReportZones(farmId).catch(() => []),
+      ]);
+
+      const types = current?.reportTypes ?? ["water_usage"];
+      const chosenZones = current?.zoneIds ?? null;
+
+      const checkbox = (value: string, label: string, checked: boolean): string =>
+        `<label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+           <input type="checkbox" data-report-type="${value}" ${checked ? "checked" : ""} />
+           <span>${esc(label)}</span>
+         </label>`;
+
+      return openDrawer({
+        title: "Automatic reports",
+        subtitle: api.findFarm(farmId)?.name ?? `Farm ${farmId}`,
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section">
+            <h6>Send automatically</h6>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" id="autoReportsEnabled" ${current?.enabled ? "checked" : ""} />
+              <span>Automatic reports on</span>
+            </label>
+            <p class="muted">
+              Off by default. Weekly reports go out on Monday at 07:00; monthly ones on the 1st
+              at 07:00, South African time. They cover the week or month that has just finished.
+            </p>
+          </div>
+
+          <div class="drawer-section">
+            <h6>How often</h6>
+            <label class="drawer-field">
+              <span>Frequency</span>
+              <select id="autoReportsFrequency" class="input">
+                <option value="weekly" ${current?.frequency !== "monthly" ? "selected" : ""}>
+                  Weekly (Monday 07:00)
+                </option>
+                <option value="monthly" ${current?.frequency === "monthly" ? "selected" : ""}>
+                  Monthly (1st, 07:00)
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <div class="drawer-section">
+            <h6>Which reports</h6>
+            ${checkbox("water_usage", "Water usage", types.includes("water_usage"))}
+            ${checkbox("moisture", "Soil moisture", types.includes("moisture"))}
+            ${checkbox("schedule", "Watering schedule & advice", types.includes("schedule"))}
+            <p class="muted">
+              Soil moisture is per zone, so a farm with four zones gets four of those. The other
+              two cover the whole farm.
+            </p>
+          </div>
+
+          <div class="drawer-section">
+            <h6>Which zones</h6>
+            <label class="drawer-field">
+              <span>Zones</span>
+              <select id="autoReportsZones" class="input" multiple size="${Math.min(6, Math.max(3, zones.length + 1))}">
+                <option value="all" ${chosenZones === null ? "selected" : ""}>All zones</option>
+                ${zones.map((z) =>
+                  `<option value="${z.zoneId}" ${chosenZones?.includes(z.zoneId) ? "selected" : ""}>
+                     ${esc(z.name)}
+                   </option>`).join("")}
+              </select>
+            </label>
+            <p class="muted">
+              Leave "All zones" selected to include any zone added later.
+            </p>
+          </div>
+
+          <div class="drawer-section">
+            <p class="muted">
+              Delivered in the app always, and on Telegram as well for a farmer who has connected
+              it. The farmer can stop these themselves at any time.
+            </p>
+          </div>
+        `,
+        confirmLabel: "Save",
+        onConfirm: () => {
+          const enabled =
+            (document.getElementById("autoReportsEnabled") as HTMLInputElement | null)?.checked ?? false;
+          const frequency =
+            ((document.getElementById("autoReportsFrequency") as HTMLSelectElement | null)?.value ??
+              "weekly") as "weekly" | "monthly";
+
+          const reportTypes = [...document.querySelectorAll<HTMLInputElement>("[data-report-type]")]
+            .filter((el) => el.checked)
+            .map((el) => el.dataset["reportType"] ?? "")
+            .filter(Boolean);
+
+          const zoneSelect = document.getElementById("autoReportsZones") as HTMLSelectElement | null;
+          const picked = [...(zoneSelect?.selectedOptions ?? [])].map((o) => o.value);
+          // "All zones" wins if it is selected at all - null means every
+          // zone, including ones added later, which is almost always what is
+          // meant. An empty array would mean "no zones" and send nothing.
+          const zoneIds = picked.includes("all") || picked.length === 0
+            ? null
+            : picked.map(Number).filter(Number.isFinite);
+
+          if (enabled && reportTypes.length === 0) {
+            toast("Choose at least one report to send.", "warn");
+            return;
+          }
+
+          void saveReportSchedule(farmId, { enabled, frequency, reportTypes, zoneIds })
+            .then((saved) => {
+              toast(saved.enabled ? saved.description : "Automatic reports are off.", "success");
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not save the automatic reports",
+                error instanceof Error ? error.message : "The setting could not be saved.",
               );
             });
         },

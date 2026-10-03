@@ -278,6 +278,13 @@ builder.Services.AddHostedService<Fao56EngineService>();
 // automatic weekly reports have no request to run inside at all.
 builder.Services.AddHostedService<ReportGenerationService>();
 
+// Creates report_request rows for farms whose schedule (0035) is due. It
+// generates nothing itself - it fills the same queue the app's own Request
+// button fills, so an automatic report and a hand-requested one cannot render
+// or deliver differently. Hourly rather than a daily cron, because a deploy
+// at 06:58 would otherwise skip that week entirely.
+builder.Services.AddHostedService<AutoReportSchedulerService>();
+
 // Historical backfill from Open-Meteo's archive (ERA5). The routine itself is
 // a plain singleton; WeatherBackfillStartupService below is what decides
 // whether to run it.
@@ -383,6 +390,7 @@ app.MapReportEndpoints();
 app.MapFao56EngineEndpoints();
 app.MapForecastEndpoints();
 app.MapReportRequestEndpoints();
+app.MapReportScheduleEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

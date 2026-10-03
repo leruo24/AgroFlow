@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Globalization;
 
 namespace AgroFlow.Business
 {
@@ -96,7 +97,16 @@ namespace AgroFlow.Business
             if (span == 7) return "last 7 days";
             if (span == 30 || span == 31) return "last 30 days";
 
-            return start.ToString("d MMM") + " to " + end.ToString("d MMM yyyy");
+            // InvariantCulture, not the host's. Without it the month name is
+            // whatever the container's locale produces - a Linux box on
+            // .NET 8 renders September as "Sept", a Windows dev machine as
+            // "Sep" - so the same report would be captioned differently
+            // depending on where it was generated. This string reaches the
+            // farmer in a Telegram message, so it has to be the same every
+            // time.
+            return start.ToString("d MMM", CultureInfo.InvariantCulture)
+                 + " to "
+                 + end.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
         }
     }
 }

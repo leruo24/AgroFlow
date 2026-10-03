@@ -577,3 +577,42 @@ export function createEnrollmentCode(input: {
 }): Promise<EnrollmentCodeResult> {
   return authorizedJson<EnrollmentCodeResult>("/api/devices/enroll", "POST", input);
 }
+
+/* ---------------- Automatic reports (step 4) ---------------- */
+
+export type ReportScheduleDto = {
+  farmId: number;
+  enabled: boolean;
+  frequency: "weekly" | "monthly";
+  reportTypes: string[];
+  zoneIds: number[] | null;
+  lastRunAt: string | null;
+  description: string;
+};
+
+export function getReportSchedule(farmId: number): Promise<ReportScheduleDto> {
+  return authorizedJson<ReportScheduleDto>(
+    `/api/admin/farms/${farmId}/report-schedule`,
+    "GET",
+  );
+}
+
+/* Off by default and only an admin can turn it on - a farmer who did not ask
+   for a weekly PDF and gets one anyway learns to mute the bot, and the bot
+   also carries the frost warnings. The farmer's own "stop" switch is a
+   separate farmer-scoped endpoint. */
+export function saveReportSchedule(
+  farmId: number,
+  input: {
+    enabled: boolean;
+    frequency: "weekly" | "monthly";
+    reportTypes: string[];
+    zoneIds: number[] | null;
+  },
+): Promise<ReportScheduleDto> {
+  return authorizedJson<ReportScheduleDto>(
+    `/api/admin/farms/${farmId}/report-schedule`,
+    "PUT",
+    input,
+  );
+}
