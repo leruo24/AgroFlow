@@ -328,16 +328,15 @@ public static class DeviceEnrollmentEndpoints
         // The same two keys MqttConnectionService already connects with, read
         // here rather than duplicated into a new section - the API and the
         // boards must never be able to point at different brokers.
-        var brokerHost = configuration["Mqtt:Host"];
-        var brokerPort = int.TryParse(configuration["Mqtt:Port"], out var parsedPort) && parsedPort > 0
-            ? parsedPort
-            : (int?)null;
+        // A board given a BAD address is worse off than one given none: with
+        // none it falls back to its compiled-in host and keeps working, but
+        // with "" or port 0 it retries forever. MqttBrokerAddress is where
+        // that rule lives.
+        var (brokerHost, brokerPort) = MqttBrokerAddress.Resolve(
+            configuration["Mqtt:Host"], configuration["Mqtt:Port"]);
 
         return Results.Ok(new MqttCredentialsResponse(
-            credential.Username,
-            credential.Password,
-            string.IsNullOrWhiteSpace(brokerHost) ? null : brokerHost.Trim(),
-            brokerPort));
+            credential.Username, credential.Password, brokerHost, brokerPort));
     }
 
     // TODO: LatestVersion/DownloadUrl are plain config values (see
