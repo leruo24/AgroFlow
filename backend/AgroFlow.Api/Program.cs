@@ -358,6 +358,7 @@ app.MapSensorReadingEndpoints();
 app.MapIrrigationEventEndpoints();
 app.MapDeviceEnrollmentEndpoints();
 app.MapDeviceCommandEndpoints();
+app.MapZoneHardwareEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 app.MapReportEndpoints();
