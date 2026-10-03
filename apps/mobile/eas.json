@@ -20,7 +20,9 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_AGROFLOW_API_BASE": "https://agroflow-production-998d.up.railway.app"
+        "EXPO_PUBLIC_AGROFLOW_API_BASE": "https://agroflow-production-998d.up.railway.app",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://zcoalyxzvemiumnipufz.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_LAfB8HvEJDQQ4EIRa4EWOw_zJPmPjtU"
       }
     },
 
