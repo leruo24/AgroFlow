@@ -311,11 +311,19 @@ public static class ReportEndpoints
         await using var connection = await dataSource.OpenConnectionAsync();
 
         // 1. Ownership gate + latitude (needed for ET0).
+        //
+        // The admin clause matches the other three report endpoints (lines
+        // 54, 179 and 1024 of this file). It was missing only here, so an
+        // administrator could open every other report for a farm they do not
+        // belong to and got a bare "Farm not found." on the schedule - which
+        // reads as a data problem rather than as the permission check it
+        // actually was.
         const string farmSql = """
             select f.name, f.latitude from farm f
             where f.farm_id = $1
               and (f.owner_id = $2 or exists (
-                select 1 from farm_member fm where fm.farm_id = f.farm_id and fm.profile_id = $2));
+                select 1 from farm_member fm where fm.farm_id = f.farm_id and fm.profile_id = $2)
+                or exists (select 1 from profile p where p.id = $2 and p.role = 'admin'));
             """;
         string farmName; double? latitude;
         await using (var cmd = new NpgsqlCommand(farmSql, connection))
