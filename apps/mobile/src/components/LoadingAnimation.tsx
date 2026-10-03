@@ -17,13 +17,14 @@
 // Getting (3) wrong is the difference between a seamless handover and a
 // visible flash of a half-built screen.
 //
-// THE BACKGROUND IS WHITE, NOT THE SPLASH'S GREEN. The video was authored on
-// a transparent background and exported to MP4, which cannot carry an alpha
-// channel, so its background is flattened to solid #FFFFFF. Matching it is
-// what stops a white rectangle appearing inside a green screen. The native
-// splash is still #184D35, so there IS one colour change at the handover -
-// see the report; making them match means changing the splash colour in
-// app.json, which is a branding decision.
+// THE BACKGROUND IS WHITE. The video was authored on a transparent
+// background and exported to MP4, which cannot carry an alpha channel, so
+// its background is flattened to solid #FFFFFF.
+//
+// The native splash background in app.json is now #FFFFFF too, so the
+// handover is seamless - there is no colour change between the OS splash and
+// this overlay. If the splash colour is ever changed back, change this with
+// it or a white rectangle appears inside a coloured screen.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -45,11 +46,14 @@ export const LOADING_BACKGROUND = '#FFFFFF';
 // session check that hangs, a player that fails silently - the overlay is
 // gone by now and the farmer is in the app.
 //
-// NOTE: the supplied video is 9.0 s long, so this 8 s cap fires BEFORE it
-// ends and the last ~1 s is cut. That is the brief's number, kept
-// deliberately as the safety limit. Change this one constant (and the
-// matching MAX_MS in apps/web/admin/index.html) to 10000 to let it play out.
-const MAX_VISIBLE_MS = 8000;
+// 10 s, not 8: the supplied video is 9.0 s long, so an 8 s cap fired before
+// it ended and cut the last second of the animation. This leaves a second of
+// headroom past the end of the video, which is what keeps it a SAFETY limit
+// rather than the thing that normally ends the splash - in the ordinary case
+// `playToEnd` has already fired and this timer never runs.
+//
+// Keep in step with MAX_MS in apps/web/admin/index.html.
+const MAX_VISIBLE_MS = 10000;
 
 const FADE_MS = 300;
 

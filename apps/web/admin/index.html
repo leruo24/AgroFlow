@@ -111,12 +111,16 @@
       // never fires `ended`, a browser that silently refuses to play -
       // the splash is gone by now. Nobody is ever stuck looking at it.
       //
-      // NOTE: the supplied video is 9.0 s long, so this 8 s cap fires
-      // BEFORE it finishes and the last ~1 s is cut. That is the brief's
-      // number and it is kept deliberately as the safety limit; raise it
-      // to 10000 here and in the mobile component to let the animation
-      // play out in full. Flagged in the report.
-      var MAX_MS = 8000;
+      // 10 s, not 8: the supplied video is 9.0 s long, so an 8 s cap fired
+      // before it finished and cut the last second of the animation. This
+      // leaves a second of headroom past the end of the video, which is
+      // what keeps it a SAFETY limit rather than the thing that normally
+      // ends the splash - in the ordinary case the `ended` event has
+      // already fired and this timer never runs.
+      //
+      // Keep in step with MAX_VISIBLE_MS in
+      // apps/mobile/src/components/LoadingAnimation.tsx.
+      var MAX_MS = 10000;
 
       var reduceMotion =
         window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;

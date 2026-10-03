@@ -267,22 +267,27 @@ dominant colour are `#FFFFFF`** throughout.
 So both overlays use `#FFFFFF`, not `#184D35`. Using green would put a white letterbox
 around the video.
 
-**One consequence to decide on:** the mobile native splash is still `#184D35`, so there is a
-green → white change at the handover. Making them match means changing the splash background
-in `app.json`, which is a branding decision, so it is flagged here rather than taken.
+**Resolved (follow-up):** the mobile native splash background in `app.json` is now `#FFFFFF`
+too, so the OS splash → overlay handover has no colour change. `splash-icon.png` is a
+mid-blue water droplet and reads fine on white; see §14 for the one caveat and for something
+else that turned up while checking it.
 
-### The video is 9 s and the cap is 8 s
+### The video is 9 s — the cap is 10 s
 
-The brief's hard ceiling is 8 seconds. The supplied video is 9.00 seconds. **The cap always
-fires first and the last ~1 second is cut.**
+The brief's hard ceiling was 8 seconds and the supplied video is 9.00 seconds, so the cap
+fired first and cut the last second of the animation.
 
-The 8 s is kept as specified, because it is the safety limit and that is a deliberate number.
-To let the animation play out in full, change **two constants** to `10000`:
+**Raised to 10 s (follow-up)**, in both places:
 
 - `apps/web/admin/index.html` → `MAX_MS`
 - `apps/mobile/src/components/LoadingAnimation.tsx` → `MAX_VISIBLE_MS`
 
-Both are commented with exactly this.
+Ten rather than nine leaves a second of headroom past the end of the video, which is what
+keeps this a **safety** limit rather than the thing that normally ends the splash: in the
+ordinary case the video's own `ended` / `playToEnd` has already fired and this timer never
+runs. It only matters when something has gone wrong.
+
+The two constants must stay in step; each one's comment says so and names the other.
 
 ### Poster
 
@@ -547,6 +552,46 @@ migrations.
 
 ---
 
+## 14. The splash icon — checked on white, and a licensing problem
+
+### It is visible on white
+
+`apps/mobile/assets/images/splash-icon.png` is a **mid-blue water droplet with a splash**.
+It reads clearly on white, so the splash background change went ahead.
+
+One caveat, measured: of the icon's visible pixels, **17.5% are brighter than luminance 235**
+and 37.5% brighter than 200. That is the specular highlight on the droplet and the finest
+outer spray. On white those edges soften and some of the outermost droplets effectively
+disappear. The icon itself is unaffected — median luminance is 176 and about a quarter of it
+is below 128 — and at the rendered size (`imageWidth: 76`) that fine spray was never
+resolvable anyway.
+
+### ⚠️ It is a watermarked stock image
+
+While compositing it against both backgrounds to check contrast, a **tiled "pngtree"
+watermark** became visible across the whole 2500 × 2500 canvas — the logo and the wordmark,
+repeated diagonally.
+
+It is white at roughly 15% alpha (`rgba(255,255,255,38)`), which is why nobody has noticed:
+**invisible on white, visible on anything darker.** On the `#184D35` splash this change just
+replaced, it was being drawn on every app launch.
+
+Two things follow:
+
+1. **The white splash hides it.** That is luck, not a fix — the watermark is still in the
+   committed asset and will reappear on any dark background, including dark mode anywhere the
+   image is reused.
+2. **It is a licensing matter, not a rendering one.** A watermarked Pngtree asset is
+   unlicensed by definition, and this is going into a deployed app and a marked submission.
+
+**Not changed here** — replacing the app's splash artwork is a branding and licensing
+decision, not a tidy-up to fold into a follow-up commit. The options are to buy the Pngtree
+licence and drop in the clean file, to redraw the droplet (the Drip mascot SVGs in
+`assets/mascot/` are already original work and already on-brand), or to use the AgroFlow logo
+from the loading video, which is clean.
+
+---
+
 ## 11. Anything skipped, and judgement calls
 
 1. **Supabase Storage for report PDFs — not used.** The brief's first choice; this project has
@@ -565,7 +610,10 @@ migrations.
    the *pipeline* (requests, auto reports) excludes them.
 7. **The `farm.status` casing was not normalised** — §5.
 8. **The mobile splash is still green while the overlay is white** — §4. A branding decision.
-9. **The 8 s cap cuts ~1 s off a 9 s video** — §4. The brief's number, kept.
+9. ~~The 8 s cap cuts ~1 s off a 9 s video~~ — **resolved in the follow-up**: raised to 10 s
+   in both apps, and the mobile splash background set to `#FFFFFF` to match the video. See §4.
+10. **`splash-icon.png` carries a Pngtree watermark** — found while checking it against white,
+    and **not changed**: it is a licensing and branding decision. See §14.
 
 ---
 
