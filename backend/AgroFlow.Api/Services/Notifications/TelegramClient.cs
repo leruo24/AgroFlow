@@ -106,6 +106,81 @@ public sealed class TelegramClient
     // Unlike SendMessageAsync this DOES throw, because its only caller is the
     // polling loop, which needs to distinguish "nothing happened" from "the
     // call failed" so it can back off rather than hammer the API.
+    // sendDocument, for the PDF reports.
+    //
+    // Multipart rather than a URL, because the PDF is generated in memory and
+    // never written anywhere a URL could point at - see migration 0034 on why
+    // this deployment stores no files.
+    //
+    // Returns false instead of throwing, like SendMessageAsync, so a failed
+    // delivery can never undo a report that is already marked ready.
+    public async Task<bool> SendDocumentAsync(
+        long chatId,
+        byte[] document,
+        string fileName,
+        string caption,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.IsConfigured)
+        {
+            _logger.LogDebug("Telegram document send skipped: no bot token configured.");
+            return false;
+        }
+
+        // Telegram's own limit for a bot upload is 50 MB. An AgroFlow report
+        // is a few pages, so this only ever catches a runaway render - but a
+        // 50 MB POST from a small container is worth refusing locally rather
+        // than discovering at the far end.
+        const int maxBytes = 50 * 1024 * 1024;
+        if (document.Length == 0 || document.Length > maxBytes)
+        {
+            _logger.LogWarning(
+                "Refusing to send a {Bytes}-byte document to Telegram.", document.Length);
+
+            return false;
+        }
+
+        // Telegram truncates a caption over 1024 characters; ours are one
+        // line, so this only guards a pathological farm name.
+        const int maxCaption = 1024;
+        if (caption.Length > maxCaption) caption = caption[..maxCaption];
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+
+            using var form = new MultipartFormDataContent();
+            form.Add(new StringContent(chatId.ToString()), "chat_id");
+            form.Add(new StringContent(caption), "caption");
+
+            var file = new ByteArrayContent(document);
+            file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+            form.Add(file, "document", fileName);
+
+            using var response = await client.PostAsync(
+                BuildUrl("sendDocument"), form, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                // The body carries Telegram's own reason (blocked bot, bad
+                // chat id), which is the useful half.
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                _logger.LogWarning(
+                    "Telegram sendDocument failed ({Status}): {Body}", response.StatusCode, body);
+
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Telegram sendDocument threw; the report is still available in the app.");
+            return false;
+        }
+    }
+
     public async Task<IReadOnlyList<TelegramUpdate>> GetUpdatesAsync(
         long offset,
         CancellationToken cancellationToken)

@@ -110,6 +110,15 @@ export const helpContent = {
     ],
   },
 
+  reports: {
+    title: 'Your reports',
+    body: [
+      'Ask for a report and we will make you a PDF you can keep, print or send on.',
+      'Water usage shows how much water went on. Soil moisture shows how wet one zone has been. Watering schedule & advice shows what we suggest for the week ahead.',
+      'A report takes a minute or two. It shows as Ready here when it is done, and we also send it to you on Telegram if you have connected it.',
+    ],
+  },
+
   forecast: {
     title: 'The week ahead',
     body: [

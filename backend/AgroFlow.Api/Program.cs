@@ -272,6 +272,12 @@ builder.Services.AddSingleton(sp => new AgroFlow.Business.Fao56EngineController(
         ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for the FAO-56 engine.")));
 builder.Services.AddHostedService<Fao56EngineService>();
 
+// Turns `preparing` report_request rows (0034) into PDFs and delivers them.
+// A background queue rather than work done inside the HTTP request: the
+// FAO-56 render is long enough to time out a phone on rural data, and the
+// automatic weekly reports have no request to run inside at all.
+builder.Services.AddHostedService<ReportGenerationService>();
+
 // Historical backfill from Open-Meteo's archive (ERA5). The routine itself is
 // a plain singleton; WeatherBackfillStartupService below is what decides
 // whether to run it.
@@ -376,6 +382,7 @@ app.MapFarmerEndpoints();
 app.MapReportEndpoints();
 app.MapFao56EngineEndpoints();
 app.MapForecastEndpoints();
+app.MapReportRequestEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

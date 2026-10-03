@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { router } from 'expo-router';
-import { Bell, ChevronRight, Clock3, CloudSun, Droplets, Settings2 } from 'lucide-react-native';
+import { Bell, ChevronRight, Clock3, CloudSun, Droplets, FileText, Settings2 } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAgroFlow } from '@/context/AgroFlowContext';
@@ -69,6 +69,7 @@ export default function HomeScreen() {
         { label: 'The week ahead', route: '/forecast' as const, Icon: CloudSun },
         { label: 'View Alerts', route: '/alerts' as const, Icon: Bell },
         { label: 'View History', route: '/history' as const, Icon: Clock3 },
+        { label: 'Reports', route: '/reports' as const, Icon: FileText },
         { label: 'Settings', route: '/settings' as const, Icon: Settings2 },
       ].map(({ label, route, Icon }) => <TouchableOpacity key={route} accessibilityRole="button" style={styles.actionRow} onPress={() => router.push(route)}>
         <Icon size={21} color={colors.textSecondary} strokeWidth={1.7} /><Text style={styles.actionText}>{label}</Text>
