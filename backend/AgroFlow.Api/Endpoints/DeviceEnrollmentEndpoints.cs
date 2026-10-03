@@ -33,7 +33,29 @@ public record ClaimDeviceResponse(
     string MqttUsername,
     string MqttPassword);
 
-public record MqttCredentialsResponse(string MqttUsername, string MqttPassword);
+// MqttHost/MqttPort are new in firmware v1.4.0 and are OPTIONAL in both
+// directions: the server omits them when Mqtt:Host / Mqtt:Port are unset, and
+// the board falls back to its compiled-in MQTT_HOST/MQTT_PORT when they are
+// absent from the response.
+//
+// WHY THE BROKER ADDRESS IS NOW SERVER-SIDE
+// HiveMQ Cloud Serverless is retired on 31 December 2026. Before this, the
+// broker hostname was a compiled-in constant, so moving to another broker -
+// or to HiveMQ's replacement tier - meant reflashing every board in the
+// field, by hand, over USB. It is now a Railway variable: change Mqtt__Host,
+// restart the boards, done.
+//
+// They are nullable rather than defaulted so that "not configured" and
+// "configured to something" stay distinguishable. System.Text.Json omits a
+// null here only if told to; JsonIgnoreCondition on the properties would be
+// one way, but the firmware reads `r["mqttHost"] | ""` and treats an empty or
+// absent value identically, so a null serialises to null and the board falls
+// back exactly as it would on an absent key.
+public record MqttCredentialsResponse(
+    string MqttUsername,
+    string MqttPassword,
+    string? MqttHost,
+    int? MqttPort);
 
 public record FirmwareCheckResponse(bool UpdateAvailable, string? LatestVersion, string? DownloadUrl);
 
@@ -278,6 +300,7 @@ public static class DeviceEnrollmentEndpoints
         HttpContext context,
         DeviceAuthService deviceAuth,
         MqttCredentialPoolService pool,
+        IConfiguration configuration,
         CancellationToken cancellationToken)
     {
         var device = await deviceAuth.AuthenticateAsync(context, cancellationToken);
@@ -302,7 +325,19 @@ public static class DeviceEnrollmentEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
-        return Results.Ok(new MqttCredentialsResponse(credential.Username, credential.Password));
+        // The same two keys MqttConnectionService already connects with, read
+        // here rather than duplicated into a new section - the API and the
+        // boards must never be able to point at different brokers.
+        var brokerHost = configuration["Mqtt:Host"];
+        var brokerPort = int.TryParse(configuration["Mqtt:Port"], out var parsedPort) && parsedPort > 0
+            ? parsedPort
+            : (int?)null;
+
+        return Results.Ok(new MqttCredentialsResponse(
+            credential.Username,
+            credential.Password,
+            string.IsNullOrWhiteSpace(brokerHost) ? null : brokerHost.Trim(),
+            brokerPort));
     }
 
     // TODO: LatestVersion/DownloadUrl are plain config values (see
