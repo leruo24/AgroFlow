@@ -7,6 +7,11 @@ node_modules/
 # Firmware credentials - real values live here, created from secrets.example.h
 # before flashing. AgroFlow.Api's secrets are in .NET user-secrets, not a file.
 hardware/**/secrets.h
+
+# Compiled firmware images for over-the-air updates. Built with arduino-cli
+# (esp32:esp32:esp32) from hardware/esp32/AgroFlowIrrigationNode and uploaded
+# to whatever Firmware:DownloadUrl points at - a build artefact, not source.
+hardware/esp32/build/
 # Environment secrets
 .env
 .env.*

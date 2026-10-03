@@ -1,64 +1,43 @@
-// AgroFlow irrigation node - ESP32 firmware.
+// AgroFlow irrigation node - ESP32 firmware (v1.3.0).
 //
-// One board per zone: reads a soil moisture sensor, drives a relay-controlled
-// pump, and talks to two backends over two transports. This board is
-// intentionally "dumb" - all irrigation DECISION-MAKING (health status,
-// water usage, moisture-threshold auto-start/stop) lives in Zone.cs on the
-// AgroFlow.Api host, not here:
-//   1. reads the soil moisture sensor and PUBLISHES it over MQTT to
-//      agroflow/farm/{farmId}/device/{deviceId}/sensors (see
-//      hardware/shared/MQTT_TOPICS.md) - AgroFlow.Api's MQTT subscriber inserts it
-//      into sensor_reading, computes health status, and decides start/stop
-//      the same way the earlier Postgres-trigger version did.
-//   2. SUBSCRIBES over MQTT to agroflow/farm/{farmId}/device/{deviceId}/commands
-//      and executes whatever arrives - REST polling of irrigation_commands
-//      is gone; this is now push-based. The board then acknowledges the
-//      command to AgroFlow.Api over HTTP
-//      (POST /api/devices/commands/{id}/executed - see markCommandExecuted()).
-//      That ACK used to be a direct Supabase REST PATCH; it never worked and
-//      never could, so this board no longer holds any Supabase credential at
-//      all. See markCommandExecuted() for the full story.
-//   3. logs the resulting run to AgroFlow.Api over HTTP
-//      (POST /api/irrigation-events), which inserts it into irrigation_event
-//      and updates the zone's running water usage total (with offline
-//      buffering, unchanged - see the summary this shipped with for why this
-//      one stayed on HTTP instead of moving to MQTT too).
+// Architecture (unchanged): WiFiManager setup portal + one-time enrollment code ->
+// /api/devices/claim; MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors
+// as {"sensorType","value"}; commands on .../commands; pump runs logged to
+// POST /api/irrigation-events; OTA checks every 4 h. Pins: soil 32, relay 25, DHT11 27.
 //
-// Device identity is ESP.getEfuseMac() (the chip's true unique hardware ID,
-// burned in at manufacture), NOT WiFi.macAddress() - see getDeviceId(). This
-// is what hardware.device_id stores and what MQTT topics are keyed on; it's
-// stable regardless of which network interface/mode the radio is in, unlike
-// a WiFi-interface-derived MAC.
+// v1.2.0 adds:
+//   1. CHANGE WIFI WITHOUT OPENING THE BOX. Three ways to reopen the setup page:
+//        - Power-cycle the board 3 times quickly (unplug/replug within ~10 s each time).
+//        - Automatically, if the saved WiFi has been unreachable for 15 minutes.
+//        - Remotely, by an {"command":"open_setup"} MQTT command while it's still online.
+//      The setup network is "AgroFlow-Setup-XXXX", password "AF-" + last 6 characters of
+//      the device ID (print it on the kit label). Watering keeps running while it's open.
+//   2. FACTORY RESET: power-cycle 5 times quickly. Wipes WiFi, zone/farm and every
+//      credential from the board, then opens setup for a fresh enrollment code.
+//   3. NO SECRETS IN THE FIRMWARE IMAGE. secrets.h now holds only API_BASE_URL (not secret).
+//      The board gets its own device token + MQTT login from /api/devices/claim, keeps
+//      them only in flash (NVS), never prints them, and wipes them on factory reset or
+//      if the server revokes the token. A stolen board can be cut off on its own,
+//      without touching any other board. REQUIRES the matching API change (claim
+//      returns deviceToken/mqttUsername/mqttPassword; device endpoints accept
+//      X-Device-Token).
+//   Boards claimed with v1.1.0 or earlier have no token, so they open setup once and
+//   need a new enrollment code.
 //
-// No WiFi credentials, zone ID, or farm ID are baked into this firmware
-// image. On first boot (nothing saved in flash) it opens its own
-// AgroFlow-Setup-XXXX access point, serves a form for the farm WiFi + a
-// one-time enrollment code (see
-// backend/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs), then calls
-// /api/devices/claim to find out which zone/farm it belongs to. Every board
-// runs the identical image.
+// v1.3.0 adds:
+//   4. MQTT LOGIN FETCHED FROM THE SERVER ON EVERY BOOT. The board asks
+//      GET /api/devices/mqtt-credentials (with its device token) and keeps the answer in
+//      RAM only - it's never written to flash. Changing the MQTT password in Railway
+//      reaches every board on its next restart, with no reflash. The only thing stored
+//      on the board is its own revocable device token.
+//   5. "CHANGE WIFI" FROM THE APP. A {"command":"change_wifi"} command makes the board
+//      forget its current WiFi and open its setup network. Because it's already enrolled,
+//      the page asks for WiFi only (no enrollment code) and it keeps its farm/zone.
+//      Until a new WiFi is saved, the setup page keeps reopening (also after a reboot),
+//      and watering continues on the offline fallback.
 //
-// This is a from-scratch sketch - there was no existing ESP32 firmware in the
-// repo to extend, so every pin/threshold/credential below is a placeholder.
-// Search for "TODO" before flashing.
-//
-// Library dependencies (Arduino Library Manager):
-//   - ArduinoJson (v7.x)
-//   - WiFiManager by tzapu (captive-portal WiFi provisioning) - actively
-//     maintained, the de facto standard for this on ESP32/ESP8266, built on
-//     the same WiFi.h/DNSServer/WebServer APIs already in use here. Chosen
-//     over rolling a custom AP+web-form since it already handles the fiddly
-//     parts (DNS captive-portal redirect, credential persistence, portal
-//     timeout) correctly.
-//   - PubSubClient by knolleary (MQTT client) - the standard, lightweight
-//     MQTT client for Arduino/ESP32, works over any Client&-derived
-//     transport (used here with WiFiClientSecure for TLS to HiveMQ Cloud on
-//     port 8883). Confirm it against your installed arduino-esp32 core
-//     version before flashing - it's a mature, widely-used library with no
-//     known incompatibility with current cores, but this hasn't been
-//     compile-tested against real hardware in this environment.
-// Built-in (ESP32 core, no install needed):
-//   - WiFi.h, WiFiClientSecure.h, HTTPClient.h, HTTPUpdate.h, Preferences.h, time.h
+// Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
+// DHT sensor library for ESPx (beegee_tokyo).
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -70,144 +49,98 @@
 #include <ArduinoJson.h>
 #include <time.h>
 #include <string.h>
-
-// Real credentials (API_KEY, MQTT_PASSWORD) live in secrets.h, which is
-// gitignored. Create it before flashing:  cp secrets.example.h secrets.h
-// then paste in the real values. The build will not compile without it.
+#include "DHTesp.h"
 #include "secrets.h"
 
 // ---------------------------------------------------------------------------
-// Config - TODO: fill in / adjust per board before flashing.
+// Config
 // ---------------------------------------------------------------------------
 
-// SUPABASE_URL / SUPABASE_ANON_KEY are GONE, deliberately. They existed only
-// to mark a command 'executed' by PATCHing Supabase's REST API directly, and
-// that path was dead twice over: the values were never filled in past their
-// placeholders, and migration 0011 grants the anon role SELECT only on
-// irrigation_commands - no UPDATE policy exists, by design, because an anon
-// write there drives a physical valve. The ACK now goes through AgroFlow.Api
-// instead (see markCommandExecuted()), so this board holds no Supabase
-// credential of any kind. Do not reintroduce one.
-
-// API_BASE_URL now lives in secrets.h alongside API_KEY and MQTT_PASSWORD -
-// see the #include above and secrets.example.h. It moved out of this file
-// because it changes per deployment, and leaving a hardcoded LAN address here
-// is what made every network change a reflash.
-//
-// IF YOUR BUILD FAILS WITH "API_BASE_URL was not declared in this scope",
-// your secrets.h predates this change. Add this line to it:
-//
-//     const char *API_BASE_URL = "https://agroflow-production-998d.up.railway.app";
-//
-// (secrets.h is gitignored, so it does not get updated by a git pull.)
-
-// API_KEY is defined in secrets.h (see the #include above). TODO: set it
-// there - copy secrets.example.h to secrets.h first. It must match the
-// "ApiKey" value in AgroFlow.Api's user-secrets. Same key on every board -
-// it identifies "this is a genuine AgroFlow device", not any individual
-// device or zone (that's what enrollment/claim is for).
-
-// HiveMQ Cloud cluster connection (HiveMQ Cloud console -> your cluster ->
-// Access Management). TLS on port 8883 - see hardware/shared/MQTT_TOPICS.md for the
-// topic structure this connects to. The password is a secret and lives in
-// secrets.h (MQTT_PASSWORD); host and username are not, and stay here.
 const char *MQTT_HOST = "853fe2eddcd24d0c8e0f4d69869c5dab.s1.eu.hivemq.cloud";
 const uint16_t MQTT_PORT = 8883;
-const char *MQTT_USERNAME = "agroflow-device";
-// TODO: set MQTT_PASSWORD in secrets.h (copy secrets.example.h to secrets.h
-// first) - the agroflow-device credential's password from HiveMQ Cloud
-// Access Management.
-
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 
-// How long the captive setup portal waits for someone to connect and submit
-// the form before giving up and restarting to try again. TODO: tune - a
-// board freshly unboxed in the field might sit powered-on for a while before
-// anyone gets to it.
-const uint16_t CONFIG_PORTAL_TIMEOUT_SECONDS = 300;
+const uint16_t CONFIG_PORTAL_TIMEOUT_SECONDS = 300;               // setup page stays open 5 min
+const unsigned long WIFI_DOWN_PORTAL_AFTER_MS = 15UL * 60UL * 1000UL; // saved WiFi gone this long -> open setup
+const unsigned long BOOT_COUNTER_WINDOW_MS = 10000;                // power-cycle within this to count
+const int BOOTS_FOR_PORTAL = 3;
+const int BOOTS_FOR_FACTORY_RESET = 5;
+const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
-// Reported to /api/devices/firmware-check and compared against
-// Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json. TODO: bump
-// this to match whatever you set there each time you cut a release.
-const char *FIRMWARE_VERSION = "1.0.0";
-
-// OTA check cadence - deliberately long. This must NOT interfere with the
-// 30s sensor-report cadence or MQTT's own keep-alive/receive loop, so it
-// runs on its own much slower timer (see loop()). TODO: tune.
+// Bump this AND Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json per release.
+const char *FIRMWARE_VERSION = "1.3.0";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
-// The zone/farm this board belongs to - neither is a compile-time constant.
-// Both are resolved once via /api/devices/claim on first setup and persisted
-// to flash (Preferences), then loaded from flash on every subsequent boot.
-// 0 means "not yet claimed". FARM_ID is needed alongside ZONE_ID because
-// MQTT topics are keyed on farmId, not zoneId - see hardware/shared/MQTT_TOPICS.md.
 long ZONE_ID = 0;
 long FARM_ID = 0;
 
-// TODO: confirm against your actual wiring.
-const int RELAY_PIN = 26;
-const int MOISTURE_PIN = 34; // ADC1 channel - stays usable while WiFi is active.
-
-// Most relay modules pull their input LOW to energise the coil. Flip this if
-// yours is active-HIGH.
+// Real wiring (fixed - do not change without rewiring).
+const int MOISTURE_PIN = 32;   // resistive YL-69 probe AO, ADC1 (works with WiFi on)
+const int RELAY_PIN    = 25;
+const int DHT_PIN      = 27;
 const bool RELAY_ACTIVE_LOW = true;
 
-// TODO: calibrate against your actual sensor (dry-in-air vs. wet-in-water
-// raw ADC readings). These only affect the reported percentage now - the
-// dry/wet thresholds that decide when to irrigate live in zone.
-// moisture_threshold / desired_moisture in Postgres instead.
-const int ADC_DRY = 3000; // raw reading in dry air ~= 0%
-const int ADC_WET = 1200; // raw reading fully submerged ~= 100%
+// Measured on this kit: higher raw = drier. Dry air maxes the ADC (4095); fully
+// submerged reads ~1550. Used ONLY to turn raw into the reported percentage
+// (air = 0%, water = 100%). Watering thresholds live in zone.moisture_threshold /
+// desired_moisture on the server, in the same percentage units.
+const int ADC_DRY = 4095;
+const int ADC_WET = 1550;
+const int SOIL_MIN_VALID = 200;   // below = shorted / faulty probe
 
-// NO FLOW CONSTANT LIVES HERE ANY MORE.
-//
-// This board used to carry PUMP_FLOW_LPS and compute litres itself. That made
-// two sources of truth for the same number - this constant, compiled into
-// every board, and zone.flow_rate_lpm in Postgres - so the same event could
-// be valued two different ways depending on who did the arithmetic.
-//
-// The board now reports only what it actually observes: how many seconds the
-// pump ran. AgroFlow.Api multiplies that by the zone's configured
-// flow_rate_lpm. Correcting a zone's rate is a database update, not a reflash.
-
-const unsigned long SENSOR_REPORT_INTERVAL_MS = 30000; // TODO: tune reporting cadence
+const unsigned long SENSOR_REPORT_INTERVAL_MS = 30000;
 const unsigned long CONNECTIVITY_CHECK_INTERVAL_MS = 2000;
 const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
-
 const int OFFLINE_BUFFER_CAPACITY = 10;
-
-// Sanity floor for time(nullptr): anything at or below this means the clock
-// is still at (or near) the Unix epoch, i.e. NTP has not synced yet - not a
-// real wall-clock time. Bump this occasionally so it stays "clearly in the
-// past" (currently 2023-11-14T22:13:20Z).
 const time_t MIN_VALID_EPOCH = 1700000000;
+
+// Safety + offline fallback.
+const unsigned long SAFETY_MAX_RUN_MS        = 5UL * 60UL * 1000UL;   // no run longer than 5 min, ever
+const unsigned long OFFLINE_FALLBACK_AFTER_MS = 10UL * 60UL * 1000UL; // MQTT down this long -> water locally
+const int FALLBACK_START_RAW = 2600;     // raw at/above = dry enough to water (previously tested values)
+const int FALLBACK_STOP_RAW  = 2300;     // raw at/below = wet enough to stop
+const unsigned long FALLBACK_MAX_RUN_MS  = 60000UL;           // ~1.5 L at 1.5 L/min
+const unsigned long FALLBACK_MIN_REST_MS = 5UL * 60UL * 1000UL; // let water soak down to the probe
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-Preferences preferences; // NVS-backed flash storage: "claimed" flag + ZONE_ID/FARM_ID survive reboots/power loss
-
+Preferences preferences;
 WiFiClientSecure mqttTlsClient;
 PubSubClient mqttClient(mqttTlsClient);
-String mqttSensorsTopic;  // built once FARM_ID is known - see buildMqttTopics()
+String mqttSensorsTopic;
 String mqttCommandsTopic;
 unsigned long lastMqttReconnectAttemptMillis = 0;
+unsigned long lastMqttConnectedMillis = 0;
+
+DHTesp dht;
+WiFiManager wm;
+
+// deviceToken: issued at claim, the ONLY credential stored in flash (NVS). Revocable.
+// mqttUser/mqttPass: fetched from the server on every boot, kept in RAM only. Never printed.
+String deviceToken = "";
+String mqttUser = "";
+String mqttPass = "";
+int authFailures = 0;
+
+bool wifiForgotten = false;          // "change WiFi" requested; cleared once a new WiFi is saved
+unsigned long lastCredFetchMs = 0;
+const unsigned long CRED_FETCH_RETRY_MS = 60000;
+
+bool portalActive = false;
+unsigned long portalStartedMs = 0;
+unsigned long wifiDownSinceMs = 0;
+bool bootCounterCleared = false;
+bool timeConfigured = false;
 
 bool pumpRunning = false;
 unsigned long pumpStartMillis = 0;
-time_t cycleStartEpoch = 0; // wall-clock start time of the current cycle, 0 if unknown/unsynced
-
-// Whatever irrigation_commands.source carried on the command that started
-// the CURRENT cycle ("manual" | "auto" | "scheduled" | "unknown"), echoed
-// straight into irrigation_event.trigger_source when the cycle ends. Empty
-// while idle. The backend (Zone.cs on AgroFlow.Api) decides what caused a
-// cycle now, not this board.
+unsigned long pumpStopMillis = 0;
+time_t cycleStartEpoch = 0;
 String currentCycleSource = "";
+bool fallbackCycle = false;   // true when the current run was started by the offline fallback
 
-// Optional auto-stop deadline, set when the command that started the
-// current cycle carried a non-null duration_seconds (manual commands with a
-// duration, and every scheduled command, both use this).
 bool hasDurationDeadline = false;
 unsigned long cycleDeadlineMillis = 0;
 
@@ -215,26 +148,29 @@ unsigned long lastSensorReportMillis = 0;
 unsigned long lastConnectivityCheckMillis = 0;
 unsigned long lastWifiReconnectAttemptMillis = 0;
 unsigned long lastFirmwareCheckMillis = 0;
-bool wasConnected = false;
+unsigned long lastFallbackCheckMillis = 0;
 
 struct PendingEvent {
   long zoneId;
   unsigned long runtimeSeconds;
   String triggerSource;
-  time_t startedAtEpoch; // 0 if the clock wasn't synced when the cycle started
+  time_t startedAtEpoch;
 };
-
 PendingEvent offlineBuffer[OFFLINE_BUFFER_CAPACITY];
-int offlineHead = 0;  // index of the oldest buffered event
-int offlineCount = 0; // number of buffered events currently held
+int offlineHead = 0;
+int offlineCount = 0;
+
+void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch);
+void markCommandExecuted(const char *commandId);
+void openSetupPortal(const char *reason);
+void forgetWifiAndOpenSetup(const char *reason);
+void factoryReset(const char *reason);
 
 // ---------------------------------------------------------------------------
 // Time helpers
 // ---------------------------------------------------------------------------
 
-bool hasValidTime() {
-  return time(nullptr) > MIN_VALID_EPOCH;
-}
+bool hasValidTime() { return time(nullptr) > MIN_VALID_EPOCH; }
 
 String isoFromEpoch(time_t epoch) {
   struct tm timeinfo;
@@ -244,12 +180,10 @@ String isoFromEpoch(time_t epoch) {
   return String(buf);
 }
 
-String nowIso8601() {
-  return isoFromEpoch(time(nullptr));
-}
+String nowIso8601() { return isoFromEpoch(time(nullptr)); }
 
 // ---------------------------------------------------------------------------
-// Relay helpers
+// Relay / pump
 // ---------------------------------------------------------------------------
 
 void relayWrite(bool energise) {
@@ -257,56 +191,31 @@ void relayWrite(bool energise) {
   digitalWrite(RELAY_PIN, level ? HIGH : LOW);
 }
 
-void startPumpCycle(const String &source) {
-  if (pumpRunning) return; // already running, nothing to do
+void startPumpCycle(const String &source, bool isFallback) {
+  if (pumpRunning) return;
   relayWrite(true);
   pumpRunning = true;
+  fallbackCycle = isFallback;
   pumpStartMillis = millis();
   currentCycleSource = source;
-
-  if (hasValidTime()) {
-    cycleStartEpoch = time(nullptr);
-  } else {
-    cycleStartEpoch = 0;
-    Serial.println("WARN: system clock not NTP-synced at pump start - this event's started_at will fall back to insert time");
-  }
-
-  Serial.print("Pump ON, source=");
-  Serial.println(currentCycleSource);
+  cycleStartEpoch = hasValidTime() ? time(nullptr) : 0;
+  Serial.printf("Pump ON, source=%s%s\n", source.c_str(), isFallback ? " (offline fallback)" : "");
 }
 
 void stopPumpCycle() {
-  if (!pumpRunning) return; // already stopped, nothing to do
+  if (!pumpRunning) return;
   relayWrite(false);
   pumpRunning = false;
   hasDurationDeadline = false;
+  fallbackCycle = false;
+  pumpStopMillis = millis();
 
-  unsigned long elapsedMs = millis() - pumpStartMillis; // unsigned wraparound
-  unsigned long runtimeSeconds = elapsedMs / 1000;
-
-  // Runtime only - litres are the server's to work out from the zone's rate.
-  Serial.print("Pump OFF, runtime_seconds=");
-  Serial.println(runtimeSeconds);
+  unsigned long runtimeSeconds = (millis() - pumpStartMillis) / 1000;
+  Serial.printf("Pump OFF, runtime_seconds=%lu\n", runtimeSeconds);
 
   logIrrigationEvent(ZONE_ID, runtimeSeconds, currentCycleSource, cycleStartEpoch);
   currentCycleSource = "";
   cycleStartEpoch = 0;
-}
-
-// ---------------------------------------------------------------------------
-// Moisture sensing - reporting only. Deciding what to DO about the reading
-// (start/stop thresholds) is Zone.cs's job on AgroFlow.Api now, not this
-// board's - see the sensor-readings endpoint below.
-// ---------------------------------------------------------------------------
-
-float readMoisturePercent() {
-  int raw = analogRead(MOISTURE_PIN);
-  // ADC_WET (fully wet) reads lower than ADC_DRY on resistive/capacitive
-  // soil sensors - map and clamp to 0-100%.
-  float percent = 100.0f * (float)(ADC_DRY - raw) / (float)(ADC_DRY - ADC_WET);
-  if (percent < 0.0f) percent = 0.0f;
-  if (percent > 100.0f) percent = 100.0f;
-  return percent;
 }
 
 void checkDurationDeadline() {
@@ -317,41 +226,57 @@ void checkDurationDeadline() {
   }
 }
 
+// Applies to EVERY cycle, server-started or not: a lost "stop" command can't flood the tub.
+void checkSafetyCap() {
+  if (pumpRunning && millis() - pumpStartMillis >= SAFETY_MAX_RUN_MS) {
+    Serial.println("SAFETY: max run time reached, stopping pump");
+    stopPumpCycle();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sensors
+// ---------------------------------------------------------------------------
+
+int readMoistureRaw() {
+  long sum = 0;
+  for (int i = 0; i < 8; i++) { sum += analogRead(MOISTURE_PIN); delay(5); }
+  return (int)(sum / 8);
+}
+
+bool moistureValid(int raw) { return raw >= SOIL_MIN_VALID && raw <= 4095; }
+
+float rawToPercent(int raw) {
+  float percent = 100.0f * (float)(ADC_DRY - raw) / (float)(ADC_DRY - ADC_WET);
+  if (percent < 0.0f) percent = 0.0f;
+  if (percent > 100.0f) percent = 100.0f;
+  return percent;
+}
+
 // ---------------------------------------------------------------------------
 // AgroFlow.Api HTTP helpers
 // ---------------------------------------------------------------------------
 
-// applySupabaseHeaders() is gone along with SUPABASE_URL/SUPABASE_ANON_KEY -
-// this board no longer talks to Supabase directly at all. See the config
-// section above and markCommandExecuted().
-
 void applyApiHeaders(HTTPClient &http) {
-  http.addHeader("X-Api-Key", API_KEY);
+  if (deviceToken.length() > 0) http.addHeader("X-Device-Token", deviceToken);
   http.addHeader("Content-Type", "application/json");
 }
 
-// Opens an HTTPClient against API_BASE_URL over TLS.
-//
-// EVERY API CALL SITE MUST GO THROUGH THIS. API_BASE_URL is an https:// URL
-// now that the API is deployed on Railway, and a plain WiFiClient cannot
-// speak TLS - HTTPClient::begin() would fail outright, or (worse, on some
-// core versions) connect and return garbage. Before this change these call
-// sites each constructed their own plain WiFiClient, which was fine against
-// the old http:// LAN address and is not fine now.
-//
-// setInsecure() skips server certificate validation.
-//
-//   TODO (security): pin the root CA instead of calling setInsecure(). As it
-//   stands the connection is encrypted but unauthenticated, so an attacker
-//   positioned on the network could impersonate the API host and feed this
-//   board forged firmware-update URLs or swallow its irrigation events.
-//   This matches the existing MQTT approach (mqttTlsClient.setInsecure(),
-//   see setupMqtt()) and carries the same caveat - fixing one should fix
-//   both. The fix is to embed the ISRG Root X1 / Let's Encrypt certificate
-//   and call client.setCACert(); the cost is having to reflash when the root
-//   rotates, which is why it has not been done yet.
+// Call with every device-endpoint response code. Repeated 401s mean the server has
+// revoked this board's token: wipe credentials so nothing usable is left on it.
+void noteAuthResult(int httpCode) {
+  if (httpCode == 401) {
+    authFailures++;
+    Serial.printf("WARN: API rejected device token (%d/%d)\n", authFailures, MAX_AUTH_FAILURES);
+    if (authFailures >= MAX_AUTH_FAILURES) factoryReset("device token revoked by server");
+  } else if (httpCode > 0) {
+    authFailures = 0;
+  }
+}
+
+// Every API call goes through this (TLS; headers added once, here).
 bool beginApiRequest(WiFiClientSecure &client, HTTPClient &http, const String &url) {
-  client.setInsecure(); // TODO: setCACert() - see the note above.
+  client.setInsecure(); // TODO (security): setCACert() with ISRG Root X1 for production.
   if (!http.begin(client, url)) {
     Serial.print("ERROR: could not open HTTP(S) connection to ");
     Serial.println(url);
@@ -362,14 +287,9 @@ bool beginApiRequest(WiFiClientSecure &client, HTTPClient &http, const String &u
 }
 
 // ---------------------------------------------------------------------------
-// Device enrollment / claim
+// Device identity / enrollment
 // ---------------------------------------------------------------------------
 
-// The ESP32's true unique hardware ID, burned into the chip at manufacture -
-// NOT the WiFi station MAC (which is derived from this but is interface/mode
-// specific). This is what hardware.device_id stores and what MQTT topics are
-// keyed on (see hardware/shared/MQTT_TOPICS.md). Only the lower 48 bits are
-// meaningful; formatted as 12 hex chars for a MAC-like, fixed-width string.
 String getDeviceId() {
   uint64_t chipId = ESP.getEfuseMac();
   char buf[13];
@@ -377,89 +297,108 @@ String getDeviceId() {
   return String(buf);
 }
 
-// Last 4 hex characters of the device ID - used to make the setup AP name
-// unique per board.
 String getDeviceIdSuffix() {
   String id = getDeviceId();
   return id.substring(id.length() - 4);
 }
 
-// Called once FARM_ID is known (either freshly from claimDevice(), or loaded
-// from flash on a normal boot).
+String apName() { return "AgroFlow-Setup-" + getDeviceIdSuffix(); }
+
+// Not a secret on its own (it's on the kit label); it stops passers-by from changing the WiFi.
+String apPassword() {
+  String id = getDeviceId();
+  return "AF-" + id.substring(id.length() - 6);
+}
+
 void buildMqttTopics() {
   String deviceId = getDeviceId();
-  mqttSensorsTopic = "agroflow/farm/" + String(FARM_ID) + "/device/" + deviceId + "/sensors";
+  mqttSensorsTopic  = "agroflow/farm/" + String(FARM_ID) + "/device/" + deviceId + "/sensors";
   mqttCommandsTopic = "agroflow/farm/" + String(FARM_ID) + "/device/" + deviceId + "/commands";
 }
 
-// Calls /api/devices/claim with this board's true device ID (see
-// getDeviceId()) + the enrollment code entered into the setup portal. On
-// success, persists the returned zoneId/farmId to flash and builds this
-// board's MQTT topics - this is what replaces the old hardcoded per-board
-// ZONE_ID constant. Returns false for any failure (bad/expired/already-used
-// code, device ID mismatch against a pre-registered code, network error)
-// without touching ZONE_ID/FARM_ID or flash state, so the caller can safely
-// retry.
+// The one-time enrollment code IS the authorisation for this call - no shared key is
+// compiled into the image. The API answers with this board's zone/farm and its OWN
+// credentials, which are written to NVS only.
 bool claimDevice(const String &enrollmentCode) {
-  if (enrollmentCode.length() == 0) {
-    Serial.println("No enrollment code entered - cannot claim device");
-    return false;
-  }
+  if (enrollmentCode.length() == 0) { Serial.println("No enrollment code entered - cannot claim device"); return false; }
   if (WiFi.status() != WL_CONNECTED) return false;
 
   WiFiClientSecure client;
   HTTPClient http;
-  String url = String(API_BASE_URL) + "/api/devices/claim";
-  // Sends X-Api-Key (the shared device secret) in addition to the code itself.
-  if (!beginApiRequest(client, http, url)) return false;
+  deviceToken = "";   // no token yet
+  if (!beginApiRequest(client, http, String(API_BASE_URL) + "/api/devices/claim")) return false;
 
   JsonDocument doc;
   doc["deviceId"] = getDeviceId();
   doc["enrollmentCode"] = enrollmentCode;
+  doc["firmwareVersion"] = FIRMWARE_VERSION;
   String body;
   serializeJson(doc, body);
 
   int httpCode = http.POST(body);
   if (httpCode < 200 || httpCode >= 300) {
-    Serial.print("Device claim rejected, http=");
-    Serial.println(httpCode);
+    Serial.printf("Device claim rejected, http=%d\n", httpCode);
     http.end();
     return false;
   }
-
   String payload = http.getString();
   http.end();
 
-  JsonDocument responseDoc;
-  if (deserializeJson(responseDoc, payload)) return false;
-
-  long claimedZoneId = responseDoc["zoneId"] | 0L;
-  long claimedFarmId = responseDoc["farmId"] | 0L;
-  if (claimedZoneId <= 0 || claimedFarmId <= 0) return false;
+  JsonDocument r;
+  if (deserializeJson(r, payload)) return false;
+  long claimedZoneId = r["zoneId"] | 0L;
+  long claimedFarmId = r["farmId"] | 0L;
+  const char *tok = r["deviceToken"] | "";
+  const char *mu  = r["mqttUsername"] | "";
+  const char *mp  = r["mqttPassword"] | "";
+  if (claimedZoneId <= 0 || claimedFarmId <= 0 || strlen(tok) == 0) {
+    Serial.println("Claim response incomplete (needs zoneId, farmId, deviceToken)");
+    return false;
+  }
+  // MQTT login is optional here; if absent, fetchMqttCredentials() gets it on first connect.
 
   ZONE_ID = claimedZoneId;
   FARM_ID = claimedFarmId;
+  deviceToken = tok; mqttUser = mu; mqttPass = mp;   // mqtt values may be empty
   preferences.putBool("claimed", true);
   preferences.putLong("zoneId", ZONE_ID);
   preferences.putLong("farmId", FARM_ID);
+  preferences.putString("token", deviceToken);   // MQTT login stays in RAM only
   buildMqttTopics();
+  Serial.printf("Device claimed, zoneId=%ld farmId=%ld (credentials stored on device)\n", ZONE_ID, FARM_ID);
+  return true;
+}
 
-  Serial.print("Device claimed successfully, zoneId=");
-  Serial.print(ZONE_ID);
-  Serial.print(" farmId=");
-  Serial.println(FARM_ID);
+// Asks the API for the current MQTT login. The answer lives in RAM only, so rotating the
+// password in Railway takes effect on each board's next boot/retry with no reflash.
+bool fetchMqttCredentials() {
+  if (WiFi.status() != WL_CONNECTED || deviceToken.length() == 0) return false;
+  lastCredFetchMs = millis();
+  WiFiClientSecure client;
+  HTTPClient http;
+  if (!beginApiRequest(client, http, String(API_BASE_URL) + "/api/devices/mqtt-credentials")) return false;
+  int httpCode = http.GET();
+  noteAuthResult(httpCode);
+  if (httpCode != 200) { http.end(); Serial.printf("WARN: MQTT credential fetch failed, http=%d\n", httpCode); return false; }
+  String payload = http.getString();
+  http.end();
+  JsonDocument r;
+  if (deserializeJson(r, payload)) return false;
+  const char *mu = r["mqttUsername"] | "";
+  const char *mp = r["mqttPassword"] | "";
+  if (strlen(mu) == 0 || strlen(mp) == 0) return false;
+  mqttUser = mu; mqttPass = mp;
+  Serial.println("MQTT login received from server (held in memory only)");
   return true;
 }
 
 // ---------------------------------------------------------------------------
-// OTA firmware updates
+// OTA
 // ---------------------------------------------------------------------------
 
-// Long-interval check only (see FIRMWARE_CHECK_INTERVAL_MS) - deliberately
-// does not run every loop() iteration so it can't interfere with the 30s
-// sensor-report cadence or MQTT's own keep-alive/receive loop.
 void checkFirmwareUpdate() {
   if (WiFi.status() != WL_CONNECTED) return;
+  if (pumpRunning) return;   // never reboot mid-watering
 
   WiFiClientSecure client;
   HTTPClient http;
@@ -467,96 +406,75 @@ void checkFirmwareUpdate() {
   if (!beginApiRequest(client, http, url)) return;
 
   int httpCode = http.GET();
-  if (httpCode != 200) {
-    http.end();
-    return;
-  }
-
+  noteAuthResult(httpCode);
+  if (httpCode != 200) { http.end(); return; }
   String payload = http.getString();
   http.end();
 
   JsonDocument doc;
   if (deserializeJson(doc, payload)) return;
-
   bool updateAvailable = doc["updateAvailable"] | false;
   const char *downloadUrl = doc["downloadUrl"];
   if (!updateAvailable || !downloadUrl) return;
 
   Serial.print("Firmware update available, fetching: ");
   Serial.println(downloadUrl);
-
-  // downloadUrl comes from AgroFlow.Api config (Firmware:DownloadUrl) and
-  // could point anywhere - Supabase Storage is always HTTPS, a plain file
-  // server alongside the API might not be. Pick the client type to match
-  // rather than assuming one.
-  httpUpdate.rebootOnUpdate(true); // reboots automatically on a successful flash
+  httpUpdate.rebootOnUpdate(true);
   t_httpUpdate_return result;
   if (String(downloadUrl).startsWith("https://")) {
     WiFiClientSecure secureClient;
-    secureClient.setInsecure(); // TODO: pin the real cert for production hardening.
+    secureClient.setInsecure(); // TODO: pin cert for production.
     result = httpUpdate.update(secureClient, downloadUrl);
   } else {
     WiFiClient plainClient;
     result = httpUpdate.update(plainClient, downloadUrl);
   }
-
-  switch (result) {
-    case HTTP_UPDATE_FAILED:
-      Serial.print("OTA update failed: ");
-      Serial.println(httpUpdate.getLastErrorString());
-      break;
-    case HTTP_UPDATE_NO_UPDATES:
-      Serial.println("OTA: server reported no update after all (race with a concurrent check?)");
-      break;
-    case HTTP_UPDATE_OK:
-      Serial.println("OTA update applied - rebooting");
-      break;
+  if (result == HTTP_UPDATE_FAILED) {
+    Serial.print("OTA update failed: ");
+    Serial.println(httpUpdate.getLastErrorString());
   }
 }
 
-// Publishes the current soil moisture reading to this board's MQTT sensors
-// topic. AgroFlow.Api's MQTT subscriber inserts it into sensor_reading,
-// computes the zone's health status, and decides whether to auto-start/stop
-// irrigation - all logic that used to live in a Postgres trigger, then an
-// HTTP endpoint, now lives in Zone.cs on that host, reached over MQTT.
-//
-// No temperature/humidity sensor is wired on this board (only a soil
-// moisture probe), so only 'SoilMoisture' is reported. If a DHT11/DHT22 (or
-// similar) is added later, report 'Temperature'/'Humidity' the same way -
-// Zone.CalculateHealthStatus already handles those being null gracefully.
+// ---------------------------------------------------------------------------
+// MQTT
+// ---------------------------------------------------------------------------
+
 bool postSensorReading(const char *sensorType, float value) {
   if (!mqttClient.connected()) return false;
-
   JsonDocument doc;
   doc["sensorType"] = sensorType;
   doc["value"] = value;
   String body;
   serializeJson(doc, body);
-
   return mqttClient.publish(mqttSensorsTopic.c_str(), body.c_str());
 }
 
 void reportSensorReadings() {
-  float moisture = readMoisturePercent();
-  if (!postSensorReading("SoilMoisture", moisture)) {
-    Serial.println("WARN: failed to publish SoilMoisture sensor reading over MQTT");
+  int raw = readMoistureRaw();
+  if (moistureValid(raw)) {
+    float pct = rawToPercent(raw);
+    if (!postSensorReading("SoilMoisture", pct)) Serial.println("WARN: SoilMoisture publish failed");
+    Serial.printf("Soil raw=%d (%.0f%%)\n", raw, pct);
+  } else {
+    Serial.printf("WARN: soil reading %d out of range - not sent (probe fault?)\n", raw);
+  }
+
+  TempAndHumidity v = dht.getTempAndHumidity();
+  if (dht.getStatus() == DHTesp::ERROR_NONE &&
+      v.temperature > -10 && v.temperature < 60 && v.humidity >= 0 && v.humidity <= 100) {
+    postSensorReading("Temperature", v.temperature);
+    postSensorReading("Humidity", v.humidity);
+    Serial.printf("DHT11 %.1f C %.0f %%\n", v.temperature, v.humidity);
+  } else {
+    // Send nothing: the server notices the gap (dht_offline), uses weather-app data,
+    // alerts the farmer and flags it for the team.
+    Serial.printf("WARN: DHT11 %s - temperature/humidity not sent\n", dht.getStatusString());
   }
 }
 
-// Fired by PubSubClient for any message on mqttCommandsTopic (subscribed in
-// reconnectMqtt()). Applies the command to the relay, exactly like the old
-// REST-polling checkForCommands() did, then acknowledges the command to
-// AgroFlow.Api over HTTP (see markCommandExecuted() - that acknowledgement
-// write stayed on HTTP; only command DELIVERY moved to MQTT). On any parse
-// failure, leaves relay state untouched entirely - never guesses start or
-// stop.
 void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, payload, length);
-  if (err) {
-    Serial.println("WARN: failed to parse MQTT command payload");
-    return;
-  }
+  if (deserializeJson(doc, payload, length)) { Serial.println("WARN: failed to parse MQTT command payload"); return; }
 
   const char *commandId = doc["id"];
   const char *command = doc["command"];
@@ -567,29 +485,33 @@ void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
     if (hasDurationDeadline) {
       long durationSeconds = doc["durationSeconds"].as<long>();
       cycleDeadlineMillis = millis() + (unsigned long)durationSeconds * 1000UL;
-      Serial.print("Start command with durationSeconds=");
-      Serial.println(durationSeconds);
-    } else {
-      Serial.println("Start command with no duration - runs until explicit stop");
     }
     const char *source = doc["source"] | "unknown";
-    startPumpCycle(String(source));
+    startPumpCycle(String(source), false);
   } else if (strcmp(command, "stop") == 0) {
     stopPumpCycle();
+  } else if (strcmp(command, "open_setup") == 0) {
+    markCommandExecuted(commandId);
+    openSetupPortal("remote open_setup command");
+    return;
+  } else if (strcmp(command, "change_wifi") == 0) {
+    markCommandExecuted(commandId);   // ACK while we still have the old WiFi
+    forgetWifiAndOpenSetup("change WiFi requested from the app");
+    return;
   } else {
-    return; // unrecognised command value - ignore rather than guess.
+    return;
   }
-
   markCommandExecuted(commandId);
 }
 
-// Non-blocking reconnect attempt, rate-limited to MQTT_RECONNECT_INTERVAL_MS -
-// safe to call every loop() iteration. Re-subscribes to mqttCommandsTopic on
-// every successful (re)connect, since PubSubClient does not remember
-// subscriptions across a dropped connection on its own.
 void reconnectMqtt() {
-  if (mqttClient.connected()) return;
+  if (mqttClient.connected()) { lastMqttConnectedMillis = millis(); return; }
   if (WiFi.status() != WL_CONNECTED) return;
+  if (FARM_ID <= 0) return;
+  if (mqttUser.length() == 0) {
+    if (millis() - lastCredFetchMs >= CRED_FETCH_RETRY_MS || lastCredFetchMs == 0) fetchMqttCredentials();
+    if (mqttUser.length() == 0) return;
+  }
 
   unsigned long nowMs = millis();
   if (nowMs - lastMqttReconnectAttemptMillis < MQTT_RECONNECT_INTERVAL_MS) return;
@@ -597,199 +519,217 @@ void reconnectMqtt() {
 
   Serial.print("Connecting to MQTT broker...");
   String clientId = "agroflow-" + getDeviceId();
-  if (mqttClient.connect(clientId.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
+  if (mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str())) {
     Serial.println("connected");
+    lastMqttConnectedMillis = millis();
     mqttClient.subscribe(mqttCommandsTopic.c_str());
-    Serial.print("Subscribed to ");
-    Serial.println(mqttCommandsTopic);
+    if (fallbackCycle) {
+      Serial.println("MQTT back - ending offline-fallback watering, server control resumes");
+      stopPumpCycle();
+    }
   } else {
-    Serial.print("failed, rc=");
-    Serial.println(mqttClient.state());
+    int rc = mqttClient.state();
+    Serial.printf("failed, rc=%d\n", rc);
+    if (rc == 4 || rc == 5) { mqttUser = ""; mqttPass = ""; }   // bad/rotated login: fetch fresh
   }
 }
 
-// Acknowledges a command to AgroFlow.Api.
-//
-// WHAT THIS REPLACED, AND WHY
-// ---------------------------
-// This used to PATCH Supabase's REST API directly:
-//
-//     PATCH {SUPABASE_URL}/rest/v1/irrigation_commands?id=eq.{id}
-//
-// with the anon key. That never worked and never could have:
-//
-//   1. SUPABASE_URL and SUPABASE_ANON_KEY were still placeholders
-//      ("YOUR_PROJECT_REF") in the committed sketch.
-//   2. Even correctly filled in it would have been refused. Migration 0011
-//      turned RLS on for irrigation_commands and grants the anon role SELECT
-//      only - there is deliberately no UPDATE policy, because an anon write
-//      to that table drives a physical valve.
-//
-// So acknowledgements never landed, every executed command stayed 'pending'
-// forever, and the manual-override cooldown in SensorReadingProcessor - which
-// keys off status = 'pending' - treated every past manual command as still
-// outstanding.
-//
-// It now goes through AgroFlow.Api like every other call this board makes:
-// X-Api-Key gated, written server-side via Npgsql as the table owner. The
-// deviceId is sent so the API can verify this board is actually the one on
-// that command's zone - X-Api-Key is shared by every board and proves only
-// "a genuine AgroFlow device", so without it any board could acknowledge any
-// other board's commands.
-//
-// Non-fatal on failure: the pump has already done what it was told. A missed
-// ACK leaves the row 'pending', which means the API's replay sweep will
-// redeliver the command - the endpoint is idempotent, so running it again and
-// re-acknowledging is safe.
-void markCommandExecuted(const char *commandId) {
-  if (!hasValidTime()) {
-    Serial.println("WARN: system clock not NTP-synced when marking command executed - executed_at will be wrong");
-  }
+// ---------------------------------------------------------------------------
+// Offline fallback watering
+// ---------------------------------------------------------------------------
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WARN: offline, cannot acknowledge command - the API will redeliver it");
+void runOfflineFallback() {
+  if (mqttClient.connected()) return;
+  unsigned long nowMs = millis();
+  if (nowMs - lastMqttConnectedMillis < OFFLINE_FALLBACK_AFTER_MS) return;
+  if (nowMs - lastFallbackCheckMillis < 1000) return;
+  lastFallbackCheckMillis = nowMs;
+
+  int raw = readMoistureRaw();
+  if (!moistureValid(raw)) {
+    if (pumpRunning && fallbackCycle) stopPumpCycle();
     return;
   }
+  if (pumpRunning) {
+    if (fallbackCycle && (raw <= FALLBACK_STOP_RAW || nowMs - pumpStartMillis >= FALLBACK_MAX_RUN_MS)) stopPumpCycle();
+    return;
+  }
+  if (raw >= FALLBACK_START_RAW && nowMs - pumpStopMillis >= FALLBACK_MIN_REST_MS) {
+    // Logged as "auto" so it fits irrigation_event.trigger_source; Serial shows it was a fallback.
+    startPumpCycle("auto", true);
+  }
+}
 
+// ---------------------------------------------------------------------------
+// Command ACK + irrigation events (HTTP)
+// ---------------------------------------------------------------------------
+
+void markCommandExecuted(const char *commandId) {
+  if (WiFi.status() != WL_CONNECTED) { Serial.println("WARN: offline, cannot ACK command - the API will redeliver it"); return; }
   WiFiClientSecure client;
   HTTPClient http;
-
   String url = String(API_BASE_URL) + "/api/devices/commands/" + String(commandId) + "/executed";
   if (!beginApiRequest(client, http, url)) return;
 
   JsonDocument doc;
   doc["deviceId"] = getDeviceId();
-  if (hasValidTime()) {
-    doc["executedAt"] = nowIso8601();
-  }
-  // executedAt omitted entirely when the clock is not NTP-synced, so the
-  // server falls back to its own now() rather than recording an epoch-1970
-  // timestamp - same fallback shape as started_at on irrigation events.
+  if (hasValidTime()) doc["executedAt"] = nowIso8601();
   String body;
   serializeJson(doc, body);
-
   int httpCode = http.POST(body);
-  if (httpCode < 200 || httpCode >= 300) {
-    Serial.print("WARN: failed to acknowledge command, http=");
-    Serial.println(httpCode);
-  }
+  noteAuthResult(httpCode);
+  if (httpCode < 200 || httpCode >= 300) Serial.printf("WARN: command ACK failed, http=%d\n", httpCode);
   http.end();
 }
 
-// Posts one completed irrigation cycle to AgroFlow.Api, which inserts it
-// into irrigation_event and updates the zone's running water usage total
-// (Zone.AddWaterUsage) - the water-usage side of what used to be a Postgres
-// trigger. syncStatus is 'synced' for a live post, 'offline_queued' when
-// this call is flushing a previously buffered event - that value is kept
-// permanently on the row as a record of how it was captured, not overwritten
-// after the fact.
-//
-// startedAtEpoch is the wall-clock time the pump cycle actually started,
-// captured on-device - this is what makes started_at correct for events that
-// sat in the offline buffer for a while before syncing (otherwise the row
-// would default to insert time, i.e. sync time, not irrigation time). If
-// startedAtEpoch is 0 (clock wasn't synced when the cycle started), the
-// startedAt field is omitted from the payload and AgroFlow.Api leaves it to
-// Postgres's own default now() - a wrong-but-plausible fallback is worse for
-// reporting than a visible gap, so we don't send a bogus 1970 timestamp.
 bool postIrrigationEvent(long zoneId, unsigned long runtimeSeconds,
-                          const String &source, const char *syncStatus, time_t startedAtEpoch) {
+                         const String &source, const char *syncStatus, time_t startedAtEpoch) {
   if (WiFi.status() != WL_CONNECTED) return false;
-
-  if (startedAtEpoch <= MIN_VALID_EPOCH) {
-    Serial.println("WARN: posting irrigation event without a valid startedAt (NTP sync failed at cycle start) - AgroFlow.Api will fall back to insert time");
-  }
-
   WiFiClientSecure client;
   HTTPClient http;
-
-  String url = String(API_BASE_URL) + "/api/irrigation-events";
-  if (!beginApiRequest(client, http, url)) return false;
-  applyApiHeaders(http);
+  if (!beginApiRequest(client, http, String(API_BASE_URL) + "/api/irrigation-events")) return false;
+  // (v1.0.0 called applyApiHeaders() again here, duplicating the headers - removed.)
 
   JsonDocument doc;
   doc["zoneId"] = zoneId;
   doc["runtimeSeconds"] = runtimeSeconds;
-  // estimatedLitres is deliberately NOT sent. The server derives litres from
-  // zone.flow_rate_lpm; a value from here would be a second, competing answer.
   doc["triggerSource"] = source;
   doc["syncStatus"] = syncStatus;
-  if (startedAtEpoch > MIN_VALID_EPOCH) {
-    doc["startedAt"] = isoFromEpoch(startedAtEpoch);
-  }
+  if (startedAtEpoch > MIN_VALID_EPOCH) doc["startedAt"] = isoFromEpoch(startedAtEpoch);
   String body;
   serializeJson(doc, body);
 
   int httpCode = http.POST(body);
   http.end();
-
+  noteAuthResult(httpCode);
   return httpCode >= 200 && httpCode < 300;
 }
 
-// ---------------------------------------------------------------------------
-// Offline buffering
-// ---------------------------------------------------------------------------
-
-void bufferOfflineEvent(long zoneId, unsigned long runtimeSeconds,
-                         const String &source, time_t startedAtEpoch) {
+void bufferOfflineEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch) {
   if (offlineCount == OFFLINE_BUFFER_CAPACITY) {
-    Serial.println("WARN: offline event buffer full, dropping oldest queued event");
+    Serial.println("WARN: offline event buffer full, dropping oldest");
     offlineHead = (offlineHead + 1) % OFFLINE_BUFFER_CAPACITY;
     offlineCount--;
   }
-
   int insertIndex = (offlineHead + offlineCount) % OFFLINE_BUFFER_CAPACITY;
   offlineBuffer[insertIndex] = { zoneId, runtimeSeconds, source, startedAtEpoch };
   offlineCount++;
-
-  Serial.print("Buffered offline irrigation event, queue depth=");
-  Serial.println(offlineCount);
 }
 
-void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds,
-                         const String &source, time_t startedAtEpoch) {
+void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch) {
   if (WiFi.status() != WL_CONNECTED ||
       !postIrrigationEvent(zoneId, runtimeSeconds, source, "synced", startedAtEpoch)) {
     bufferOfflineEvent(zoneId, runtimeSeconds, source, startedAtEpoch);
   }
 }
 
-// Attempts to flush buffered events, oldest first. Stops at the first
-// failure so a flaky connection doesn't reorder/skip entries - retried on
-// the next connectivity check. An entry is only cleared once its POST
-// actually succeeds. Each flushed event carries its ORIGINAL startedAtEpoch,
-// captured back when the cycle actually ran - not the time of this flush.
 void flushOfflineBuffer() {
   while (offlineCount > 0 && WiFi.status() == WL_CONNECTED) {
     PendingEvent &ev = offlineBuffer[offlineHead];
-    bool ok = postIrrigationEvent(ev.zoneId, ev.runtimeSeconds,
-                                   ev.triggerSource, "offline_queued", ev.startedAtEpoch);
-    if (!ok) break;
-
+    if (!postIrrigationEvent(ev.zoneId, ev.runtimeSeconds, ev.triggerSource, "offline_queued", ev.startedAtEpoch)) break;
     offlineHead = (offlineHead + 1) % OFFLINE_BUFFER_CAPACITY;
     offlineCount--;
-    Serial.print("Flushed buffered irrigation event, queue depth=");
-    Serial.println(offlineCount);
   }
 }
 
 // ---------------------------------------------------------------------------
-// WiFi connectivity
+// WiFi
 // ---------------------------------------------------------------------------
 
-void maintainWiFi() {
-  bool isConnected = WiFi.status() == WL_CONNECTED;
+// Opens the setup page WITHOUT blocking: watering, sensors and the offline fallback keep
+// running while it's open. Saving new WiFi details reconnects automatically.
+void openSetupPortal(const char *reason) {
+  if (portalActive) return;
+  Serial.printf("Opening setup page (%s): join WiFi \"%s\"\n", reason, apName().c_str());
+  wm.setConfigPortalBlocking(false);
+  wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_SECONDS);
+  wm.startConfigPortal(apName().c_str(), apPassword().c_str());
+  portalActive = true;
+  portalStartedMs = millis();
+}
 
-  if (!isConnected) {
-    unsigned long nowMs = millis();
-    if (nowMs - lastWifiReconnectAttemptMillis >= WIFI_RECONNECT_INTERVAL_MS) {
-      lastWifiReconnectAttemptMillis = nowMs;
-      Serial.println("WiFi disconnected, attempting reconnect...");
-      WiFi.reconnect();
-    }
+// Forget the saved WiFi but KEEP the enrollment (farm, zone, device token), then open
+// setup. The page asks for WiFi only, because the board already knows where it belongs.
+void forgetWifiAndOpenSetup(const char *reason) {
+  Serial.printf("Forgetting saved WiFi (%s)\n", reason);
+  wifiForgotten = true;
+  preferences.putBool("wifiForgot", true);   // survive a reboot mid-setup
+  mqttClient.disconnect();
+  wm.resetSettings();                         // erases saved WiFi only; NVS "agroflow" untouched
+  openSetupPortal(reason);
+}
+
+void servicePortal() {
+  if (!portalActive) return;
+  if (wm.process()) {                       // new WiFi saved and connected
+    Serial.println("Setup page: new WiFi saved, connected");
+    portalActive = false;
+    wifiDownSinceMs = 0;
+    wifiForgotten = false;
+    preferences.putBool("wifiForgot", false);
+    return;
   }
+  if (millis() - portalStartedMs > (unsigned long)CONFIG_PORTAL_TIMEOUT_SECONDS * 1000UL + 5000UL) {
+    wm.stopConfigPortal();
+    portalActive = false;
+    if (wifiForgotten) {
+      // No saved WiFi to fall back to: keep offering setup until someone completes it.
+      openSetupPortal("still waiting for a new WiFi");
+      return;
+    }
+    Serial.println("Setup page closed (timeout) - retrying saved WiFi");
+    WiFi.mode(WIFI_STA);
+    WiFi.begin();
+  }
+}
 
-  wasConnected = isConnected;
+void maintainWiFi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    wifiDownSinceMs = 0;
+    if (!timeConfigured) { configTime(0, 0, "pool.ntp.org", "time.nist.gov"); timeConfigured = true; }
+    return;
+  }
+  unsigned long nowMs = millis();
+  if (wifiDownSinceMs == 0) wifiDownSinceMs = nowMs;
+
+  if (wifiForgotten) { if (!portalActive) openSetupPortal("still waiting for a new WiFi"); return; }
+
+  // Saved network gone for a long time (router replaced, password changed): offer setup.
+  if (!portalActive && nowMs - wifiDownSinceMs >= WIFI_DOWN_PORTAL_AFTER_MS) {
+    openSetupPortal("saved WiFi unreachable for 15 min");
+    wifiDownSinceMs = nowMs;                // if it times out, wait another 15 min
+    return;
+  }
+  if (!portalActive && nowMs - lastWifiReconnectAttemptMillis >= WIFI_RECONNECT_INTERVAL_MS) {
+    lastWifiReconnectAttemptMillis = nowMs;
+    Serial.println("WiFi disconnected, attempting reconnect...");
+    WiFi.reconnect();
+  }
+}
+
+// Wipes everything this board knows: WiFi, zone/farm, token, MQTT login. Then reboots
+// into setup. Used for re-assigning a kit, and automatically when the token is revoked.
+void factoryReset(const char *reason) {
+  Serial.printf("FACTORY RESET (%s): wiping WiFi and all stored credentials\n", reason);
+  relayWrite(false);
+  preferences.clear();
+  wm.resetSettings();
+  delay(500);
+  ESP.restart();
+}
+
+// Counts quick power cycles. Cleared after the board has run for BOOT_COUNTER_WINDOW_MS.
+int bumpBootCounter() {
+  int c = preferences.getInt("bootCount", 0) + 1;
+  preferences.putInt("bootCount", c);
+  return c;
+}
+
+void clearBootCounterWhenStable() {
+  if (!bootCounterCleared && millis() > BOOT_COUNTER_WINDOW_MS) {
+    preferences.putInt("bootCount", 0);
+    bootCounterCleared = true;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -797,110 +737,100 @@ void maintainWiFi() {
 // ---------------------------------------------------------------------------
 
 void setup() {
+  pinMode(RELAY_PIN, OUTPUT);
+  relayWrite(false);                 // pump definitively off before anything else
   Serial.begin(115200);
 
-  pinMode(RELAY_PIN, OUTPUT);
-  relayWrite(false); // start with pump definitively off
+  analogReadResolution(12);
+  analogSetPinAttenuation(MOISTURE_PIN, ADC_11db);
+  dht.setup(DHT_PIN, DHTesp::DHT11);
 
-  analogReadResolution(12); // 0-4095, matches ADC_DRY/ADC_WET above
-
-  mqttTlsClient.setInsecure(); // TODO: pin the HiveMQ Cloud root CA for production hardening.
+  mqttTlsClient.setInsecure();       // TODO: pin HiveMQ root CA for production.
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   mqttClient.setCallback(handleMqttCommand);
 
   preferences.begin("agroflow", false);
-  bool isClaimed = preferences.getBool("claimed", false);
 
-  // WiFiManager owns WiFi.begin()/credential storage from here - no more
-  // manual WiFi.begin(ssid, password). autoConnect() tries any previously
-  // saved credentials first and only opens the captive portal if that fails
-  // or none are saved yet.
-  WiFiManager wm;
-  wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_SECONDS);
+  int boots = bumpBootCounter();
+  if (boots >= BOOTS_FOR_FACTORY_RESET) factoryReset("5 quick power cycles");
 
-  // Only prompt for an enrollment code when this device hasn't been claimed
-  // yet - an already-claimed board reconnecting to known WiFi shouldn't show
-  // this field (and WiFiManager wouldn't display it anyway on a silent
-  // reconnect, since the portal page itself doesn't render).
-  WiFiManagerParameter enrollmentCodeParam(
-      "enrollcode", "Enrollment Code (from admin)", "", 9);
+  deviceToken = preferences.getString("token", "");
+  preferences.remove("mqttUser");             // v1.2.0 stored these; v1.3.0 keeps them in RAM only
+  preferences.remove("mqttPass");
+  wifiForgotten = preferences.getBool("wifiForgot", false);
+  // A board claimed by older firmware has no token: treat it as unclaimed (needs a new code).
+  bool isClaimed = preferences.getBool("claimed", false) && deviceToken.length() > 0;
+
+  Serial.print("AgroFlow node v");
+  Serial.print(FIRMWARE_VERSION);
+  Serial.print(" - device ");
+  Serial.println(getDeviceId());
+
   if (!isClaimed) {
+    // First-time setup (or after factory reset): blocking portal with the enrollment code field.
+    WiFiManagerParameter enrollmentCodeParam("enrollcode", "Enrollment Code (from admin)", "", 9);
     wm.addParameter(&enrollmentCodeParam);
-  }
-
-  String apName = "AgroFlow-Setup-" + getDeviceIdSuffix();
-  Serial.print("Starting WiFiManager, AP name if portal opens: ");
-  Serial.println(apName);
-
-  bool wifiOk = wm.autoConnect(apName.c_str());
-  if (!wifiOk) {
-    Serial.println("WiFi setup timed out with no credentials configured - restarting to retry.");
-    delay(1000);
-    ESP.restart();
-  }
-
-  Serial.print("WiFi connected, IP=");
-  Serial.println(WiFi.localIP());
-
-  // configTime() just kicks off SNTP - it does not block until synced, so
-  // wait (bounded) and confirm the clock actually moved before trusting it.
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  Serial.print("Waiting for NTP sync");
-  unsigned long ntpStart = millis();
-  while (!hasValidTime() && millis() - ntpStart < 10000) {
-    delay(250);
-    Serial.print(".");
-  }
-  Serial.println();
-
-  if (hasValidTime()) {
-    Serial.print("NTP synced, epoch=");
-    Serial.println((long)time(nullptr));
-  } else {
-    Serial.println("WARN: NTP sync did not complete within 10s - event timestamps will fall back to insert time until it does");
-  }
-
-  if (isClaimed) {
-    ZONE_ID = preferences.getLong("zoneId", 0);
-    FARM_ID = preferences.getLong("farmId", 0);
-    buildMqttTopics();
-    Serial.print("Already claimed, using saved zoneId=");
-    Serial.print(ZONE_ID);
-    Serial.print(" farmId=");
-    Serial.println(FARM_ID);
-  } else {
-    bool claimOk = claimDevice(enrollmentCodeParam.getValue());
-    if (!claimOk) {
-      // Never proceed as an unlinked device - wipe the WiFi credentials too
-      // (not just the claim flag) so autoConnect() re-opens the full portal,
-      // enrollment code field included, on the next boot instead of silently
-      // reconnecting to WiFi with no zone assigned.
-      Serial.println("Device claim failed - clearing WiFi credentials and restarting to show setup portal again.");
+    wm.setConfigPortalBlocking(true);
+    wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_SECONDS);
+    Serial.printf("Not set up yet: join WiFi \"%s\" to enter farm WiFi + enrollment code\n", apName().c_str());
+    preferences.putInt("bootCount", 0);
+    if (!wm.startConfigPortal(apName().c_str(), apPassword().c_str())) {
+      Serial.println("Setup timed out - restarting to retry.");
+      delay(1000);
+      ESP.restart();
+    }
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+    timeConfigured = true;
+    if (!claimDevice(enrollmentCodeParam.getValue())) {
+      Serial.println("Device claim failed - wiping and restarting into setup.");
+      preferences.clear();
       wm.resetSettings();
       delay(1000);
       ESP.restart();
     }
+  } else {
+    ZONE_ID = preferences.getLong("zoneId", 0);
+    FARM_ID = preferences.getLong("farmId", 0);
+    buildMqttTopics();
+    Serial.printf("Claimed: zoneId=%ld farmId=%ld\n", ZONE_ID, FARM_ID);
+
+    // Connect to the saved WiFi WITHOUT blocking, so watering starts immediately even if
+    // the network is down. maintainWiFi() handles reconnects and the 15-minute setup offer.
+    WiFi.mode(WIFI_STA);
+    unsigned long t0 = millis();
+    if (!wifiForgotten) {
+      WiFi.begin();
+      while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000) delay(250);
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.print("WiFi connected, IP=");
+      Serial.println(WiFi.localIP());
+    } else {
+      Serial.println("WiFi not connected yet - running offline, will keep retrying");
+    }
+
+    if (wifiForgotten) openSetupPortal("still waiting for a new WiFi");
+    else if (boots >= BOOTS_FOR_PORTAL) openSetupPortal("3 quick power cycles");
   }
 
-  reconnectMqtt(); // get the MQTT connection going immediately rather than waiting for the first loop() iteration
-
-  // Give a freshly-provisioned (or just-rebooted) device a firmware check
-  // right away rather than waiting a full FIRMWARE_CHECK_INTERVAL_MS.
+  pumpStopMillis = millis() - FALLBACK_MIN_REST_MS;
+  lastMqttConnectedMillis = millis();   // offline-fallback timer starts from boot
+  reconnectMqtt();
   checkFirmwareUpdate();
 }
 
 void loop() {
+  clearBootCounterWhenStable();
+  servicePortal();
   maintainWiFi();
   reconnectMqtt();
-  mqttClient.loop(); // must be called frequently - processes incoming messages and keep-alive pings
+  mqttClient.loop();
 
   unsigned long nowMs = millis();
 
   if (nowMs - lastConnectivityCheckMillis >= CONNECTIVITY_CHECK_INTERVAL_MS) {
     lastConnectivityCheckMillis = nowMs;
-    if (WiFi.status() == WL_CONNECTED && offlineCount > 0) {
-      flushOfflineBuffer();
-    }
+    if (WiFi.status() == WL_CONNECTED && offlineCount > 0) flushOfflineBuffer();
   }
 
   if (nowMs - lastSensorReportMillis >= SENSOR_REPORT_INTERVAL_MS) {
@@ -908,12 +838,12 @@ void loop() {
     reportSensorReadings();
   }
 
-  // Long interval, deliberately separate from the timers above - see
-  // FIRMWARE_CHECK_INTERVAL_MS.
   if (nowMs - lastFirmwareCheckMillis >= FIRMWARE_CHECK_INTERVAL_MS) {
     lastFirmwareCheckMillis = nowMs;
     checkFirmwareUpdate();
   }
 
   checkDurationDeadline();
+  checkSafetyCap();
+  runOfflineFallback();
 }
