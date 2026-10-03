@@ -149,6 +149,27 @@ async function fetchZoneMap(): Promise<Map<number, ZoneRow>> {
    optimistic UI feedback until the corresponding backend work exists. */
 let users: User[] = [];
 let farms: Farm[] = [];
+
+/* "Show archived" on the Farms page. Archived farms are hidden from the
+   default list, from reports and from automatic reports - but nothing about
+   them is deleted, so they have to stay reachable. */
+let showArchivedFarms = false;
+
+export function getShowArchivedFarms(): boolean {
+  return showArchivedFarms;
+}
+
+export function setShowArchivedFarms(value: boolean): void {
+  showArchivedFarms = value;
+}
+
+/* farm.status has no CHECK constraint and has always defaulted to 'Active'
+   with a capital A, so both spellings exist in the live data. Every status
+   comparison added here is case-insensitive rather than rewriting the rows -
+   see migration 0036's note on why. */
+export function isArchived(status: string | null | undefined): boolean {
+  return (status ?? "").trim().toLowerCase() === "inactive";
+}
 let hardware: Hardware[] = [];
 let alerts: AdminAlert[] = [];
 let maintenance: MaintenanceJob[] = [];
@@ -275,7 +296,13 @@ export const api = {
     updated_at: string | null;
   };
 
-  const rows = await getAuthorized<ApiFarmRow[]>("/api/farms");
+  // Archived farms are excluded by the API unless asked for. The toggle is
+  // module state rather than a filter value because it changes WHAT IS
+  // FETCHED, not how a fetched list is filtered - applyFilters cannot bring
+  // back rows the server never sent.
+  const rows = await getAuthorized<ApiFarmRow[]>(
+    `/api/farms${showArchivedFarms ? "?includeArchived=true" : ""}`,
+  );
 
   farms = rows.map((f) => {
     const { province, region } = splitLocation(f.location);
@@ -666,3 +693,117 @@ export const api = {
     return undefined;
   },
 };
+/* ---------------- Alert history (step 2b) ----------------
+
+   Every alert and every piece of engine advice for one farm's zones, with
+   whether the farmer ever looked at it.
+
+   WHY THE ADMIN NEEDS THIS
+   The whole point of the alert channel is that somebody acts on it, and
+   until migration 0033 there was no way to check that it was working: the
+   mobile app's "read" flag lived only in that phone's AsyncStorage and never
+   reached the database.
+
+   Read-only by design. Nothing here writes - an admin marking a farmer's
+   alert as read would destroy the only evidence of whether the farmer saw
+   it. */
+
+export type AdminAlertHistoryItem = {
+  id: string;
+  kind: "alert" | "advice";
+  zoneName: string;
+  message: string;
+  severity: string | null;
+  createdAt: string;
+  /** "New" | "Seen 3 Oct, 14:05" | "Dismissed 3 Oct, 14:05" */
+  status: string;
+  seen: boolean;
+};
+
+function describeSeen(prefix: string, iso: string | null): string {
+  if (!iso) return "New";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return prefix;
+  return `${prefix} ${d.toLocaleString("en-ZA", {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+  })}`;
+}
+
+export async function getFarmAlertHistory(farmId: number): Promise<AdminAlertHistoryItem[]> {
+  const zoneMap = await fetchZoneMap();
+  const zoneIds = [...zoneMap.entries()]
+    .filter(([, z]) => z.farm_id === farmId)
+    .map(([id]) => id);
+
+  if (zoneIds.length === 0) return [];
+
+  const zoneName = (id: number | null): string =>
+    id === null ? "Unassigned" : zoneMap.get(id)?.name ?? `Zone ${id}`;
+
+  const items: AdminAlertHistoryItem[] = [];
+
+  // read_at may not exist yet if 0033 has not been applied. A missing column
+  // comes back as an error rather than an exception, so fall back to the
+  // columns that have always been there - the team still sees the alerts,
+  // just without the status that makes them useful.
+  const withRead = await supabase
+    .from("alert")
+    .select("id, zone_id, severity, message, status, created_at, read_at")
+    .in("zone_id", zoneIds)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const alertRows = withRead.error
+    ? (await supabase
+        .from("alert")
+        .select("id, zone_id, severity, message, status, created_at")
+        .in("zone_id", zoneIds)
+        .order("created_at", { ascending: false })
+        .limit(200)).data
+    : withRead.data;
+
+  for (const a of (alertRows ?? []) as {
+    id: number; zone_id: number | null; severity: string | null;
+    message: string | null; created_at: string | null; read_at?: string | null;
+  }[]) {
+    items.push({
+      id: `alert-${a.id}`,
+      kind: "alert",
+      zoneName: zoneName(a.zone_id),
+      message: a.message ?? "",
+      severity: a.severity,
+      createdAt: a.created_at ?? "",
+      status: describeSeen("Seen", a.read_at ?? null),
+      seen: Boolean(a.read_at),
+    });
+  }
+
+  const { data: insightRows } = await supabase
+    .from("ai_recommendation")
+    .select("recommendation_id, zone_id, message, severity, created_at, dismissed_at")
+    .in("zone_id", zoneIds)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  for (const r of (insightRows ?? []) as {
+    recommendation_id: number; zone_id: number | null; message: string | null;
+    severity: string | null; created_at: string | null; dismissed_at: string | null;
+  }[]) {
+    if (!r.message) continue;
+    items.push({
+      id: `advice-${r.recommendation_id}`,
+      kind: "advice",
+      zoneName: zoneName(r.zone_id),
+      message: r.message,
+      severity: r.severity,
+      createdAt: r.created_at ?? "",
+      // An insight has no "read" concept - the farmer dismisses it or it
+      // expires with the day. Claiming "Seen" for an undismissed one would
+      // be inventing a fact.
+      status: describeSeen("Dismissed", r.dismissed_at),
+      seen: Boolean(r.dismissed_at),
+    });
+  }
+
+  return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}

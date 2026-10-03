@@ -23,6 +23,9 @@ SHA-256 hash. Revoking one board therefore cuts off that board alone.
 | `GET /api/devices/firmware-check` | `X-Device-Token` |
 | `GET /api/devices/mqtt-credentials` | `X-Device-Token` |
 
+Boards on **v1.4.0** also take the broker address from that last call — see
+"The broker address" below.
+
 An unknown or revoked token gets **401**. Three consecutive 401s make the board
 wipe its own credentials and reopen its setup page for a fresh enrollment code.
 
@@ -33,6 +36,37 @@ every use. Turn it off once every board reports firmware 1.3.0.
 Each board also fetches its own MQTT username/password from
 `GET /api/devices/mqtt-credentials` on every boot and holds them in RAM only,
 so rotating a login needs no reflash.
+
+## The broker address (v1.4.0)
+
+`GET /api/devices/mqtt-credentials` returns the **broker address** alongside the
+login:
+
+```json
+{
+  "mqttUsername": "agroflow-kit-07",
+  "mqttPassword": "…",
+  "mqttHost": "853fe2eddcd24d0c8e0f4d69869c5dab.s1.eu.hivemq.cloud",
+  "mqttPort": 8883
+}
+```
+
+`mqttHost` / `mqttPort` come from the API's own `Mqtt:Host` and `Mqtt:Port` —
+the **same two keys `MqttConnectionService` connects with**, deliberately not a
+second pair, so the API and the boards can never end up pointing at different
+brokers.
+
+Both are optional in both directions. Unset on the server → omitted from the
+response. Absent from the response → the board keeps its compiled-in
+`MQTT_HOST` / `MQTT_PORT`.
+
+**Why this matters:** HiveMQ Cloud Serverless is **retired on 31 December
+2026**. Until v1.4.0 the broker hostname was a compiled-in constant, so moving
+to a different broker meant reflashing every board in the field by hand over
+USB. It is now a Railway variable — set `Mqtt__Host`, `Mqtt__Port`,
+`Mqtt__Username` and `Mqtt__Password` at the new broker, re-paste the per-kit
+logins into the admin MQTT logins page, and restart the boards. No reflash, and
+no site visit.
 
 `{farmId}` and `{deviceId}` are always the real `farm.farm_id` and
 `hardware.device_id` (the device's `ESP.getEfuseMac()`-derived ID, not its

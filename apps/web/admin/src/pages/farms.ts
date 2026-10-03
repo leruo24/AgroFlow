@@ -1,4 +1,4 @@
-import { api } from "@/data/api";
+import { api, getShowArchivedFarms, isArchived } from "@/data/api";
 import { esc, fmtInt, healthDot, healthTone, fmtPct } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
 import { PROVINCES, REGIONS } from "@/data/referenceData";
@@ -50,6 +50,23 @@ function farmCard(f: Farm): string {
       <span class="muted">Last activity ${esc(f.lastActivity)}</span>
       <div class="farm-card-actions">
         ${badge(f.status)}
+        ${isArchived(f.status)
+          ? `<button
+               type="button"
+               class="btn ghost sm"
+               data-act="restore-farm"
+               data-id="${f.id}"
+             >
+               Restore
+             </button>`
+          : `<button
+               type="button"
+               class="btn ghost sm"
+               data-act="archive-farm"
+               data-id="${f.id}"
+             >
+               Archive
+             </button>`}
         <button
           type="button"
           class="btn danger sm"
@@ -76,8 +93,10 @@ export async function farmsPage(): Promise<string> {
   });
 
   const total = farms.length;
-  const active = farms.filter((x) => x.status === "Active").length;
-  const inactive = farms.filter((x) => x.status === "Inactive").length;
+  // Case-insensitive: farm.status has no CHECK constraint, so both 'Active'
+  // and 'active' exist in the live data. See migration 0036.
+  const active = farms.filter((x) => (x.status ?? "").toLowerCase() === "active").length;
+  const inactive = farms.filter((x) => isArchived(x.status)).length;
   const pending = farms.filter((x) => x.status === "Pending Approval").length;
   const recent = farms.filter((x) => x.registered >= "2026-05-01").length;
 
@@ -85,7 +104,10 @@ export async function farmsPage(): Promise<string> {
   ${pageHeader(
     "Farms",
     "Central overview of every farm registered on the platform.",
-    `<button class="btn" data-act="add-farm">+ Register Farm</button>`,
+    `<button class="btn ghost" data-act="toggle-archived-farms">
+       ${getShowArchivedFarms() ? "Hide archived" : "Show archived"}
+     </button>
+     <button class="btn" data-act="add-farm">+ Register Farm</button>`,
   )}
 
   <div class="grid kpis five">

@@ -1357,6 +1357,55 @@ export default function ZoneControlScreen() {
             }
             onPress={() =>
               router.push({
+                pathname: '/forecast',
+                params: {
+                  zoneId: String(
+                    selectedZone.id
+                  ),
+                  zoneName:
+                    selectedZone.name,
+                },
+              })
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="The week ahead"
+          >
+            <View
+              style={
+                styles.linkRowCopy
+              }
+            >
+              <Text
+                style={
+                  styles.linkRowTitle
+                }
+              >
+                The week ahead
+              </Text>
+
+              <Text
+                style={
+                  styles.linkRowHint
+                }
+              >
+                Weather and watering advice for 7 days
+              </Text>
+            </View>
+
+            <ChevronRight
+              size={20}
+              color={colors.textMuted}
+              strokeWidth={2}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={
+              styles.linkRow
+            }
+            onPress={() =>
+              router.push({
                 pathname: '/zone-soil',
                 params: {
                   zoneId: String(

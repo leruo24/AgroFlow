@@ -17,6 +17,14 @@ import { initAuth, onAuthChange, isAdminAuthenticated } from "@/app/auth";
 import { LOGIN_HTML, wireLogin } from "@/pages/login";
 import { WELCOME_HTML, wireWelcome } from "@/pages/welcome";
 
+declare global {
+  interface Window {
+    // Defined by the inline script in index.html, before this bundle loads.
+    // Optional because a test harness or a stripped page may not have it.
+    __agroflowAppReady?: () => void;
+  }
+}
+
 // Wires up every page's own interactions after each in-session navigation
 // (go() -> swapContent -> this) - unrelated to the loading/signed-out/
 // signed-in state machine below, and only ever fires once #content
@@ -27,13 +35,28 @@ type ViewState = "loading" | "welcome" | "signed-out" | "signed-in";
 
 /* Whether the visitor has asked to see the login form yet.
 
-   A visitor with no session starts on "welcome" and moves to "signed-out"
-   (the login form) only by pressing Log in. It is NOT persisted: a reload is
-   a fresh arrival and should land on the welcome screen again.
+   A visitor with no session starts on the landing page and moves to
+   "signed-out" (the login form) only by pressing Admin login.
+
+   It is backed by the URL HASH rather than a variable alone, so that:
+     * the login form has its own address (#/login) and can be linked to or
+       bookmarked by the people who actually use it;
+     * a reload of the bare root URL is a fresh arrival and lands on the
+       landing page again, which is the lecturer's point - opening the console
+       link must not greet you with a password box;
+     * and the back button does what it looks like it does.
+
+   Deliberately NOT localStorage: "I once pressed Log in" is not a fact worth
+   remembering across visits, and persisting it would reintroduce exactly the
+   behaviour being fixed.
 
    Someone who already has a valid admin session never touches this -
    currentState() returns "signed-in" before this is consulted. */
-let loginRequested = false;
+const LOGIN_HASH = "#/login";
+
+function loginRequestedFromHash(): boolean {
+  return window.location.hash === LOGIN_HASH;
+}
 
 function getRoot(): HTMLElement {
   const root = document.getElementById("root");
@@ -43,7 +66,7 @@ function getRoot(): HTMLElement {
 
 function currentState(): ViewState {
   if (isAdminAuthenticated()) return "signed-in";
-  return loginRequested ? "signed-out" : "welcome";
+  return loginRequestedFromHash() ? "signed-out" : "welcome";
 }
 
 function render(state: ViewState): void {
@@ -58,8 +81,10 @@ function render(state: ViewState): void {
   if (state === "welcome") {
     root.innerHTML = WELCOME_HTML;
     wireWelcome(root, () => {
-      loginRequested = true;
-      render(currentState());
+      // Changing the hash is what triggers the re-render, through the
+      // hashchange listener in boot(). Setting it here AND rendering would
+      // render twice.
+      window.location.hash = LOGIN_HASH;
     });
     return;
   }
@@ -92,12 +117,39 @@ async function boot(): Promise<void> {
   render("loading"); // explicit, even though index.html's static #root content already shows this - every state this app can be in goes through render(), no exceptions
   await initAuth();
   render(currentState());
-  onAuthChange(() => {
-    // Signing out returns to the welcome screen, not straight back to a login
-    // form - the same thing a new visitor sees.
-    if (!isAdminAuthenticated()) loginRequested = false;
+
+  // #/login <-> landing, and the browser's back button between them. The
+  // signed-in app has its own hash routes (#dashboard, #farms, ...) which
+  // bootRouter owns; this listener only matters while signed out, so it
+  // re-renders only when the current state would actually change.
+  window.addEventListener("hashchange", () => {
+    if (isAdminAuthenticated()) return;
     render(currentState());
   });
+
+  onAuthChange(() => {
+    // Signing out returns to the landing page, not straight back to a login
+    // form - the same thing a new visitor sees. Clearing the hash is what
+    // does it; the listener above then renders.
+    if (!isAdminAuthenticated() && window.location.hash === LOGIN_HASH) {
+      window.location.hash = "";
+    }
+    render(currentState());
+  });
+
+  // Tells index.html's loading animation that the app has finished starting:
+  // bundle loaded, session check done, first real state rendered. The splash
+  // leaves once this AND the video are done - see the script in index.html.
+  //
+  // Called in a finally-style position so a failed session check still
+  // releases it; a visitor must never be left looking at a splash because
+  // Supabase was unreachable.
+  window.__agroflowAppReady?.();
 }
 
-void boot();
+void boot().catch((error: unknown) => {
+  console.error("AgroFlow admin failed to start:", error);
+  // Same reasoning as above: release the splash even on a failed boot, so
+  // whatever the app managed to render is at least visible.
+  window.__agroflowAppReady?.();
+});

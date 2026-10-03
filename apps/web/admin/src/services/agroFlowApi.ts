@@ -577,3 +577,100 @@ export function createEnrollmentCode(input: {
 }): Promise<EnrollmentCodeResult> {
   return authorizedJson<EnrollmentCodeResult>("/api/devices/enroll", "POST", input);
 }
+
+/* ---------------- Automatic reports (step 4) ---------------- */
+
+export type ReportScheduleDto = {
+  farmId: number;
+  enabled: boolean;
+  frequency: "weekly" | "monthly";
+  reportTypes: string[];
+  zoneIds: number[] | null;
+  lastRunAt: string | null;
+  description: string;
+};
+
+export function getReportSchedule(farmId: number): Promise<ReportScheduleDto> {
+  return authorizedJson<ReportScheduleDto>(
+    `/api/admin/farms/${farmId}/report-schedule`,
+    "GET",
+  );
+}
+
+/* Off by default and only an admin can turn it on - a farmer who did not ask
+   for a weekly PDF and gets one anyway learns to mute the bot, and the bot
+   also carries the frost warnings. The farmer's own "stop" switch is a
+   separate farmer-scoped endpoint. */
+export function saveReportSchedule(
+  farmId: number,
+  input: {
+    enabled: boolean;
+    frequency: "weekly" | "monthly";
+    reportTypes: string[];
+    zoneIds: number[] | null;
+  },
+): Promise<ReportScheduleDto> {
+  return authorizedJson<ReportScheduleDto>(
+    `/api/admin/farms/${farmId}/report-schedule`,
+    "PUT",
+    input,
+  );
+}
+
+/* ---------------- Archive (step 6) ----------------
+
+   Archive is NOT delete and the two sit side by side in the UI on purpose.
+   Delete removes the farm and cascades to every zone, sensor reading,
+   irrigation event and alert it owns - that history is the evidence the
+   system worked. Archive hides it and keeps all of it, and is reversible. */
+
+export function archiveFarm(id: number): Promise<{ message: string }> {
+  return authorizedJson<{ message: string }>(`/api/farms/${id}/archive`, "POST", {});
+}
+
+export function restoreFarm(id: number): Promise<{ message: string }> {
+  return authorizedJson<{ message: string }>(`/api/farms/${id}/restore`, "POST", {});
+}
+
+/* ---------------- Run advice now (step 6c) ----------------
+
+   Runs the FAO-56 engine for one zone, today, and returns what it worked
+   out. Exists so the engine can be PROVEN to work live during setup and the
+   presentation, instead of waiting for the nightly pass and hoping.
+
+   Advisory only: it writes the normal zone_water_balance and
+   ai_recommendation rows and never touches the pump. */
+
+export type RunAdviceResult = {
+  zoneId: number;
+  zoneName: string;
+  ranFor: string;
+  stage: string | null;
+  dayOfSeason: number | null;
+  crop: string | null;
+  soil: string;
+  soilWasDefaulted: boolean;
+  etcTodayMm: number | null;
+  etoTodayMm: number | null;
+  depletionMm: number | null;
+  readilyAvailableMm: number | null;
+  totalAvailableMm: number | null;
+  recommendedLitres: number | null;
+  recommendedMinutes: number | null;
+  daysToNextWatering: number | null;
+  nextWateringDate: string | null;
+  moisturePercent: number | null;
+  balanceRan: boolean;
+  /** Named missing fields - the half that makes this useful during setup. */
+  setupMissing: string[];
+  limitations: string[];
+  insights: { insightType: string; severity: string; message: string }[];
+};
+
+export function runAdviceNow(zoneId: number): Promise<RunAdviceResult> {
+  return authorizedJson<RunAdviceResult>(
+    `/api/admin/zones/${zoneId}/run-advice`,
+    "POST",
+    {},
+  );
+}

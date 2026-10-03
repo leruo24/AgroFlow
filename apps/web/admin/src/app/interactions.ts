@@ -1,6 +1,6 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
-import { api } from "@/data/api";
+import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms } from "@/data/api";
 import { toast } from "@/lib/toast";
 import { openDrawer } from "@/lib/drawer";
 import {
@@ -20,6 +20,11 @@ import {
   deviceRevoke,
   addMqttLogins,
   createEnrollmentCode,
+  getReportSchedule,
+  saveReportSchedule,
+  archiveFarm,
+  restoreFarm,
+  runAdviceNow,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
@@ -223,8 +228,29 @@ async function openUserProfile(id: string): Promise<void> {
 async function openFarmDetail(id: number): Promise<void> {
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
+    // Read-only, and allowed to fail: the rest of the drawer must still open
+    // if 0033 has not been applied or the query is refused.
+    getFarmAlertHistory(id).catch((e: unknown) => {
+      console.warn("Could not load alert history for farm", id, e);
+      return [];
+    }),
+    // A farm with no schedule row is the NORMAL state - automatic reports are
+    // off until an admin turns them on - so this failing must not stop the
+    // drawer opening either.
+    getReportSchedule(id).catch((e: unknown) => {
+      console.warn("Could not load the report schedule for farm", id, e);
+      return null;
+    }),
+    // REAL zones, from the API. The "Irrigation schedules" section below is
+    // still the pre-existing mock working copy (irrigation_schedule was
+    // dropped in 0010), so its ids are not zone ids and cannot be used to
+    // run the engine against anything.
+    getReportZones(id).catch((e: unknown) => {
+      console.warn("Could not load zones for farm", id, e);
+      return [];
+    }),
   ]);
 
   const farmUsers = users.filter((u) => u.farm === f.name);
@@ -269,6 +295,86 @@ async function openFarmDetail(id: number): Promise<void> {
         `<span class="mono">${esc(m.id)}</span> ${esc(m.issue)} — <b>${esc(m.status)}</b>`))),
       section(`Alerts (${farmAlerts.length})`, list(farmAlerts.map((a) =>
         `<span class="mono">${esc(a.id)}</span> ${esc(a.title)} — <b>${esc(a.status)}</b>`))),
+
+      // What the farmer has actually been told, and whether they looked at
+      // it. The section above is the OPEN alert queue; this is the record,
+      // and the "Seen"/"Dismissed" column is the only way to tell whether the
+      // channel is working at all. Read-only on purpose: an admin marking a
+      // farmer's alert as read would destroy that evidence.
+      section(
+        `Alerts & advice seen by the farmer (${alertHistory.length})`,
+        alertHistory.length
+          ? `<div class="table-wrap"><table>
+               <thead><tr><th>When</th><th>Zone</th><th>Type</th><th>Message</th><th>Status</th></tr></thead>
+               <tbody>${alertHistory.slice(0, 50).map((h) => `
+                 <tr>
+                   <td>${esc(fmtDate(h.createdAt))}</td>
+                   <td>${esc(h.zoneName)}</td>
+                   <td>${h.kind === "alert" ? "Alert" : "Advice"}</td>
+                   <td>${esc(h.message)}</td>
+                   <td>${h.seen
+                     ? `<span class="muted">${esc(h.status)}</span>`
+                     : `<b>New</b>`}</td>
+                 </tr>`).join("")}
+               </tbody>
+             </table>
+             ${alertHistory.length > 50
+               ? `<p class="muted">Showing the 50 most recent of ${alertHistory.length}.</p>`
+               : ""}
+             <p class="muted">
+               "New" means nobody has opened it in the app. Advice is marked Dismissed when the
+               farmer clears it; it has no separate read state.
+             </p>
+           </div>`
+          : `<p class="muted">Nothing has been sent to this farm yet.</p>`),
+      // The engine, per zone, on demand. Placed above the auto-report
+      // summary because during a setup visit this is the thing somebody
+      // actually clicks - it is how you prove the installation works before
+      // leaving the farm.
+      section(`Zones (${farmZones.length})`,
+        farmZones.length
+          ? `<div class="table-wrap"><table>
+               <thead><tr><th>Zone</th><th>Crop</th><th>Advice</th></tr></thead>
+               <tbody>${farmZones.map((z) => `
+                 <tr>
+                   <td>${esc(z.name)}</td>
+                   <td>${esc(z.cropType ?? "Not set")}</td>
+                   <td>
+                     <a href="#" class="row-act" data-act="run-advice" data-id="${z.zoneId}">
+                       Run advice now
+                     </a>
+                   </td>
+                 </tr>`).join("")}
+               </tbody></table>
+             <p class="muted">
+               Runs the FAO-56 engine for that zone today and shows what it worked out, including
+               anything still missing from its setup. Advisory only - it never starts a pump.
+             </p></div>`
+          : `<p class="muted">No zones on this farm yet.</p>`),
+
+      // AUTO REPORTS. Shown as a summary with an Edit action rather than an
+      // inline form: the drawer is already long, and this is a setting
+      // changed once when a farm is set up, not something read on every
+      // visit.
+      section("Automatic reports", `
+        <div class="detail-list">
+          <div class="detail-row">
+            <span>Status</span>
+            <b>${autoReports?.enabled ? esc(autoReports.description) : "Off"}</b>
+          </div>
+          <div class="detail-row">
+            <span>Last sent</span>
+            <b>${autoReports?.lastRunAt ? esc(fmtDate(autoReports.lastRunAt)) : "Never"}</b>
+          </div>
+        </div>
+        <p class="muted">
+          Off by default. The farmer can stop these themselves from the app at any time;
+          only an administrator can switch them back on.
+        </p>
+        <button class="btn ghost sm" data-act="edit-auto-reports" data-id="${id}">
+          ${autoReports?.enabled ? "Change automatic reports" : "Set up automatic reports"}
+        </button>`),
+
       section("Device inventory", `
         <div class="detail-list">
           ${Object.entries(farmHw.reduce<Record<string, number>>((acc, h) => {
@@ -924,6 +1030,287 @@ case "delete-user": {
             });
         },
       });
+    }
+
+    case "edit-auto-reports": {
+      const farmId = Number(idAttr);
+      if (!farmId) return;
+
+      const [current, zones] = await Promise.all([
+        getReportSchedule(farmId).catch(() => null),
+        getReportZones(farmId).catch(() => []),
+      ]);
+
+      const types = current?.reportTypes ?? ["water_usage"];
+      const chosenZones = current?.zoneIds ?? null;
+
+      const checkbox = (value: string, label: string, checked: boolean): string =>
+        `<label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+           <input type="checkbox" data-report-type="${value}" ${checked ? "checked" : ""} />
+           <span>${esc(label)}</span>
+         </label>`;
+
+      return openDrawer({
+        title: "Automatic reports",
+        subtitle: api.findFarm(farmId)?.name ?? `Farm ${farmId}`,
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section">
+            <h6>Send automatically</h6>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" id="autoReportsEnabled" ${current?.enabled ? "checked" : ""} />
+              <span>Automatic reports on</span>
+            </label>
+            <p class="muted">
+              Off by default. Weekly reports go out on Monday at 07:00; monthly ones on the 1st
+              at 07:00, South African time. They cover the week or month that has just finished.
+            </p>
+          </div>
+
+          <div class="drawer-section">
+            <h6>How often</h6>
+            <label class="drawer-field">
+              <span>Frequency</span>
+              <select id="autoReportsFrequency" class="input">
+                <option value="weekly" ${current?.frequency !== "monthly" ? "selected" : ""}>
+                  Weekly (Monday 07:00)
+                </option>
+                <option value="monthly" ${current?.frequency === "monthly" ? "selected" : ""}>
+                  Monthly (1st, 07:00)
+                </option>
+              </select>
+            </label>
+          </div>
+
+          <div class="drawer-section">
+            <h6>Which reports</h6>
+            ${checkbox("water_usage", "Water usage", types.includes("water_usage"))}
+            ${checkbox("moisture", "Soil moisture", types.includes("moisture"))}
+            ${checkbox("schedule", "Watering schedule & advice", types.includes("schedule"))}
+            <p class="muted">
+              Soil moisture is per zone, so a farm with four zones gets four of those. The other
+              two cover the whole farm.
+            </p>
+          </div>
+
+          <div class="drawer-section">
+            <h6>Which zones</h6>
+            <label class="drawer-field">
+              <span>Zones</span>
+              <select id="autoReportsZones" class="input" multiple size="${Math.min(6, Math.max(3, zones.length + 1))}">
+                <option value="all" ${chosenZones === null ? "selected" : ""}>All zones</option>
+                ${zones.map((z) =>
+                  `<option value="${z.zoneId}" ${chosenZones?.includes(z.zoneId) ? "selected" : ""}>
+                     ${esc(z.name)}
+                   </option>`).join("")}
+              </select>
+            </label>
+            <p class="muted">
+              Leave "All zones" selected to include any zone added later.
+            </p>
+          </div>
+
+          <div class="drawer-section">
+            <p class="muted">
+              Delivered in the app always, and on Telegram as well for a farmer who has connected
+              it. The farmer can stop these themselves at any time.
+            </p>
+          </div>
+        `,
+        confirmLabel: "Save",
+        onConfirm: () => {
+          const enabled =
+            (document.getElementById("autoReportsEnabled") as HTMLInputElement | null)?.checked ?? false;
+          const frequency =
+            ((document.getElementById("autoReportsFrequency") as HTMLSelectElement | null)?.value ??
+              "weekly") as "weekly" | "monthly";
+
+          const reportTypes = [...document.querySelectorAll<HTMLInputElement>("[data-report-type]")]
+            .filter((el) => el.checked)
+            .map((el) => el.dataset["reportType"] ?? "")
+            .filter(Boolean);
+
+          const zoneSelect = document.getElementById("autoReportsZones") as HTMLSelectElement | null;
+          const picked = [...(zoneSelect?.selectedOptions ?? [])].map((o) => o.value);
+          // "All zones" wins if it is selected at all - null means every
+          // zone, including ones added later, which is almost always what is
+          // meant. An empty array would mean "no zones" and send nothing.
+          const zoneIds = picked.includes("all") || picked.length === 0
+            ? null
+            : picked.map(Number).filter(Number.isFinite);
+
+          if (enabled && reportTypes.length === 0) {
+            toast("Choose at least one report to send.", "warn");
+            return;
+          }
+
+          void saveReportSchedule(farmId, { enabled, frequency, reportTypes, zoneIds })
+            .then((saved) => {
+              toast(saved.enabled ? saved.description : "Automatic reports are off.", "success");
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not save the automatic reports",
+                error instanceof Error ? error.message : "The setting could not be saved.",
+              );
+            });
+        },
+      });
+    }
+
+    case "toggle-archived-farms":
+      setShowArchivedFarms(!getShowArchivedFarms());
+      return void refresh();
+
+    /* ARCHIVE, not delete. The confirm text spells out the difference
+       because the two buttons sit next to each other and the farm being
+       archived is usually test data somebody is trying to tidy away - which
+       is exactly the moment a mis-click is most likely and most costly. */
+    case "archive-farm": {
+      const farmId = Number(idAttr);
+      const farm = api.findFarm(farmId);
+      if (!farm) return;
+
+      return openDrawer({
+        title: `Archive ${farm.name}`,
+        subtitle: `${farm.owner} · ${farm.province}`,
+        bodyHtml: `<div class="muted">
+            This hides the farm and its zones from the farm list, from reports and from
+            automatic reports.
+            <br><br>
+            <b>Nothing is deleted.</b> Every sensor reading, watering event and alert is kept,
+            and you can bring the farm back at any time with "Show archived" then Restore.
+            <br><br>
+            Use this for test and demo farms. Use Delete only when the data itself should go.
+          </div>`,
+        confirmLabel: "Archive this farm",
+        onConfirm: () => {
+          void archiveFarm(farmId)
+            .then((r) => {
+              toast(r.message, "success");
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not archive the farm",
+                error instanceof Error ? error.message : "The farm could not be archived.",
+              );
+            });
+        },
+      });
+    }
+
+    case "restore-farm": {
+      const farmId = Number(idAttr);
+      if (!farmId) return;
+
+      await restoreFarm(farmId)
+        .then((r) => toast(r.message, "success"))
+        .catch((error: unknown) =>
+          showErrorModal(
+            "Could not restore the farm",
+            error instanceof Error ? error.message : "The farm could not be restored.",
+          ),
+        );
+
+      return void refresh();
+    }
+
+    /* "Run advice now" on a zone. The point is to be able to SHOW the
+       engine working during setup and the presentation, so the result is
+       laid out as the numbers somebody checking it reads in order - and,
+       when it cannot answer, the named missing fields rather than a blank
+       panel. */
+    case "run-advice": {
+      const zoneId = Number(idAttr);
+      if (!zoneId) return void toast("No zone selected.", "warn");
+
+      toast("Running the advice engine…", "success");
+
+      try {
+        const r = await runAdviceNow(zoneId);
+
+        const row = (label: string, value: string): string =>
+          `<div class="detail-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`;
+
+        const num = (v: number | null, unit: string): string =>
+          v === null ? "Not known" : `${v} ${unit}`;
+
+        return openDrawer({
+          title: `Advice for ${r.zoneName}`,
+          subtitle: `Engine run for ${r.ranFor}`,
+          wide: true,
+          bodyHtml: `
+            <div class="drawer-section">
+              <h6>Crop and season</h6>
+              <div class="detail-list">
+                ${row("Crop", r.crop ?? "Not set")}
+                ${row("Stage", r.stage ?? "Not known")}
+                ${row("Day of season", r.dayOfSeason === null ? "Not known" : String(r.dayOfSeason))}
+                ${row("Soil", r.soilWasDefaulted ? `${r.soil} (defaulted)` : r.soil)}
+              </div>
+            </div>
+
+            <div class="drawer-section">
+              <h6>Water need today</h6>
+              <div class="detail-list">
+                ${row("Crop used today (ETc)", num(r.etcTodayMm, "mm"))}
+                ${row("Reference (ET0)", num(r.etoTodayMm, "mm"))}
+                ${row("Soil water used up", num(r.depletionMm, "mm"))}
+                ${row("Can be used before stress", num(r.readilyAvailableMm, "mm"))}
+                ${row("Soil can hold", num(r.totalAvailableMm, "mm"))}
+                ${row("Suggested water", num(r.recommendedLitres, "L"))}
+                ${row("Suggested run time", r.recommendedMinutes === null ? "Not known" : `${r.recommendedMinutes} min`)}
+                ${row("Soil moisture", num(r.moisturePercent, "%"))}
+              </div>
+            </div>
+
+            <div class="drawer-section">
+              <h6>Next watering</h6>
+              <div class="detail-list">
+                ${row("Days until needed", r.daysToNextWatering === null ? "Not known" : String(r.daysToNextWatering))}
+                ${row("Expected date", r.nextWateringDate ?? "Not known")}
+                ${row("Water balance ran", r.balanceRan ? "Yes" : "No")}
+              </div>
+            </div>
+
+            ${r.setupMissing.length ? `
+              <div class="drawer-section">
+                <h6>Still needed before the engine can advise fully</h6>
+                <ul class="drawer-list">
+                  ${r.setupMissing.map((m) => `<li>${esc(m)}</li>`).join("")}
+                </ul>
+              </div>` : ""}
+
+            ${r.limitations.length ? `
+              <div class="drawer-section">
+                <h6>Limitations</h6>
+                <ul class="drawer-list">
+                  ${r.limitations.map((m) => `<li>${esc(m)}</li>`).join("")}
+                </ul>
+              </div>` : ""}
+
+            <div class="drawer-section">
+              <h6>Advice written for the farmer (${r.insights.length})</h6>
+              ${r.insights.length
+                ? `<ul class="drawer-list">${r.insights.map((i) =>
+                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)}</li>`).join("")}</ul>`
+                : `<p class="muted">Nothing to tell the farmer today.</p>`}
+            </div>
+
+            <p class="muted">
+              Advisory only. This writes the same rows the nightly pass writes and never
+              starts or stops a pump.
+            </p>`,
+        });
+      } catch (error) {
+        showErrorModal(
+          "The advice engine could not run",
+          error instanceof Error ? error.message : "The engine did not answer.",
+        );
+        return;
+      }
     }
 
     case "go-mqtt-logins":
