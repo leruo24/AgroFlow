@@ -70,7 +70,9 @@ public static class MqttPoolEndpoints
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
-        var (credentials, skipped) = Parse(request.Pasted);
+        var parsed = MqttPoolPasteParser.Parse(request.Pasted);
+        var credentials = parsed.Credentials;
+        var skipped = parsed.Skipped;
 
         if (credentials.Count == 0)
         {
@@ -81,7 +83,8 @@ public static class MqttPoolEndpoints
             });
         }
 
-        var (added, duplicates) = await pool.AddAsync(credentials, cancellationToken);
+        var (added, duplicates) = await pool.AddAsync(
+            credentials.Select(c => (c.Username, c.Password)), cancellationToken);
 
         var summary = await pool.ListAsync(cancellationToken);
 
@@ -102,52 +105,8 @@ public static class MqttPoolEndpoints
         return string.Join(" ", parts);
     }
 
-    // Accepts the separators a pasted console table actually arrives with.
-    //
-    // Tab first: copying two columns out of the HiveMQ web UI produces
-    // tab-separated text, and a tab is unambiguous. Colon is supported
-    // because "user:pass" is the habitual shorthand - with the caveat that a
-    // password containing a colon then splits wrongly, which is why the split
-    // is on the FIRST separator only and the remainder is taken whole.
-    private static (List<(string Username, string Password)> Credentials, int Skipped) Parse(string? pasted)
-    {
-        var credentials = new List<(string, string)>();
-        var skipped = 0;
-
-        if (string.IsNullOrWhiteSpace(pasted)) return (credentials, 0);
-
-        foreach (var rawLine in pasted!.Split('\n', '\r'))
-        {
-            var line = rawLine.Trim();
-            if (line.Length == 0) continue;
-
-            // Let an admin annotate a pasted batch.
-            if (line.StartsWith('#')) continue;
-
-            var separatorIndex = line.IndexOfAny(new[] { '\t', ' ', ',', ':', ';' });
-
-            if (separatorIndex <= 0 || separatorIndex == line.Length - 1)
-            {
-                skipped++;
-                continue;
-            }
-
-            var username = line[..separatorIndex].Trim();
-
-            // TrimStart only on the separators themselves, so a password that
-            // legitimately begins with a symbol survives. Not TrimEnd beyond
-            // whitespace, for the same reason.
-            var password = line[(separatorIndex + 1)..].TrimStart('\t', ' ', ',', ':', ';').TrimEnd();
-
-            if (username.Length == 0 || password.Length == 0)
-            {
-                skipped++;
-                continue;
-            }
-
-            credentials.Add((username, password));
-        }
-
-        return (credentials, skipped);
-    }
+    // Parsing lives in AgroFlow.Business.MqttPoolPasteParser, not here: what
+    // this accepts IS the behaviour, and a separator it mishandles silently
+    // stores a password that will not work - the board then just fails to
+    // reach the broker with no visible cause. That deserves direct tests.
 }

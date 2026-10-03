@@ -1,4 +1,5 @@
 using AgroFlow.Api.Services;
+using AgroFlow.Business;
 using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
@@ -109,7 +110,7 @@ public static class DeviceCommandEndpoints
         // comparison are now server-derived - the left from the command's
         // zone, the right from the credential - so a board genuinely cannot
         // acknowledge another zone's command.
-        if (!string.Equals(ownership.DeviceId, callerDeviceId, StringComparison.OrdinalIgnoreCase))
+        if (!DeviceCommandOwnership.MayAcknowledge(ownership.DeviceId, callerDeviceId))
         {
             // Deliberately 404, not 403: a device that is not on this zone
             // should not be able to probe which command ids exist.

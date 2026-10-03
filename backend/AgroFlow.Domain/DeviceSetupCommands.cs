@@ -127,4 +127,39 @@ namespace AgroFlow.Business
         public const string OfflineRouterChangedHint =
             "If your router changed, your kit opens its setup network by itself after 15 minutes.";
     }
+
+    // Who may acknowledge a command.
+    //
+    // THE HOLE THIS CLOSES
+    // --------------------
+    // POST /api/devices/commands/{id}/executed used to read a deviceId out of
+    // the REQUEST BODY and compare it to the zone's hardware row. That check
+    // was only ever as strong as the shared X-Api-Key behind it: any board
+    // holding the fleet key could claim to be any other board.
+    //
+    // It matters more than it looks. Marking a command executed is what stops
+    // the replay sweep redelivering it (see CommandReplayPolicy). A forged ACK
+    // therefore suppresses redelivery of a pump run that never physically
+    // happened - the farmer's zone reads as watered and was not.
+    //
+    // On a token-authenticated call both sides of this comparison are now
+    // server-derived: the expected device comes from the command's zone, and
+    // the caller's device comes from the credential.
+    public static class DeviceCommandOwnership
+    {
+        // expectedDeviceId: the device on the command's zone, or null when
+        // that zone has no active claimed device.
+        // callerDeviceId: resolved from the caller's token.
+        public static bool MayAcknowledge(string? expectedDeviceId, string? callerDeviceId)
+        {
+            if (string.IsNullOrWhiteSpace(expectedDeviceId)) return false;
+            if (string.IsNullOrWhiteSpace(callerDeviceId)) return false;
+
+            // Case-insensitive: device_id is stored uppercased by the claim
+            // path, but the firmware's own getDeviceId() and a hand-entered
+            // admin value have both been seen in other cases, and a casing
+            // difference is not a different board.
+            return string.Equals(expectedDeviceId, callerDeviceId, StringComparison.OrdinalIgnoreCase);
+        }
+    }
 }
