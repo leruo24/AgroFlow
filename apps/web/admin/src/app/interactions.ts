@@ -1,6 +1,6 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
-import { api, getFarmAlertHistory } from "@/data/api";
+import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms } from "@/data/api";
 import { toast } from "@/lib/toast";
 import { openDrawer } from "@/lib/drawer";
 import {
@@ -22,6 +22,8 @@ import {
   createEnrollmentCode,
   getReportSchedule,
   saveReportSchedule,
+  archiveFarm,
+  restoreFarm,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
@@ -1121,6 +1123,64 @@ case "delete-user": {
             });
         },
       });
+    }
+
+    case "toggle-archived-farms":
+      setShowArchivedFarms(!getShowArchivedFarms());
+      return void refresh();
+
+    /* ARCHIVE, not delete. The confirm text spells out the difference
+       because the two buttons sit next to each other and the farm being
+       archived is usually test data somebody is trying to tidy away - which
+       is exactly the moment a mis-click is most likely and most costly. */
+    case "archive-farm": {
+      const farmId = Number(idAttr);
+      const farm = api.findFarm(farmId);
+      if (!farm) return;
+
+      return openDrawer({
+        title: `Archive ${farm.name}`,
+        subtitle: `${farm.owner} · ${farm.province}`,
+        bodyHtml: `<div class="muted">
+            This hides the farm and its zones from the farm list, from reports and from
+            automatic reports.
+            <br><br>
+            <b>Nothing is deleted.</b> Every sensor reading, watering event and alert is kept,
+            and you can bring the farm back at any time with "Show archived" then Restore.
+            <br><br>
+            Use this for test and demo farms. Use Delete only when the data itself should go.
+          </div>`,
+        confirmLabel: "Archive this farm",
+        onConfirm: () => {
+          void archiveFarm(farmId)
+            .then((r) => {
+              toast(r.message, "success");
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not archive the farm",
+                error instanceof Error ? error.message : "The farm could not be archived.",
+              );
+            });
+        },
+      });
+    }
+
+    case "restore-farm": {
+      const farmId = Number(idAttr);
+      if (!farmId) return;
+
+      await restoreFarm(farmId)
+        .then((r) => toast(r.message, "success"))
+        .catch((error: unknown) =>
+          showErrorModal(
+            "Could not restore the farm",
+            error instanceof Error ? error.message : "The farm could not be restored.",
+          ),
+        );
+
+      return void refresh();
     }
 
     case "go-mqtt-logins":

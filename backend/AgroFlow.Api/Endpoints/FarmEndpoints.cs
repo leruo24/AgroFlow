@@ -14,6 +14,72 @@ public static class FarmEndpoints
         group.MapGet("", GetFarmsAsync);
         group.MapPost("/register", RegisterFarmAsync);
         group.MapDelete("/{id:long}", DeleteFarmAsync);
+
+        // Archive / restore. Deliberately next to Delete so the difference is
+        // visible in one place: Delete removes the farm and cascades to every
+        // zone, reading, event and alert it owns; Archive removes NOTHING and
+        // is reversible. Test data should go through Archive.
+        group.MapPost("/{id:long}/archive", ArchiveFarmAsync);
+        group.MapPost("/{id:long}/restore", RestoreFarmAsync);
+    }
+
+    // Hides a farm and its zones from default lists, reports and automatic
+    // reports, keeping every row. See migration 0036.
+    private static async Task<IResult> ArchiveFarmAsync(
+        long id, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+    {
+        return await SetArchivedAsync(id, archived: true, dataSource, loggerFactory);
+    }
+
+    private static async Task<IResult> RestoreFarmAsync(
+        long id, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+    {
+        return await SetArchivedAsync(id, archived: false, dataSource, loggerFactory);
+    }
+
+    private static async Task<IResult> SetArchivedAsync(
+        long id, bool archived, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+    {
+        var logger = loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmEndpoints");
+
+        await using var connection = await dataSource.OpenConnectionAsync();
+
+        // Existence is checked first so "no such farm" is a 404 rather than a
+        // silent success - archiving a farm id that does not exist should not
+        // report that it worked.
+        await using (var exists = new NpgsqlCommand(
+            "select name from farm where farm_id = $1", connection))
+        {
+            exists.Parameters.AddWithValue(id);
+
+            if (await exists.ExecuteScalarAsync() is not string name)
+            {
+                return Results.NotFound(new { error = "No such farm." });
+            }
+
+            logger.LogWarning(
+                "{Action} farm {FarmId} ({Name}) and its zones. Nothing is deleted.",
+                archived ? "Archiving" : "Restoring", id, name);
+        }
+
+        // The function moves the farm and its zones together - a farm archived
+        // while its zones stayed active would still feed the auto-report
+        // scheduler's zone lookup.
+        await using (var cmd = new NpgsqlCommand(
+            archived ? "select archive_farm($1)" : "select restore_farm($1)", connection))
+        {
+            cmd.Parameters.AddWithValue(id);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        return Results.Ok(new
+        {
+            farmId = id,
+            archived,
+            message = archived
+                ? "Farm archived. Nothing was deleted - its zones, readings and history are all still there."
+                : "Farm restored.",
+        });
     }
     
     
@@ -322,7 +388,10 @@ private static async Task<IResult> RegisterFarmAsync(
 
 
     private static async Task<IResult> GetFarmsAsync(
-        NpgsqlDataSource dataSource)
+        NpgsqlDataSource dataSource,
+        // "Show archived" on the admin farms page. Opt-in, so every existing
+        // caller keeps seeing only live farms without being changed.
+        bool? includeArchived)
     {
         await using var connection =
             await dataSource.OpenConnectionAsync();
@@ -340,11 +409,19 @@ private static async Task<IResult> RegisterFarmAsync(
             from farm f
             left join profile p
                 on p.id = f.owner_id
+            -- Archived farms are EXCLUDED by default and returned only when
+            -- the caller asks. lower() because farm.status has no CHECK
+            -- constraint and has always defaulted to 'Active' with a capital
+            -- A, so both spellings exist in the live data - see 0036's note.
+            -- Comparing case-insensitively is cheaper and safer than
+            -- rewriting every row.
+            where $1 or lower(coalesce(f.status, 'active')) <> 'inactive'
             order by f.farm_id
             """;
 
         await using var command =
             new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue(includeArchived ?? false);
 
         await using var reader =
             await command.ExecuteReaderAsync();

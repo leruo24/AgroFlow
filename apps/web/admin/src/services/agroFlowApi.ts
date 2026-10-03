@@ -616,3 +616,18 @@ export function saveReportSchedule(
     input,
   );
 }
+
+/* ---------------- Archive (step 6) ----------------
+
+   Archive is NOT delete and the two sit side by side in the UI on purpose.
+   Delete removes the farm and cascades to every zone, sensor reading,
+   irrigation event and alert it owns - that history is the evidence the
+   system worked. Archive hides it and keeps all of it, and is reversible. */
+
+export function archiveFarm(id: number): Promise<{ message: string }> {
+  return authorizedJson<{ message: string }>(`/api/farms/${id}/archive`, "POST", {});
+}
+
+export function restoreFarm(id: number): Promise<{ message: string }> {
+  return authorizedJson<{ message: string }>(`/api/farms/${id}/restore`, "POST", {});
+}

@@ -149,6 +149,27 @@ async function fetchZoneMap(): Promise<Map<number, ZoneRow>> {
    optimistic UI feedback until the corresponding backend work exists. */
 let users: User[] = [];
 let farms: Farm[] = [];
+
+/* "Show archived" on the Farms page. Archived farms are hidden from the
+   default list, from reports and from automatic reports - but nothing about
+   them is deleted, so they have to stay reachable. */
+let showArchivedFarms = false;
+
+export function getShowArchivedFarms(): boolean {
+  return showArchivedFarms;
+}
+
+export function setShowArchivedFarms(value: boolean): void {
+  showArchivedFarms = value;
+}
+
+/* farm.status has no CHECK constraint and has always defaulted to 'Active'
+   with a capital A, so both spellings exist in the live data. Every status
+   comparison added here is case-insensitive rather than rewriting the rows -
+   see migration 0036's note on why. */
+export function isArchived(status: string | null | undefined): boolean {
+  return (status ?? "").trim().toLowerCase() === "inactive";
+}
 let hardware: Hardware[] = [];
 let alerts: AdminAlert[] = [];
 let maintenance: MaintenanceJob[] = [];
@@ -275,7 +296,13 @@ export const api = {
     updated_at: string | null;
   };
 
-  const rows = await getAuthorized<ApiFarmRow[]>("/api/farms");
+  // Archived farms are excluded by the API unless asked for. The toggle is
+  // module state rather than a filter value because it changes WHAT IS
+  // FETCHED, not how a fetched list is filtered - applyFilters cannot bring
+  // back rows the server never sent.
+  const rows = await getAuthorized<ApiFarmRow[]>(
+    `/api/farms${showArchivedFarms ? "?includeArchived=true" : ""}`,
+  );
 
   farms = rows.map((f) => {
     const { province, region } = splitLocation(f.location);
