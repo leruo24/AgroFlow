@@ -1,32 +1,4 @@
 {
-  "//": [
-    "EAS build profiles for AgroFlow.",
-    "",
-    "WHY `preview` BUILDS AN APK AND `production` DOES NOT:",
-    "EAS defaults an Android build to an .aab (Android App Bundle), which is",
-    "what Google Play requires and what nothing else can install. A farmer",
-    "cannot sideload an .aab, and neither can a lecturer marking this. So",
-    "`preview` sets buildType: apk - a single file that installs by tapping",
-    "it - and `production` keeps the .aab for the day this reaches Play.",
-    "",
-    "`development` exists because expo-video is a NATIVE module: Expo Go",
-    "cannot load it, so testing the loading animation needs a development",
-    "build rather than the usual `npx expo start`.",
-    "",
-    "Run the installable one with:",
-    "    npx eas build -p android --profile preview",
-    "It needs an Expo login, so it is NOT run from here.",
-    "",
-    "BEFORE THE FIRST BUILD, set these two as EAS secrets - the app throws at",
-    "startup without them (lib/supabase.ts), so the APK would install and then",
-    "immediately fail:",
-    "    npx eas secret:create --name EXPO_PUBLIC_SUPABASE_URL --value <url>",
-    "    npx eas secret:create --name EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY --value <key>",
-    "They are secrets rather than values in this file only because this file",
-    "is committed; the publishable key is safe to expose in the built app, which",
-    "is what RLS is for."
-  ],
-
   "cli": {
     "version": ">= 5.9.0",
     "appVersionSource": "remote"
