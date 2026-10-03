@@ -28,7 +28,102 @@ public static class Fao56EngineEndpoints
         group.MapPut("/zones/{zoneId:long}/soil", SaveSoilType);
         group.MapGet("/zones/{zoneId:long}/insights", GetInsights);
         group.MapPost("/insights/{insightType}/dismiss", DismissInsight);
+
+        // ADMIN: "Run advice now" on a zone.
+        //
+        // Exists so the engine can be PROVEN to work, live, during setup and
+        // during the presentation - rather than everyone waiting until just
+        // after midnight for the nightly pass and hoping. It writes the
+        // normal zone_water_balance and ai_recommendation rows, exactly as
+        // that pass does, and never touches the pump: advisory only.
+        app.MapPost("/api/admin/zones/{zoneId:long}/run-advice", RunAdviceNow)
+            .RequireAuthorization()
+            .AddEndpointFilter<AgroFlow.Api.Auth.AdminOnlyFilter>();
     }
+
+    private static IResult RunAdviceNow(
+        long zoneId, Fao56EngineController engine, ILoggerFactory loggerFactory)
+    {
+        var logger = loggerFactory.CreateLogger("AgroFlow.Api.RunAdvice");
+
+        var zone = engine.Data.GetZone(zoneId);
+        if (zone is null) return Results.NotFound(new { error = "Zone not found." });
+
+        var today = Fao56EngineController.TodayInSast();
+
+        ZoneEngineResult result;
+        List<ZoneInsight> insights;
+
+        try
+        {
+            // The same call the nightly pass makes, so what an admin sees
+            // here is what the farmer will get - not a parallel code path
+            // that could disagree with it.
+            insights = engine.RunZoneAndWriteInsights(zone, today);
+            result = engine.RunZone(zone, today, persist: false);
+        }
+        catch (Exception ex)
+        {
+            // An engine fault during a live demonstration should say what
+            // broke, not vanish into a 500.
+            logger.LogError(ex, "Run-advice failed for zone {ZoneId}.", zoneId);
+
+            return Results.Problem(
+                title: "The advice engine could not run for this zone.",
+                detail: ex.Message,
+                statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        logger.LogInformation(
+            "Ran advice for zone {ZoneId} ({Name}): {Count} insight(s), {Missing} setup item(s) missing.",
+            zoneId, zone.ZoneName, insights.Count, result.MissingSetup.Count);
+
+        return Results.Ok(new
+        {
+            zoneId,
+            zoneName = zone.ZoneName,
+            ranFor = today.ToString("yyyy-MM-dd"),
+
+            // The headline numbers, in the order somebody checking the
+            // engine reads them.
+            stage = result.Stage is { } st ? Fao56EngineReference.StageLabel(st) : null,
+            dayOfSeason = result.DayOfSeason,
+            crop = result.Crop?.Label,
+            soil = result.Soil.Label,
+            soilWasDefaulted = result.SoilWasDefaulted,
+
+            // "Water need" - what the crop used today and what is owed.
+            etcTodayMm = Round(result.EtcTodayMm),
+            etoTodayMm = Round(result.EtoTodayMm),
+            depletionMm = Round(result.DepletionMm),
+            readilyAvailableMm = Round(result.RawMm),
+            totalAvailableMm = Round(result.TawMm),
+            recommendedLitres = Round(result.RecommendedLitres),
+            recommendedMinutes = result.RecommendedMinutes,
+
+            daysToNextWatering = result.DaysToNextWatering,
+            nextWateringDate = result.NextWateringDate?.ToString("yyyy-MM-dd"),
+
+            moisturePercent = Round(result.RelativeMoisturePercent),
+            balanceRan = result.BalanceRan,
+
+            // Why the engine could NOT answer, when it could not. This is the
+            // half that makes the action useful during setup: it names the
+            // missing field instead of leaving a blank screen.
+            setupMissing = result.MissingSetup,
+            limitations = result.Limitations,
+
+            insights = insights.Select(i => new
+            {
+                insightType = i.InsightType,
+                severity = i.Severity,
+                message = i.Message,
+            }),
+        });
+    }
+
+    private static double? Round(double? value) =>
+        value is { } v ? Math.Round(v, 1) : null;
 
     // Synchronous bodies: the engine's data layer is synchronous by the project's
     // DB/XDB/Controller pattern. Minimal APIs accept a non-Task return directly.

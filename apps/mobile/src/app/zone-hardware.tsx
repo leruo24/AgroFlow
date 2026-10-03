@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -318,6 +319,20 @@ export default function ZoneHardwareScreen() {
 
               {error && kit && <Text style={styles.error}>{error}</Text>}
             </View>
+
+            {/* The WiFi handover needs a phone: step 1 is joining the kit's
+                own network, which a desktop browser realistically cannot do.
+                Everything on this screen still WORKS on the web - the status,
+                the sensors, even sending the command - so this is a note, not
+                a disabled button. Saying it up front is kinder than letting
+                someone send the command and then discover they cannot finish
+                it. */}
+            {Platform.OS === 'web' && (
+              <Text style={styles.footnote}>
+                You are using AgroFlow in a browser. To finish a WiFi change you need the phone
+                that will join your kit&apos;s setup network, so do this step on your phone.
+              </Text>
+            )}
 
             <Text style={styles.footnote}>
               Your kit keeps watering on its own while it is off WiFi, using the last readings it

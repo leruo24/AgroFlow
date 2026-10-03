@@ -261,4 +261,57 @@ namespace AgroFlow.Business
             return freeCount < LowPoolWarningThreshold;
         }
     }
+
+    // The broker address handed to a board by GET /api/devices/mqtt-credentials
+    // (firmware v1.4.0).
+    //
+    // WHY THIS IS A RULE AND NOT TWO CONFIG READS
+    // -------------------------------------------
+    // A board that is given a BAD address is worse off than one given none:
+    // with none it falls back to its compiled-in MQTT_HOST and keeps working,
+    // but with "" or port 0 it tries, fails, and retries forever. So an
+    // unusable value has to come back as "not configured" rather than as
+    // itself, and that decision is worth stating once and testing.
+    //
+    // This matters for the thing it exists for: HiveMQ Cloud Serverless is
+    // retired on 31 December 2026, and this is the switch that moves every
+    // board to a new broker without a reflash. A typo in Mqtt__Host on the
+    // day of that move should leave the fleet on the old address, not strand
+    // it between two.
+    public static class MqttBrokerAddress
+    {
+        // Ports are 1-65535. 0 is "unset" in the config and is also what
+        // int.TryParse leaves behind on a failed parse, so it can never be
+        // sent as a real port.
+        public const int MinPort = 1;
+        public const int MaxPort = 65535;
+
+        public static string? ResolveHost(string? configuredHost)
+        {
+            return string.IsNullOrWhiteSpace(configuredHost) ? null : configuredHost!.Trim();
+        }
+
+        // Accepts the raw config string, because that is what IConfiguration
+        // hands back - parsing here keeps the "what counts as valid" decision
+        // in one place rather than at the call site.
+        public static int? ResolvePort(string? configuredPort)
+        {
+            if (string.IsNullOrWhiteSpace(configuredPort)) return null;
+
+            if (!int.TryParse(configuredPort.Trim(), out var port)) return null;
+
+            return port >= MinPort && port <= MaxPort ? port : (int?)null;
+        }
+
+        // A host with no usable port is still useful: the board falls back to
+        // its own compiled-in port, which is 8883 and almost certainly right
+        // for any TLS broker. A port with no host is not - there is nothing
+        // to connect it to - so it is dropped rather than sent on its own.
+        public static (string? Host, int? Port) Resolve(string? configuredHost, string? configuredPort)
+        {
+            var host = ResolveHost(configuredHost);
+
+            return host is null ? (null, null) : (host, ResolvePort(configuredPort));
+        }
+    }
 }

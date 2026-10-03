@@ -44,6 +44,33 @@ export function resetDripHelperSession(): void {
   shownThisSession = false;
 }
 
+// Whether the opening loading animation has finished.
+//
+// Drip waits for it. Without this, the greeting fires while the full-screen
+// animation is still up, its one-per-session flag is spent on a bubble nobody
+// saw, and the farmer never gets greeted at all.
+//
+// Module-level and NOT reset on sign-out: the animation plays once per app
+// launch, not once per login, so a farmer who signs out and back in should not
+// have Drip wait for an animation that is not going to play again.
+let loadingAnimationFinished = false;
+
+// Lets a listener wake up when the flag flips. A plain module variable cannot
+// trigger a re-render on its own, and Drip may well have mounted and bailed
+// out before the animation ended.
+const loadingAnimationListeners = new Set<() => void>();
+
+/** Called by LoadingAnimation once the overlay is really gone. */
+export function setLoadingAnimationFinished(): void {
+  if (loadingAnimationFinished) return;
+  loadingAnimationFinished = true;
+  for (const listener of loadingAnimationListeners) listener();
+}
+
+export function isLoadingAnimationFinished(): boolean {
+  return loadingAnimationFinished;
+}
+
 type Decision = {
   message: string;
   mood: DripMood;
@@ -147,8 +174,27 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
   // equivalent zones array on every render.
   const zoneKey = zones.map((z) => z.id).join(',');
 
+  // Re-runs the effect below when the opening animation finishes. Drip
+  // usually mounts while it is still playing, so without this the greeting
+  // would be decided against a flag that was false and never reconsidered.
+  const [animationDone, setAnimationDone] = useState(isLoadingAnimationFinished());
+
+  useEffect(() => {
+    if (animationDone) return;
+
+    const listener = () => setAnimationDone(true);
+    loadingAnimationListeners.add(listener);
+
+    return () => {
+      loadingAnimationListeners.delete(listener);
+    };
+  }, [animationDone]);
+
   useEffect(() => {
     if (!ready || !preferencesReady) return;
+    // Wait for the opening animation. Greeting the farmer underneath it would
+    // spend the one-per-session flag on a bubble nobody saw.
+    if (!animationDone) return;
     if (!preferences.showRaindropHelper) return;
     if (shownThisSession) return;
 
@@ -235,7 +281,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
     };
     // zoneKey rather than zones: see the note above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, preferencesReady, preferences.showRaindropHelper, zoneKey, unreadAlertCount]);
+  }, [ready, preferencesReady, animationDone, preferences.showRaindropHelper, zoneKey, unreadAlertCount]);
 
   const hide = useCallback(() => {
     cleanupTimers.current?.();

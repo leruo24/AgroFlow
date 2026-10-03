@@ -586,3 +586,170 @@ export async function requestZoneWifiChange(
 
   return (await response.json()) as ChangeWifiResult;
 }
+
+/* ------------------------------------------------------------------------
+   FORECAST
+   ------------------------------------------------------------------------ */
+
+// One day of the 7-day outlook.
+//
+// `advice` is null whenever the engine cannot speak to that day - no zone was
+// asked for, or the zone has no crop or planting date. The screen renders
+// nothing in that case rather than inventing a sentence: advice the app made
+// up is worse than no advice, because the farmer cannot tell the two apart.
+export type ForecastDay = {
+  date: string;
+  weekday: string;
+  minC: number | null;
+  maxC: number | null;
+  rainMm: number | null;
+  humidityPercent: number | null;
+  icon: 'sun' | 'cloud' | 'rain';
+  advice: string | null;
+};
+
+export type ForecastResponse = {
+  farmId: number;
+  zoneId: number | null;
+  zoneName: string | null;
+  days: ForecastDay[];
+  source: string;
+  // Set when there are no forecast rows at all, so the screen can say which
+  // of "nothing to show" and "something is broken" it is.
+  message: string | null;
+};
+
+export function fetchForecast(params?: {
+  farmId?: string | number;
+  zoneId?: string | number;
+}) {
+  const search = new URLSearchParams();
+  if (params?.farmId != null) search.set('farmId', String(params.farmId));
+  if (params?.zoneId != null) search.set('zoneId', String(params.zoneId));
+  const qs = search.toString();
+
+  return authorizedRequest<ForecastResponse>(
+    `/api/farmer/forecast${qs ? `?${qs}` : ''}`
+  );
+}
+
+/* ------------------------------------------------------------------------
+   REPORTS
+   ------------------------------------------------------------------------ */
+
+export type ReportKind = 'water_usage' | 'moisture' | 'schedule';
+export type ReportPeriodChoice = 'last_7_days' | 'last_30_days' | 'custom';
+
+export type ReportRequestRow = {
+  id: number;
+  reportType: ReportKind;
+  reportTypeLabel: string;
+  zoneId: number | null;
+  zoneName: string | null;
+  periodStart: string;
+  periodEnd: string;
+  periodLabel: string;
+  status: 'preparing' | 'ready' | 'failed';
+  statusLabel: string;
+  // The API path that regenerates the PDF. Not an object key - see migration
+  // 0034 for why this deployment stores no files.
+  filePath: string | null;
+  requestedVia: 'app' | 'auto';
+  createdAt: string;
+  completedAt: string | null;
+  // Plain words for the farmer, never the underlying reason.
+  error: string | null;
+};
+
+export function fetchReportRequests() {
+  return authorizedRequest<ReportRequestRow[]>('/api/farmer/report-requests');
+}
+
+export function createReportRequest(input: {
+  reportType: ReportKind;
+  period: ReportPeriodChoice;
+  periodStart?: string;
+  periodEnd?: string;
+  zoneId?: number | null;
+  farmId?: number | string | null;
+}) {
+  return authorizedRequest<{ id: number; status: string; message: string }>(
+    '/api/farmer/report-requests',
+    { method: 'POST', body: JSON.stringify(input) }
+  );
+}
+
+// Fetches a finished report and hands it to the phone to open.
+//
+// The PDF needs the sign-in token in a header, so it cannot be a plain link -
+// it is fetched as a blob and opened from there. On web that is an object
+// URL; on a phone there is no filesystem to write to without another native
+// module, so it opens in the system browser, which already knows how to
+// display a PDF.
+export async function openReportPdf(filePath: string): Promise<void> {
+  const apiBase = resolveApiBase();
+
+  if (!apiBase) {
+    throw new Error('AgroFlow.Api could not be located.');
+  }
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (!token) throw new Error('You must be signed in.');
+
+  const response = await fetch(`${apiBase}${filePath}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' },
+  });
+
+  if (!response.ok) {
+    throw new Error(`This report could not be opened (${response.status}).`);
+  }
+
+  const blob = await response.blob();
+
+  if (Platform.OS === 'web') {
+    const url = URL.createObjectURL(blob);
+    if (typeof window !== 'undefined') window.open(url, '_blank');
+    // Revoked on a delay: revoking immediately races the new tab's load.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+
+  // Data URL rather than a temporary file: writing one would need
+  // expo-file-system, and a new native module means a new APK for a feature
+  // that works without one.
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('The report could not be read.'));
+    reader.onloadend = () => resolve(String(reader.result ?? ''));
+    reader.readAsDataURL(blob);
+  });
+
+  const { openBrowserAsync } = await import('expo-web-browser');
+  await openBrowserAsync(base64);
+}
+
+/* ---- Automatic reports (the farmer's half of step 4) ---- */
+
+export type AutoReportSummary = {
+  enabled: boolean;
+  frequency: 'weekly' | 'monthly' | null;
+  reportTypes: ReportKind[];
+  reportTypeLabels: string[];
+  description: string;
+};
+
+export function fetchAutoReportSummary() {
+  return authorizedRequest<AutoReportSummary>('/api/farmer/auto-reports');
+}
+
+// The farmer's own off switch. Scoped server-side to their own farm; there
+// is deliberately no way to turn it back ON from here - an admin sets up
+// what a farmer gets, and a farmer can always stop it.
+export function stopAutoReports() {
+  return authorizedRequest<{ message: string }>('/api/farmer/auto-reports/stop', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}

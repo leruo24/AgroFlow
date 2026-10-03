@@ -12,6 +12,16 @@ namespace AgroFlow.Api.Endpoints;
 
 public static class ReportEndpoints
 {
+    // The three PDF builders below are `internal` rather than `private` so
+    // ReportGenerationService can call them directly.
+    //
+    // That is deliberate reuse and not a refactor: their bodies are
+    // untouched, and the alternative - a second renderer for the background
+    // queue - would mean the PDF a farmer downloads and the PDF the
+    // scheduler emails could drift apart. The ownership check inside each
+    // one still runs, because the generator hands it a ClaimsPrincipal built
+    // from the requesting farmer's own profile id.
+
     // South Africa has no daylight saving, so a fixed zone is safe for day boundaries.
     private const string ReportTimeZone = "Africa/Johannesburg";
     private const int MaxRangeDays = 366;
@@ -552,7 +562,7 @@ public static class ReportEndpoints
         });
     }
 
-        private static async Task<IResult> GetWaterUsagePdfAsync(
+        internal static async Task<IResult> GetWaterUsagePdfAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to,
         AgroFlow.Business.Fao56EngineController engine)
     {
@@ -656,7 +666,7 @@ public static class ReportEndpoints
         return Results.File(bytes, "application/pdf", $"water-usage-farm{farmId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
     }
 
-        private static async Task<IResult> GetMoisturePdfAsync(
+        internal static async Task<IResult> GetMoisturePdfAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to,
         AgroFlow.Business.Fao56EngineController engine)
     {
@@ -794,7 +804,7 @@ public static class ReportEndpoints
         return Results.File(bytes, "application/pdf", $"moisture-zone{zoneId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
     }
 
-        private static async Task<IResult> GetSchedulePdfAsync(
+        internal static async Task<IResult> GetSchedulePdfAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId,
         AgroFlow.Business.Fao56EngineController engine)
     {

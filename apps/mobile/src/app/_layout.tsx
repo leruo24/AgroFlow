@@ -15,9 +15,28 @@ import {
   View,
 } from 'react-native';
 
+import * as SplashScreen from 'expo-splash-screen';
+
 import {
   AgroFlowProvider,
 } from '@/context/AgroFlowContext';//provides shared information
+
+import {
+  LoadingAnimation,
+} from '@/components/LoadingAnimation';
+
+import {
+  setLoadingAnimationFinished,
+} from '@/components/DripHelper';
+
+// Hold the native splash until the loading animation is ready to take over.
+// Called at module scope, before any component renders, because the splash
+// auto-hides as soon as the first frame is drawn otherwise - and then there
+// IS no splash left to hand over from.
+//
+// It never rejects in a way that matters (already-hidden, or a platform
+// without a splash), and a failure here must not stop the app booting.
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 import {
   AuthProvider,//stores and provides authentication
@@ -140,6 +159,33 @@ function RootNavigator() {//decides which screens the user is permitted to acces
   );
 }
 
+// Sits INSIDE AuthProvider so it can read isLoading - "the app has finished
+// starting" means the Supabase session has been restored and the app knows
+// whether to show login or the tabs. A separate component because hooks
+// cannot be called above the provider that supplies them.
+function RootShell() {
+  const { isLoading } = useAuth();
+
+  return (
+    <>
+      <View style={Platform.OS === 'web' ? styles.webFrame : styles.nativeFrame}>
+        <RootNavigator />
+      </View>
+
+      {/* Above everything, including the login screen, and deliberately
+          independent of the "Raindrop helper" and "Show page help" settings -
+          this is the app starting, not a helper the farmer can switch off.
+
+          Drip is told when it finishes so its greeting never lands on top of
+          the animation. */}
+      <LoadingAnimation
+        appReady={!isLoading}
+        onFinished={setLoadingAnimationFinished}
+      />
+    </>
+  );
+}
+
 export default function RootLayout() {/*wraps the application with ThemeProvider, AuthProvider, and AgroFlowProvider to provide theme, authentication, and farm state contexts throughout the app. It renders the RootNavigator component, which defines the main navigation structure of the app using Expo Router's Stack navigator.*/
   return (
     <ThemeProvider>
@@ -147,9 +193,7 @@ export default function RootLayout() {/*wraps the application with ThemeProvider
       <AuthProvider>
         {/* Farm data provider */}
         <AgroFlowProvider>
-          <View style={Platform.OS === 'web' ? styles.webFrame : styles.nativeFrame}>
-            <RootNavigator />
-          </View>
+          <RootShell />
           {/*reads authentication state */}
         </AgroFlowProvider>
       </AuthProvider>

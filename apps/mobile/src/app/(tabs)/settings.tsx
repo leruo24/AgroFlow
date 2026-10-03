@@ -361,6 +361,17 @@ export default function SettingsScreen() {
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push('/reports')}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Reports"
+          >
+            <Text style={styles.profileText}>Reports</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
           {/* Telegram is how AgroFlow reaches a farmer when the app is
               shut - sign-in details, dangerous weather, a kit that has
               stopped working - so whether it is connected belongs where a

@@ -1,4 +1,4 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.3.0).
+// AgroFlow irrigation node - ESP32 firmware (v1.4.0).
 //
 // Architecture (unchanged): WiFiManager setup portal + one-time enrollment code ->
 // /api/devices/claim; MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors
@@ -36,6 +36,13 @@
 //      Until a new WiFi is saved, the setup page keeps reopening (also after a reboot),
 //      and watering continues on the offline fallback.
 //
+// v1.4.0 adds:
+//   6. BROKER ADDRESS FROM THE SERVER. /api/devices/mqtt-credentials may also return
+//      mqttHost and mqttPort. If present, the board connects there instead of the
+//      compiled-in default, so moving off HiveMQ Cloud Serverless (retired 31 Dec 2026)
+//      or to any other broker is a Railway setting - no reflash. Missing values fall
+//      back to the compiled-in MQTT_HOST/MQTT_PORT.
+//
 // Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
 // DHT sensor library for ESPx (beegee_tokyo).
 
@@ -68,7 +75,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Bump this AND Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json per release.
-const char *FIRMWARE_VERSION = "1.3.0";
+const char *FIRMWARE_VERSION = "1.4.0";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -124,6 +131,8 @@ String mqttUser = "";
 String mqttPass = "";
 int authFailures = 0;
 
+String mqttHostOverride = "";        // from the server; must outlive setServer(), so kept global
+uint16_t mqttPortOverride = 0;
 bool wifiForgotten = false;          // "change WiFi" requested; cleared once a new WiFi is saved
 unsigned long lastCredFetchMs = 0;
 const unsigned long CRED_FETCH_RETRY_MS = 60000;
@@ -388,6 +397,14 @@ bool fetchMqttCredentials() {
   const char *mp = r["mqttPassword"] | "";
   if (strlen(mu) == 0 || strlen(mp) == 0) return false;
   mqttUser = mu; mqttPass = mp;
+  const char *host = r["mqttHost"] | "";
+  uint16_t port = r["mqttPort"] | 0;
+  if (strlen(host) > 0) {
+    mqttHostOverride = host;
+    mqttPortOverride = port > 0 ? port : MQTT_PORT;
+    mqttClient.setServer(mqttHostOverride.c_str(), mqttPortOverride);
+    Serial.printf("MQTT broker from server: %s:%u\n", mqttHostOverride.c_str(), mqttPortOverride);
+  }
   Serial.println("MQTT login received from server (held in memory only)");
   return true;
 }

@@ -46,6 +46,7 @@ export const helpContent = {
     body: [
       'A record of every watering: when it ran, for how long, and roughly how much water it used.',
       'Water amounts are estimates worked out from the pump running time. There is no water meter.',
+      'Tap "Alerts & advice" to see everything we have told you, and whether you have read it. You can narrow it down by zone, by type and by how far back to look.',
     ],
   },
 
@@ -106,6 +107,24 @@ export const helpContent = {
       'This sets when the zone waters, and when it stops, back to what we recommend for your crop and soil.',
       'It only works once the crop, the soil type and the wet/dry setup are all done.',
       'Your own settings are replaced, so only use it if you want to start again.',
+    ],
+  },
+
+  reports: {
+    title: 'Your reports',
+    body: [
+      'Ask for a report and we will make you a PDF you can keep, print or send on.',
+      'Water usage shows how much water went on. Soil moisture shows how wet one zone has been. Watering schedule & advice shows what we suggest for the week ahead.',
+      'A report takes a minute or two. It shows as Ready here when it is done, and we also send it to you on Telegram if you have connected it.',
+    ],
+  },
+
+  forecast: {
+    title: 'The week ahead',
+    body: [
+      'The weather for the next seven days: how cold and how hot it should get, and how much rain is expected.',
+      'For a zone, we also say what it means for watering that day - whether you will likely need to water, or whether the rain should cover it.',
+      'This is a forecast for your area, not a reading from your farm, so treat it as a guide.',
     ],
   },
 
