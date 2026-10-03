@@ -586,3 +586,49 @@ export async function requestZoneWifiChange(
 
   return (await response.json()) as ChangeWifiResult;
 }
+
+/* ------------------------------------------------------------------------
+   FORECAST
+   ------------------------------------------------------------------------ */
+
+// One day of the 7-day outlook.
+//
+// `advice` is null whenever the engine cannot speak to that day - no zone was
+// asked for, or the zone has no crop or planting date. The screen renders
+// nothing in that case rather than inventing a sentence: advice the app made
+// up is worse than no advice, because the farmer cannot tell the two apart.
+export type ForecastDay = {
+  date: string;
+  weekday: string;
+  minC: number | null;
+  maxC: number | null;
+  rainMm: number | null;
+  humidityPercent: number | null;
+  icon: 'sun' | 'cloud' | 'rain';
+  advice: string | null;
+};
+
+export type ForecastResponse = {
+  farmId: number;
+  zoneId: number | null;
+  zoneName: string | null;
+  days: ForecastDay[];
+  source: string;
+  // Set when there are no forecast rows at all, so the screen can say which
+  // of "nothing to show" and "something is broken" it is.
+  message: string | null;
+};
+
+export function fetchForecast(params?: {
+  farmId?: string | number;
+  zoneId?: string | number;
+}) {
+  const search = new URLSearchParams();
+  if (params?.farmId != null) search.set('farmId', String(params.farmId));
+  if (params?.zoneId != null) search.set('zoneId', String(params.zoneId));
+  const qs = search.toString();
+
+  return authorizedRequest<ForecastResponse>(
+    `/api/farmer/forecast${qs ? `?${qs}` : ''}`
+  );
+}

@@ -109,6 +109,15 @@ export const helpContent = {
     ],
   },
 
+  forecast: {
+    title: 'The week ahead',
+    body: [
+      'The weather for the next seven days: how cold and how hot it should get, and how much rain is expected.',
+      'For a zone, we also say what it means for watering that day - whether you will likely need to water, or whether the rain should cover it.',
+      'This is a forecast for your area, not a reading from your farm, so treat it as a guide.',
+    ],
+  },
+
   zoneHardware: {
     title: 'Your kit',
     body: [

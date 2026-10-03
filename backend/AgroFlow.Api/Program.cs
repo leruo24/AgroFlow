@@ -375,6 +375,7 @@ app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 app.MapReportEndpoints();
 app.MapFao56EngineEndpoints();
+app.MapForecastEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

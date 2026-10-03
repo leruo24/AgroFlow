@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { router } from 'expo-router';
-import { Bell, ChevronRight, Clock3, Droplets, Settings2 } from 'lucide-react-native';
+import { Bell, ChevronRight, Clock3, CloudSun, Droplets, Settings2 } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAgroFlow } from '@/context/AgroFlowContext';
@@ -64,6 +64,9 @@ export default function HomeScreen() {
         <Droplets size={22} color={colors.white} strokeWidth={1.7} /><Text style={styles.primaryActionText}>Manage Irrigation</Text><ChevronRight size={20} color={colors.white} />
       </TouchableOpacity>
       {[
+        // Forecast first: it is the only one of these that answers a question
+        // the farmer has BEFORE they open the app ("do I water tomorrow?").
+        { label: 'The week ahead', route: '/forecast' as const, Icon: CloudSun },
         { label: 'View Alerts', route: '/alerts' as const, Icon: Bell },
         { label: 'View History', route: '/history' as const, Icon: Clock3 },
         { label: 'Settings', route: '/settings' as const, Icon: Settings2 },
