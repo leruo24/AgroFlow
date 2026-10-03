@@ -118,5 +118,25 @@ export function createSettingsStyles(colors: AppColors) {
       fontSize: Type.title,
       color: colors.text,
     },
+
+    // A status word plus the chevron, on the trailing edge of a row.
+    rowTrailing: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.two,
+    },
+
+    // Connected / Not connected. Carries the WORD as well as the colour -
+    // "Not connected" is not a failure and must not read as a red error, and
+    // neither state may depend on colour alone to be understood.
+    statusConnected: {
+      fontSize: Type.caption,
+      fontWeight: '600',
+      color: colors.success,
+    },
+    statusNotConnected: {
+      fontSize: Type.caption,
+      color: colors.textSecondary,
+    },
   });
 }

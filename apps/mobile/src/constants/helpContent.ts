@@ -109,6 +109,15 @@ export const helpContent = {
     ],
   },
 
+  zoneHardware: {
+    title: 'Your kit',
+    body: [
+      'This is the little box in your field: the sensor that reads your soil and the switch that runs your pump.',
+      'It says whether the kit is talking to us right now, and whether each sensor is working. If the temperature sensor stops, we use the weather for your area instead and your watering carries on.',
+      'Use Change WiFi if you got a new router or changed your WiFi password. Your watering keeps running while you do it.',
+    ],
+  },
+
   zoneSoil: {
     title: 'Soil type',
     body: [

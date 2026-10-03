@@ -374,6 +374,38 @@ content: {
     inputColumn: {
       flex: 1,
     },
+    // The Kit / Soil type / Teach-the-sensor rows. Modelled on switchRow
+    // below - same height, same hairline, same two-line copy - but with a
+    // chevron instead of a switch, because each one is a door to somewhere
+    // else rather than a setting toggled in place.
+    linkRow: {
+      minHeight: 56,
+      marginBottom: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      backgroundColor: colors.background,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.divider,
+    },
+    linkRowCopy: {
+      flex: 1,
+    },
+    linkRowTitle: {
+      fontSize: Type.body,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    linkRowHint: {
+      marginTop: 2,
+      fontSize: Type.caption,
+      lineHeight: 18,
+      color: colors.textSecondary,
+    },
+
     switchRow: {
       minHeight: 56,
       marginBottom: 10,
