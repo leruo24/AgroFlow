@@ -24,6 +24,7 @@ import {
   saveReportSchedule,
   archiveFarm,
   restoreFarm,
+  runAdviceNow,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
@@ -227,7 +228,7 @@ async function openUserProfile(id: string): Promise<void> {
 async function openFarmDetail(id: number): Promise<void> {
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
     // Read-only, and allowed to fail: the rest of the drawer must still open
     // if 0033 has not been applied or the query is refused.
@@ -241,6 +242,14 @@ async function openFarmDetail(id: number): Promise<void> {
     getReportSchedule(id).catch((e: unknown) => {
       console.warn("Could not load the report schedule for farm", id, e);
       return null;
+    }),
+    // REAL zones, from the API. The "Irrigation schedules" section below is
+    // still the pre-existing mock working copy (irrigation_schedule was
+    // dropped in 0010), so its ids are not zone ids and cannot be used to
+    // run the engine against anything.
+    getReportZones(id).catch((e: unknown) => {
+      console.warn("Could not load zones for farm", id, e);
+      return [];
     }),
   ]);
 
@@ -318,6 +327,31 @@ async function openFarmDetail(id: number): Promise<void> {
              </p>
            </div>`
           : `<p class="muted">Nothing has been sent to this farm yet.</p>`),
+      // The engine, per zone, on demand. Placed above the auto-report
+      // summary because during a setup visit this is the thing somebody
+      // actually clicks - it is how you prove the installation works before
+      // leaving the farm.
+      section(`Zones (${farmZones.length})`,
+        farmZones.length
+          ? `<div class="table-wrap"><table>
+               <thead><tr><th>Zone</th><th>Crop</th><th>Advice</th></tr></thead>
+               <tbody>${farmZones.map((z) => `
+                 <tr>
+                   <td>${esc(z.name)}</td>
+                   <td>${esc(z.cropType ?? "Not set")}</td>
+                   <td>
+                     <a href="#" class="row-act" data-act="run-advice" data-id="${z.zoneId}">
+                       Run advice now
+                     </a>
+                   </td>
+                 </tr>`).join("")}
+               </tbody></table>
+             <p class="muted">
+               Runs the FAO-56 engine for that zone today and shows what it worked out, including
+               anything still missing from its setup. Advisory only - it never starts a pump.
+             </p></div>`
+          : `<p class="muted">No zones on this farm yet.</p>`),
+
       // AUTO REPORTS. Shown as a summary with an Edit action rather than an
       // inline form: the drawer is already long, and this is a setting
       // changed once when a farm is set up, not something read on every
@@ -1181,6 +1215,102 @@ case "delete-user": {
         );
 
       return void refresh();
+    }
+
+    /* "Run advice now" on a zone. The point is to be able to SHOW the
+       engine working during setup and the presentation, so the result is
+       laid out as the numbers somebody checking it reads in order - and,
+       when it cannot answer, the named missing fields rather than a blank
+       panel. */
+    case "run-advice": {
+      const zoneId = Number(idAttr);
+      if (!zoneId) return void toast("No zone selected.", "warn");
+
+      toast("Running the advice engine…", "success");
+
+      try {
+        const r = await runAdviceNow(zoneId);
+
+        const row = (label: string, value: string): string =>
+          `<div class="detail-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`;
+
+        const num = (v: number | null, unit: string): string =>
+          v === null ? "Not known" : `${v} ${unit}`;
+
+        return openDrawer({
+          title: `Advice for ${r.zoneName}`,
+          subtitle: `Engine run for ${r.ranFor}`,
+          wide: true,
+          bodyHtml: `
+            <div class="drawer-section">
+              <h6>Crop and season</h6>
+              <div class="detail-list">
+                ${row("Crop", r.crop ?? "Not set")}
+                ${row("Stage", r.stage ?? "Not known")}
+                ${row("Day of season", r.dayOfSeason === null ? "Not known" : String(r.dayOfSeason))}
+                ${row("Soil", r.soilWasDefaulted ? `${r.soil} (defaulted)` : r.soil)}
+              </div>
+            </div>
+
+            <div class="drawer-section">
+              <h6>Water need today</h6>
+              <div class="detail-list">
+                ${row("Crop used today (ETc)", num(r.etcTodayMm, "mm"))}
+                ${row("Reference (ET0)", num(r.etoTodayMm, "mm"))}
+                ${row("Soil water used up", num(r.depletionMm, "mm"))}
+                ${row("Can be used before stress", num(r.readilyAvailableMm, "mm"))}
+                ${row("Soil can hold", num(r.totalAvailableMm, "mm"))}
+                ${row("Suggested water", num(r.recommendedLitres, "L"))}
+                ${row("Suggested run time", r.recommendedMinutes === null ? "Not known" : `${r.recommendedMinutes} min`)}
+                ${row("Soil moisture", num(r.moisturePercent, "%"))}
+              </div>
+            </div>
+
+            <div class="drawer-section">
+              <h6>Next watering</h6>
+              <div class="detail-list">
+                ${row("Days until needed", r.daysToNextWatering === null ? "Not known" : String(r.daysToNextWatering))}
+                ${row("Expected date", r.nextWateringDate ?? "Not known")}
+                ${row("Water balance ran", r.balanceRan ? "Yes" : "No")}
+              </div>
+            </div>
+
+            ${r.setupMissing.length ? `
+              <div class="drawer-section">
+                <h6>Still needed before the engine can advise fully</h6>
+                <ul class="drawer-list">
+                  ${r.setupMissing.map((m) => `<li>${esc(m)}</li>`).join("")}
+                </ul>
+              </div>` : ""}
+
+            ${r.limitations.length ? `
+              <div class="drawer-section">
+                <h6>Limitations</h6>
+                <ul class="drawer-list">
+                  ${r.limitations.map((m) => `<li>${esc(m)}</li>`).join("")}
+                </ul>
+              </div>` : ""}
+
+            <div class="drawer-section">
+              <h6>Advice written for the farmer (${r.insights.length})</h6>
+              ${r.insights.length
+                ? `<ul class="drawer-list">${r.insights.map((i) =>
+                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)}</li>`).join("")}</ul>`
+                : `<p class="muted">Nothing to tell the farmer today.</p>`}
+            </div>
+
+            <p class="muted">
+              Advisory only. This writes the same rows the nightly pass writes and never
+              starts or stops a pump.
+            </p>`,
+        });
+      } catch (error) {
+        showErrorModal(
+          "The advice engine could not run",
+          error instanceof Error ? error.message : "The engine did not answer.",
+        );
+        return;
+      }
     }
 
     case "go-mqtt-logins":
