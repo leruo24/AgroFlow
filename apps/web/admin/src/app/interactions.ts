@@ -1,6 +1,6 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
-import { api } from "@/data/api";
+import { api, getFarmAlertHistory } from "@/data/api";
 import { toast } from "@/lib/toast";
 import { openDrawer } from "@/lib/drawer";
 import {
@@ -223,8 +223,14 @@ async function openUserProfile(id: string): Promise<void> {
 async function openFarmDetail(id: number): Promise<void> {
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
+    // Read-only, and allowed to fail: the rest of the drawer must still open
+    // if 0033 has not been applied or the query is refused.
+    getFarmAlertHistory(id).catch((e: unknown) => {
+      console.warn("Could not load alert history for farm", id, e);
+      return [];
+    }),
   ]);
 
   const farmUsers = users.filter((u) => u.farm === f.name);
@@ -269,6 +275,38 @@ async function openFarmDetail(id: number): Promise<void> {
         `<span class="mono">${esc(m.id)}</span> ${esc(m.issue)} — <b>${esc(m.status)}</b>`))),
       section(`Alerts (${farmAlerts.length})`, list(farmAlerts.map((a) =>
         `<span class="mono">${esc(a.id)}</span> ${esc(a.title)} — <b>${esc(a.status)}</b>`))),
+
+      // What the farmer has actually been told, and whether they looked at
+      // it. The section above is the OPEN alert queue; this is the record,
+      // and the "Seen"/"Dismissed" column is the only way to tell whether the
+      // channel is working at all. Read-only on purpose: an admin marking a
+      // farmer's alert as read would destroy that evidence.
+      section(
+        `Alerts & advice seen by the farmer (${alertHistory.length})`,
+        alertHistory.length
+          ? `<div class="table-wrap"><table>
+               <thead><tr><th>When</th><th>Zone</th><th>Type</th><th>Message</th><th>Status</th></tr></thead>
+               <tbody>${alertHistory.slice(0, 50).map((h) => `
+                 <tr>
+                   <td>${esc(fmtDate(h.createdAt))}</td>
+                   <td>${esc(h.zoneName)}</td>
+                   <td>${h.kind === "alert" ? "Alert" : "Advice"}</td>
+                   <td>${esc(h.message)}</td>
+                   <td>${h.seen
+                     ? `<span class="muted">${esc(h.status)}</span>`
+                     : `<b>New</b>`}</td>
+                 </tr>`).join("")}
+               </tbody>
+             </table>
+             ${alertHistory.length > 50
+               ? `<p class="muted">Showing the 50 most recent of ${alertHistory.length}.</p>`
+               : ""}
+             <p class="muted">
+               "New" means nobody has opened it in the app. Advice is marked Dismissed when the
+               farmer clears it; it has no separate read state.
+             </p>
+           </div>`
+          : `<p class="muted">Nothing has been sent to this farm yet.</p>`),
       section("Device inventory", `
         <div class="detail-list">
           ${Object.entries(farmHw.reduce<Record<string, number>>((acc, h) => {

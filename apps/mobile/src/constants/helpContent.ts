@@ -46,6 +46,7 @@ export const helpContent = {
     body: [
       'A record of every watering: when it ran, for how long, and roughly how much water it used.',
       'Water amounts are estimates worked out from the pump running time. There is no water meter.',
+      'Tap "Alerts & advice" to see everything we have told you, and whether you have read it. You can narrow it down by zone, by type and by how far back to look.',
     ],
   },
 

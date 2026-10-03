@@ -23,6 +23,10 @@ import {
   sendManualIrrigationCommand,
   updateZoneThroughApi,
 } from '@/services/agroFlowApi';
+
+import {
+  markAlertReadInDatabase,
+} from '@/services/alertHistoryService';
 //status stypes - restricts irrigation to these statuses
 export type IrrigationStatus =
   | 'Active'
@@ -1769,6 +1773,20 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
   function markAlertAsRead(
     alertId: string
   ) {
+    // Record it in the database as well as on this phone.
+    //
+    // Until now `read` lived ONLY in AsyncStorage, so reinstalling the app or
+    // signing in on a second phone marked everything unread again - and
+    // nobody on the AgroFlow side could tell whether a farmer had ever seen
+    // the frost warning that mattered. See migration 0033.
+    //
+    // Deliberately not awaited and never surfaced: the row is already shown
+    // as read on screen, and failing to write that down must not put an error
+    // in front of someone who was just reading their alerts.
+    void markAlertReadInDatabase(
+      alertId
+    );
+
     setAlerts(
       (
         current
