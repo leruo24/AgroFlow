@@ -38,6 +38,11 @@
    ========================================================================== */
 
 import { supabase } from "@/lib/supabase";
+import {
+  getAdminHardware,
+  updateServiceRequestStatusThroughApi,
+  type AdminHardwareRow,
+} from "@/services/agroFlowApi";
 
 import type {
   Kpis, Trends, GrowthSeries, SystemHealth, StatusDistribution,
@@ -361,28 +366,40 @@ export const api = {
     });
   },
 
+  /* Through AgroFlow.Api, not straight to Supabase.
+     The direct write worked - an admin's JWT satisfies
+     service_request_all_admin (0021) - but nothing server-side ever learned
+     the status had changed, so there was no moment at which the farmer's
+     "your hardware kit is booked" message could be sent, and putting the bot
+     token in the browser is not an option.
+
+     The RLS policy and the direct route both still exist, so an older build
+     of this dashboard keeps working, silently, without the messages. */
   async updateServiceRequestStatus(
     id: number,
     status: ServiceRequestStatus,
   ): Promise<void> {
-    const { error } = await supabase
-      .from("service_request")
-      .update({
-        status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-
-    if (error) throw error;
+    await updateServiceRequestStatusThroughApi(id, status);
   },
 
   async getHardware(): Promise<Hardware[]> {
-    const [{ data, error }, zoneMap, farmNames] = await Promise.all([
+    // The API call supplies what RLS deliberately cannot: token status and
+    // the assigned MQTT login username. It is allowed to FAIL - the table
+    // then renders exactly as it did before v1.3.0 rather than not at all,
+    // because an admin who cannot see their fleet is worse off than one who
+    // cannot see its token column.
+    const [{ data, error }, zoneMap, farmNames, enriched] = await Promise.all([
       supabase.from("hardware").select("hardware_id, device_name, device_type, zone_id, status, last_seen, created_at"),
       fetchZoneMap(),
       fetchFarmNameMap(),
+      getAdminHardware().catch((enrichError: unknown) => {
+        console.warn("Could not load per-device token / MQTT details:", enrichError);
+        return [] as AdminHardwareRow[];
+      }),
     ]);
     if (error) throw error;
+
+    const extra = new Map(enriched.map((row) => [String(row.hardwareId), row]));
 
     hardware = (data as HardwareRow[] ?? []).map((h) => {
       const zone = h.zone_id !== null ? zoneMap.get(h.zone_id) : undefined;
@@ -391,7 +408,10 @@ export const api = {
         type: h.device_type,
         farm: zone ? farmNames.get(zone.farm_id) ?? "Unassigned" : "Unassigned",
         province: "",
-        firmware: "",
+        // hardware.firmware_version, reported by the board at claim and on
+        // every 4-hourly firmware-check. Empty until a board on 1.3.0 has
+        // called in - there was no column to read before 0028.
+        firmware: extra.get(String(h.hardware_id))?.firmwareVersion ?? "",
         // No battery/uptime telemetry column exists on hardware.
         battery: null,
         uptimePct: 0,
@@ -402,6 +422,16 @@ export const api = {
         maintenanceState: "OK",
         installed: h.created_at.slice(0, 10),
         lastSeen: h.last_seen,
+
+        // v1.3.0 additions, from the API. Undefined when the enrichment
+        // call failed; every consumer treats that as "not known".
+        zoneId: h.zone_id,
+        deviceId: extra.get(String(h.hardware_id))?.deviceId ?? null,
+        zoneName: zone?.name ?? null,
+        online: extra.get(String(h.hardware_id))?.online,
+        tokenStatus: extra.get(String(h.hardware_id))?.tokenStatus,
+        mqttUsername: extra.get(String(h.hardware_id))?.mqttUsername ?? null,
+        enrollmentStatus: extra.get(String(h.hardware_id))?.enrollmentStatus,
       };
     });
     return hardware;

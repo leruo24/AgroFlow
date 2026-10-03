@@ -1,5 +1,5 @@
 import { api } from "@/data/api";
-import { esc, fmtInt, fmtDate, fmtPct } from "@/lib/format";
+import { esc, fmtInt, fmtDate } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
 import { HARDWARE_TYPES, PROVINCES } from "@/data/referenceData";
 import {
@@ -28,9 +28,18 @@ export async function hardwarePage(): Promise<string> {
   const offline = hardware.filter((h) => h.status === "Offline" || h.status === "Fault").length;
   const needsService = hardware.filter((h) => h.maintenanceState === "Due" || h.maintenanceState === "Overdue").length;
 
+  // The number that decides when Devices:LegacyApiKeyEnabled can be turned
+  // off: boards claimed before v1.3.0 have no per-device token and are still
+  // authenticating with the shared fleet key. Once this is zero, the flag can
+  // go. Surfaced as a KPI because it is a one-time migration to finish, not a
+  // permanent property of the fleet.
+  const legacyKey = hardware.filter((h) => h.tokenStatus === "legacy key").length;
+  const revoked = hardware.filter((h) => h.tokenStatus === "revoked").length;
+
   return `
   ${pageHeader("Farm Hardware", "All registered hardware across every farm on the platform.",
-    `<button class="btn" data-act="add-device">+ Register Hardware</button>`)}
+    `<button class="btn ghost" data-act="go-mqtt-logins">MQTT logins</button>
+     <button class="btn" data-act="add-device">+ Register Hardware</button>`)}
 
   <div class="grid kpis four">
     ${kpiCard({ label: "Total Hardware", value: total, icon: Icon.radio })}
@@ -38,6 +47,18 @@ export async function hardwarePage(): Promise<string> {
     ${kpiCard({ label: "Offline / Fault", value: offline, icon: Icon.circleX })}
     ${kpiCard({ label: "Needs Service", value: needsService, icon: Icon.wrench })}
   </div>
+
+  ${legacyKey > 0 || revoked > 0 ? `
+  <div class="grid kpis two">
+    ${kpiCard({ label: "On the legacy shared key", value: legacyKey, icon: Icon.radio })}
+    ${kpiCard({ label: "Revoked", value: revoked, icon: Icon.circleX })}
+  </div>
+  ${legacyKey > 0 ? `<div class="muted" style="margin:8px 0 16px">
+    ${legacyKey} board${legacyKey === 1 ? " has" : "s have"} no per-device token and
+    ${legacyKey === 1 ? "is" : "are"} still using the shared key. Re-enrol
+    ${legacyKey === 1 ? "it" : "them"} on firmware 1.3.0, then set
+    <span class="mono sm">Devices__LegacyApiKeyEnabled=false</span> to close that path.
+  </div>` : ""}` : ""}
 
   ${filterBar({
     page: "hardware",
@@ -55,25 +76,40 @@ export async function hardwarePage(): Promise<string> {
 
   ${panel("Hardware Inventory", "Registered controllers, pumps, sensors, stations and gateways",
     resultCount(filtered.length, total, "devices"),
-    table(["Device ID", "Type", "Farm", "Firmware", "Battery", "Uptime", "Status", "Maintenance", "Actions"],
+    table(["Device ID", "Type", "Farm", "Firmware", "Connection", "Last seen", "Token", "MQTT login", "Status", "Actions"],
       filtered, (h) => [
-        `<span class="mono">${esc(h.id)}</span>`,
+        `<span class="mono">${esc(h.deviceId ?? h.id)}</span>`,
         esc(h.type),
-        esc(h.farm),
-        `<span class="mono sm">${esc(h.firmware)}</span>`,
-        h.battery === null
-          ? `<span class="muted">Mains</span>`
-          : `<span class="batt ${h.battery < 20 ? "batt-low" : ""}">
-               <span class="batt-bar"><i style="width:${h.battery}%"></i></span>${fmtInt(h.battery)}%
-             </span>`,
-        fmtPct(h.uptimePct),
+        esc(h.zoneName ? `${h.farm} · ${h.zoneName}` : h.farm),
+        // firmware_version, reported by the board on claim and on every
+        // 4-hourly firmware-check. Blank until a board on 1.3.0 has called in.
+        `<span class="mono sm">${esc(h.firmware || "—")}</span>`,
+        // Deliberately separate from `status` below. This is the 5-minute
+        // "is it listening right now" answer that decides whether a command
+        // will arrive; `status` is DeviceStatusMonitorService's 30-minute
+        // alerting judgement. They legitimately disagree.
+        h.online === undefined
+          ? `<span class="muted">Unknown</span>`
+          : badge(h.online ? "Online" : "Offline", h.online ? "good" : "warn"),
+        esc(h.lastSeen ? fmtDate(h.lastSeen) : "Never"),
+        h.tokenStatus
+          ? badge(h.tokenStatus, h.tokenStatus === "active" ? "good" : "warn")
+          : `<span class="muted">Unknown</span>`,
+        h.mqttUsername
+          ? `<span class="mono sm">${esc(h.mqttUsername)}</span>`
+          : `<span class="muted">Shared</span>`,
         badge(h.status),
-        badge(h.maintenanceState),
+        // The three new actions are addressed by ZONE, not hardware id: the
+        // commands go into irrigation_commands, which is keyed on zone. A
+        // board with no zone cannot be commanded at all, so those links are
+        // omitted rather than rendered and then failing on click.
         `<span class="row-act">
           <a href="#" data-act="view-device" data-id="${esc(h.id)}">View</a>
-          <a href="#" data-act="restart-device" data-id="${esc(h.id)}">Restart</a>
+          ${h.zoneId ? `
+          <a href="#" data-act="device-change-wifi" data-id="${esc(h.id)}">Change WiFi</a>
+          <a href="#" data-act="device-open-setup" data-id="${esc(h.id)}">Open setup page</a>
+          <a href="#" class="danger" data-act="device-revoke" data-id="${esc(h.id)}">Revoke</a>` : ""}
           <a href="#" data-act="schedule-device-maint" data-id="${esc(h.id)}">Service</a>
-          <a href="#" data-act="replace-device" data-id="${esc(h.id)}">Replace</a>
           <a href="#" class="danger" data-act="remove-device" data-id="${esc(h.id)}">Remove</a>
         </span>`,
       ], "No hardware matches the current filters."))}

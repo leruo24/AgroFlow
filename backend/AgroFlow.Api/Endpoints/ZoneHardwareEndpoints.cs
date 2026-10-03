@@ -33,6 +33,29 @@ public record ZoneHardwareResponse(
 
 public record ChangeWifiResponse(Guid CommandId, string SetupNetworkName, string SetupNetworkPassword);
 
+// One row of the admin hardware page.
+//
+// MqttUsername and TokenStatus are the reason this endpoint exists at all.
+// The dashboard reads most tables straight from Supabase under RLS, but
+// migration 0028 deliberately revoked the whole-table select on hardware and
+// granted an explicit column list that EXCLUDES device_token_hash and
+// token_revoked_at - and 0029 gives no client role any grant on
+// mqtt_credential_pool whatsoever. Neither value can be reached from the
+// browser by design, so the API derives them.
+public record AdminHardwareRow(
+    long HardwareId,
+    string? DeviceId,
+    string DeviceName,
+    long? ZoneId,
+    string? ZoneName,
+    string? FarmName,
+    bool Online,
+    DateTimeOffset? LastSeen,
+    string? FirmwareVersion,
+    string EnrollmentStatus,
+    string TokenStatus,
+    string? MqttUsername);
+
 // Step 5: the two new device commands, and the screens that drive them.
 //
 // WHY A SEPARATE FILE
@@ -72,6 +95,74 @@ public static class ZoneHardwareEndpoints
         admin.MapPost("/change-wifi", AdminChangeWifiAsync);
         admin.MapPost("/open-setup", AdminOpenSetupAsync);
         admin.MapPost("/revoke", AdminRevokeAsync);
+
+        // The whole fleet, for the admin hardware table. Not under the
+        // per-zone group - it is not scoped to a zone.
+        app.MapGet("/api/admin/hardware", ListAllHardwareAsync)
+            .RequireAuthorization()
+            .AddEndpointFilter<AdminOnlyFilter>();
+    }
+
+    // ------------------------------------------------------------------
+    // ADMIN FLEET LIST
+    // ------------------------------------------------------------------
+
+    private static async Task<IResult> ListAllHardwareAsync(
+        NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        var rows = new List<AdminHardwareRow>();
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        // The MQTT username comes from a left join rather than a second
+        // query, so a fleet of any size is one round trip. A burned entry is
+        // excluded: it is no longer this board's login, and showing it would
+        // suggest the kit is still using a password that has been retired.
+        await using var cmd = new NpgsqlCommand(
+            """
+            select h.hardware_id, h.device_id, h.device_name, h.zone_id, z.name, f.name,
+                   greatest(h.last_seen, coalesce(r.recorded_at, h.last_seen)),
+                   h.firmware_version, h.enrollment_status,
+                   h.device_token_hash is not null, h.token_revoked_at,
+                   p.username
+              from hardware h
+              left join zone z on z.id = h.zone_id
+              left join farm f on f.farm_id = z.farm_id
+              left join lateral (
+                select max(x.recorded_at) as recorded_at from sensor_reading x
+                 where x.zone_id = h.zone_id) r on true
+              left join mqtt_credential_pool p
+                on p.assigned_device_id = h.device_id and p.burned_at is null
+             order by f.name nulls last, z.name nulls last, h.hardware_id
+            """,
+            connection);
+
+        var now = DateTimeOffset.UtcNow;
+
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var hardwareId = reader.GetInt64(0);
+            var lastSeen = reader.IsDBNull(6) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(6);
+            var hasToken = !reader.IsDBNull(9) && reader.GetBoolean(9);
+            var revokedAt = reader.IsDBNull(10) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(10);
+
+            rows.Add(new AdminHardwareRow(
+                hardwareId,
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.IsDBNull(2) ? "" : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetInt64(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                DeviceLiveness.IsOnline(lastSeen, now),
+                lastSeen,
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? "unregistered" : reader.GetString(8),
+                DescribeTokenStatus(hardwareId, hasToken, revokedAt),
+                reader.IsDBNull(11) ? null : reader.GetString(11)));
+        }
+
+        return Results.Ok(rows);
     }
 
     // ------------------------------------------------------------------
