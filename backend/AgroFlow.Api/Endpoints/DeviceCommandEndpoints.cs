@@ -1,8 +1,13 @@
+using AgroFlow.Api.Services;
 using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-public record CommandExecutedRequest(string DeviceId, DateTimeOffset? ExecutedAt);
+// DeviceId is still accepted so a v1.1.0 board's ACK still parses, but on a
+// token-authenticated call it is IGNORED: the device is resolved from the
+// credential instead. Nullable because the identity no longer has to come
+// from the body at all.
+public record CommandExecutedRequest(string? DeviceId, DateTimeOffset? ExecutedAt);
 
 public record CommandExecutedResponse(Guid CommandId, string Status, DateTimeOffset ExecutedAt);
 
@@ -48,26 +53,50 @@ public static class DeviceCommandEndpoints
     }
 
     private static async Task<IResult> HandleAsync(
-        string id, CommandExecutedRequest request, NpgsqlDataSource dataSource)
+        string id,
+        CommandExecutedRequest request,
+        HttpContext context,
+        DeviceAuthService deviceAuth,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
     {
         if (!Guid.TryParse(id, out var commandId))
         {
             return Results.BadRequest("Command id must be a UUID.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.DeviceId))
+        // v1.3.0: the identity comes out of the credential.
+        //
+        // This used to read a deviceId out of the REQUEST BODY and compare it
+        // to the zone's hardware row. That check was only ever as strong as
+        // the shared X-Api-Key behind it: any board holding the fleet key
+        // could claim to be any other board and acknowledge its commands -
+        // including marking executed a command its own zone never ran, which
+        // suppresses the replay sweep for a pump run that never physically
+        // happened.
+        //
+        // Now the token resolves the board, and the body's deviceId is
+        // ignored. A legacy shared-key board keeps the old behaviour, because
+        // it cannot be resolved any other way.
+        var device = await deviceAuth.AuthenticateAsync(context, cancellationToken);
+
+        if (device is null)
+        {
+            return Results.Json(
+                new { error = "A valid X-Device-Token is required." },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var callerDeviceId = device.IsLegacyApiKey ? request.DeviceId : device.DeviceId;
+
+        if (string.IsNullOrWhiteSpace(callerDeviceId))
         {
             return Results.BadRequest("deviceId is required.");
         }
 
-        // X-Api-Key is shared by every board, so it proves "a genuine AgroFlow
-        // device" and nothing more. Without this ownership check any device
-        // could acknowledge any other device's commands - including marking a
-        // command executed that its own zone never ran, which would suppress
-        // the replay sweep for a command that never physically happened.
         var executedAt = request.ExecutedAt ?? DateTimeOffset.UtcNow;
 
-        await using var connection = await dataSource.OpenConnectionAsync();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         var ownership = await ResolveCommandOwnershipAsync(connection, commandId);
         if (ownership is null)
@@ -75,7 +104,12 @@ public static class DeviceCommandEndpoints
             return Results.NotFound($"No irrigation command with id {commandId}.");
         }
 
-        if (!string.Equals(ownership.DeviceId, request.DeviceId, StringComparison.OrdinalIgnoreCase))
+        // The ownership check the task calls for: this device must own the
+        // zone the command was issued for. On a token call both sides of this
+        // comparison are now server-derived - the left from the command's
+        // zone, the right from the credential - so a board genuinely cannot
+        // acknowledge another zone's command.
+        if (!string.Equals(ownership.DeviceId, callerDeviceId, StringComparison.OrdinalIgnoreCase))
         {
             // Deliberately 404, not 403: a device that is not on this zone
             // should not be able to probe which command ids exist.

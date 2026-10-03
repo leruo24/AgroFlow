@@ -138,6 +138,22 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 // (irrigation commands) - registered once as a singleton so
 // IrrigationCommandNotifyService can inject the same instance via
 // IMqttPublisher rather than opening a second connection.
+// ---------------------------------------------------------------------------
+// PER-DEVICE CREDENTIALS (firmware v1.3.0, migrations 0028 + 0029)
+// ---------------------------------------------------------------------------
+// DeviceAuthService resolves X-Device-Token to a specific board, so a device
+// endpoint acts on the device the CREDENTIAL names rather than on whatever
+// deviceId the request body claimed. ClaimRateLimiter holds per-IP failed-claim
+// counters in memory, so it must be a singleton to count anything at all.
+// MqttCredentialPoolService hands out the hand-created HiveMQ logins.
+//
+// SECRETS: Mqtt__PoolEncryptionKey is a Railway variable and a local
+// user-secret. Like Telegram__BotToken it is deliberately absent from
+// appsettings.json and must never be committed.
+builder.Services.AddSingleton<DeviceAuthService>();
+builder.Services.AddSingleton<ClaimRateLimiter>();
+builder.Services.AddSingleton<MqttCredentialPoolService>();
+
 builder.Services.AddSingleton<MqttConnectionService>();
 builder.Services.AddSingleton<IMqttPublisher>(sp => sp.GetRequiredService<MqttConnectionService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttConnectionService>());
@@ -208,7 +224,13 @@ else
 // local API running alongside Railway would steal farmers' onboarding
 // messages at random. Railway sets Telegram__EnablePolling=true; nowhere else
 // should.
-builder.Services.AddHostedService<TelegramPollingService>();
+// Registered as a singleton AND as the hosted service, the same way
+// MqttConnectionService is above, so that TelegramEndpoints' webhook can
+// resolve the SAME instance and hand it an update. Both inbound routes then
+// run identical handling - /start, /status, /alerts and /help behave the same
+// whether Telegram pushed the update to the webhook or the poller pulled it.
+builder.Services.AddSingleton<TelegramPollingService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramPollingService>());
 
 // Equipment that has stopped working: devices gone quiet, pumps that never
 // acknowledged a command, zones whose sensor has gone silent or that have
@@ -280,7 +302,31 @@ app.UseCors();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
+
+    // Routes that authenticate THEMSELVES and must therefore not be stopped
+    // by the shared-key gate.
+    //
+    // /api/devices/claim: a freshly flashed v1.3.0 board holds no credential
+    // of any kind until claim answers - the compiled-in fleet key is exactly
+    // what this release removes from the firmware image. The one-time,
+    // single-use, 24-hour enrollment code is the authorisation, and
+    // ClaimRateLimiter replaces the shared key's brute-force role.
+    //
+    // The other three: they require X-Device-Token and resolve the board from
+    // it (DeviceAuthService), which is strictly stronger than the shared key.
+    // They still ACCEPT the shared key while Devices:LegacyApiKeyEnabled is
+    // true, but that decision belongs to DeviceAuthService - which can log
+    // each legacy use and be switched off by config - not to a middleware
+    // that cannot tell the two apart.
+    var isSelfAuthenticatingDeviceRoute =
+        path.StartsWithSegments("/api/devices/claim") ||
+        path.StartsWithSegments("/api/devices/mqtt-credentials") ||
+        path.StartsWithSegments("/api/devices/firmware-check") ||
+        path.StartsWithSegments("/api/devices/commands") ||
+        path.StartsWithSegments("/api/irrigation-events");
+
     var isUserRoute = path.StartsWithSegments("/api/devices/enroll") ||
+                  isSelfAuthenticatingDeviceRoute ||
                   path.StartsWithSegments("/api/telegram") ||
                   // Anonymous by necessity: a farmer who has forgotten their
                   // password can present neither a JWT nor the device key.

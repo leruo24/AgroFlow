@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using AgroFlow.Api.Auth;
+using AgroFlow.Api.Services;
+using AgroFlow.Business;
 using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
@@ -7,11 +9,31 @@ namespace AgroFlow.Api.Endpoints;
 public record EnrollDeviceRequest(long ZoneId, string? DeviceId, string? DeviceName);
 public record EnrollDeviceResponse(long HardwareId, string EnrollmentCode, DateTimeOffset ExpiresAt);
 
-public record ClaimDeviceRequest(string DeviceId, string EnrollmentCode);
+// FirmwareVersion is new in v1.3.0 - the board reports what it is running at
+// claim time, which is what the Kit screen shows and what tells you when
+// Devices:LegacyApiKeyEnabled can be retired. Optional, so a v1.1.0 board
+// claiming with an old sketch still works.
+public record ClaimDeviceRequest(string DeviceId, string EnrollmentCode, string? FirmwareVersion);
+
 // FarmId is included alongside ZoneId because the firmware needs both to
 // build its MQTT topics (agroflow/farm/{farmId}/device/{deviceId}/...) - see
 // hardware/shared/MQTT_TOPICS.md. Both are persisted to flash on claim.
-public record ClaimDeviceResponse(long ZoneId, long FarmId, long HardwareId);
+//
+// DeviceToken is returned EXACTLY ONCE, here. The server keeps only its
+// SHA-256 hash, so there is no endpoint that can ever return it again - a
+// board that loses it needs a fresh enrollment code. MqttUsername/
+// MqttPassword may be empty when the pool is exhausted; the firmware treats
+// them as optional and falls back to GET /api/devices/mqtt-credentials on
+// its first connect.
+public record ClaimDeviceResponse(
+    long ZoneId,
+    long FarmId,
+    long HardwareId,
+    string DeviceToken,
+    string MqttUsername,
+    string MqttPassword);
+
+public record MqttCredentialsResponse(string MqttUsername, string MqttPassword);
 
 public record FirmwareCheckResponse(bool UpdateAvailable, string? LatestVersion, string? DownloadUrl);
 
@@ -38,12 +60,23 @@ public static class DeviceEnrollmentEndpoints
             .RequireAuthorization()
             .AddEndpointFilter<AdminOnlyFilter>();
 
-        // Device-facing: no user auth, per the design - the enrollment code
-        // itself is the single-use credential. Still behind the shared
-        // X-Api-Key device secret like every other device endpoint (defense
-        // in depth: a stranger without the firmware's baked-in key can't even
-        // attempt to brute-force codes).
+        // Device-facing and deliberately UNAUTHENTICATED beyond the code
+        // itself (v1.3.0; see the Program.cs middleware exemption).
+        //
+        // It used to also require the shared X-Api-Key. That is exactly the
+        // compiled-in fleet secret this release removes from the firmware
+        // image, so requiring it here would make the claim impossible: a
+        // freshly flashed board has no credential of any kind until this
+        // call answers. The one-time, single-use, 24-hour enrollment code IS
+        // the authorisation, and every check it used to get it still gets -
+        // see ClaimAsync. ClaimRateLimiter replaces the shared key's
+        // defence-in-depth role against brute force.
         app.MapPost("/api/devices/claim", ClaimAsync);
+
+        // Called on every boot. This is what lets an MQTT password rotation
+        // reach the whole fleet with no reflash - the board holds the answer
+        // in RAM only.
+        app.MapGet("/api/devices/mqtt-credentials", MqttCredentialsAsync);
 
         app.MapGet("/api/devices/firmware-check", FirmwareCheckAsync);
     }
@@ -73,15 +106,38 @@ public static class DeviceEnrollmentEndpoints
         return Results.Ok(new EnrollDeviceResponse(hardwareId, code, expiresAt));
     }
 
-    private static async Task<IResult> ClaimAsync(ClaimDeviceRequest request, NpgsqlDataSource dataSource)
+    private static async Task<IResult> ClaimAsync(
+        ClaimDeviceRequest request,
+        HttpContext context,
+        NpgsqlDataSource dataSource,
+        MqttCredentialPoolService pool,
+        ClaimRateLimiter rateLimiter,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
     {
+        var logger = loggerFactory.CreateLogger("AgroFlow.Api.DeviceClaim");
+        var address = ClaimRateLimiter.ResolveAddress(context);
+        var now = DateTimeOffset.UtcNow;
+
+        // Checked before the body is looked at, so a blocked address cannot
+        // keep spending database round trips.
+        if (rateLimiter.IsBlocked(address, now))
+        {
+            return Results.Json(
+                new { error = "Too many failed enrollment codes from this address. Try again in a few minutes." },
+                statusCode: StatusCodes.Status429TooManyRequests);
+        }
+
         if (string.IsNullOrWhiteSpace(request.DeviceId) || string.IsNullOrWhiteSpace(request.EnrollmentCode))
         {
+            // A malformed body is a bug or a probe, not a wrong code. It is
+            // not counted against the limit, because counting it would let a
+            // broken board lock out the installer standing next to it.
             return Results.BadRequest("deviceId and enrollmentCode are required.");
         }
 
-        await using var connection = await dataSource.OpenConnectionAsync();
-        await using var transaction = await connection.BeginTransactionAsync();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         long hardwareId;
         long zoneId;
@@ -99,10 +155,14 @@ public static class DeviceEnrollmentEndpoints
             "and h.enrollment_code_expires_at > now() for update", connection, transaction))
         {
             lookupCmd.Parameters.AddWithValue(request.EnrollmentCode.Trim().ToUpperInvariant());
-            await using var reader = await lookupCmd.ExecuteReaderAsync();
-            if (!await reader.ReadAsync())
+            await using var reader = await lookupCmd.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
             {
-                await transaction.RollbackAsync();
+                await reader.CloseAsync();
+                await transaction.RollbackAsync(cancellationToken);
+
+                rateLimiter.RecordFailure(address, now);
+
                 return Results.Json(new { error = "Invalid, expired, or already-used enrollment code." },
                     statusCode: StatusCodes.Status401Unauthorized);
             }
@@ -124,24 +184,125 @@ public static class DeviceEnrollmentEndpoints
         // and stored.
         if (existingDeviceId is not null && existingDeviceId != claimedDeviceId)
         {
-            await transaction.RollbackAsync();
+            await transaction.RollbackAsync(cancellationToken);
+
+            rateLimiter.RecordFailure(address, now);
+
             return Results.Json(new { error = "Device ID does not match the device this code was issued for." },
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
+        // ------------------------------------------------------------------
+        // The token. Minted here, returned once, stored only as a hash.
+        // ------------------------------------------------------------------
+        var deviceToken = DeviceToken.Generate();
+        var deviceTokenHash = DeviceToken.Hash(deviceToken);
+
         await using (var updateCmd = new NpgsqlCommand(
             "update hardware set device_id = $1, enrollment_status = 'active', " +
-            "enrollment_code = null, enrollment_code_expires_at = null, status = 'Online', last_seen = now() " +
+            "enrollment_code = null, enrollment_code_expires_at = null, status = 'Online', last_seen = now(), " +
+            // A re-enrolled board gets a brand new token and its revocation
+            // is cleared: the whole point of re-enrolling is that this board
+            // is trusted again. The OLD token stops working the instant this
+            // row is updated, because the hash it matched is gone.
+            "device_token_hash = $3, token_issued_at = now(), token_revoked_at = null, " +
+            "firmware_version = coalesce($4, firmware_version) " +
             "where hardware_id = $2", connection, transaction))
         {
             updateCmd.Parameters.AddWithValue(claimedDeviceId);
             updateCmd.Parameters.AddWithValue(hardwareId);
-            await updateCmd.ExecuteNonQueryAsync();
+            updateCmd.Parameters.AddWithValue(deviceTokenHash);
+            updateCmd.Parameters.AddWithValue((object?)request.FirmwareVersion?.Trim() ?? DBNull.Value);
+            await updateCmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await transaction.CommitAsync();
+        // ------------------------------------------------------------------
+        // The MQTT login, assigned in THIS transaction (step 4).
+        //
+        // Same transaction on purpose: a claim that commits without an
+        // assignment, or an assignment that commits without a claim, both
+        // leave a row that has to be reconciled by hand. Either both land or
+        // neither does.
+        // ------------------------------------------------------------------
+        MqttCredential? assigned = null;
+        try
+        {
+            assigned = await pool.AssignToDeviceAsync(connection, transaction, claimedDeviceId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // The claim is the part that must not fail. A board that enrols
+            // without a pooled login still works on the shared credential and
+            // can pick up its own on any later boot; a board that cannot
+            // enrol at all is a site visit.
+            logger.LogError(ex,
+                "Could not assign a pooled MQTT login to device {DeviceId}; completing the claim with the " +
+                "shared credential.", claimedDeviceId);
+        }
 
-        return Results.Ok(new ClaimDeviceResponse(zoneId, farmId, hardwareId));
+        await transaction.CommitAsync(cancellationToken);
+
+        rateLimiter.RecordSuccess(address);
+
+        // Falls back to the shared credential outside the transaction - it is
+        // a config read, not a write, and the claim is already safe.
+        var credential = assigned;
+        if (credential is null)
+        {
+            credential = await pool.ResolveForDeviceAsync(claimedDeviceId, cancellationToken);
+
+            // The admin alert for an exhausted pool. Logged at the point the
+            // fallback actually happens, with the exact words the admin page
+            // shows, so searching either one finds the other.
+            logger.LogWarning(
+                "ADMIN ALERT: {Alert} Device {DeviceId} on zone {ZoneId} enrolled with the shared MQTT " +
+                "credential. Create logins in the HiveMQ console and paste them into the admin MQTT logins page.",
+                MqttCredentialResolution.PoolEmptyAlert, claimedDeviceId, zoneId);
+        }
+
+        logger.LogInformation(
+            "Device {DeviceId} claimed zone {ZoneId} on farm {FarmId}, firmware {Firmware}, MQTT login from {Source}.",
+            claimedDeviceId, zoneId, farmId, request.FirmwareVersion ?? "unreported", credential.Source);
+
+        return Results.Ok(new ClaimDeviceResponse(
+            zoneId, farmId, hardwareId, deviceToken, credential.Username, credential.Password));
+    }
+
+    // The board asks for this on every boot and keeps the answer in RAM only.
+    // Requires a valid device token: the password it returns is a live broker
+    // credential, so there is no anonymous or shared-key route to it even
+    // while Devices:LegacyApiKeyEnabled is on - a legacy board cannot be
+    // resolved to a device, and handing out "some device's" password would
+    // defeat the per-device split entirely.
+    private static async Task<IResult> MqttCredentialsAsync(
+        HttpContext context,
+        DeviceAuthService deviceAuth,
+        MqttCredentialPoolService pool,
+        CancellationToken cancellationToken)
+    {
+        var device = await deviceAuth.AuthenticateAsync(context, cancellationToken);
+
+        if (device is null || device.IsLegacyApiKey)
+        {
+            return Results.Json(
+                new { error = "A valid X-Device-Token is required." },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        var credential = await pool.ResolveForDeviceAsync(device.DeviceId, cancellationToken);
+
+        if (credential.Source == MqttCredentialSource.None)
+        {
+            // Nothing to hand over. 503 rather than 200-with-blanks, so the
+            // board retries instead of attempting a broker connection with an
+            // empty username and reporting a confusing rc=4.
+            return Results.Problem(
+                title: "No MQTT credential is available.",
+                detail: "The login pool is empty and no shared Mqtt:Username/Mqtt:Password is configured.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        return Results.Ok(new MqttCredentialsResponse(credential.Username, credential.Password));
     }
 
     // TODO: LatestVersion/DownloadUrl are plain config values (see
@@ -149,8 +310,31 @@ public static class DeviceEnrollmentEndpoints
     // freshly-compiled .bin every time you cut a release. This endpoint does
     // not host or build firmware itself; see the OTA section of the summary
     // for where the .bin actually needs to live.
-    private static IResult FirmwareCheckAsync(string? currentVersion, IConfiguration configuration)
+    //
+    // v1.3.0: now authenticated by X-Device-Token, which also makes this the
+    // cheapest place to record what each board is running - it calls in every
+    // 4 hours whether or not an update exists.
+    private static async Task<IResult> FirmwareCheckAsync(
+        string? currentVersion,
+        HttpContext context,
+        DeviceAuthService deviceAuth,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
     {
+        var device = await deviceAuth.AuthenticateAsync(context, cancellationToken);
+
+        if (device is null)
+        {
+            return Results.Json(
+                new { error = "A valid X-Device-Token is required." },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!device.IsLegacyApiKey)
+        {
+            await deviceAuth.RecordFirmwareVersionAsync(device.HardwareId, currentVersion, cancellationToken);
+        }
+
         var latestVersion = configuration["Firmware:LatestVersion"];
         var downloadUrl = configuration["Firmware:DownloadUrl"];
 
