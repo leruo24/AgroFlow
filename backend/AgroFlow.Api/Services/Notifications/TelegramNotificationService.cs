@@ -1,3 +1,4 @@
+using AgroFlow.Business;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -404,6 +405,107 @@ public sealed class TelegramNotificationService : INotificationService
         catch (Exception ex)
         {
             LogSwallowed(ex, "request-status", profileId.ToString());
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // FARM / ZONE REQUESTS (step 7)
+    // ------------------------------------------------------------------
+
+    public async Task NotifyFarmRequestAsync(
+        Guid profileId,
+        FarmRequestNotification notification,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var chatId = await GetChatIdAsync(profileId, cancellationToken);
+
+            if (chatId is null)
+            {
+                // Not an error. A farmer who has never pressed Start in the
+                // bot has no chat for anything to be sent to, and a bot
+                // cannot message anyone first - so this is the ordinary state
+                // for part of the user base, logged and skipped.
+                _logger.LogInformation(
+                    "Skipped the {Stage} message for request {RequestId}: profile {ProfileId} has no linked Telegram chat.",
+                    notification.Stage, notification.RequestId, profileId);
+
+                return;
+            }
+
+            var message = notification.Stage switch
+            {
+                FarmRequestStage.Submitted =>
+                    FarmRequestMessages.Submitted(notification.RequestType, notification.Location),
+                FarmRequestStage.Scheduled =>
+                    FarmRequestMessages.Scheduled(notification.ScheduledFor),
+                FarmRequestStage.Completed =>
+                    FarmRequestMessages.Completed(notification.RequestType),
+                _ => null,
+            };
+
+            if (message is null) return;
+
+            // Deliberately NOT gated on telegram_alerts_enabled - same
+            // reasoning as NotifyRequestStatusAsync above: someone who muted
+            // weather and equipment messages still needs to know a technician
+            // is coming to their farm.
+            await _client.SendMessageAsync(chatId.Value, message, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogSwallowed(ex, $"farm-request-{notification.Stage}", profileId.ToString());
+        }
+    }
+
+    public async Task NotifyAdminsOfFarmRequestAsync(
+        FarmRequestAdminNotification notification,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var message = FarmRequestMessages.AdminSubmitted(
+                notification.FarmerName, notification.RequestType, notification.Location);
+
+            // Every admin with a linked chat. Not filtered on
+            // telegram_alerts_enabled: that preference is about weather and
+            // equipment noise on a farmer's phone, and an admin who linked
+            // the bot at all did so to receive exactly this.
+            var chatIds = new List<long>();
+
+            await using (var connection = await _dataSource.OpenConnectionAsync(cancellationToken))
+            {
+                await using var command = new NpgsqlCommand(
+                    "select distinct p.telegram_chat_id from profile p " +
+                    "where p.role = 'admin' and p.telegram_chat_id is not null", connection);
+
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    chatIds.Add(reader.GetInt64(0));
+                }
+            }
+
+            if (chatIds.Count == 0)
+            {
+                _logger.LogInformation(
+                    "No admin has a linked Telegram chat; request {RequestId} was not announced.",
+                    notification.RequestId);
+
+                return;
+            }
+
+            // Sequential, for the same reason BroadcastToFarmAsync is: a
+            // handful of recipients, and Telegram rate-limits bots.
+            foreach (var chatId in chatIds)
+            {
+                await _client.SendMessageAsync(chatId, message, cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogSwallowed(ex, "farm-request-admin", $"request {notification.RequestId}");
         }
     }
 

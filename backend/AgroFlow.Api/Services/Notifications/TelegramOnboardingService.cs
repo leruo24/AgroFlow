@@ -36,13 +36,27 @@ public sealed class TelegramOnboardingService
     // TelegramCodePurpose. It is chosen by the endpoint that issues the code,
     // never by the farmer, so somebody cannot turn a link request into a
     // password reset on someone else's account.
+    // lifetime is optional and defaults to the configured TTL, so every
+    // existing caller is unchanged.
+    //
+    // It exists for the app's own "Connect Telegram" button, which wants
+    // FIFTEEN MINUTES rather than the onboarding default of seven days. The
+    // two are different situations: an onboarding QR is printed or shown
+    // on-site and may sit in a box for days, while a link code is generated
+    // by a farmer who is holding the phone and about to tap straight through
+    // to Telegram. A week-long window for that is a week in which a code
+    // sitting in a log or a screenshot can attach someone else's chat to
+    // their account.
     public async Task<TelegramOnboardingCode> IssueCodeAsync(
         Guid profileId,
         TelegramCodePurpose purpose,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? lifetime = null)
     {
         var code = GenerateCode();
-        var expiresAt = DateTimeOffset.UtcNow.AddDays(Math.Max(1, _options.OnboardingCodeTtlDays));
+        var expiresAt = lifetime.HasValue
+            ? DateTimeOffset.UtcNow.Add(lifetime.Value)
+            : DateTimeOffset.UtcNow.AddDays(Math.Max(1, _options.OnboardingCodeTtlDays));
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);

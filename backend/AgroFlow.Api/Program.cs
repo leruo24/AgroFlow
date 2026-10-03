@@ -179,6 +179,7 @@ builder.Services.PostConfigure<TelegramOptions>(options =>
 {
     options.BotToken = options.BotToken?.Trim();
     options.BotUsername = options.BotUsername?.Trim().TrimStart('@');
+    options.WebhookSecret = options.WebhookSecret?.Trim();
 });
 builder.Services.Configure<ApkOptions>(
     builder.Configuration.GetSection(ApkOptions.SectionName));
@@ -197,6 +198,11 @@ builder.Services.AddSingleton<SupabaseAdminService>();
 // forecast refreshes every 6 hours with 8 days of data, so without this one
 // storm would be announced about 20 times. See migration 0026.
 builder.Services.AddSingleton<NotificationLedger>();
+
+// The same claim-then-send mechanism for farm/zone request messages, against
+// its own table - notification_sent's farm_id is NOT NULL and a new_farm
+// request has no farm yet. See migration 0032.
+builder.Services.AddSingleton<FarmRequestNotifier>();
 
 // Self-service password recovery over Telegram. Supabase's own email reset
 // needs SMTP that this project has never configured, so the mobile
@@ -327,6 +333,12 @@ app.Use(async (context, next) =>
 
     var isUserRoute = path.StartsWithSegments("/api/devices/enroll") ||
                   isSelfAuthenticatingDeviceRoute ||
+                  // Every /api/admin route is JWT + AdminOnlyFilter. Without
+                  // this line the shared DEVICE key would also be demanded of
+                  // a human administrator, which no browser sends - the
+                  // hardware actions, the MQTT logins page and the request
+                  // status endpoint would all 401 for the dashboard.
+                  path.StartsWithSegments("/api/admin") ||
                   path.StartsWithSegments("/api/telegram") ||
                   // Anonymous by necessity: a farmer who has forgotten their
                   // password can present neither a JWT nor the device key.
@@ -366,6 +378,9 @@ app.MapFao56EngineEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();
+app.MapTelegramWebhookEndpoints();
+app.MapAdminRequestEndpoints();
+app.MapMqttPoolEndpoints();
 app.MapPasswordResetEndpoints();
 
 
