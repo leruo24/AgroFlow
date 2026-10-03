@@ -76,7 +76,11 @@ public static class SensorReadingProcessor
         // are app-only. See the note above the send at the end of this method.
         ZoneCriticalReason? couldNotActReason = null;
 
-        if (sensorType == "SoilMoisture")
+        // Temperature and Humidity readings stop here: they are inserted
+        // above and feed the health status, but must never reach the
+        // irrigation decision. A hot afternoon is not a reason to open a
+        // valve.
+        if (SensorReadingTypes.DrivesIrrigation(sensorType))
         {
             // Respect the zone's irrigation_mode BEFORE deciding anything.
             //
