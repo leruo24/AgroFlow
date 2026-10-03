@@ -222,9 +222,13 @@ public sealed class TelegramPollingService : BackgroundService
             await _client.SendMessageAsync(
                 chatId,
                 existing is null
-                    ? "Hello from AgroFlow.\n\n" +
-                      "This chat is not linked to an AgroFlow account yet. Please scan the QR code " +
-                      "your AgroFlow installer shows you, or ask them for a new one."
+                    // Tells the farmer what they can do THEMSELVES first. The old
+                    // wording sent everyone to an installer - a phone call and a wait -
+                    // when most people reading it are holding the app that can link
+                    // them in two taps.
+                    ? "Hello from AgroFlow. This chat isn't linked to an account yet. " +
+                      "In the AgroFlow app, go to Settings → Connect Telegram, or ask your " +
+                      "installer for a link code."
                     : "This chat is already linked to your AgroFlow account.\n\n" +
                       "Send /status to see your open requests, or /help for what else I can do.",
                 cancellationToken);
@@ -336,8 +340,9 @@ public sealed class TelegramPollingService : BackgroundService
         {
             await _client.SendMessageAsync(
                 chatId,
-                "This chat is not linked to an AgroFlow account yet. " +
-                "Please scan the QR code your AgroFlow installer shows you.",
+                "This chat isn't linked to an account yet. " +
+                "In the AgroFlow app, go to Settings → Connect Telegram, or ask your " +
+                "installer for a link code.",
                 cancellationToken);
 
             return;
@@ -441,7 +446,9 @@ public sealed class TelegramPollingService : BackgroundService
         {
             await _client.SendMessageAsync(
                 chatId,
-                "This chat is not linked to an AgroFlow account yet.",
+                "This chat isn't linked to an account yet. " +
+                "In the AgroFlow app, go to Settings → Connect Telegram, or ask your " +
+                "installer for a link code.",
                 cancellationToken);
 
             return;

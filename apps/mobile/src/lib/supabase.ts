@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createClient,
-  processLock,
 } from '@supabase/supabase-js';
 
 import {
@@ -39,7 +38,18 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
-      lock: processLock,
+      // `lock: processLock` was removed here.
+      //
+      // GoTrueClient's `lock` option is deprecated in supabase-js 2.116 and
+      // goes away in v3 - the client now coordinates session refreshes on its
+      // own, so passing one is both unnecessary and a console warning on every
+      // app start. Nothing replaces it: there is no option to set, and the
+      // behaviour it protected is now the client's own responsibility.
+      //
+      // Everything else here is unchanged and still needed: AsyncStorage
+      // (native only - the web build uses the client's default
+      // localStorage), autoRefreshToken, persistSession and
+      // detectSessionInUrl: false.
     },
   },
 );
