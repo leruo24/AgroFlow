@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AgroFlow.Business;
 using AgroFlow.Api.Services;
 using AgroFlow.Api.Services.Notifications;
 using MQTTnet;
@@ -161,6 +162,27 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
             var payloadJson = args.ApplicationMessage.ConvertPayloadToString();
             var payload = JsonSerializer.Deserialize<SensorMqttPayload>(payloadJson, JsonOptions);
             if (payload is null) return;
+
+            // v1.3.0 boards publish Temperature and Humidity from the DHT11
+            // alongside SoilMoisture, on this same topic and in this same
+            // shape. All three are already allowed by sensor_reading's CHECK
+            // constraint (0002_relationships.sql), so they need no migration
+            // and no special case below - they simply flow through
+            // SensorReadingProcessor like any other reading.
+            //
+            // What this guard adds is the rejection of anything OUTSIDE that
+            // set. Without it an unrecognised sensorType reached Postgres,
+            // violated the CHECK and surfaced as a logged exception for every
+            // such message. One warning and a drop is the right answer to a
+            // malformed payload - the same thing this handler already does
+            // with an unparseable topic.
+            if (!SensorReadingTypes.IsValid(payload.SensorType))
+            {
+                _logger.LogWarning(
+                    "Ignoring sensor message on {Topic}: sensorType {SensorType} is not one of {Allowed}",
+                    args.ApplicationMessage.Topic, payload.SensorType, SensorReadingTypes.Describe());
+                return;
+            }
 
             await using var connection = await _dataSource.OpenConnectionAsync();
             var device = await ResolveDeviceAsync(connection, deviceId, farmId);

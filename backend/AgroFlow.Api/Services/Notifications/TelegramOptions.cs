@@ -31,9 +31,27 @@ public sealed class TelegramOptions
     // default and cannot hijack a live onboarding.
     public bool EnablePolling { get; set; }
 
+    // The secret Telegram echoes back in X-Telegram-Bot-Api-Secret-Token on
+    // every webhook call, chosen by whoever registers the webhook.
+    //
+    // POST /api/telegram/webhook is necessarily anonymous - Telegram's
+    // servers hold no AgroFlow credential - so this is the ONLY thing
+    // standing between that route and anyone who finds the URL. Unset means
+    // the webhook refuses everything: failing closed turns a missing Railway
+    // variable into a visibly broken webhook rather than an open
+    // account-linking endpoint.
+    //
+    // A credential, so like BotToken it is absent from appsettings.json.
+    public string? WebhookSecret { get; set; }
+
     // How long an onboarding QR code stays redeemable. The code unlocks a
     // message containing login details, so it expires.
     public int OnboardingCodeTtlDays { get; set; } = 7;
+
+    // The app's own "Connect Telegram" button. Much shorter than the
+    // onboarding TTL above, because the farmer is holding the phone and taps
+    // straight through to Telegram - see IssueCodeAsync's lifetime parameter.
+    public int LinkCodeTtlMinutes { get; set; } = 15;
 
     // Long-poll duration passed to getUpdates. Telegram holds the connection
     // open this long when there is nothing to report, which is what makes

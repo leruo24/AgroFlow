@@ -1,9 +1,20 @@
 import { DataState } from '@/components/DataState';
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { BlurSheet } from '@/components/BlurSheet';
+
+// The FAO-56 engine's farmer-facing pieces, and page help. All of these were
+// built and merged but never mounted anywhere - this screen is where they
+// belong, and until now the engine had no farmer-visible surface at all.
+import { HelpButton } from '@/components/HelpButton';
+import { ZoneInsightsCard } from '@/components/ZoneInsightsCard';
+import { ZoneGrowthBar } from '@/components/ZoneGrowthBar';
+import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
+import { CalibrateSoilSheet } from '@/components/CalibrateSoilSheet';
+import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 // Dynamic Expo route: the same screen manages every irrigation zone using its route ID.
 import {
   ArrowLeft,
+  ChevronRight,
 } from 'lucide-react-native';
 
 import {
@@ -227,6 +238,15 @@ export default function ZoneControlScreen() {
   ] =
     useState('20');
 
+  // Growth + insights for the engine components below. Fetched here rather
+  // than inside ZoneInsightsCard so that one request fills both it and the
+  // growth bar - the endpoint returns the two together.
+  const [zoneGrowth, setZoneGrowth] =
+    useState<ZoneGrowth | null>(null);
+
+  const [calibrateVisible, setCalibrateVisible] =
+    useState(false);
+
   const routeId =
     Array.isArray(
       id
@@ -264,6 +284,51 @@ export default function ZoneControlScreen() {
     zone?.id,
     zone?.irrigation.mode,
     zone?.irrigation.override.active,
+  ]);
+
+  // The growth summary for the bar below. Failure is silent and leaves it
+  // null, which renders nothing - the engine's advice is additional to this
+  // screen, never a precondition for it, so a dead engine must not take the
+  // whole zone page down with it.
+  useEffect(() => {
+    const numericId =
+      Number(routeId);
+
+    if (
+      !Number.isFinite(
+        numericId
+      ) ||
+      numericId <= 0
+    ) {
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      try {
+        const result =
+          await fetchZoneInsights(
+            numericId
+          );
+
+        if (active) {
+          setZoneGrowth(
+            result.growth ?? null
+          );
+        }
+      } catch {
+        if (active) {
+          setZoneGrowth(null);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    routeId,
   ]);
 
   if (
@@ -1094,6 +1159,11 @@ export default function ZoneControlScreen() {
             </Text>
           </View>
 
+          {/* Page help, in the same place every other screen puts it -
+              beside the header's trailing element. It disappears entirely
+              when the farmer turns page help off in Settings. */}
+          <HelpButton screen="zoneDetail" />
+
           <View
             style={
               styles.statusBadge
@@ -1202,6 +1272,179 @@ export default function ZoneControlScreen() {
               )
             )}
           </View>
+
+          {/* ------------------------------------------------------------
+              THE ENGINE'S FARMER-FACING SURFACE
+
+              Placed straight after the live readings, because the readings
+              say what is happening and these say what to do about it - which
+              is the order the screen is read in. Each piece renders nothing
+              when its data is missing, so a zone with no crop, no planting
+              date or no calibration shows exactly what it did before.
+              ------------------------------------------------------------ */}
+
+          <ZoneGrowthBar
+            stage={zoneGrowth?.stage}
+            dayOfSeason={zoneGrowth?.dayOfSeason}
+            totalDays={zoneGrowth?.totalDays}
+            cropLabel={zoneGrowth?.cropLabel}
+          />
+
+          <ZoneInsightsCard
+            zoneId={Number(
+              selectedZone.id
+            )}
+          />
+
+          {/* ---- Kit, soil and setup rows ---------------------------- */}
+          {/* Three navigation/action rows rather than three cards: each is
+              a door to somewhere else, and a farmer scanning this screen
+              should be able to tell them apart from the readings above at a
+              glance. */}
+
+          <TouchableOpacity
+            style={
+              styles.linkRow
+            }
+            onPress={() =>
+              router.push({
+                pathname: '/zone-hardware',
+                params: {
+                  zoneId: String(
+                    selectedZone.id
+                  ),
+                  zoneName:
+                    selectedZone.name,
+                },
+              })
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Your kit"
+          >
+            <View
+              style={
+                styles.linkRowCopy
+              }
+            >
+              <Text
+                style={
+                  styles.linkRowTitle
+                }
+              >
+                Your kit
+              </Text>
+
+              <Text
+                style={
+                  styles.linkRowHint
+                }
+              >
+                Is it working, and change its WiFi
+              </Text>
+            </View>
+
+            <ChevronRight
+              size={20}
+              color={colors.textMuted}
+              strokeWidth={2}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={
+              styles.linkRow
+            }
+            onPress={() =>
+              router.push({
+                pathname: '/zone-soil',
+                params: {
+                  zoneId: String(
+                    selectedZone.id
+                  ),
+                },
+              })
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Soil type"
+          >
+            <View
+              style={
+                styles.linkRowCopy
+              }
+            >
+              <Text
+                style={
+                  styles.linkRowTitle
+                }
+              >
+                Soil type
+              </Text>
+
+              <Text
+                style={
+                  styles.linkRowHint
+                }
+              >
+                How much water your soil holds
+              </Text>
+            </View>
+
+            <ChevronRight
+              size={20}
+              color={colors.textMuted}
+              strokeWidth={2}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={
+              styles.linkRow
+            }
+            onPress={() =>
+              setCalibrateVisible(
+                true
+              )
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Teach the sensor your soil"
+          >
+            <View
+              style={
+                styles.linkRowCopy
+              }
+            >
+              <Text
+                style={
+                  styles.linkRowTitle
+                }
+              >
+                Teach the sensor your soil
+              </Text>
+
+              <Text
+                style={
+                  styles.linkRowHint
+                }
+              >
+                Save a wet and a dry reading
+              </Text>
+            </View>
+
+            <ChevronRight
+              size={20}
+              color={colors.textMuted}
+              strokeWidth={2}
+            />
+          </TouchableOpacity>
+
+          <ResetRecommendedButton
+            zoneId={Number(
+              selectedZone.id
+            )}
+          />
 
           <View
             style={
@@ -1773,6 +2016,24 @@ export default function ZoneControlScreen() {
                 </TouchableOpacity>
               </View>
       </BlurSheet>
+
+      {/* Teaching the sensor what wet and dry look like in THIS soil. Its own
+          sheet (not a BlurSheet row) because it is two independent saves made
+          on different days - soaked soil and properly dry soil are a day or
+          more apart - rather than one choice. */}
+      <CalibrateSoilSheet
+        zoneId={Number(
+          selectedZone.id
+        )}
+        visible={
+          calibrateVisible
+        }
+        onClose={() =>
+          setCalibrateVisible(
+            false
+          )
+        }
+      />
     </SafeAreaView>
   );
 }

@@ -6,6 +6,7 @@ import { usersPage } from "@/pages/users";
 import { farmsPage } from "@/pages/farms";
 import { onboardingPage } from "@/pages/onboarding";
 import { requestsPage } from "@/pages/requests";
+import { mqttLoginsPage } from "@/pages/mqttLogins";
 import { hardwarePage, alertsPage, maintenancePage } from "@/pages/operations";
 import {
   irrigationPage, reportsPage, activityPage, settingsPage, settingsTabBody, SETTINGS_TABS,
@@ -35,6 +36,10 @@ const PAGES: Record<PageId, PageRenderer> = {
   requests: () => requestsPage(),
   farms: () => farmsPage(),
   hardware: () => hardwarePage(),
+  // Reached from a button on the Hardware page rather than the sidebar, the
+  // same way `requests` and `onboarding` are: it is a once-a-batch
+  // administrative chore, not a place anyone needs to be one click from.
+  mqttLogins: () => mqttLoginsPage(),
   alerts: () => alertsPage(),
   maintenance: () => maintenancePage(),
   reports: () => reportsPage(),

@@ -14,7 +14,8 @@ export type PageId =
   | "activity"
   | "settings"
   | "onboarding"
-  | "requests";
+  | "requests"
+  | "mqttLogins";
 
 export interface NavItem {
   id: PageId;
@@ -214,6 +215,27 @@ export interface Hardware {
   maintenanceState: MaintenanceState;
   installed: string;
   lastSeen: string;
+
+  /* --- firmware v1.3.0 ---------------------------------------------------
+     All optional, so a row that could not be enriched from
+     GET /api/admin/hardware still renders everything it always did.
+
+     zoneId is what every device action is addressed by: the commands go into
+     irrigation_commands, which is keyed on zone, not on hardware_id. */
+  zoneId?: number | null;
+  /** hardware.device_id - the ESP32 efuse ID the firmware derives from the chip. */
+  deviceId?: string | null;
+  zoneName?: string | null;
+  /** Heard from within the last 5 minutes, by any route. Distinct from
+      `status`, which DeviceStatusMonitorService writes on a 30-minute rule. */
+  online?: boolean;
+  /** active / revoked / legacy key / no device. Cannot be derived in the
+      browser - see 0028's column grants. */
+  tokenStatus?: string;
+  /** The board's assigned pool login. Username only; the password is never
+      returned to any admin screen. */
+  mqttUsername?: string | null;
+  enrollmentStatus?: string;
 }
 
 /* --------------------------------- alerts --------------------------------------- */

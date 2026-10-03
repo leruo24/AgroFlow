@@ -386,11 +386,25 @@ export type ZoneInsight = {
   message: string;
 };
 
+// How far through its season this zone's crop is.
+//
+// Null whenever the crop or the planting date is unknown, which is the
+// ordinary state for a zone the farmer has not filled in yet. ZoneGrowthBar
+// renders nothing at all for null rather than an empty bar, because an empty
+// bar reads as "the season has not started".
+export type ZoneGrowth = {
+  stage: string;
+  dayOfSeason: number;
+  totalDays: number;
+  cropLabel: string;
+};
+
 export function fetchZoneInsights(zoneId: number) {
   return authorizedRequest<{
     zoneId: number;
     day: string;
     insights: ZoneInsight[];
+    growth: ZoneGrowth | null;
   }>(`/api/farmer/zones/${zoneId}/insights`);
 }
 
@@ -442,4 +456,133 @@ export function resetZoneToRecommended(zoneId: number) {
     threshold: number;
     desired: number;
   }>(`/api/farmer/zones/${zoneId}/reset-recommended`, { method: 'POST' });
+}
+
+/* ------------------------------------------------------------------------
+   THE KIT (hardware) SCREEN - firmware v1.3.0
+   ------------------------------------------------------------------------ */
+
+// Everything the Kit screen shows about one zone's board.
+//
+// The three sensors report separately because they fail separately: a dead
+// DHT11 alongside a working soil probe is a real and ordinary state. The kit
+// keeps watering correctly and the app falls back to weather-app temperature,
+// so reporting it as "your kit is broken" would be both wrong and alarming.
+export type ZoneHardware = {
+  hardwareId: number | null;
+  deviceId: string | null;
+  deviceName: string | null;
+  online: boolean;
+  lastSeen: string | null;
+  firmwareVersion: string | null;
+  soilSensorWorking: boolean;
+  soilLastReadingAt: string | null;
+  temperatureSensorWorking: boolean;
+  temperatureLastReadingAt: string | null;
+  humiditySensorWorking: boolean;
+  humidityLastReadingAt: string | null;
+  // active / revoked / legacy key / no device.
+  tokenStatus: string;
+  // What the farmer has to join after a WiFi change. Supplied by the server
+  // (derived from the device ID the same way the firmware derives it) rather
+  // than worked out here, so one change to the firmware's naming does not
+  // need finding in two codebases.
+  setupNetworkName: string | null;
+  setupNetworkPassword: string | null;
+};
+
+export function fetchZoneHardware(zoneId: number) {
+  return authorizedRequest<ZoneHardware>(
+    `/api/farmer/zones/${zoneId}/hardware`
+  );
+}
+
+export type ChangeWifiResult = {
+  commandId: string;
+  setupNetworkName: string;
+  setupNetworkPassword: string;
+};
+
+// Thrown when the kit is offline (HTTP 409). A distinct type because the
+// screen has to show a completely different thing for it - the power-cycle
+// instructions - rather than the generic error banner.
+export class KitOfflineError extends Error {
+  readonly hint: string;
+  readonly setupNetworkName: string | null;
+  readonly setupNetworkPassword: string | null;
+
+  constructor(
+    message: string,
+    hint: string,
+    setupNetworkName: string | null,
+    setupNetworkPassword: string | null
+  ) {
+    super(message);
+    this.name = 'KitOfflineError';
+    this.hint = hint;
+    this.setupNetworkName = setupNetworkName;
+    this.setupNetworkPassword = setupNetworkPassword;
+  }
+}
+
+// Tells the kit to forget its WiFi and open its own setup network.
+//
+// Not routed through authorizedRequest, because that helper turns every
+// non-2xx into a generic Error and the 409 body here carries the three
+// things the offline screen needs. The auth header work is duplicated
+// deliberately rather than widening the shared helper, which every other
+// call in this file depends on.
+export async function requestZoneWifiChange(
+  zoneId: number
+): Promise<ChangeWifiResult> {
+  const apiBase = resolveApiBase();
+
+  if (!apiBase) {
+    throw new Error(
+      'AgroFlow.Api could not be located. Set EXPO_PUBLIC_AGROFLOW_API_BASE.'
+    );
+  }
+
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (!token) {
+    throw new Error('You must be signed in.');
+  }
+
+  const response = await fetch(
+    `${apiBase}/api/farmer/zones/${zoneId}/hardware/change-wifi`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}),
+    }
+  );
+
+  if (response.status === 409) {
+    const body = await response.json().catch(() => ({}));
+
+    throw new KitOfflineError(
+      body.error ??
+        'Your kit is offline. Unplug and replug it 3 times quickly to open its setup network.',
+      body.hint ??
+        'If your router changed, your kit opens its setup network by itself after 15 minutes.',
+      body.setupNetworkName ?? null,
+      body.setupNetworkPassword ?? null
+    );
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+
+    throw new Error(
+      text || `Could not ask your kit to change WiFi (${response.status}).`
+    );
+  }
+
+  return (await response.json()) as ChangeWifiResult;
 }

@@ -382,3 +382,198 @@ export async function downloadReportPdf(path: string, fileName: string): Promise
   a.remove();
   URL.revokeObjectURL(url);
 }
+/* ---------------- Hardware (firmware v1.3.0) ----------------
+
+   WHY THESE GO THROUGH THE API AND NOT SUPABASE
+
+   The dashboard reads most tables straight from Supabase under RLS. These
+   cannot be:
+
+   - tokenStatus needs hardware.device_token_hash and token_revoked_at.
+     Migration 0028 revoked the whole-table select 0011 had granted and
+     replaced it with an explicit column list that excludes both, because RLS
+     restricts ROWS and never COLUMNS - a farmer's own JWT would otherwise
+     have read its own kit's token hash.
+   - mqttUsername needs mqtt_credential_pool, which 0029 gives no client role
+     any grant on at all.
+   - Revoking a device has to burn a pool entry in the same action, and
+     nothing in the browser can touch that table.
+   - change-wifi / open-setup write to irrigation_commands, which 0011
+     deliberately grants SELECT only: an anon or authenticated INSERT there
+     drives a physical valve.
+*/
+
+async function authorizedJson<T>(
+  path: string,
+  method: "GET" | "POST" | "PUT",
+  body?: unknown,
+): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  if (!token) {
+    throw new Error("Not signed in.");
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+
+  if (!response.ok) {
+    throw await reportError(response);
+  }
+
+  const text = await response.text();
+
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export type AdminHardwareRow = {
+  hardwareId: number;
+  deviceId: string | null;
+  deviceName: string;
+  zoneId: number | null;
+  zoneName: string | null;
+  farmName: string | null;
+  online: boolean;
+  lastSeen: string | null;
+  firmwareVersion: string | null;
+  enrollmentStatus: string;
+  /** active / revoked / legacy key / no device */
+  tokenStatus: string;
+  mqttUsername: string | null;
+};
+
+export function getAdminHardware(): Promise<AdminHardwareRow[]> {
+  return authorizedJson<AdminHardwareRow[]>("/api/admin/hardware", "GET");
+}
+
+export type SetupCommandResult = {
+  commandId: string;
+  setupNetworkName: string;
+  setupNetworkPassword: string;
+};
+
+/* Makes the kit forget its WiFi and open its setup network. 409 when the kit
+   has not been heard from in the last 5 minutes - the command would publish
+   into the void and nobody would ever see the setup network appear. */
+export function deviceChangeWifi(zoneId: number): Promise<SetupCommandResult> {
+  return authorizedJson<SetupCommandResult>(
+    `/api/admin/zones/${zoneId}/hardware/change-wifi`,
+    "POST",
+    {},
+  );
+}
+
+/* Opens the setup page but KEEPS the WiFi. No online requirement: the command
+   sits pending and the replay sweep delivers it when the board comes back,
+   which is a reasonable thing for an admin to queue deliberately. */
+export function deviceOpenSetup(zoneId: number): Promise<SetupCommandResult> {
+  return authorizedJson<SetupCommandResult>(
+    `/api/admin/zones/${zoneId}/hardware/open-setup`,
+    "POST",
+    {},
+  );
+}
+
+export type RevokeDeviceResult = {
+  hardwareId: number;
+  deviceId: string | null;
+  burnedMqttUsername: string | null;
+  notice: string;
+};
+
+/* Cuts one board off: revokes its device token (every device endpoint then
+   401s it, and three of those make the board wipe its own credentials) and
+   burns its pooled MQTT login. The notice carries the HiveMQ half, which this
+   system cannot do on the free tier. */
+export function deviceRevoke(zoneId: number): Promise<RevokeDeviceResult> {
+  return authorizedJson<RevokeDeviceResult>(
+    `/api/admin/zones/${zoneId}/hardware/revoke`,
+    "POST",
+    {},
+  );
+}
+
+/* ---------------- MQTT login pool ---------------- */
+
+export type MqttPoolEntry = {
+  id: number;
+  username: string;
+  /** free | assigned to <kit> | burned */
+  status: string;
+  assignedDeviceId: string | null;
+  assignedAt: string | null;
+  burnedAt: string | null;
+  createdAt: string;
+};
+
+export type MqttPoolSummary = {
+  entries: MqttPoolEntry[];
+  freeCount: number;
+  assignedCount: number;
+  burnedCount: number;
+  runningLow: boolean;
+  warning: string | null;
+};
+
+export function getMqttLogins(): Promise<MqttPoolSummary> {
+  return authorizedJson<MqttPoolSummary>("/api/admin/mqtt-logins", "GET");
+}
+
+export type AddMqttLoginsResult = {
+  added: number;
+  duplicates: number;
+  skipped: number;
+  freeCount: number;
+  runningLow: boolean;
+  message: string;
+};
+
+/* Pasted in bulk because that is how they are made - HiveMQ's credential API
+   needs the paid Starter plan, so an admin creates a batch by hand in the
+   console and brings them over together. */
+export function addMqttLogins(pasted: string): Promise<AddMqttLoginsResult> {
+  return authorizedJson<AddMqttLoginsResult>("/api/admin/mqtt-logins", "POST", { pasted });
+}
+
+/* ---------------- Service requests ---------------- */
+
+/* Routed through the API rather than written straight to Supabase, so that
+   moving a request along also MESSAGES the farmer. The direct write still
+   works (service_request_all_admin, 0021) but nothing server-side learned the
+   status changed, so there was no point at which a Telegram message could be
+   sent - and putting the bot token in the browser is not an option. */
+export function updateServiceRequestStatusThroughApi(
+  id: number,
+  status: "pending" | "scheduled" | "completed",
+): Promise<{ id: number; status: string; message: string | null }> {
+  return authorizedJson<{ id: number; status: string; message: string | null }>(
+    `/api/admin/requests/${id}/status`,
+    "PUT",
+    { status },
+  );
+}
+
+/* ---------------- Enrollment codes ---------------- */
+
+export type EnrollmentCodeResult = {
+  hardwareId: number;
+  enrollmentCode: string;
+  expiresAt: string;
+};
+
+/* The code the installer types into the kit's setup page. Single-use, 24-hour,
+   and the ONLY authorisation /api/devices/claim needs - which is why there is
+   no "show it again": the response below is the one time it exists. */
+export function createEnrollmentCode(input: {
+  zoneId: number;
+  deviceName?: string;
+}): Promise<EnrollmentCodeResult> {
+  return authorizedJson<EnrollmentCodeResult>("/api/devices/enroll", "POST", input);
+}

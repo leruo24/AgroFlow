@@ -22,6 +22,22 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgroFlow.Domain\AgroFlow.Domain.csproj" />
+
+    <!-- Added for the v1.3.0 device work. Most of the new logic lives in
+         AgroFlow.Domain and needs nothing from here, but three things the
+         pre-deploy test list asks for do not and cannot:
+
+           - ClaimRateLimiter holds its per-IP counters in memory, so the
+             limit is only observable by exercising the real object.
+           - FarmRequestNotifier's "a Telegram failure never fails the
+             request" guarantee is a property of ITS error handling, not of
+             any pure function.
+           - MqttPoolEndpoints' paste parser decides what an admin's
+             copy-and-paste out of the HiveMQ console turns into.
+
+         Referencing a web project from a test project is ordinary; it pulls
+         in the ASP.NET framework reference, nothing is hosted. -->
+    <ProjectReference Include="..\AgroFlow.Api\AgroFlow.Api.csproj" />
   </ItemGroup>
 
 </Project>

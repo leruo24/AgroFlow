@@ -95,7 +95,60 @@ public static class Fao56EngineEndpoints
                 severity = i.Severity,
                 message = i.Message,
             }),
+
+            // ADDITIVE: the growth summary, so one call fills both the
+            // insights card and the growth bar on the zone screen.
+            //
+            // It is served here rather than read from zone_water_balance.
+            // That table has `stage` and `day_of_season` but NOT the season
+            // length, and the growth bar needs all three - "day 62" with no
+            // total is not a progress bar. The length comes from the crop's
+            // Table 11 stage lengths, which only the knowledge base has, so
+            // computing it here is the only place all three exist at once.
+            //
+            // Null when the crop or the planting date is unknown, and the
+            // component renders nothing at all in that case rather than an
+            // empty bar - an empty bar reads as "the season has not started",
+            // which is a claim the app cannot make.
+            growth = BuildGrowthSummary(engine, zoneId, today),
         });
+    }
+
+    private sealed record GrowthSummary(
+        string Stage, int DayOfSeason, int TotalDays, string CropLabel);
+
+    private static GrowthSummary? BuildGrowthSummary(
+        Fao56EngineController engine, long zoneId, DateOnly today)
+    {
+        var zone = engine.Data.GetZone(zoneId);
+        if (zone?.PlantingDate is null) return null;
+
+        var crop = Fao56Knowledge.TryResolve(zone.CropType);
+        if (crop is null) return null;
+
+        var lengths = crop.StageLengths;
+        var totalDays = lengths.InitialDays + lengths.DevelopmentDays
+                      + lengths.MidSeasonDays + lengths.LateSeasonDays;
+
+        if (totalDays <= 0) return null;
+
+        // Day 1 is the planting date itself, matching
+        // zone_water_balance.day_of_season.
+        var dayOfSeason = today.DayNumber - zone.PlantingDate.Value.DayNumber + 1;
+
+        // A planting date in the future is a typo or a crop not yet in the
+        // ground. Either way there is no season to show progress through.
+        if (dayOfSeason < 1) return null;
+
+        var stage = SoilWaterBalance.Stage(
+            lengths.InitialDays, lengths.DevelopmentDays,
+            lengths.MidSeasonDays, lengths.LateSeasonDays, dayOfSeason);
+
+        return new GrowthSummary(
+            Fao56EngineReference.StageLabel(stage),
+            dayOfSeason,
+            totalDays,
+            crop.DisplayName);
     }
 
     // Dismissing is a farmer write, so it goes through RLS from the app rather

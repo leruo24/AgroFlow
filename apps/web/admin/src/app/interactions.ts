@@ -15,6 +15,11 @@ import {
   registerFarm,
   sendTemporaryPasswordViaTelegram,
   resetTemporaryPassword,
+  deviceChangeWifi,
+  deviceOpenSetup,
+  deviceRevoke,
+  addMqttLogins,
+  createEnrollmentCode,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
@@ -804,6 +809,253 @@ case "delete-user": {
       await api.restartDevice(idAttr);
       toast(`${idAttr} restart command sent.`, "success");
       return void refresh();
+
+    /* ---- firmware v1.3.0 device actions -------------------------------
+       All three are addressed by ZONE, not hardware id: the commands go
+       into irrigation_commands, which is keyed on zone. The table omits
+       these links for a board with no zone, so findHardware always has one
+       here - the guard is for a stale render, not an expected state.
+
+       Each one confirms first. Change WiFi takes a kit off the network,
+       open setup exposes a local setup page, and revoke cuts a board off
+       permanently: none of them should happen on a mis-click. */
+    case "device-change-wifi": {
+      const h = api.findHardware(idAttr);
+      if (!h?.zoneId) return void toast("This device is not assigned to a zone.", "warn");
+
+      return openDrawer({
+        title: `Change WiFi — ${esc(h.deviceId ?? h.id)}`,
+        subtitle: `${h.farm}${h.zoneName ? ` · ${h.zoneName}` : ""}`,
+        bodyHtml: `<div class="muted">
+            The kit will forget its current WiFi and open its own setup network. Watering keeps
+            running in the meantime, on the readings it already has.
+            <br><br>
+            Somebody has to be AT the kit to finish this: join its setup network on a phone and
+            enter the new WiFi details. Until they do, the setup page keeps reopening.
+          </div>`,
+        confirmLabel: "Change WiFi",
+        onConfirm: () => {
+          void deviceChangeWifi(h.zoneId as number)
+            .then((result) => {
+              // The network name and password are the whole point of the
+              // success message: whoever is standing at the kit needs them.
+              toast(
+                `Sent. Join "${result.setupNetworkName}" (password ${result.setupNetworkPassword}) to finish.`,
+                "success",
+              );
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not change the kit's WiFi",
+                error instanceof Error ? error.message : "The kit could not be reached.",
+              );
+            });
+        },
+      });
+    }
+
+    case "device-open-setup": {
+      const h = api.findHardware(idAttr);
+      if (!h?.zoneId) return void toast("This device is not assigned to a zone.", "warn");
+
+      return openDrawer({
+        title: `Open setup page — ${esc(h.deviceId ?? h.id)}`,
+        subtitle: `${h.farm}${h.zoneName ? ` · ${h.zoneName}` : ""}`,
+        bodyHtml: `<div class="muted">
+            The kit opens its setup page but KEEPS its current WiFi, so it stays online.
+            <br><br>
+            If the kit is offline this command waits for it: it sits pending and is delivered
+            when the board next connects.
+          </div>`,
+        confirmLabel: "Open setup page",
+        onConfirm: () => {
+          void deviceOpenSetup(h.zoneId as number)
+            .then((result) => {
+              toast(`Sent. The setup page is at "${result.setupNetworkName}".`, "success");
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not open the kit's setup page",
+                error instanceof Error ? error.message : "The kit could not be reached.",
+              );
+            });
+        },
+      });
+    }
+
+    case "device-revoke": {
+      const h = api.findHardware(idAttr);
+      if (!h?.zoneId) return void toast("This device is not assigned to a zone.", "warn");
+
+      return openDrawer({
+        title: `Revoke ${esc(h.deviceId ?? h.id)}`,
+        subtitle: `${h.farm}${h.zoneName ? ` · ${h.zoneName}` : ""}`,
+        bodyHtml: `<div class="muted">
+            <b>This cuts the board off immediately and cannot be undone.</b>
+            <br><br>
+            Its device token stops working, so every reading and command acknowledgement it
+            sends is refused. After three refusals the board wipes its own credentials and
+            reopens its setup page, which means it needs a NEW enrollment code to come back.
+            <br><br>
+            Its MQTT login is burned at the same time. You will then need to change that
+            password in the HiveMQ console and add it back to the pool - this system cannot
+            change a HiveMQ password on the free plan.
+            <br><br>
+            Do this for a kit that has been lost or stolen. For a kit whose WiFi has simply
+            changed, use Change WiFi instead.
+          </div>`,
+        confirmLabel: "Revoke this device",
+        onConfirm: () => {
+          void deviceRevoke(h.zoneId as number)
+            .then((result) => {
+              // Shown as a modal, not a toast: the HiveMQ step is a manual
+              // job the admin has to actually go and do, and a toast
+              // disappears.
+              showErrorModal("Device revoked", result.notice);
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not revoke the device",
+                error instanceof Error ? error.message : "The device could not be revoked.",
+              );
+            });
+        },
+      });
+    }
+
+    case "go-mqtt-logins":
+      return void go("mqttLogins");
+
+    case "go-onboarding":
+      // A new_farm request has no farm yet, so there is no zone to enrol a
+      // kit onto. Send the admin through the existing zone setup flow first
+      // rather than offering an action that cannot work.
+      toast("Set up the farm and its zones first, then create the enrollment code.", "warn");
+      return void go("onboarding");
+
+    /* The code the installer types into the kit's setup page.
+       Uses the EXISTING generator (POST /api/devices/enroll) unchanged -
+       single-use, 24 hours, and the only authorisation the claim needs. */
+    case "create-enrollment-code": {
+      const requests = await api.getServiceRequests();
+      const request = requests.find((r) => String(r.id) === idAttr);
+
+      if (!request) return void toast("That request could not be found.", "warn");
+
+      if (request.farmId === null) {
+        toast("This request has no farm yet. Set up the farm and its zones first.", "warn");
+        return void go("onboarding");
+      }
+
+      let zones;
+      try {
+        zones = await getReportZones(request.farmId);
+      } catch (error) {
+        showErrorModal(
+          "Could not load the farm's zones",
+          error instanceof Error ? error.message : "The zone list could not be retrieved.",
+        );
+        return;
+      }
+
+      if (zones.length === 0) {
+        // The farm exists but has no zones. Same answer as a new_farm
+        // request: the zone has to exist before a kit can be enrolled onto
+        // it, because hardware.zone_id is what the claim resolves.
+        toast("This farm has no zones yet. Add one first, then create the code.", "warn");
+        return void go("onboarding");
+      }
+
+      return openDrawer({
+        title: "Create enrollment code",
+        subtitle: `${request.farmName ?? "Farm"} · ${request.farmerName}`,
+        bodyHtml: `
+          <div class="drawer-field">
+            <span>Zone</span>
+            <select data-field="zoneId" class="input" style="width:100%">
+              ${zones
+                .map(
+                  (z) =>
+                    `<option value="${z.zoneId}">${esc(z.name)}${
+                      z.cropType ? ` · ${esc(z.cropType)}` : ""
+                    }</option>`,
+                )
+                .join("")}
+            </select>
+          </div>
+          <div class="muted" style="margin-top:12px">
+            The code is single-use and expires in 24 hours. It is shown ONCE - there is no way to
+            look it up again, because nothing stores it in a readable form. If it is lost, make
+            another.
+          </div>
+        `,
+        confirmLabel: "Create code",
+        onConfirm: (values) => {
+          const zoneId = Number(values["zoneId"]);
+          if (!zoneId) return void toast("Pick a zone first.", "warn");
+
+          void createEnrollmentCode({ zoneId })
+            .then((result) => {
+              // A modal, not a toast. This is a credential the installer has
+              // to write down or type, and a toast disappears while they are
+              // still looking for a pen.
+              showErrorModal(
+                "Enrollment code",
+                `${result.enrollmentCode}
+
+` +
+                  `Give this to the installer. They enter it on the kit's setup page, once.
+` +
+                  `It expires ${fmtDate(result.expiresAt)} and cannot be shown again.`,
+              );
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not create the enrollment code",
+                error instanceof Error ? error.message : "The code could not be created.",
+              );
+            });
+        },
+      });
+    }
+
+    case "add-mqtt-logins": {
+      const box = document.getElementById("mqttPasteBox") as HTMLTextAreaElement | null;
+      const pasted = box?.value ?? "";
+
+      if (!pasted.trim()) {
+        return void toast("Paste at least one username and password first.", "warn");
+      }
+
+      try {
+        const result = await addMqttLogins(pasted);
+
+        // Clear the box on success, so a second click cannot re-submit the
+        // same batch and make the duplicate count look like a problem.
+        if (box) box.value = "";
+
+        toast(result.message, result.added > 0 ? "success" : "warn");
+
+        if (result.runningLow) {
+          toast(
+            `Only ${result.freeCount} free login(s) left - create more in the HiveMQ console.`,
+            "warn",
+          );
+        }
+
+        return void refresh();
+      } catch (error) {
+        showErrorModal(
+          "Could not add the logins",
+          error instanceof Error ? error.message : "The logins could not be stored.",
+        );
+        return;
+      }
+    }
     case "remove-device":
       await api.removeDevice(idAttr);
       toast(`${idAttr} removed from platform.`, "warn");

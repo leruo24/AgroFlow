@@ -161,7 +161,18 @@ public sealed class TelegramPollingService : BackgroundService
         _logger.LogInformation("Telegram polling stopped.");
     }
 
-    private async Task HandleUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken)
+    // PUBLIC so POST /api/telegram/webhook can hand this the same update
+    // Telegram would otherwise have been long-polled for. Both inbound routes
+    // then run identical handling - /start, /status, /alerts and /help behave
+    // the same whichever way the update arrived - rather than a webhook
+    // growing a second, drifting copy of the same switch.
+    //
+    // Safe to call while the poller is also running: nothing below touches
+    // _offset (that is getUpdates' own acknowledgement bookkeeping, and the
+    // webhook has no equivalent), and every state change it makes goes
+    // through TelegramOnboardingService, where single-use code redemption is
+    // already one atomic statement. A code delivered twice redeems once.
+    public async Task HandleUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken)
     {
         var chatId = update.Message?.Chat?.Id;
         var text = update.Message?.Text?.Trim();

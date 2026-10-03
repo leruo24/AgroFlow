@@ -53,7 +53,9 @@ public static class FarmerEndpoints
     private static async Task<IResult> CreateFarmerServiceRequestAsync(
         FarmerServiceRequest request,
         ClaimsPrincipal user,
-        NpgsqlDataSource dataSource)
+        NpgsqlDataSource dataSource,
+        AgroFlow.Api.Services.Notifications.FarmRequestNotifier requestNotifier,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId))
             return Results.Unauthorized();
@@ -224,6 +226,22 @@ public static class FarmerEndpoints
 
         var createdAt =
             reader.GetDateTime(2);
+
+        // The reader has to be closed before the notifier opens its own
+        // connection on this data source, and the insert above is already
+        // committed (there is no explicit transaction here, so it committed
+        // when it executed) - which is the ordering the message needs: a
+        // message about a request that then rolled back would be a lie that
+        // cannot be retracted.
+        await reader.CloseAsync();
+
+        // Telegram, to this farmer and to every admin with a linked chat.
+        // Awaited rather than fire-and-forget so the work happens while the
+        // request is still alive, but it cannot fail this endpoint: every
+        // path inside NotifyAsync is wrapped, and INotificationService's
+        // contract is that it never throws. A dead Telegram means a logged
+        // skip, not a rejected request.
+        await requestNotifier.NotifyAsync(requestId, cancellationToken);
 
         return Results.Created(
             $"/api/farmer/requests/{requestId}",

@@ -36,8 +36,38 @@ public static class IrrigationEventEndpoints
         app.MapPost("/api/irrigation-events", HandleAsync);
     }
 
-    private static async Task<IResult> HandleAsync(IrrigationEventRequest request, NpgsqlDataSource dataSource)
+    private static async Task<IResult> HandleAsync(
+        IrrigationEventRequest request,
+        HttpContext context,
+        AgroFlow.Api.Services.DeviceAuthService deviceAuth,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
     {
+        // v1.3.0: X-Device-Token, which resolves WHICH board is posting. A
+        // board on a token may only log a run against its own zone - the
+        // zoneId in the body is now checked against the credential rather
+        // than trusted, which closes the "any board could log against any
+        // zone" hole the shared X-Api-Key left open.
+        //
+        // A legacy shared-key board cannot be resolved to a device, so it
+        // keeps the old behaviour (the body is taken at face value) for as
+        // long as Devices:LegacyApiKeyEnabled allows it at all.
+        var device = await deviceAuth.AuthenticateAsync(context, cancellationToken);
+
+        if (device is null)
+        {
+            return Results.Json(
+                new { error = "A valid X-Device-Token is required." },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (!device.IsLegacyApiKey && device.ZoneId != request.ZoneId)
+        {
+            // Deliberately 404, not 403: a board should not be able to probe
+            // which zone ids exist. Mirrors the command ACK's choice.
+            return Results.NotFound("No such zone for this device.");
+        }
+
         // Validate BEFORE opening a connection or a transaction.
         //
         // This used to check only zoneId/triggerSource/syncStatus, so a

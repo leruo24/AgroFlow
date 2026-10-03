@@ -1,3 +1,5 @@
+using AgroFlow.Business;
+
 namespace AgroFlow.Api.Services.Notifications;
 
 // Outbound messages to a farmer, independent of the channel that carries them.
@@ -83,6 +85,34 @@ public interface INotificationService
         Guid profileId,
         RequestStatusNotification notification,
         CancellationToken cancellationToken);
+
+    // A farmer's new-farm / new-zone request moving along: submitted,
+    // scheduled for installation, completed.
+    //
+    // WHY THIS IS A SECOND METHOD AND NOT A REUSE OF THE ONE ABOVE
+    // NotifyRequestStatusAsync sends a generic "Update on your request /
+    // Status: ..." block for any status whatsoever. These three moments want
+    // specific words, because each one tells the farmer something different
+    // about a physical kit on its way to their farm, and "Status: Scheduled -
+    // a visit has been booked" does not say that a box is coming. The copy
+    // lives in FarmRequestMessages so it can be reviewed and tested in one
+    // place; the generic method is left exactly as it was for any other
+    // status change.
+    //
+    // Sent only when the farmer has a chat id AND - per the note on
+    // NotifyRequestStatusAsync - regardless of telegram_alerts_enabled:
+    // somebody who muted weather and equipment messages still needs to know a
+    // technician is coming to their farm.
+    Task NotifyFarmRequestAsync(
+        Guid profileId,
+        FarmRequestNotification notification,
+        CancellationToken cancellationToken);
+
+    // The same submission, to every admin who has linked a chat. This is a
+    // work-queue notice, not farmer-facing copy.
+    Task NotifyAdminsOfFarmRequestAsync(
+        FarmRequestAdminNotification notification,
+        CancellationToken cancellationToken);
 }
 
 // Why AgroFlow could not water a Critical zone itself. Each value is a
@@ -149,6 +179,23 @@ public sealed record SystemFailureNotification(
 // exchange it. Nothing constructs this yet: the request table is Luba's work
 // and is not on dev at the time of writing, so the notification path is built
 // and wired but unreachable.
+// Stage decides which of the three messages is sent; the rest is what the
+// message has to name. ScheduledFor is always null today - service_request
+// (0021) has no date column - and is carried so that adding one later is a
+// change in FarmRequestMessages and nowhere else.
+public sealed record FarmRequestNotification(
+    long RequestId,
+    FarmRequestStage Stage,
+    string RequestType,
+    string? Location,
+    DateOnly? ScheduledFor);
+
+public sealed record FarmRequestAdminNotification(
+    long RequestId,
+    string FarmerName,
+    string RequestType,
+    string? Location);
+
 public sealed record RequestStatusNotification(
     string RequestType,
     string Description,
@@ -195,6 +242,14 @@ public sealed class NullNotificationService : INotificationService
     public Task NotifyRequestStatusAsync(
         Guid profileId, RequestStatusNotification notification, CancellationToken cancellationToken)
         => LogDiscarded("request-status", profileId.ToString());
+
+    public Task NotifyFarmRequestAsync(
+        Guid profileId, FarmRequestNotification notification, CancellationToken cancellationToken)
+        => LogDiscarded($"farm-request-{notification.Stage}", profileId.ToString());
+
+    public Task NotifyAdminsOfFarmRequestAsync(
+        FarmRequestAdminNotification notification, CancellationToken cancellationToken)
+        => LogDiscarded("farm-request-admin", $"request {notification.RequestId}");
 
     private Task LogDiscarded(string kind, string target)
     {

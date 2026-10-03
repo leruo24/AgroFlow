@@ -69,6 +69,23 @@ function requestRow(request: ServiceRequest): string {
           ${badge(request.status, statusTone(request.status))}
         </div>
       </td>
+      <td>
+        ${
+          // Only for a SCHEDULED request. Before that there is nothing to
+          // install, and afterwards the kit is already claimed - a second
+          // code would just be a live credential sitting unused.
+          request.status === "scheduled"
+            ? request.farmId !== null
+              ? `<a href="#" class="row-act" data-act="create-enrollment-code"
+                    data-id="${request.id}">Create enrollment code</a>`
+              // A new_farm request has no farm, so it has no zone to enrol a
+              // kit onto. The existing zone setup flow has to run first; this
+              // links there rather than offering an action that cannot work.
+              : `<a href="#" class="row-act" data-act="go-onboarding"
+                    data-id="${request.id}">Set up the farm and zone first</a>`
+            : `<span class="muted">—</span>`
+        }
+      </td>
     </tr>
   `;
 }
@@ -101,6 +118,7 @@ export async function requestsPage(): Promise<string> {
                   <th>Notes</th>
                   <th>Date submitted</th>
                   <th>Status</th>
+                  <th>Hardware</th>
                 </tr>
               </thead>
               <tbody>
@@ -109,7 +127,7 @@ export async function requestsPage(): Promise<string> {
                     ? requests.map(requestRow).join("")
                     : `
                       <tr>
-                        <td colspan="9" class="muted">
+                        <td colspan="10" class="muted">
                           No farm requests have been submitted yet.
                         </td>
                       </tr>

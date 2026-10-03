@@ -1,4 +1,5 @@
 using AgroFlow.Api.Services;
+using AgroFlow.Business;
 using AgroFlow.Api.Services.Notifications;
 using Npgsql;
 
@@ -15,8 +16,6 @@ public record SensorReadingResponse(string HealthStatus, string? CommandIssued);
 // the request body; MQTT resolves it from the topic's deviceId instead).
 public static class SensorReadingEndpoints
 {
-    private static readonly string[] ValidSensorTypes = { "SoilMoisture", "Temperature", "Humidity" };
-
     public static void MapSensorReadingEndpoints(this WebApplication app)
     {
         app.MapPost("/api/sensor-readings", HandleAsync);
@@ -28,9 +27,13 @@ public static class SensorReadingEndpoints
         INotificationService notifications,
         CancellationToken cancellationToken)
     {
-        if (request.ZoneId <= 0 || !ValidSensorTypes.Contains(request.SensorType))
+        // The same list the MQTT subscriber checks against, so the two
+        // transports cannot drift apart - it used to be a private copy here
+        // and nothing at all on the MQTT side.
+        if (request.ZoneId <= 0 || !SensorReadingTypes.IsValid(request.SensorType))
         {
-            return Results.BadRequest("zoneId must be positive and sensorType must be one of SoilMoisture/Temperature/Humidity.");
+            return Results.BadRequest(
+                $"zoneId must be positive and sensorType must be one of {SensorReadingTypes.Describe()}.");
         }
 
         await using var connection = await dataSource.OpenConnectionAsync();

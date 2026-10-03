@@ -100,14 +100,14 @@ export async function irrigationPage(): Promise<string> {
   </div>
 
   <div class="grid split-2">
-    ${panel("Monthly Irrigation Trend", `Water delivered per month (kL) · ${rangeLabel(f)}`, "",
+    ${panel("Monthly Irrigation Trend", `Estimated water delivered per month (kL) · ${rangeLabel(f)}`, "",
       monthly.length ? lineChart(monthly, "#38bdf8") : `<div class="empty-state">No irrigation events in this range.</div>`)}
-    ${panel("Regional Comparison", "Water delivered by region (kL)", "",
+    ${panel("Regional Comparison", "Estimated water delivered by region (kL)", "",
       Object.keys(byRegion).length ? donut(byRegion, ["#22c55e", "#38bdf8", "#f59e0b", "#a78bfa", "#ef4444"])
         : `<div class="empty-state">No data.</div>`)}
   </div>
 
-  ${panel("Water Usage by Farm", "Top farms by volume delivered (kL)", "",
+  ${panel("Water Usage by Farm", "Top farms by estimated volume delivered (kL)", "",
     byFarm.length ? barChart(byFarm) : `<div class="empty-state">No data in this range.</div>`)}
 
   ${panel("Irrigation Schedules", "View, edit or remove schedules recorded from farms",
