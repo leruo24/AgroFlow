@@ -3,10 +3,85 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AgroFlow — Administration Console</title>
-  <meta name="description" content="AgroFlow platform administration console." />
+  <title>AgroFlow — Smart irrigation for South African farmers</title>
+  <meta name="description" content="AgroFlow: sensors in the soil, weather from the sky, and simple advice that tells farmers exactly when and how much to water." />
+  <meta name="theme-color" content="#184D35" />
+
+  <!-- ===================================================================
+       LOADING ANIMATION — inline on purpose.
+
+       This has to be on screen BEFORE the JS bundle loads, which is the
+       whole point of it: the bundle is ~400 KB and on a slow connection the
+       gap before it runs is exactly the gap this is covering. So the markup
+       and its styles are in the document itself, not imported from
+       main.css, and the only script is the few lines at the bottom.
+
+       BACKGROUND IS WHITE, NOT AGROFLOW GREEN. The video was authored on a
+       transparent background and exported to MP4, which cannot carry an
+       alpha channel - so its background is flattened to solid #FFFFFF.
+       Matching it is what stops a white letterbox appearing around the
+       video on a green page. See the report.
+
+       No npm dependency, no localStorage, and every path is relative so it
+       works under any GitHub Pages base path.
+       =================================================================== -->
+  <style>
+    #agroflow-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* The video's own background - see the note above. */
+      background: #FFFFFF;
+      opacity: 1;
+      transition: opacity 300ms ease;
+    }
+
+    /* Added by the script once the app is ready AND the video has finished.
+       The element is removed on transitionend, so nothing is left behind to
+       swallow clicks. */
+    #agroflow-splash.is-leaving { opacity: 0; }
+
+    #agroflow-splash video,
+    #agroflow-splash img {
+      /* contain, not cover: the video is 1080x1920 portrait and the logo
+         sits in the middle of it. Cover on a wide desktop screen would crop
+         the logo off the top and bottom, which is the only part that
+         matters. */
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      /* The poster is shown at the same size as the video would be, so a
+         fallback does not jump. */
+      display: block;
+    }
+
+    /* Reduced motion: the still frame instead of nine seconds of animation.
+       The video element is never given a src in that case (see the script),
+       so nothing is downloaded either. */
+    @media (prefers-reduced-motion: reduce) {
+      #agroflow-splash { transition: none; }
+    }
+  </style>
 </head>
 <body>
+  <div id="agroflow-splash" role="status" aria-label="AgroFlow is starting">
+    <!-- muted + playsinline are what make autoplay allowed at all on iOS and
+         on Chrome's autoplay policy. The poster shows instantly and stays up
+         if the video is blocked or fails. -->
+    <video
+      id="agroflow-splash-video"
+      poster="media/agroflow-loading-poster.jpg"
+      muted
+      playsinline
+      autoplay
+      preload="auto"
+      aria-hidden="true"
+    ></video>
+  </div>
+
   <!-- Everything this app ever shows lives inside #root, and only ever
        ONE of three mutually exclusive states at a time: loading,
        signed-out (login card), signed-in (the dashboard shell). See
@@ -20,6 +95,109 @@
   <div id="root">
     <div class="boot-loading" aria-live="polite">Loading…</div>
   </div>
+
+  <script>
+    (function () {
+      var splash = document.getElementById("agroflow-splash");
+      var video = document.getElementById("agroflow-splash-video");
+      if (!splash || !video) return;
+
+      // The two things that must BOTH be true before the splash leaves.
+      var videoDone = false;
+      var appReady = false;
+      var gone = false;
+
+      // HARD CEILING. Whatever happens - a wedged bundle, a video that
+      // never fires `ended`, a browser that silently refuses to play -
+      // the splash is gone by now. Nobody is ever stuck looking at it.
+      //
+      // NOTE: the supplied video is 9.0 s long, so this 8 s cap fires
+      // BEFORE it finishes and the last ~1 s is cut. That is the brief's
+      // number and it is kept deliberately as the safety limit; raise it
+      // to 10000 here and in the mobile component to let the animation
+      // play out in full. Flagged in the report.
+      var MAX_MS = 8000;
+
+      var reduceMotion =
+        window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      function dismiss() {
+        if (gone) return;
+        gone = true;
+
+        splash.classList.add("is-leaving");
+
+        // Remove rather than leave an invisible full-screen layer over the
+        // app, which would swallow every click.
+        var remove = function () {
+          if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+        };
+
+        splash.addEventListener("transitionend", remove, { once: true });
+        // transitionend does not fire when the transition is suppressed
+        // (reduced motion) or if the tab is backgrounded mid-fade.
+        window.setTimeout(remove, 400);
+      }
+
+      function maybeDismiss() {
+        if (videoDone && appReady) dismiss();
+      }
+
+      // The app calls this when it has finished starting: bundle loaded and
+      // the session check done. Defined before the bundle loads so it can
+      // never be called before it exists.
+      window.__agroflowAppReady = function () {
+        appReady = true;
+        maybeDismiss();
+      };
+
+      if (reduceMotion) {
+        // Static splash: the poster only. The video is never given a src,
+        // so nothing is downloaded and nothing animates.
+        videoDone = true;
+      } else {
+        video.src = "media/agroflow-loading.mp4";
+
+        video.addEventListener("ended", function () {
+          videoDone = true;
+          maybeDismiss();
+        });
+
+        // A video that cannot play must not hold the splash open - the
+        // poster is already showing, and the app continues the moment it
+        // is ready.
+        video.addEventListener("error", function () {
+          videoDone = true;
+          maybeDismiss();
+        });
+
+        // Autoplay blocked (a policy that needs a gesture) rejects the
+        // promise. Same answer: poster, then continue when ready.
+        var played = video.play();
+        if (played && typeof played.catch === "function") {
+          played.catch(function () {
+            videoDone = true;
+            maybeDismiss();
+          });
+        }
+      }
+
+      // Skip, but only once there is something to skip TO. Skipping into a
+      // half-loaded app would show a flash of empty page, which is worse
+      // than the second of animation it saved.
+      function skip() {
+        if (appReady) {
+          videoDone = true;
+          dismiss();
+        }
+      }
+
+      splash.addEventListener("pointerdown", skip);
+      window.addEventListener("keydown", skip);
+
+      window.setTimeout(dismiss, MAX_MS);
+    })();
+  </script>
 
   <script type="module" src="/src/main.ts"></script>
 </body>
