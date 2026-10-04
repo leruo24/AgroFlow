@@ -450,7 +450,13 @@ the `apple-*` meta tags, and the loading video and poster.
 
 **There was no GitHub Pages deploy in this repo at all**: no workflow, no Vite `base`,
 nothing. The brief asked to add the web app "following the admin's existing deploy setup" —
-there wasn't one, so `.github/workflows/pages.yml` creates both.
+there wasn't one, so a workflow was written that builds and publishes both.
+
+> **⚠️ The workflow is parked at `docs/pages-workflow.yml`, not `.github/workflows/`.**
+> GitHub refuses a push from a credential without the `workflow` OAuth scope if any commit
+> in it adds or changes a file under `.github/workflows/`, and the token this repo is
+> pushed with does not have that scope. The file is unmodified — only relocated — and the
+> header at the top of it has the one-line copy command. This is step 0 of the three below.
 
 Once it runs, the URLs will be:
 
@@ -459,12 +465,19 @@ Once it runs, the URLs will be:
 
 **Three things must happen before those work**, none of which can be done from here:
 
+0. **Put the workflow in place** — `cp docs/pages-workflow.yml .github/workflows/pages.yml`,
+   then commit it with a credential that has the `workflow` scope (or add it through the
+   GitHub web UI, which is not subject to that restriction).
 1. **Enable Pages** — repo Settings → Pages → Source: **GitHub Actions**.
 2. **Set the eight repository variables** in §3 (Settings → Secrets and variables → Actions →
    Variables).
 3. **Run the workflow** — it fires on push to `main`, or manually via *Run workflow* on the
    branch. This branch merges to `dev`, not `main`, so it will need the manual run (or a
    `dev` → `main` merge) to publish.
+
+`.github/workflows/pages.yml` is referenced by that name in the commit message of
+`feat(admin): loading animation, public landing page, GitHub Pages deploy` — that commit
+predates the move, and its message was left alone rather than rewritten.
 
 `base` is `"./"` rather than a hardcoded `/AgroFlow/`, so the same build works from Pages,
 `vite preview` and Railway. `404.html` mirrors `index.html` so deep links survive a hard

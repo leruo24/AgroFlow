@@ -1,3 +1,30 @@
+# ============================================================================
+# THIS FILE IS NOT ACTIVE WHERE IT SITS. COPY IT INTO PLACE TO USE IT:
+#
+#     mkdir -p .github/workflows
+#     cp docs/pages-workflow.yml .github/workflows/pages.yml
+#     git add .github/workflows/pages.yml && git commit && git push
+#
+# WHY IT LIVES IN docs/ INSTEAD
+# GitHub refuses a push from a credential without the `workflow` OAuth scope
+# if any commit in it adds or changes a file under .github/workflows/. The
+# token this repo was pushed with does not have that scope, so the workflow
+# was moved here to let the rest of the work land. Nothing is wrong with the
+# file - it has never been edited, only relocated.
+#
+# To put it back permanently, either grant the scope (regenerate the PAT with
+# `repo` + `workflow`, or `gh auth refresh -h github.com -s workflow`) and
+# then do the copy above, or add the file through the GitHub web UI, which is
+# not subject to the same restriction.
+#
+# Three things are still needed before the published URLs work - none of them
+# can be done from a terminal. See section 9 of docs/finish-features-report.md:
+#   1. Settings -> Pages -> Source: GitHub Actions
+#   2. Settings -> Secrets and variables -> Actions -> Variables: the eight
+#      listed in section 3 of the report
+#   3. Run the workflow (it fires on push to main, or manually)
+# ============================================================================
+
 # Publishes the admin console and the mobile web app to GitHub Pages.
 #
 # THERE WAS NO DEPLOY WORKFLOW IN THIS REPO BEFORE THIS FILE. The brief asked
