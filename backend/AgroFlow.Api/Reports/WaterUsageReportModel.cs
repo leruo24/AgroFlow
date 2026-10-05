@@ -1,0 +1,451 @@
+using System.Globalization;
+using AgroFlow.Business;
+using AgroFlow.Business.Agronomy;
+using Npgsql;
+using NpgsqlTypes;
+
+namespace AgroFlow.Api.Reports;
+
+/// One zone, one period, everything the designed report prints.
+///
+/// WHY A MODEL RATHER THAN QUERYING FROM THE RENDERERS
+/// Two things render this: the PDF and the workbook. The brief's two
+/// templates are the same report in two formats, and the first thing that
+/// would go wrong is the spreadsheet disagreeing with the document - a
+/// rounded figure in one, a raw one in the other, a day included here and
+/// excluded there. Gathering once and handing the same numbers to both makes
+/// that impossible rather than merely unlikely.
+internal sealed class WaterUsageReportModel
+{
+    public required string FarmName { get; init; }
+    public required string ZoneName { get; init; }
+    public string? CropLabel { get; init; }
+
+    public required DateOnly From { get; init; }
+    public required DateOnly To { get; init; }
+    public required DateTimeOffset GeneratedAtSast { get; init; }
+
+    /// Null when the zone has no flow rate on file. Everything derived from
+    /// it is then null too - see migration 0018.
+    public double? FlowRateLpm { get; init; }
+
+    public required IReadOnlyList<DayLine> Days { get; init; }
+    public required IReadOnlyList<ChartSvg.MoisturePoint> MoistureSeries { get; init; }
+    public required IReadOnlyList<double> PumpPositions { get; init; }
+    public required IReadOnlyList<AdviceLine> Advice { get; init; }
+
+    /// "Peak growth, day 72 of 145". Null when the crop or planting date is
+    /// not set, in which case the report simply does not mention a stage
+    /// rather than guessing one.
+    public string? GrowthStage { get; init; }
+
+    /// The day the engine expects the soil to reach its watering point.
+    public DateOnly? NextWatering { get; init; }
+    public int? NextWateringMinutes { get; init; }
+    public double? NextWateringLitres { get; init; }
+
+    public double HealthyLowPercent { get; init; } = 60;
+    public double HealthyHighPercent { get; init; } = 100;
+
+    /* ---- Totals, computed once so the PDF and the workbook agree ------ */
+
+    public int TotalRuns => Days.Sum(d => d.PumpRuns);
+    public double TotalMinutes => Round(Days.Sum(d => d.PumpMinutes));
+
+    /// Every total is rounded to three decimals.
+    ///
+    /// Not cosmetic: summing seven doubles that are each already rounded to
+    /// two decimals produces the usual binary artefact, and 11 came out as
+    /// 10.999999999999998. The PDF hid that behind its display rounding, but
+    /// the workbook stores the raw value, so the cell read 11.0 and contained
+    /// something else - which anyone comparing or filtering on it would hit.
+    /// Three decimals is well past the precision of an estimate derived from
+    /// a nominal flow rate.
+    private static double Round(double value) => Math.Round(value, 3);
+
+    /// Null if NO day could be estimated. A zone with no flow rate has no
+    /// water figure at all, which is different from a zone that was simply
+    /// not watered.
+    public double? TotalLitres =>
+        Days.Any(d => d.Litres.HasValue) ? Round(Days.Sum(d => d.Litres ?? 0)) : null;
+
+    public double? TotalNeedLitres =>
+        Days.Any(d => d.NeedLitres.HasValue) ? Round(Days.Sum(d => d.NeedLitres ?? 0)) : null;
+
+    public double? Difference =>
+        TotalLitres.HasValue && TotalNeedLitres.HasValue ? Round(TotalLitres.Value - TotalNeedLitres.Value) : null;
+
+    /// Days whose average moisture sat below the healthy band.
+    public int DaysTooDry =>
+        Days.Count(d => d.AvgMoisturePercent.HasValue && d.AvgMoisturePercent < HealthyLowPercent);
+
+    public double? AvgMoisturePercent
+    {
+        get
+        {
+            var values = Days.Where(d => d.AvgMoisturePercent.HasValue)
+                             .Select(d => d.AvgMoisturePercent!.Value).ToList();
+            return values.Count == 0 ? null : Round(values.Average());
+        }
+    }
+
+    public double TotalRainMm => Round(Days.Sum(d => d.RainMm ?? 0));
+
+    public double? AvgAreaTempC => Avg(Days.Select(d => d.AreaMaxC));
+    public double? AvgTubTempC => Avg(Days.Select(d => d.TubMaxC));
+    public double? AvgAreaHumidity => Avg(Days.Select(d => d.AreaHumidity));
+    public double? AvgTubHumidity => Avg(Days.Select(d => d.TubHumidity));
+
+    private static double? Avg(IEnumerable<double?> values)
+    {
+        var present = values.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        return present.Count == 0 ? null : Round(present.Average());
+    }
+
+    public sealed record DayLine(
+        DateOnly Date,
+        int PumpRuns,
+        double PumpMinutes,
+        double? Litres,
+        double? NeedLitres,
+        double? AvgMoisturePercent,
+        double? AreaMaxC,
+        double? TubMaxC,
+        double? AreaHumidity,
+        double? TubHumidity,
+        double? RainMm,
+        string Note)
+    {
+        /// "Mon 28" for charts, "Mon 28 Sep" for tables. Invariant culture:
+        /// .NET 8 on some hosts abbreviates September as "Sept", and this
+        /// string reaches a farmer in a Telegram caption.
+        public string ShortLabel =>
+            Date.ToDateTime(TimeOnly.MinValue).ToString("ddd d", CultureInfo.InvariantCulture);
+
+        public string LongLabel =>
+            Date.ToDateTime(TimeOnly.MinValue).ToString("ddd d MMM", CultureInfo.InvariantCulture);
+    }
+
+    public sealed record AdviceLine(string Message, string Source);
+}
+
+/// Builds the model. All reads; nothing here writes.
+internal static class WaterUsageReportBuilder
+{
+    /// UTC+2, no DST.
+    private static readonly TimeSpan Sast = TimeSpan.FromHours(2);
+
+    /// How far the engine's balance window reaches back. A report older than
+    /// this cannot carry crop-need or moisture figures, and says so rather
+    /// than leaving the reader to wonder why those columns are empty.
+    public const int EngineWindowDays = Fao56EngineController.BalanceWindowDays;
+
+    /// Returns null when the zone does not exist or the caller does not own
+    /// it. The caller turns that into a 404, so a farmer probing zone ids
+    /// cannot tell "not yours" from "not there".
+    public static async Task<WaterUsageReportModel?> BuildAsync(
+        NpgsqlConnection connection,
+        Fao56EngineController engine,
+        Guid profileId,
+        long zoneId,
+        DateOnly from,
+        DateOnly to,
+        CancellationToken ct)
+    {
+        /* ---- 1. The zone, and whether this person may read it --------- */
+        const string zoneSql = """
+            select z.id, z.name, z.crop_type, z.flow_rate_lpm,
+                   z.calibration_wet, z.calibration_dry,
+                   f.farm_id, f.name
+              from zone z
+              join farm f on f.farm_id = z.farm_id
+             where z.id = $1
+               and (exists (select 1 from farm f2 where f2.farm_id = z.farm_id and f2.owner_id = $2)
+                 or exists (select 1 from farm_member fm where fm.farm_id = z.farm_id and fm.profile_id = $2)
+                 or exists (select 1 from profile p where p.id = $2 and p.role = 'admin'))
+            """;
+
+        string zoneName, farmName;
+        string? cropType;
+        double? flowRate, calibrationWet, calibrationDry;
+
+        await using (var cmd = new NpgsqlCommand(zoneSql, connection))
+        {
+            cmd.Parameters.AddWithValue(zoneId);
+            cmd.Parameters.AddWithValue(profileId);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return null;
+
+            zoneName = reader.IsDBNull(1) ? $"Zone {zoneId}" : reader.GetString(1);
+            cropType = reader.IsDBNull(2) ? null : reader.GetString(2);
+            flowRate = reader.IsDBNull(3) ? null : reader.GetFloat(3);
+            calibrationWet = reader.IsDBNull(4) ? null : reader.GetDouble(4);
+            calibrationDry = reader.IsDBNull(5) ? null : reader.GetDouble(5);
+            farmName = reader.IsDBNull(7) ? "Farm" : reader.GetString(7);
+        }
+
+        /* ---- 2. Pump runs per day ------------------------------------- */
+        // Grouped in SAST, not UTC. A run at 01:30 local belongs to that
+        // morning; grouped in UTC it lands on the previous day and the chart
+        // shows water arriving the night before it did.
+        const string eventSql = """
+            select (started_at at time zone 'Africa/Johannesburg')::date as day,
+                   count(*),
+                   coalesce(sum(runtime_seconds), 0)
+              from irrigation_event
+             where zone_id = $1
+               and (started_at at time zone 'Africa/Johannesburg')::date between $2 and $3
+             group by 1
+            """;
+
+        var runsByDay = new Dictionary<DateOnly, (int Runs, long Seconds)>();
+
+        await using (var cmd = new NpgsqlCommand(eventSql, connection))
+        {
+            cmd.Parameters.AddWithValue(zoneId);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, to);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                runsByDay[reader.GetFieldValue<DateOnly>(0)] =
+                    ((int)reader.GetInt64(1), reader.GetInt64(2));
+            }
+        }
+
+        /* ---- 3. Each pump run's moment, for the chart markers ---------- */
+        const string pumpTimesSql = """
+            select started_at at time zone 'Africa/Johannesburg'
+              from irrigation_event
+             where zone_id = $1
+               and (started_at at time zone 'Africa/Johannesburg')::date between $2 and $3
+             order by started_at
+            """;
+
+        var pumpTimes = new List<DateTime>();
+
+        await using (var cmd = new NpgsqlCommand(pumpTimesSql, connection))
+        {
+            cmd.Parameters.AddWithValue(zoneId);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, to);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) pumpTimes.Add(reader.GetDateTime(0));
+        }
+
+        /* ---- 4. Soil moisture readings -------------------------------- */
+        const string moistureSql = """
+            select recorded_at at time zone 'Africa/Johannesburg', value
+              from sensor_reading
+             where zone_id = $1
+               and sensor_type = 'SoilMoisture'
+               and (recorded_at at time zone 'Africa/Johannesburg')::date between $2 and $3
+             order by recorded_at
+            """;
+
+        var readings = new List<(DateTime At, double Raw)>();
+
+        await using (var cmd = new NpgsqlCommand(moistureSql, connection))
+        {
+            cmd.Parameters.AddWithValue(zoneId);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, to);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                readings.Add((reader.GetDateTime(0), reader.GetDouble(1)));
+            }
+        }
+
+        /* ---- 5. The tub's own temperature and humidity ----------------- */
+        const string dhtSql = """
+            select (recorded_at at time zone 'Africa/Johannesburg')::date,
+                   max(value) filter (where sensor_type = 'Temperature'),
+                   avg(value) filter (where sensor_type = 'Humidity')
+              from sensor_reading
+             where zone_id = $1
+               and sensor_type in ('Temperature', 'Humidity')
+               and (recorded_at at time zone 'Africa/Johannesburg')::date between $2 and $3
+             group by 1
+            """;
+
+        var tubByDay = new Dictionary<DateOnly, (double? MaxC, double? Humidity)>();
+
+        await using (var cmd = new NpgsqlCommand(dhtSql, connection))
+        {
+            cmd.Parameters.AddWithValue(zoneId);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Date, to);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                tubByDay[reader.GetFieldValue<DateOnly>(0)] = (
+                    reader.IsDBNull(1) ? null : reader.GetDouble(1),
+                    reader.IsDBNull(2) ? null : reader.GetDouble(2));
+            }
+        }
+
+        /* ---- 6. The engine: crop need, weather, stage, next watering --- */
+        //
+        // Anchored on the report's LAST day rather than on today, so a report
+        // for last week is built from a balance that ended last week. Anchored
+        // on today instead, the "next watering" line would answer a question
+        // about a period the report does not cover.
+        var engineZone = engine.Data.GetZone(zoneId);
+        ZoneEngineResult? engineResult = null;
+        var weatherByDay = new Dictionary<DateOnly, ZoneWeatherDay>();
+        var insights = new List<ZoneInsight>();
+
+        if (engineZone is not null)
+        {
+            var today = Fao56EngineController.TodayInSast();
+            var anchor = to > today ? today : to;
+
+            var input = engine.BuildInput(engineZone, anchor);
+            foreach (var w in input.Weather) weatherByDay[w.Date] = w;
+
+            engineResult = Fao56Engine.Run(input);
+
+            // ZoneInsightBuilder.Build directly, NOT engine.RunActNowChecks.
+            // That method writes the insights it finds (and handles DHT
+            // faults) as a side effect, which is right when the scheduler
+            // calls it and wrong here: producing a report must not change
+            // what the farmer sees in the app. The builder itself is pure.
+            var signals = engine.BuildFaultSignals(engineZone, anchor);
+            insights = ZoneInsightBuilder.Build(input, engineResult, signals);
+        }
+
+        var balanceByDay = engineResult?.Days.ToDictionary(d => d.Day) ?? new Dictionary<DateOnly, WaterBalanceDay>();
+        var areaM2 = engineZone?.AreaM2;
+
+        /* ---- 7. Assemble a line per day ------------------------------- */
+        var days = new List<WaterUsageReportModel.DayLine>();
+
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            runsByDay.TryGetValue(date, out var runs);
+            var minutes = runs.Seconds / 60.0;
+
+            // The formula from migration 0018, and the only place litres are
+            // ever derived. Null when the zone has no flow rate, never 0.
+            double? litres = flowRate.HasValue ? minutes * flowRate.Value : null;
+
+            balanceByDay.TryGetValue(date, out var balance);
+
+            // ETc is a depth in mm. Litres need an area: 1 mm over 1 m^2 is
+            // 1 litre. A zone with no area recorded therefore has no need
+            // figure - the depth alone cannot be turned into a volume.
+            double? needLitres = balance?.EtcAdjustedMm is { } mm && areaM2 is { } area
+                ? mm * area
+                : null;
+
+            var dayReadings = readings
+                .Where(r => DateOnly.FromDateTime(r.At) == date)
+                .Select(r => SoilWaterBalance.RelativeMoisturePercent(r.Raw, calibrationWet, calibrationDry))
+                .Where(p => p.HasValue)
+                .Select(p => p!.Value)
+                .ToList();
+
+            double? avgMoisture = dayReadings.Count == 0 ? null : dayReadings.Average();
+
+            weatherByDay.TryGetValue(date, out var weather);
+            tubByDay.TryGetValue(date, out var tub);
+
+            days.Add(new WaterUsageReportModel.DayLine(
+                date,
+                runs.Runs,
+                Math.Round(minutes, 2),
+                litres.HasValue ? Math.Round(litres.Value, 2) : null,
+                needLitres.HasValue ? Math.Round(needLitres.Value, 2) : null,
+                avgMoisture.HasValue ? Math.Round(avgMoisture.Value, 1) : null,
+                weather?.TMaxC,
+                tub.MaxC ?? weather?.DhtTMaxC,
+                weather?.RhMeanPct,
+                tub.Humidity ?? weather?.DhtRhMeanPct,
+                balance?.RainMm ?? weather?.RainMm,
+                DayNote(runs.Runs, litres, needLitres, balance?.RainMm ?? weather?.RainMm, avgMoisture)));
+        }
+
+        /* ---- 8. The moisture series, positioned by actual time --------- */
+        var periodStart = from.ToDateTime(TimeOnly.MinValue);
+        var periodSpan = to.AddDays(1).ToDateTime(TimeOnly.MinValue) - periodStart;
+
+        var series = readings
+            .Select(r => new
+            {
+                Position = periodSpan.TotalSeconds <= 0 ? 0 : (r.At - periodStart).TotalSeconds / periodSpan.TotalSeconds,
+                Percent = SoilWaterBalance.RelativeMoisturePercent(r.Raw, calibrationWet, calibrationDry),
+            })
+            .Where(p => p.Percent.HasValue)
+            .Select(p => new ChartSvg.MoisturePoint(p.Position, p.Percent!.Value))
+            .ToList();
+
+        var pumpPositions = pumpTimes
+            .Select(t => periodSpan.TotalSeconds <= 0 ? 0 : (t - periodStart).TotalSeconds / periodSpan.TotalSeconds)
+            .ToList();
+
+        /* ---- 9. Advice, with where each line came from ----------------- */
+        // Act-now first, then the rest, capped at four. The template shows
+        // three; four is the point where a farmer stops reading a numbered
+        // list, and anything past it would be the least urgent item anyway.
+        var advice = insights
+            .OrderBy(i => i.Severity == InsightSeverity.ActNow ? 0 : 1)
+            .Take(4)
+            .Select(i => new WaterUsageReportModel.AdviceLine(i.Message, i.Source))
+            .ToList();
+
+        /* ---- 10. The crop and its stage -------------------------------- */
+        var crop = Fao56EngineReference.TryResolveCrop(cropType);
+
+        string? stage = null;
+        if (engineResult?.Stage is { } st && engineResult.DayOfSeason is { } dayOfSeason && crop is not null)
+        {
+            stage = $"{Fao56EngineReference.StageLabel(st)}, day {dayOfSeason} of {crop.TotalDays}";
+        }
+
+        return new WaterUsageReportModel
+        {
+            FarmName = farmName,
+            ZoneName = zoneName,
+            CropLabel = crop?.Label,
+            From = from,
+            To = to,
+            GeneratedAtSast = DateTimeOffset.UtcNow.ToOffset(Sast),
+            FlowRateLpm = flowRate,
+            Days = days,
+            MoistureSeries = series,
+            PumpPositions = pumpPositions,
+            Advice = advice,
+            GrowthStage = stage,
+            NextWatering = engineResult?.NextWateringDate,
+            NextWateringMinutes = engineResult?.RecommendedMinutes,
+            NextWateringLitres = engineResult?.RecommendedLitres,
+        };
+    }
+
+    /// The one-line note in the daily table. Deliberately plain, and never a
+    /// judgement the data does not support: with no need figure to compare
+    /// against, it reports what happened rather than whether it was right.
+    private static string DayNote(
+        int runs, double? litres, double? need, double? rain, double? moisture)
+    {
+        if (rain is >= 2) return "Rain helped";
+        if (runs == 0) return "Pump did not run";
+
+        if (litres is null || need is null)
+        {
+            return runs == 1 ? "One run" : $"{runs} runs";
+        }
+
+        if (moisture is { } m && m < 60) return "Soil dipped low";
+        if (litres < need * 0.8) return "Less than needed";
+        if (litres > need * 1.3) return "More than needed";
+
+        return "Watering about right";
+    }
+}

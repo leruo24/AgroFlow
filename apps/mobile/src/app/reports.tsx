@@ -297,6 +297,19 @@ export default function ReportsScreen() {
           {needsZone && zoneId === 'all' && (
             <Text style={styles.hint}>A soil moisture report is for one zone. Please pick one.</Text>
           )}
+
+          {/* Picking a zone is not just a filter on the water usage report -
+              it produces a different, fuller document: charts of what the
+              crop needed against what it got, the week's soil moisture, and
+              the advice behind it. Worth saying, because "All zones" reads
+              like the more complete option and is in fact the shorter one. */}
+          {reportType === 'water_usage' && (
+            <Text style={styles.hint}>
+              {zoneId === 'all'
+                ? 'All zones gives a short summary. Pick one zone for the full report, with charts and advice.'
+                : 'You will get the full report for this zone: charts, what the crop needed, and advice.'}
+            </Text>
+          )}
         </View>
 
         <Pressable

@@ -253,8 +253,13 @@ public sealed class ReportGenerationService : BackgroundService
 
         IResult result = request.ReportType switch
         {
+            // request.ZoneId travels through. A farmer who picked a zone in
+            // the app gets the designed per-zone report; one who asked about
+            // the whole farm gets the farm summary, unchanged. Both arrive by
+            // Telegram the same way.
             ReportKinds.WaterUsage => await ReportEndpoints.GetWaterUsagePdfAsync(
-                principal, dataSource, request.FarmId, request.PeriodStart, request.PeriodEnd, engine),
+                principal, dataSource, request.FarmId, request.PeriodStart, request.PeriodEnd, engine,
+                request.ZoneId, ct),
 
             ReportKinds.Moisture => await ReportEndpoints.GetMoisturePdfAsync(
                 principal, dataSource, request.ZoneId, request.PeriodStart, request.PeriodEnd, engine),
@@ -285,8 +290,12 @@ public sealed class ReportGenerationService : BackgroundService
     {
         return request.ReportType switch
         {
+            // The zone has to be in the stored path too, or regenerating a
+            // report would hand back the farm summary instead of the document
+            // the farmer originally received.
             ReportKinds.WaterUsage =>
                 $"/api/farmer/reports/water-usage/pdf?farmId={request.FarmId}" +
+                (request.ZoneId is { } wz ? $"&zoneId={wz}" : "") +
                 $"&from={request.PeriodStart:yyyy-MM-dd}&to={request.PeriodEnd:yyyy-MM-dd}",
 
             ReportKinds.Moisture =>

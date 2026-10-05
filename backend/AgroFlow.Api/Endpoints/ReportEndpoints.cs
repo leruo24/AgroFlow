@@ -7,6 +7,7 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using AgroFlow.Business.Agronomy;
+using AgroFlow.Api.Reports;
 
 namespace AgroFlow.Api.Endpoints;
 
@@ -33,6 +34,11 @@ public static class ReportEndpoints
         group.MapGet("/moisture", GetMoistureAsync);
         group.MapGet("/schedule", GetScheduleAsync);
         group.MapGet("/water-usage/pdf", GetWaterUsagePdfAsync);
+
+        // The same report as a workbook. Only ever per zone, because a
+        // spreadsheet of several zones' days side by side is not a thing
+        // anybody asked for - they would filter it back down to one.
+        group.MapGet("/water-usage/xlsx", GetWaterUsageXlsxAsync);
         group.MapGet("/moisture/pdf", GetMoisturePdfAsync);
         group.MapGet("/schedule/pdf", GetSchedulePdfAsync);
         group.MapGet("/zones", GetZonesAsync);
@@ -562,10 +568,99 @@ public static class ReportEndpoints
         });
     }
 
-        internal static async Task<IResult> GetWaterUsagePdfAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to,
-        AgroFlow.Business.Fao56EngineController engine)
+        /* The designed, per-zone report (item 8b).
+     *
+     * WHY zoneId SWITCHES THE WHOLE DOCUMENT
+     * Without a zone this endpoint answers "how much water did this FARM
+     * use", which is a summary across zones and stays exactly as it was -
+     * the scheduler, the Telegram delivery and the admin console all depend
+     * on it. With a zone it answers "how did this block do this week", which
+     * is a different document for a different reader: a farmer, on a phone,
+     * who wants to know whether their tomatoes got enough. That is the one
+     * docs/agroflow-report-template.pdf describes, and it carries charts, the
+     * crop's needs, the moisture trace and the week's advice.
+     *
+     * Splitting them on a parameter rather than on a new route keeps one URL
+     * in the scheduler's regeneration path and one in the mobile app. */
+    private static async Task<IResult> BuildDesignedAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        long zoneId, DateOnly from, DateOnly to,
+        AgroFlow.Business.Fao56EngineController engine,
+        bool asWorkbook,
+        CancellationToken cancellationToken)
     {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+        if (from > to) return Results.BadRequest(new { error = "from must not be after to." });
+
+        if (to.DayNumber - from.DayNumber >= MaxRangeDays)
+        {
+            return Results.BadRequest(new { error = $"Date range must not exceed {MaxRangeDays} days." });
+        }
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var model = await WaterUsageReportBuilder.BuildAsync(
+            connection, engine, userId, zoneId, from, to, cancellationToken);
+
+        // One answer for "no such zone" and "not your zone". Telling them
+        // apart would let anyone with a token enumerate which zone ids exist.
+        if (model is null) return Results.NotFound(new { error = "No such zone." });
+
+        var stamp = $"{from:yyyy-MM-dd}-to-{to:yyyy-MM-dd}";
+        var slug = Slug(model.ZoneName);
+
+        return asWorkbook
+            ? Results.File(
+                WaterUsageWorkbook.Render(model),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"agroflow-water-{slug}-{stamp}.xlsx")
+            : Results.File(
+                DesignedWaterUsagePdf.Render(model),
+                "application/pdf",
+                $"agroflow-water-{slug}-{stamp}.pdf");
+    }
+
+    /// A filename a phone will not mangle: lowercase, ASCII, hyphens.
+    private static string Slug(string name)
+    {
+        var chars = name.ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray();
+
+        var slug = new string(chars).Trim('-');
+
+        while (slug.Contains("--", StringComparison.Ordinal))
+        {
+            slug = slug.Replace("--", "-", StringComparison.Ordinal);
+        }
+
+        return slug.Length == 0 ? "zone" : slug;
+    }
+
+    private static async Task<IResult> GetWaterUsageXlsxAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to,
+        AgroFlow.Business.Fao56EngineController engine, CancellationToken cancellationToken)
+    {
+        if (zoneId is null) return Results.BadRequest(new { error = "zoneId is required." });
+        if (from is null || to is null) return Results.BadRequest(new { error = "from and to dates are required (yyyy-MM-dd)." });
+
+        return await BuildDesignedAsync(
+            user, dataSource, zoneId.Value, from.Value, to.Value, engine,
+            asWorkbook: true, cancellationToken);
+    }
+
+    internal static async Task<IResult> GetWaterUsagePdfAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, DateOnly? from, DateOnly? to,
+        AgroFlow.Business.Fao56EngineController engine, long? zoneId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (zoneId is not null && from is not null && to is not null)
+        {
+            return await BuildDesignedAsync(
+                user, dataSource, zoneId.Value, from.Value, to.Value, engine,
+                asWorkbook: false, cancellationToken);
+        }
+
         // Reuse the on-screen report so the PDF can never disagree with it.
         var result = await GetWaterUsageAsync(user, dataSource, farmId, from, to, engine);
         if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;

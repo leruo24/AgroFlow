@@ -29,4 +29,22 @@
     <ProjectReference Include="../AgroFlow.Domain/AgroFlow.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The report's logo, compiled into the assembly rather than deployed
+         beside it. A Railway container's filesystem is rebuilt on every
+         deploy and nothing copies loose assets into it, so a report that
+         loaded this from disk would quietly lose its header in production -
+         and only in production. -->
+    <EmbeddedResource Include="Reports/Assets/agroflow-icon.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The report builders in Reports/ are internal: they are an
+         implementation detail of three endpoints, not API surface. The test
+         project still has to exercise them, because a malformed chart does
+         not throw - Skia renders a blank box and the document "succeeds", so
+         a broken report would ship looking like a layout choice. -->
+    <InternalsVisibleTo Include="AgroFlow.Domain.Tests" />
+  </ItemGroup>
+
 </Project>
