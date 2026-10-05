@@ -315,8 +315,7 @@ export async function reportsPage(): Promise<string> {
           </div>
           <div class="report-actions">
             <button class="btn sm" data-act="generate-report" data-report="${esc(r.name)}">Generate</button>
-            <button class="btn ghost sm" data-act="export-report-pdf" data-report="${esc(r.name)}">PDF</button>
-            <button class="btn ghost sm" data-act="export-report-excel" data-report="${esc(r.name)}">Excel</button>
+                  <button class="btn ghost sm" data-act="export-report-excel" data-report="${esc(r.name)}">Excel</button>
             <button class="btn ghost sm" data-act="export-report-csv" data-report="${esc(r.name)}">CSV</button>
           </div>
         </div>`).join("")}
@@ -504,24 +503,38 @@ export function settingsTabBody(tab: SettingsTab): string {
         ${toggleRow("Restrict admin access by IP", "Allow-list only", false)}
         ${toggleRow("Log all administrator actions", "Written to Platform Activity", true)}
       </div>
-      <div class="form-foot">
-        ${save}
-        <button class="btn dark" data-act="manage-roles">Manage roles &amp; permissions</button>
-      </div>`;
+      <div class="form-foot">${save}</div>
+      <p class="muted">
+        An account is either an administrator or a farmer, set on their profile. There is no
+        finer-grained permission set to manage.
+      </p>`;
 
+    /* This tab used to state a last cloud backup time, a last local backup
+       time, a retention policy and "82% of 500 GB", with a meter drawn from
+       that 82 - all of it invented. None of those numbers came from anywhere;
+       there is no backup system in this project to report on, and no local
+       storage to be 82% full. Three buttons underneath claimed to start a
+       backup, restore one and download an archive, and did none of it.
+
+       Fabricated facts are worse than a gap: somebody could have read that
+       line and concluded the data was safe. What follows is what is actually
+       true about where AgroFlow's data lives. */
     case "Backup & Recovery":
       return `<div class="detail-list">
-        <div class="detail-row"><span>Last cloud backup</span><b>2026-07-22 04:20</b></div>
-        <div class="detail-row"><span>Last local backup</span><b>2026-07-22 03:55</b></div>
-        <div class="detail-row"><span>Backup frequency</span><b>Hourly (local) · Daily (cloud)</b></div>
-        <div class="detail-row"><span>Retention policy</span><b>30 days rolling</b></div>
-        <div class="detail-row"><span>Storage used</span><b>82% of 500 GB</b></div>
+        <div class="detail-row"><span>Where the data lives</span><b>Supabase Postgres</b></div>
+        <div class="detail-row"><span>Who backs it up</span><b>Supabase, on the project's plan</b></div>
+        <div class="detail-row"><span>Managed from</span><b>The Supabase dashboard, not here</b></div>
       </div>
-      ${meter(82, "warn")}
-      <div class="form-foot">
-        <button class="btn" data-act="backup-now">Back up now</button>
-        <button class="btn dark" data-act="restore">Restore from backup</button>
-        <button class="btn ghost" data-act="download-backup">Download archive</button>
-      </div>`;
+      <p class="muted">
+        Backups and point-in-time recovery are part of the Supabase project and are configured in
+        the Supabase dashboard under Database → Backups. AgroFlow holds no separate copy of the
+        data and has nothing of its own to back up or restore, so there is nothing to start from
+        this page.
+      </p>
+      <p class="muted">
+        Two things in AgroFlow are deliberately never deleted and so need no backup of their own:
+        archiving a farm hides it and keeps every row (migration 0036), and the administrator
+        activity log cannot be updated or deleted at all (migration 0037).
+      </p>`;
   }
 }

@@ -35,7 +35,7 @@ import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard } from "@/ui/patterns";
-import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
+import { exportActivityWorkbook, exportSummaryWorkbook, exportRowsWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml } from "@/pages/analytics";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
@@ -323,8 +323,12 @@ async function exportCurrent(kind: string): Promise<void> {
         search: (h) => `${h.id} ${h.type} ${h.farm}`, date: (h) => h.installed,
         farm: (h) => h.farm, deviceType: (h) => h.type, status: (h) => h.status,
         maintenanceState: (h) => h.maintenanceState,
-      }).map((h) => [h.id, h.type, h.farm, h.province, h.firmware, h.battery ?? "Mains", h.uptimePct, h.status, h.maintenanceState, h.installed]);
-      downloadExcelSafeCsv("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime %", "Status", "Maintenance", "Installed"], rows));
+      // Uptime and battery are not measured anywhere, so they say so
+      // rather than exporting 0 and an assumed "Mains".
+      }).map((h) => [h.id, h.type, h.farm, h.province, h.firmware,
+                     h.battery === null ? "Not reported" : h.battery,
+                     "Not measured", h.status, h.maintenanceState, h.installed]);
+      downloadExcelSafeCsv("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime", "Status", "Maintenance", "Installed"], rows));
       break;
     }
     case "alerts": {
@@ -537,8 +541,11 @@ async function openUserProfile(id: string): Promise<void> {
       section("Administrator notes", list(u.notes.map((n) =>
         `${esc(n.note)} <span class="muted">— ${esc(n.author)}, ${esc(n.when)}</span>`))),
     ].join(""),
-    confirmLabel: "Add note",
-    onConfirm: () => toast("Note added (demo).", "success"),
+    /* No confirm button. This drawer is a read of one farmer's record, and
+       its "Add note" claimed to save a note that was never written anywhere -
+       profile has no notes column and nothing was holding it even for the
+       session. The Administrator notes section above still shows whatever is
+       on the record. */
   });
 }
 
@@ -709,8 +716,12 @@ async function openFarmDetail(id: number): Promise<void> {
           void refresh();
         });
       } else {
-        void api.logReportGenerated(`${f.name} farm report`);
-        toast("Farm report generated (demo).", "success");
+        // This used to say a report had been generated. Nothing was: the
+        // call it made is a no-op. Real farm reports are produced by the
+        // live report section of the Reports page, against the API, so this
+        // takes the admin there instead of claiming work it did not do.
+        toast(`Choose ${f.name} under Reports to produce a report for it.`, "info");
+        void go("reports");
       }
     },
   });
@@ -1508,7 +1519,10 @@ case "delete-user": {
           { label: "Maintenance", value: h.maintenanceState },
           { label: "Firmware", value: h.firmware },
           { label: "Battery", value: h.battery === null ? "Mains powered" : `${h.battery}%` },
-          { label: "Uptime", value: fmtPct(h.uptimePct) },
+          // Never "0.0%". Nothing measures per-kit uptime - there is no
+          // telemetry table for it - and a zero reads as a kit that has
+          // never once been up, which is a fault report, not a blank.
+          { label: "Uptime", value: "Not measured" },
           { label: "Installed", value: fmtDate(h.installed) },
           { label: "Last seen", value: h.lastSeen },
         ],
@@ -2279,7 +2293,17 @@ case "delete-user": {
           { label: "Date", value: todayIso(), editable: true, name: "date" },
         ],
         confirmLabel: "Schedule",
-        onConfirm: () => toast("Maintenance scheduled (demo).", "success"),
+        /* The maintenance list is a session working copy - there is no
+           writer for it (see data/api.ts's header). scheduleVisit at least
+           puts the date and status on the row in front of the admin, which
+           is honest optimistic feedback; the old toast claimed a booking
+           that existed nowhere, not even on screen. */
+        onConfirm: (v) => {
+          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
+            toast("Visit put on the job for this session.", "info");
+            void refresh();
+          });
+        },
       });
     // The old free-text version of this wrote nothing at all - it toasted
     // "registered (demo)" and the kit never existed. Kept as an alias so an
@@ -2471,7 +2495,17 @@ case "delete-user": {
           { label: "Date", value: todayIso(), editable: true, name: "date" },
         ],
         confirmLabel: "Schedule",
-        onConfirm: () => toast("Maintenance scheduled (demo).", "success"),
+        /* The maintenance list is a session working copy - there is no
+           writer for it (see data/api.ts's header). scheduleVisit at least
+           puts the date and status on the row in front of the admin, which
+           is honest optimistic feedback; the old toast claimed a booking
+           that existed nowhere, not even on screen. */
+        onConfirm: (v) => {
+          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
+            toast("Visit put on the job for this session.", "info");
+            void refresh();
+          });
+        },
       });
 
     /* irrigation schedules */
@@ -2521,12 +2555,33 @@ case "delete-user": {
       await api.logReportGenerated(name);
       return toast(`${name} generated for ${rangeLabel(getFilter("reports"))}.`, "success");
     }
-    case "export-report-pdf":
+    /* Excel is real now - the same rows the CSV export writes, in a workbook
+       Excel opens without guessing a separator.
+
+       PDF is NOT offered for these cards any more. There is no per-report-type
+       PDF generator for them, and the button toasted "(demo)" while producing
+       no file. The Reports page's live report section does produce real PDFs,
+       from the API, so that is where the admin is sent. */
     case "export-report-excel": {
       const name = el.dataset["report"] ?? "Report";
-      const fmt = act === "export-report-pdf" ? "PDF" : "Excel";
-      await api.logReportGenerated(`${name} (${fmt})`);
-      return toast(`${name} exported as ${fmt} (demo).`, "info");
+      const f = getFilter("reports");
+
+      const events = applyFilters(await api.getIrrigationEvents(), f, {
+        date: (e) => e.date, farm: (e) => e.farm,
+        province: (e) => e.province, region: (e) => e.region,
+      });
+
+      await exportRowsWorkbook(
+        `agroflow-${name.toLowerCase().replace(/\s+/g, "-")}`,
+        name,
+        ["Date (SAST)", "Farm", "Region", "Crop", "Estimated litres"],
+        events.slice(0, 500).map((e) => [
+          fmtDate(e.date), e.farm, e.region, e.crop,
+          e.litres === null ? "No estimate" : e.litres,
+        ]),
+      );
+
+      return void toast(`${name} exported.`, "success");
     }
     case "export-report-csv": {
       const name = el.dataset["report"] ?? "Report";
@@ -2547,7 +2602,24 @@ case "delete-user": {
     case "run-comparison": return runComparison();    
     case "live-report-view": return liveReportRun(el.dataset["report"] ?? "", false);
     case "live-report-pdf": return liveReportRun(el.dataset["report"] ?? "", true);
-    case "export-comparison": return toast("Comparison exported (demo).", "info");
+    /* A real file, from what is on screen. The comparison table is rendered
+       into #cmpResult by runComparison; reading it back is what makes
+       this export match exactly what the admin is looking at, rather than
+       re-running the comparison and risking a different answer. */
+    case "export-comparison": {
+      const rows = collectComparisonRows();
+
+      if (rows.length === 0) {
+        return void toast("Run a comparison first - there is nothing to export yet.", "warn");
+      }
+
+      downloadExcelSafeCsv(
+        "agroflow-comparison",
+        toCSV(["Group", "Period A (kL)", "Period B (kL)", "Change"], rows),
+      );
+
+      return void toast("Comparison exported.", "success");
+    }
 
     /* exports */
     case "export-users": return exportCurrent("users");
@@ -2560,11 +2632,21 @@ case "delete-user": {
     case "export-dashboard": return exportCurrent("dashboard");
 
     /* settings */
-    case "save-settings": return toast("Settings saved.", "success");
-    case "manage-roles": return toast("Role manager opened (demo).", "info");
-    case "backup-now": return toast("Backup started…", "info");
-    case "restore": return toast("Restore workflow started (demo).", "warn");
-    case "download-backup": return toast("Backup archive download started (demo).", "info");
+    /* The Settings form has nowhere to write to - there is no settings table
+       anywhere in the schema, and every field on that page shows the default
+       the platform is built with. So this says what happened: the values were
+       kept for this session and the platform's own defaults are unchanged.
+       It used to say "Settings saved.", which was not true, and an admin who
+       believed it would have reported a bug the next time they signed in. */
+    case "save-settings":
+      return toast(
+        "Kept for this session. The platform's own defaults are set in code and are unchanged.",
+        "info",
+      );
+
+    /* manage-roles, backup-now, restore and download-backup are gone, with
+       the buttons that fired them: each toasted a success for work nothing
+       did. See the Backup & Recovery tab for what is actually true. */
   }
 }
 
@@ -2632,6 +2714,22 @@ async function runComparison(): Promise<void> {
     </table></div>`;
 
   toast("Comparison generated.", "success");
+}
+
+/* The comparison table's rows, read back out of the DOM.
+ *
+ * Reading the rendered table rather than recomputing is deliberate: the
+ * export then matches exactly what the admin is looking at. Recomputing would
+ * re-read the filters, and if anything had changed since they pressed Compare
+ * the file would disagree with the screen - which is the one thing an export
+ * must never do. */
+function collectComparisonRows(): string[][] {
+  const host = document.getElementById("cmpResult");
+  if (!host) return [];
+
+  return Array.from(host.querySelectorAll("tbody tr")).map((tr) =>
+    Array.from(tr.querySelectorAll("td")).map((td) => td.textContent?.trim() ?? ""),
+  );
 }
 
 function collectFields(): Record<string, string> {
