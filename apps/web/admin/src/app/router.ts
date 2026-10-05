@@ -16,18 +16,42 @@ import { animateIn, swapContent } from "@/lib/animate";
 import { esc } from "@/lib/format";
 import { Icon } from "@/lib/icons";
 
+/* The sidebar, in the order an admin actually works.
+ *
+ * Home first because it is the queue of what needs a person. Requests
+ * second because that is the inbound work. Then the things those requests
+ * are ABOUT, from people outward: farmers, their farms and zones, the kits
+ * in those zones. Then the things that happen to them - alerts, maintenance.
+ * Then the outputs: reports. Then the record: activity. Settings last,
+ * where settings always are.
+ *
+ * "Irrigation Data" and "MQTT logins" are gone as top-level entries. They
+ * were never destinations in their own right - irrigation data is part of
+ * Reports, and MQTT logins are part of looking after kits. Both still have
+ * their routes (see PAGES and REDIRECTS below), so no old link breaks. */
 export const NAV: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: Icon.layoutDashboard },
-  { id: "users", label: "Users", icon: Icon.users },
-  { id: "farms", label: "Farms", icon: Icon.tractor },
-  { id: "hardware", label: "Farm Hardware", icon: Icon.radio },
+  { id: "dashboard", label: "Home", icon: Icon.layoutDashboard },
+  { id: "requests", label: "Requests", icon: Icon.inbox },
+  { id: "users", label: "Farmers", icon: Icon.users },
+  { id: "farms", label: "Farms & zones", icon: Icon.tractor },
+  { id: "hardware", label: "Kits", icon: Icon.radio },
   { id: "alerts", label: "Alerts", icon: Icon.bell },
   { id: "maintenance", label: "Maintenance", icon: Icon.wrench },
-  { id: "reports", label: "Reports & Analytics", icon: Icon.barChart },
-  { id: "irrigation", label: "Irrigation Data", icon: Icon.droplet },
-  { id: "activity", label: "Platform Activity", icon: Icon.activity },
+  { id: "reports", label: "Reports", icon: Icon.barChart },
+  { id: "activity", label: "Activity", icon: Icon.activity },
   { id: "settings", label: "Settings", icon: Icon.settings },
 ];
+
+/* Old route -> where it lives now.
+ *
+ * Bookmarks, the browser's back button and any link written down in a
+ * handover note all still work: go() sends them on rather than falling back
+ * to the dashboard, which would silently lose the admin's place. */
+const REDIRECTS: Record<string, PageId> = {
+  // Irrigation data is a Reports concern - it is the same data the water
+  // usage report is built from.
+  irrigation: "reports",
+};
 
 const PAGES: Record<PageId, PageRenderer> = {
   dashboard: () => dashboardPage(),
@@ -64,6 +88,14 @@ export function setAfterRender(fn: () => void): void {
 }
 
 export async function go(pageId: string, opts: PageOptions = {}): Promise<void> {
+  // An old route is forwarded, not dropped. Falling through to the
+  // dashboard would lose the admin's place without telling them why.
+  const redirected = REDIRECTS[pageId];
+  if (redirected) {
+    location.hash = redirected;
+    return;
+  }
+
   const id: PageId = isPageId(pageId) ? pageId : "dashboard";
   appState.activePage = id;
   appState.pageOptions = opts;
@@ -77,7 +109,16 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
   const html = await PAGES[id](opts);
   await swapContent(content, html);
 
-  if (title) title.textContent = NAV.find((n) => n.id === id)?.label ?? "Dashboard";
+  // Pages reachable by link but not in the sidebar still need a header.
+  const OFF_NAV_TITLES: Partial<Record<PageId, string>> = {
+    onboarding: "Set up a farmer",
+    mqttLogins: "MQTT logins",
+  };
+
+  if (title) {
+    title.textContent =
+      NAV.find((n) => n.id === id)?.label ?? OFF_NAV_TITLES[id] ?? "Home";
+  }
 
   document.querySelectorAll<HTMLButtonElement>("#nav button").forEach((b) => {
     b.classList.toggle("active", b.dataset["page"] === id);

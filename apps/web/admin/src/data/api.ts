@@ -39,6 +39,7 @@
 
 import { supabase } from "@/lib/supabase";
 import {
+  getMqttLogins,
   getAdminHardware,
   updateServiceRequestStatusThroughApi,
   type AdminHardwareRow,
@@ -806,4 +807,97 @@ export async function getFarmAlertHistory(farmId: number): Promise<AdminAlertHis
   }
 
   return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/* ---------------- Home's attention queue (item A) ----------------
+
+   Each of these answers one card on Home. They are separate calls rather
+   than one endpoint so that a failure in any single queue leaves the rest of
+   Home working - see dashboard.ts, which catches each one on its own. */
+
+export type ZoneNeedingSetup = {
+  zoneId: number;
+  zoneName: string;
+  farmId: number;
+  farmName: string;
+  /** Which fields are missing, in plain words. */
+  missing: string[];
+};
+
+/* Zones the FAO-56 engine cannot fully advise on.
+
+   These are the ones where a farmer is getting less than the system can
+   actually give them, and - unlike an alert - nothing raises them on its
+   own. Read straight from Supabase under RLS, like the rest of the farm
+   data the console shows. */
+export async function getFarmsNeedingSetup(): Promise<ZoneNeedingSetup[]> {
+  const [{ data: zones, error }, farmNames] = await Promise.all([
+    supabase
+      .from("zone")
+      .select("id, name, farm_id, crop_type, planting_date, area_m2, flow_rate_lpm, status"),
+    fetchFarmNameMap(),
+  ]);
+
+  if (error) throw error;
+
+  const farmCoords = new Map<number, boolean>();
+  try {
+    const { data } = await supabase.from("farm").select("farm_id, latitude, longitude, status");
+    for (const f of (data ?? []) as { farm_id: number; latitude: number | null; longitude: number | null; status: string | null }[]) {
+      // Archived farms are not work anybody should be doing.
+      if (isArchived(f.status)) continue;
+      farmCoords.set(f.farm_id, f.latitude !== null && f.longitude !== null);
+    }
+  } catch {
+    // Coordinates unknown - the other checks below still stand.
+  }
+
+  const out: ZoneNeedingSetup[] = [];
+
+  for (const z of (zones ?? []) as {
+    id: number; name: string | null; farm_id: number; crop_type: string | null;
+    planting_date: string | null; area_m2: number | null; flow_rate_lpm: number | null;
+    status: string | null;
+  }[]) {
+    if (isArchived(z.status)) continue;
+    // A zone on a farm that is archived (or that we could not read) is not
+    // outstanding work either.
+    if (!farmCoords.has(z.farm_id)) continue;
+
+    const missing: string[] = [];
+    if (!z.crop_type) missing.push("crop");
+    if (!z.planting_date) missing.push("planting date");
+    if (z.area_m2 === null) missing.push("area");
+    if (z.flow_rate_lpm === null) missing.push("flow rate");
+    if (!farmCoords.get(z.farm_id)) missing.push("farm location");
+
+    if (missing.length > 0) {
+      out.push({
+        zoneId: z.id,
+        zoneName: z.name ?? `Zone ${z.id}`,
+        farmId: z.farm_id,
+        farmName: farmNames.get(z.farm_id) ?? "Unassigned",
+        missing,
+      });
+    }
+  }
+
+  return out;
+}
+
+export async function getMqttPoolHealth(): Promise<{ freeCount: number; runningLow: boolean }> {
+  const pool = await getMqttLogins();
+  return { freeCount: pool.freeCount, runningLow: pool.runningLow };
+}
+
+/* Reports a farmer asked for that could not be made. Nothing else surfaces
+   these - the farmer sees "try again later" and the team never hears. */
+export async function getFailedReportCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("report_request")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "failed");
+
+  if (error) throw error;
+  return count ?? 0;
 }

@@ -31,6 +31,7 @@ import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
+import { refreshHealthPanel } from "@/app/health";
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
@@ -42,6 +43,147 @@ import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile } from "@/app/auth";
 import { getReportZones, getReportJson, downloadReportPdf } from "@/services/agroFlowApi";
 
+
+/* ------------------------------- pickers -------------------------------- */
+
+/* A picker is a search box over a list of real options. Choosing one writes
+   its value into the hidden field the wizard reads, so a form can never end
+   up holding a farm name that does not exist - which is the whole reason
+   these replaced the free-text fields. */
+function wirePickers(): void {
+  document.querySelectorAll<HTMLElement>("[data-picker]").forEach((host) => {
+    if (host.dataset["bound"]) return;
+    host.dataset["bound"] = "1";
+
+    const name = host.dataset["picker"] ?? "";
+    const search = host.querySelector<HTMLInputElement>(".picker-search");
+    const hidden = host.querySelector<HTMLInputElement>('[data-field="' + name + '"]');
+
+    search?.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+
+      host.querySelectorAll<HTMLElement>(".picker-option").forEach((opt) => {
+        const hay = opt.dataset["search"] ?? "";
+        opt.hidden = q.length > 0 && !hay.includes(q);
+      });
+    });
+
+    host.querySelectorAll<HTMLButtonElement>(".picker-option").forEach((opt) => {
+      opt.addEventListener("click", () => {
+        if (opt.disabled) return;
+
+        host.querySelectorAll(".picker-option").forEach((o) => {
+          o.classList.remove("is-selected");
+          o.setAttribute("aria-selected", "false");
+        });
+
+        opt.classList.add("is-selected");
+        opt.setAttribute("aria-selected", "true");
+
+        if (hidden) hidden.value = opt.dataset["value"] ?? "";
+
+        // Tell the wizard a choice was made, so a later step can rebuild
+        // itself from it (zones depend on the farm, farms on the farmer).
+        host.dispatchEvent(
+          new CustomEvent("picker:change", {
+            bubbles: true,
+            detail: { name, value: opt.dataset["value"] ?? "" },
+          }),
+        );
+      });
+    });
+  });
+}
+
+/* ------------------------------- wizards -------------------------------- */
+
+/* Steps, validation per step, and Back that keeps what was entered.
+   Validation is deliberately per step: one long form that validates at the
+   end tells the admin about a mistake they made six fields ago. */
+function wireWizards(): void {
+  document.querySelectorAll<HTMLElement>("[data-wizard]").forEach((wiz) => {
+    if (wiz.dataset["bound"]) return;
+    wiz.dataset["bound"] = "1";
+
+    const total = Number(wiz.dataset["steps"] ?? "1");
+    const back = wiz.querySelector<HTMLButtonElement>("[data-wizard-back]");
+    const next = wiz.querySelector<HTMLButtonElement>("[data-wizard-next]");
+    const confirmBtn = wiz.querySelector<HTMLButtonElement>("[data-wizard-confirm]");
+    const errorEl = wiz.querySelector<HTMLElement>("[data-wizard-error]");
+    const counter = wiz.querySelector<HTMLElement>("[data-wizard-current]");
+
+    const showError = (message: string | null): void => {
+      if (!errorEl) return;
+      errorEl.textContent = message ?? "";
+      errorEl.hidden = message === null;
+    };
+
+    const render = (): void => {
+      const step = Number(wiz.dataset["step"] ?? "0");
+
+      wiz.querySelectorAll<HTMLElement>("[data-wizard-step]").forEach((el) => {
+        el.classList.toggle("is-current", Number(el.dataset["wizardStep"]) === step);
+      });
+
+      wiz.querySelectorAll<HTMLElement>("[data-rail]").forEach((el) => {
+        const i = Number(el.dataset["rail"]);
+        el.classList.toggle("is-current", i === step);
+        el.classList.toggle("is-done", i < step);
+      });
+
+      if (back) back.disabled = step === 0;
+      if (counter) counter.textContent = String(step + 1);
+
+      // The last step is the review step, so Next becomes Confirm there.
+      const last = step === total - 1;
+      if (next) next.hidden = last;
+      if (confirmBtn) confirmBtn.hidden = !last;
+
+      showError(null);
+    };
+
+    /* Every field marked data-required must have a value before Next.
+       Returns the first problem in plain words, or null. */
+    const validateStep = (): string | null => {
+      const step = Number(wiz.dataset["step"] ?? "0");
+      const section = wiz.querySelector<HTMLElement>('[data-wizard-step="' + step + '"]');
+      if (!section) return null;
+
+      const fields = section.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-required]");
+
+      for (const el of Array.from(fields)) {
+        if (!el.value.trim()) {
+          return el.dataset["requiredMessage"] ?? "Please complete this step before continuing.";
+        }
+      }
+
+      return null;
+    };
+
+    next?.addEventListener("click", () => {
+      const problem = validateStep();
+      if (problem) {
+        showError(problem);
+        return;
+      }
+
+      const step = Number(wiz.dataset["step"] ?? "0");
+      wiz.dataset["step"] = String(Math.min(step + 1, total - 1));
+      render();
+    });
+
+    back?.addEventListener("click", () => {
+      // Nothing is cleared: going back and forward keeps every value,
+      // because re-typing a farm details is exactly the frustration this
+      // whole pattern exists to remove.
+      const step = Number(wiz.dataset["step"] ?? "0");
+      wiz.dataset["step"] = String(Math.max(step - 1, 0));
+      render();
+    });
+
+    render();
+  });
+}
 
 /* ----------------------------- filter toolbar ---------------------------- */
 
@@ -1313,6 +1455,63 @@ case "delete-user": {
       }
     }
 
+    /* ---- Home: the attention queue and the KPI tiles ----------------
+       Each one lands on the list it counts, already filtered, so the admin
+       never arrives at a page and has to find the thing again. */
+    case "go-requests-pending":
+      setFilter("requests", { status: "pending" });
+      return void go("requests");
+
+    case "go-alerts-critical":
+      setFilter("alerts", { priority: "Critical" });
+      return void go("alerts");
+
+    case "go-kits-offline":
+      setFilter("hardware", { status: "Offline" });
+      return void go("hardware");
+
+    case "go-zones-setup":
+      // Farms and zones, where the list itself highlights which field each
+      // zone is missing.
+      return void go("farms");
+
+    case "go-users-no-telegram":
+      setFilter("users", { search: "" });
+      return void go("users");
+
+    case "go-reports-failed":
+      return void go("reports");
+
+    case "go-farms":
+      return void go("farms");
+    case "go-users":
+      return void go("users");
+    case "go-kits":
+      return void go("hardware");
+    case "go-alerts":
+      return void go("alerts");
+    case "go-maintenance":
+      return void go("maintenance");
+
+    /* ---- Health ------------------------------------------------------ */
+    case "open-health":
+      // Home holds the card. If we are already there, scroll to it rather
+      // than re-rendering the page under the admin.
+      if (appState.activePage === "dashboard") {
+        document.getElementById("systemHealth")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      return void go("dashboard");
+
+    case "refresh-health":
+      await refreshHealthPanel();
+      return;
+
+    /* The one rule this enforces: never a frozen page. Any page that failed
+       to load renders a Retry that comes back here. */
+    case "retry-page":
+      return void refresh();
+
     case "go-mqtt-logins":
       return void go("mqttLogins");
 
@@ -2132,6 +2331,8 @@ export function wirePageInteractions(): void {
   wireFilters();
   wireLiveReports();
  wireOnboardingZones();
+  wirePickers();
+  wireWizards();
 
   document.querySelectorAll<HTMLElement>("[data-go]").forEach((a) => {
     if (a.dataset["bound"]) return;

@@ -29,6 +29,11 @@ export interface KpiOptions {
   total?: string;
   trend?: Trend;
   icon?: string;
+  /* A data-act value. When present the tile becomes a button that opens the
+     list it counts - a number you cannot click makes the admin go and find
+     the thing it refers to. */
+  act?: string;
+  actId?: string;
 }
 
 export function kpiCard(opts: KpiOptions): string {
@@ -39,11 +44,18 @@ export function kpiCard(opts: KpiOptions): string {
          <span class="trend-arrow">${opts.trend.dir === "up" ? "↑" : "↓"}</span> ${esc(opts.trend.text)}
        </div>`
     : "";
-  return `<div class="card reveal">
+  const inner = `
     <div class="label">${opts.icon ? `<span class="kpi-ico">${opts.icon}</span>` : ""}${esc(opts.label)}</div>
     <div class="value" data-countup="${opts.value}" data-countup-format="${fmt}"${totalAttr}>0</div>
-    ${trend}
-  </div>`;
+    ${trend}`;
+
+  // A real <button> when it is clickable, so it is keyboard-reachable and
+  // announced as actionable - not a div with a click handler bolted on.
+  return opts.act
+    ? `<button type="button" class="card reveal card-clickable" data-act="${esc(opts.act)}"${
+        opts.actId ? ` data-id="${esc(opts.actId)}"` : ""
+      }>${inner}</button>`
+    : `<div class="card reveal">${inner}</div>`;
 }
 
 /* -------------------------------- panels --------------------------------- */

@@ -674,3 +674,29 @@ export function runAdviceNow(zoneId: number): Promise<RunAdviceResult> {
     {},
   );
 }
+
+/* ---------------- Platform health (item 4) ----------------
+
+   Replaces the three "Monitoring not yet implemented" strings. One endpoint
+   feeds the sidebar light, the header chip and Home's card, so they cannot
+   disagree about whether the platform is well. */
+
+export type HealthCheck = {
+  key: string;
+  name: string;
+  /** ok | warning | down */
+  status: string;
+  /** A sentence an admin can act on, not a code. */
+  detail: string;
+  responseMs: number | null;
+};
+
+export type HealthResponse = {
+  overall: string;
+  checkedAt: string;
+  checks: HealthCheck[];
+};
+
+export function getPlatformHealth(): Promise<HealthResponse> {
+  return authorizedJson<HealthResponse>("/api/admin/health", "GET");
+}

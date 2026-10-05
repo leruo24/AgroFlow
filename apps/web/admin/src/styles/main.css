@@ -1153,3 +1153,336 @@ tbody tr:last-child td{border-bottom:none}
 @media (prefers-reduced-motion: reduce){
   .landing *{ animation:none !important; transition:none !important; }
 }
+
+/* ==========================================================================
+   ITEM A — the click-driven console.
+   Styles for ui/patterns.ts: the attention queue, pickers, wizards, detail
+   panels, empty and error states.
+
+   Tokens only - every colour below is one of the variables defined at the
+   top of this file. No new palette, no new font.
+   ========================================================================== */
+
+.section-heading{
+  margin:28px 0 12px;
+  font-size:1rem;
+  font-weight:700;
+  color:var(--text);
+}
+.section-heading:first-child{ margin-top:0; }
+
+/* ---- Attention queue ---------------------------------------------------- */
+.attn-section{ margin-bottom:8px; }
+
+.attn-grid{
+  display:grid;
+  gap:12px;
+  grid-template-columns:repeat(auto-fit, minmax(290px, 1fr));
+}
+
+.attn-card{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  width:100%;
+  text-align:left;
+  padding:16px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  border-left-width:4px;
+  background:var(--surface);
+  cursor:pointer;
+  transition:transform .12s var(--ease), box-shadow .12s var(--ease), border-color .12s var(--ease);
+}
+.attn-card:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(20,26,20,.08); }
+.attn-card:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+
+/* The left edge carries the urgency. The count and the words carry it too,
+   so colour is never the only signal. */
+.attn-bad{ border-left-color:var(--bad); }
+.attn-warn{ border-left-color:var(--warn); }
+.attn-info{ border-left-color:var(--info); }
+
+.attn-ico{ display:inline-flex; flex:none; color:var(--text-2); }
+.attn-ico svg{ width:22px; height:22px; }
+
+.attn-body{ display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
+.attn-title{ font-weight:700; color:var(--text); font-size:.95rem; }
+.attn-sub{ font-size:.82rem; line-height:1.45; color:var(--text-2); }
+
+.attn-count{
+  flex:none;
+  min-width:34px;
+  text-align:center;
+  font-size:1.25rem;
+  font-weight:800;
+  color:var(--text);
+}
+
+.attn-clear{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:18px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--surface-2);
+}
+.attn-clear-ico{ display:inline-flex; color:var(--good); }
+.attn-clear-ico svg{ width:26px; height:26px; }
+.attn-clear b{ display:block; color:var(--text); }
+.attn-clear p{ margin:2px 0 0; font-size:.85rem; }
+
+/* ---- Clickable KPI tiles ------------------------------------------------ */
+.card-clickable{
+  cursor:pointer;
+  text-align:left;
+  font:inherit;
+  border:1px solid var(--border);
+  transition:transform .12s var(--ease), box-shadow .12s var(--ease);
+}
+.card-clickable:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(20,26,20,.08); }
+.card-clickable:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+
+/* ---- Empty and error states --------------------------------------------- */
+.empty-state-card,
+.error-state-card{
+  display:flex;
+  gap:14px;
+  align-items:flex-start;
+  padding:24px;
+  border-radius:12px;
+  border:1px dashed var(--border-strong);
+  background:var(--surface-2);
+}
+.empty-state-card{ flex-direction:column; align-items:center; text-align:center; }
+.empty-state-ico{ display:inline-flex; color:var(--muted); }
+.empty-state-ico svg{ width:30px; height:30px; }
+.empty-state-card h4,
+.error-state-card h4{ margin:0; font-size:1rem; color:var(--text); }
+.empty-state-card p,
+.error-state-card p{ margin:4px 0 0; font-size:.88rem; line-height:1.5; color:var(--text-2); max-width:48ch; }
+.empty-state-card .btn{ margin-top:8px; }
+
+.error-state-card{ border-style:solid; border-color:var(--bad); background:#fff; align-items:center; }
+.error-state-ico{ display:inline-flex; color:var(--bad); flex:none; }
+.error-state-ico svg{ width:26px; height:26px; }
+.error-state-body{ flex:1; }
+
+/* ---- Pickers ------------------------------------------------------------ */
+.picker{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+.picker-label{ font-size:.85rem; font-weight:600; color:var(--text); }
+.picker-label .req{ color:var(--bad); }
+.picker-hint{ margin:0; font-size:.8rem; color:var(--text-2); }
+
+.picker-search{
+  min-height:42px;
+  padding:0 12px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:#fff;
+  font-size:.92rem;
+  color:var(--text);
+}
+.picker-search:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(66,195,199,.18); }
+
+.picker-list{
+  max-height:230px;
+  overflow-y:auto;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:#fff;
+}
+
+.picker-option{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+  padding:10px 12px;
+  text-align:left;
+  background:none;
+  border:none;
+  border-bottom:1px solid var(--divider);
+  cursor:pointer;
+  font:inherit;
+}
+.picker-option:last-child{ border-bottom:none; }
+.picker-option:hover:not(.is-disabled){ background:var(--surface-2); }
+.picker-option:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+
+/* Selection is a left bar plus a tint plus bold text - never colour alone. */
+.picker-option.is-selected{
+  background:var(--surface-2);
+  box-shadow:inset 3px 0 0 var(--brand);
+}
+.picker-option.is-selected b{ color:var(--brand); }
+.picker-option.is-disabled{ opacity:.5; cursor:not-allowed; }
+.picker-option[hidden]{ display:none; }
+
+.picker-option-main{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.picker-option-main b{ font-size:.9rem; color:var(--text); }
+.picker-option-sub{ font-size:.78rem; color:var(--text-2); }
+.picker-option-meta{ flex:none; font-size:.75rem; color:var(--warn); font-weight:600; }
+
+.picker-empty{
+  margin:0;
+  padding:12px;
+  border:1px dashed var(--border-strong);
+  border-radius:8px;
+  font-size:.85rem;
+  color:var(--text-2);
+}
+
+/* ---- Wizards ------------------------------------------------------------ */
+.wizard{ display:flex; flex-direction:column; gap:18px; }
+.wizard-head h3{ margin:0 0 4px; font-size:1.15rem; }
+
+.wizard-rail{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.wizard-rail-step{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:6px 12px 6px 6px;
+  border-radius:999px;
+  background:var(--surface-2);
+  font-size:.8rem;
+  color:var(--text-2);
+}
+.wizard-rail-step.is-current{ background:var(--brand); color:#fff; }
+.wizard-rail-step.is-done{ background:var(--good); color:#fff; }
+.wizard-rail-n{
+  display:grid; place-items:center;
+  width:21px; height:21px;
+  border-radius:50%;
+  background:rgba(255,255,255,.35);
+  font-weight:700; font-size:.72rem;
+}
+.wizard-rail-step:not(.is-current):not(.is-done) .wizard-rail-n{ background:var(--border); color:var(--text-2); }
+
+.wizard-step{ display:none; }
+.wizard-step.is-current{ display:block; }
+.wizard-step h4{ margin:0 0 4px; font-size:1rem; }
+.wizard-step-hint{ margin:0 0 14px; font-size:.85rem; }
+
+.wizard-error{
+  margin:0;
+  padding:10px 12px;
+  border-radius:8px;
+  background:#fdecea;
+  border:1px solid var(--bad);
+  color:#8a2a22;
+  font-size:.86rem;
+}
+
+.wizard-foot{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding-top:14px;
+  border-top:1px solid var(--divider);
+}
+.wizard-count{ margin-left:auto; font-size:.82rem; color:var(--text-2); }
+.wizard-foot .btn[hidden]{ display:none; }
+
+/* ---- Detail panels ------------------------------------------------------ */
+.detail{ display:flex; flex-direction:column; gap:18px; }
+.detail-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+.detail-head h3{ margin:0; font-size:1.1rem; }
+.detail-head p{ margin:3px 0 0; font-size:.85rem; }
+
+.detail-actions{ display:flex; flex-wrap:wrap; gap:8px; }
+
+.detail-section{ border-top:1px solid var(--divider); padding-top:14px; }
+.detail-section h6{
+  margin:0 0 10px;
+  font-size:.74rem;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+
+.related-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; }
+.related-list a{
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+  padding:9px 10px;
+  border-radius:8px;
+  text-decoration:none;
+  color:var(--text);
+}
+.related-list a:hover{ background:var(--surface-2); }
+.related-list a b{ font-size:.89rem; }
+.related-list a span{ font-size:.78rem; color:var(--text-2); }
+
+/* ---- Confirm dialogs ---------------------------------------------------- */
+.confirm-body{ display:flex; flex-direction:column; gap:10px; }
+.confirm-consequence{ margin:0; font-size:.95rem; line-height:1.55; color:var(--text); font-weight:600; }
+.confirm-body p{ margin:0; font-size:.86rem; line-height:1.55; }
+.confirm-alt{
+  margin:0;
+  padding:10px 12px;
+  border-radius:8px;
+  background:var(--surface-2);
+  font-size:.85rem;
+  color:var(--text-2);
+}
+
+/* ---- Sidebar brand + status --------------------------------------------- */
+.brand-logo{
+  width:36px; height:36px;
+  border-radius:9px;
+  flex:none;
+  background:#fff;
+}
+
+/* The status block is a button now (it opens the health card), so it needs
+   resetting out of the browser default button styling. */
+.side-foot{
+  display:block;
+  width:100%;
+  text-align:left;
+  font:inherit;
+  background:none;
+  border:none;
+  cursor:pointer;
+  border-top:1px solid rgba(255,255,255,.12);
+}
+.side-foot:hover{ background:rgba(255,255,255,.06); }
+.side-foot:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+.side-foot-state{ display:flex; align-items:center; gap:7px; margin-top:4px; }
+
+.dot{ width:9px; height:9px; border-radius:50%; flex:none; display:inline-block; }
+.dot-good{ background:var(--good); }
+.dot-warn{ background:var(--warn); }
+.dot-bad{ background:var(--bad); }
+.dot-unknown{ background:var(--neutral); }
+
+/* ---- Health card -------------------------------------------------------- */
+.health-good{ border-left:3px solid var(--good); }
+.health-warn{ border-left:3px solid var(--warn); }
+.health-bad{ border-left:3px solid var(--bad); }
+.health-neutral{ border-left:3px solid var(--neutral); }
+.health-foot{ margin:12px 0 0; font-size:.78rem; }
+.health-unavailable{ display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+.health-unavailable p{ margin:0; font-size:.88rem; color:var(--text-2); }
+
+@media (max-width:900px){
+  .attn-grid{ grid-template-columns:1fr; }
+  .wizard-rail-t{ display:none; }
+  .wizard-rail-step{ padding:6px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .attn-card, .card-clickable{ transition:none; }
+  .attn-card:hover, .card-clickable:hover{ transform:none; }
+}

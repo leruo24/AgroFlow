@@ -391,6 +391,7 @@ app.MapFao56EngineEndpoints();
 app.MapForecastEndpoints();
 app.MapReportRequestEndpoints();
 app.MapReportScheduleEndpoints();
+app.MapHealthEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

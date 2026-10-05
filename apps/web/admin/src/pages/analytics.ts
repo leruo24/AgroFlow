@@ -10,6 +10,7 @@ import {
 } from "@/ui/components";
 import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
+import { emptyState } from "@/ui/patterns";
 import { getReportFarms, type ReportFarm } from "@/services/agroFlowApi";
 
 /* ============================ IRRIGATION DATA ============================ */
@@ -294,21 +295,20 @@ export async function reportsPage(): Promise<string> {
 
 /* =========================== PLATFORM ACTIVITY =========================== */
 
-/** No activity-log table exists anywhere in the schema (see
-    data/api.ts's getActivity()) - this is a genuine "not built yet", not
-    an empty result to filter. No filter bar, no table: those would imply
-    there's a real feature underneath with nothing in it right now. */
+/** Replaced by the real audit log in item 5 (admin_audit_log). Until that
+    migration is applied there is genuinely nothing recorded, so this says so
+    in the farmer-facing voice the rest of the console uses rather than
+    exposing the gap as a status. */
 export async function activityPage(): Promise<string> {
   return `
-  ${pageHeader("Platform Activity", "History of significant administrator and platform actions.")}
+  ${pageHeader("Activity", "Who did what, across the platform.")}
 
-  ${panel("Not yet implemented", "", "", `
-    <div class="empty-state">
-      Platform Activity has no backing table yet - there is nowhere to
-      record or read administrator actions from. This is a gap to build,
-      not empty data.
-    </div>
-  `)}
+  ${emptyState({
+    title: "No activity recorded yet",
+    body:
+      "Admin actions are recorded from the moment the activity log is switched on. " +
+      "Once it is, every status change, assignment and revoke shows here with who did it and when.",
+  })}
   `;
 }
 
