@@ -80,6 +80,7 @@ public static class ReportScheduleEndpoints
         ReportScheduleBody request,
         ClaimsPrincipal user,
         NpgsqlDataSource dataSource,
+        AgroFlow.Api.Services.AuditLog audit,
         CancellationToken cancellationToken)
     {
         var types = (request.ReportTypes ?? Array.Empty<string>())
@@ -136,6 +137,12 @@ public static class ReportScheduleEndpoints
         // not make this period look already-done, and disabling and
         // re-enabling must not resend a period the farmer already got.
         var saved = await LoadAsync(connection, farmId, cancellationToken);
+
+        await audit.WriteAsync(
+            user, AgroFlow.Api.Services.AuditActions.ReportScheduleChanged,
+            "report_schedule", farmId.ToString(), farmId: farmId,
+            details: new { request.Enabled, frequency = ReportSchedulePolicy.ToDatabaseValue(frequency), reportTypes = types },
+            cancellationToken: cancellationToken);
 
         return Results.Ok(saved);
     }

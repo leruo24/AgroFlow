@@ -56,7 +56,9 @@ public static class MqttPoolEndpoints
 
     private static async Task<IResult> AddAsync(
         AddMqttLoginsRequest request,
+        System.Security.Claims.ClaimsPrincipal user,
         MqttCredentialPoolService pool,
+        AuditLog audit,
         CancellationToken cancellationToken)
     {
         if (!pool.IsConfigured)
@@ -87,6 +89,14 @@ public static class MqttPoolEndpoints
             credentials.Select(c => (c.Username, c.Password)), cancellationToken);
 
         var summary = await pool.ListAsync(cancellationToken);
+
+        // Counts only. The usernames would be harmless; the passwords are
+        // not, and a log that records "what was added" invites somebody to
+        // widen it later until it records both.
+        await audit.WriteAsync(
+            user, AuditActions.MqttPoolAdded, "mqtt_credential_pool", null,
+            details: new { added, duplicates, skipped, freeAfter = summary.FreeCount },
+            cancellationToken: cancellationToken);
 
         return Results.Ok(new AddMqttLoginsResponse(
             added, duplicates, skipped, summary.FreeCount, summary.RunningLow,

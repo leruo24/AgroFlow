@@ -42,7 +42,11 @@ public static class Fao56EngineEndpoints
     }
 
     private static IResult RunAdviceNow(
-        long zoneId, Fao56EngineController engine, ILoggerFactory loggerFactory)
+        long zoneId,
+        ClaimsPrincipal user,
+        Fao56EngineController engine,
+        AgroFlow.Api.Services.AuditLog audit,
+        ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.RunAdvice");
 
@@ -77,6 +81,16 @@ public static class Fao56EngineEndpoints
         logger.LogInformation(
             "Ran advice for zone {ZoneId} ({Name}): {Count} insight(s), {Missing} setup item(s) missing.",
             zoneId, zone.ZoneName, insights.Count, result.MissingSetup.Count);
+
+        // Advisory, but it WRITES - new zone_water_balance and
+        // ai_recommendation rows - so "why did this zone's advice change on
+        // Tuesday?" should have an answer. Fire-and-forget: this handler is
+        // synchronous by the engine's DB/XDB/Controller pattern, and an audit
+        // row must not be what makes it async.
+        _ = audit.WriteAsync(
+            user, AgroFlow.Api.Services.AuditActions.ZoneAdviceRun,
+            "zone", zoneId.ToString(), farmId: zone.FarmId,
+            details: new { insights = insights.Count, setupMissing = result.MissingSetup.Count });
 
         return Results.Ok(new
         {

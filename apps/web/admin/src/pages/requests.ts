@@ -1,6 +1,6 @@
 import { api } from "@/data/api";
 import { badge, pageHeader, panel, resultCount } from "@/ui/components";
-import { esc } from "@/lib/format";
+import { esc, fmtDateTimeSast } from "@/lib/format";
 import type { ServiceRequest, ServiceRequestStatus } from "@/types/models";
 
 const statusOptions: ServiceRequestStatus[] = [
@@ -13,7 +13,7 @@ function formatRequestType(type: ServiceRequest["requestType"]): string {
   return type === "new_farm" ? "New farm" : "New zone";
 }
 
-function formatCrop(crop: ServiceRequest["cropType"]): string {
+export function formatCrop(crop: ServiceRequest["cropType"]): string {
   return crop.replace("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
@@ -30,6 +30,41 @@ function statusTone(status: ServiceRequestStatus): "good" | "warn" | "neutral" {
   return "neutral";
 }
 
+/* The who/when chain as a timeline.
+ *
+ * Built from service_request's own columns rather than from the audit log,
+ * because this is the CURRENT state of one request - "scheduled by Leruo on
+ * Tuesday" - and the audit log is the history of changes to it. Both exist;
+ * they answer different questions, and reading the chain off the row is one
+ * query instead of one per request.
+ *
+ * Steps that have not happened yet are still shown, greyed, so the shape of
+ * the whole process is visible rather than only the parts already done. */
+export function requestTimeline(r: ServiceRequest): string {
+  const step = (
+    label: string,
+    who: string | null | undefined,
+    when: string | null | undefined,
+    done: boolean,
+  ): string => `
+    <li class="timeline-item${done ? "" : " is-pending"}">
+      <span class="timeline-dot" aria-hidden="true"></span>
+      <div>
+        <b>${esc(label)}${who ? ` by ${esc(who)}` : ""}</b>
+        <span class="timeline-when">${
+          when ? esc(fmtDateTimeSast(when)) : done ? "time not recorded" : "not yet"
+        }</span>
+      </div>
+    </li>`;
+
+  return `<ol class="timeline">
+    ${step("Submitted", r.farmerName, r.createdAt, true)}
+    ${r.assignedToName ? step("Assigned", r.assignedToName, null, true) : ""}
+    ${step("Scheduled", r.scheduledByName, r.scheduledAt, r.status !== "pending")}
+    ${step("Completed", r.completedByName, r.completedAt, r.status === "completed")}
+  </ol>`;
+}
+
 function requestRow(request: ServiceRequest): string {
   const statusSelect = statusOptions
     .map(
@@ -43,7 +78,9 @@ function requestRow(request: ServiceRequest): string {
   return `
     <tr>
       <td>
-        <strong>${esc(request.farmerName)}</strong>
+        <a href="#" class="cell-link" data-act="view-request" data-id="${request.id}">
+          <strong>${esc(request.farmerName)}</strong>
+        </a>
         ${
           request.farmerEmail
             ? `<div class="muted">${esc(request.farmerEmail)}</div>`
@@ -55,7 +92,7 @@ function requestRow(request: ServiceRequest): string {
       <td>${esc(formatCrop(request.cropType))}</td>
       <td>${request.roughSize !== null ? `${request.roughSize} ha` : "—"}</td>
       <td>${esc(request.location ?? "—")}</td>
-      <td>${esc(request.notes ?? "—")}</td>
+      <td class="cell-clip" title="${esc(request.notes ?? "")}">${esc(request.notes ?? "—")}</td>
       <td>${esc(formatDate(request.createdAt))}</td>
       <td>
         <select
@@ -68,6 +105,12 @@ function requestRow(request: ServiceRequest): string {
         <div class="request-status-badge">
           ${badge(request.status, statusTone(request.status))}
         </div>
+      </td>
+      <td>${requestTimeline(request)}</td>
+      <td>
+        <button class="btn ghost sm" data-act="assign-request" data-id="${request.id}">
+          ${request.assignedToName ? `Assigned: ${esc(request.assignedToName)}` : "Assign"}
+        </button>
       </td>
       <td>
         ${
@@ -118,6 +161,8 @@ export async function requestsPage(): Promise<string> {
                   <th>Notes</th>
                   <th>Date submitted</th>
                   <th>Status</th>
+                  <th>Who and when</th>
+                  <th>Assigned to</th>
                   <th>Hardware</th>
                 </tr>
               </thead>
@@ -127,7 +172,7 @@ export async function requestsPage(): Promise<string> {
                     ? requests.map(requestRow).join("")
                     : `
                       <tr>
-                        <td colspan="10" class="muted">
+                        <td colspan="12" class="muted">
                           No farm requests have been submitted yet.
                         </td>
                       </tr>

@@ -1,5 +1,5 @@
 import { api } from "@/data/api";
-import { esc, fmtInt, fmtDate, fmtPct, fmtLitres } from "@/lib/format";
+import { esc, fmtInt, fmtDate, fmtPct, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters, rangeLabel } from "@/lib/filters";
 import {
   PROVINCES, REGIONS, CROPS,
@@ -10,7 +10,8 @@ import {
 } from "@/ui/components";
 import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
-import { emptyState } from "@/ui/patterns";
+import { emptyState, withErrorState } from "@/ui/patterns";
+import { getActivityLog, type AuditRow } from "@/services/agroFlowApi";
 import { getReportFarms, type ReportFarm } from "@/services/agroFlowApi";
 
 /* ============================ IRRIGATION DATA ============================ */
@@ -295,21 +296,79 @@ export async function reportsPage(): Promise<string> {
 
 /* =========================== PLATFORM ACTIVITY =========================== */
 
-/** Replaced by the real audit log in item 5 (admin_audit_log). Until that
-    migration is applied there is genuinely nothing recorded, so this says so
-    in the farmer-facing voice the rest of the console uses rather than
-    exposing the gap as a status. */
+/* The audit log (migration 0037): who did what, newest first.
+ *
+ * Every row is one sentence, built on the SERVER so this page, the CSV and
+ * the XLSX cannot describe the same action three different ways. */
 export async function activityPage(): Promise<string> {
-  return `
-  ${pageHeader("Activity", "Who did what, across the platform.")}
+  return withErrorState("Activity", async () => {
+    const f = getFilter("activity");
 
-  ${emptyState({
-    title: "No activity recorded yet",
-    body:
-      "Admin actions are recorded from the moment the activity log is switched on. " +
-      "Once it is, every status change, assignment and revoke shows here with who did it and when.",
-  })}
-  `;
+    const log = await getActivityLog({
+      // eventType and administrator already exist on FilterState and mean
+      // exactly this, so the activity page reuses them rather than widening
+      // the shared shape with two near-duplicates.
+      ...(f.eventType ? { action: f.eventType } : {}),
+      ...(f.administrator ? { actor: f.administrator } : {}),
+    });
+
+    if (log.rows.length === 0) {
+      return `
+      ${pageHeader("Activity", "Who did what, across the platform.")}
+      ${emptyState({
+        title: "No activity recorded yet",
+        body:
+          "Every status change, assignment, revoke and archive is recorded here with who did it " +
+          "and when, from the moment the activity log table is in place.",
+      })}`;
+    }
+
+    return `
+    ${pageHeader("Activity", "Who did what, across the platform.",
+      `<button class="btn ghost" data-act="export-activity-csv">Export CSV</button>
+       <button class="btn ghost" data-act="export-activity-xlsx">Export Excel</button>`)}
+
+    ${filterBar({
+      page: "activity",
+      filter: f,
+      searchPlaceholder: "Search this page…",
+      selects: [
+        { key: "eventType", label: "Action", options: log.actions.map((a) => a.label) },
+        { key: "administrator", label: "Administrator", options: log.actors.map((a) => a.label) },
+      ],
+    })}
+
+    ${panel("Administrator actions", "Newest first",
+      resultCount(log.rows.length, log.total, "actions"),
+      table(["When", "Who", "What", "Farm"], log.rows, (r) => [
+        esc(fmtDateTimeSast(r.createdAt)),
+        esc(r.actorName),
+        // The summary already names the actor; the What column carries the
+        // action so the two columns are not the same sentence twice.
+        esc(r.summary.replace(new RegExp("^" + r.actorName + "\\s*"), "")),
+        r.farmName ? esc(r.farmName) : `<span class="muted">—</span>`,
+      ], "No actions match the current filters."))}
+    `;
+  });
+}
+
+/* A timeline for one item, oldest first - the shape a person reads a history
+   in, which is the opposite of the activity list above. */
+export function timelineHtml(rows: AuditRow[], emptyText: string): string {
+  if (rows.length === 0) return `<p class="muted">${esc(emptyText)}</p>`;
+
+  return `<ol class="timeline">${rows
+    .map(
+      (r) => `
+      <li class="timeline-item">
+        <span class="timeline-dot" aria-hidden="true"></span>
+        <div>
+          <b>${esc(r.summary)}</b>
+          <span class="timeline-when">${esc(fmtDateTimeSast(r.createdAt))}</span>
+        </div>
+      </li>`,
+    )
+    .join("")}</ol>`;
 }
 
 /* ================================ SETTINGS =============================== */

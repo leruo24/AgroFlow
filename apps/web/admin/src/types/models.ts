@@ -111,6 +111,11 @@ export interface User {
   farm: string;
   status: UserStatus;
 
+  /** profile.role. Needed to tell an administrator from a farmer - the
+      Assign picker must offer only people who can actually attend to a
+      request, and a list of every farmer would be hundreds long. */
+  role: string;
+
   /** Whether this farmer has actually connected Telegram (profile.
       telegram_chat_id is not null). False means they receive NOTHING -
       no weather warnings, no equipment failures, no password resets -
@@ -157,6 +162,16 @@ export interface ServiceRequest {
   status: ServiceRequestStatus;
   createdAt: string;
   updatedAt: string;
+
+  /* The accountability chain (migration 0037). All optional: rows created
+     before that migration have nulls, which read correctly as "we do not
+     know who did this" - because we genuinely do not. */
+  assignedToProfileId?: string | null;
+  assignedToName?: string | null;
+  scheduledByName?: string | null;
+  scheduledAt?: string | null;
+  completedByName?: string | null;
+  completedAt?: string | null;
 }
 
 /* ---------------------------------- farms ------------------------------------ */

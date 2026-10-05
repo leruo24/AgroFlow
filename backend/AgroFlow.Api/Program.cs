@@ -204,6 +204,11 @@ builder.Services.AddSingleton<NotificationLedger>();
 // request has no farm yet. See migration 0032.
 builder.Services.AddSingleton<FarmRequestNotifier>();
 
+// The append-only record of what administrators do (migration 0037).
+// Singleton because it holds only the data source, like the other
+// writers here.
+builder.Services.AddSingleton<AuditLog>();
+
 // Self-service password recovery over Telegram. Supabase's own email reset
 // needs SMTP that this project has never configured, so the mobile
 // forgot-password screen silently did nothing before this.
@@ -392,6 +397,7 @@ app.MapForecastEndpoints();
 app.MapReportRequestEndpoints();
 app.MapReportScheduleEndpoints();
 app.MapHealthEndpoints();
+app.MapAuditLogEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

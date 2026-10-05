@@ -103,7 +103,11 @@ public static class DeviceEnrollmentEndpoints
         app.MapGet("/api/devices/firmware-check", FirmwareCheckAsync);
     }
 
-    private static async Task<IResult> EnrollAsync(EnrollDeviceRequest request, NpgsqlDataSource dataSource)
+    private static async Task<IResult> EnrollAsync(
+        EnrollDeviceRequest request,
+        System.Security.Claims.ClaimsPrincipal user,
+        NpgsqlDataSource dataSource,
+        AgroFlow.Api.Services.AuditLog audit)
     {
         if (request.ZoneId <= 0)
         {
@@ -124,6 +128,14 @@ public static class DeviceEnrollmentEndpoints
         cmd.Parameters.AddWithValue(expiresAt);
 
         var hardwareId = (long)(await cmd.ExecuteScalarAsync())!;
+
+        // The CODE ITSELF IS NOT RECORDED - it is a live single-use
+        // credential, and a permanent log is the last place it belongs. Who
+        // created one, for which zone and when is the accountable part.
+        await audit.WriteAsync(
+            user, AgroFlow.Api.Services.AuditActions.EnrollmentCodeCreated,
+            "hardware", hardwareId.ToString(),
+            details: new { zoneId = request.ZoneId, expiresAt });
 
         return Results.Ok(new EnrollDeviceResponse(hardwareId, code, expiresAt));
     }

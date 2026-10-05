@@ -25,19 +25,27 @@ import {
   archiveFarm,
   restoreFarm,
   runAdviceNow,
+  assignRequest,
+  getActivityLog,
+  getEntityTimeline,
+  type AuditRow,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
+import { picker, detailList } from "@/ui/patterns";
+import { exportActivityWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
+import { timelineHtml } from "@/pages/analytics";
+import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV, downloadCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
 import { refreshHealthPanel } from "@/app/health";
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
-import { esc, fmtInt, fmtPct, fmtDate, fmtLitres } from "@/lib/format";
+import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { TECHNICIANS } from "@/data/referenceData";
-import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
+import type { AdminAlert, DateRangePreset, FilterState, AlertPriority } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile } from "@/app/auth";
@@ -542,6 +550,48 @@ async function openFarmDetail(id: number): Promise<void> {
 }
 
 /* ------------------------------ action router ---------------------------- */
+
+/* An alert's history as a timeline.
+ *
+ * Built from the alert's own fields and its notes rather than from the audit
+ * log, for the same reason requests.ts does it: this is the CURRENT state of
+ * one alert, and the audit log is the history of admin actions across the
+ * platform. The two answer different questions.
+ *
+ * Steps that have not happened are still shown, greyed, so an admin can see
+ * what is outstanding rather than only what is done. */
+function alertTimeline(a: AdminAlert): string {
+  const step = (label: string, when: string | null, done: boolean): string => `
+    <li class="timeline-item${done ? "" : " is-pending"}">
+      <span class="timeline-dot" aria-hidden="true"></span>
+      <div>
+        <b>${esc(label)}</b>
+        <span class="timeline-when">${when ? esc(when) : "not yet"}</span>
+      </div>
+    </li>`;
+
+  const resolved = ["Resolved", "Closed"].includes(a.status);
+
+  // Notes sit in the middle of the chain in the order they were written.
+  // api.addAlertNote unshifts, so the newest is first - reversed here because
+  // a timeline reads downwards through time.
+  const notes = [...a.notes].reverse().map((n) => `
+    <li class="timeline-item">
+      <span class="timeline-dot" aria-hidden="true"></span>
+      <div>
+        <b>Note by ${esc(n.author)}</b>
+        <span class="timeline-when">${esc(n.when)}</span>
+        <p class="muted">${esc(n.note)}</p>
+      </div>
+    </li>`).join("");
+
+  return `<ol class="timeline">
+    ${step("Raised", a.raised, true)}
+    ${a.assignedTo ? step(`Assigned to ${a.assignedTo}`, null, true) : step("Assigned", null, false)}
+    ${notes}
+    ${step(a.status === "Closed" ? "Closed" : "Resolved", null, resolved)}
+  </ol>`;
+}
 
 async function handleAction(el: HTMLElement): Promise<void> {
   const act = el.dataset["act"];
@@ -1512,6 +1562,143 @@ case "delete-user": {
     case "retry-page":
       return void refresh();
 
+    /* One request, end to end: what was asked for, who has touched it, and
+       every recorded change to it.
+       The state chain comes off the row (service_request's own columns); the
+       history below it comes from the audit log, which is the only place that
+       knows a status was changed twice or set back. */
+    case "view-request": {
+      const requestId = Number(idAttr);
+      if (!requestId) return;
+
+      const requests = await api.getServiceRequests();
+      const request = requests.find((r) => r.id === requestId);
+      if (!request) return void toast("That request could not be found.", "warn");
+
+      // The log is a nicety on this panel, not the panel itself: if 0037 has
+      // not been applied the details must still open.
+      const history = await getEntityTimeline("service_request", String(requestId))
+        .catch(() => [] as AuditRow[]);
+
+      return openDrawer({
+        title: `${request.farmerName}`,
+        subtitle: request.requestType === "new_farm" ? "New farm request" : "New zone request",
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section"><h6>What was asked for</h6>
+            ${detailList([
+              ["Farm", esc(request.farmName ?? "New farm request")],
+              ["Crop", esc(formatCrop(request.cropType))],
+              ["Rough size", request.roughSize !== null ? `${request.roughSize} ha` : "Not stated"],
+              ["Location", esc(request.location ?? "Not stated")],
+              ["Contact", esc(request.farmerEmail || "Not on file")],
+              ["Notes", esc(request.notes ?? "None")],
+            ])}
+          </div>
+          <div class="drawer-section"><h6>Where it has got to</h6>
+            ${requestTimeline(request)}
+          </div>
+          <div class="drawer-section"><h6>Recorded changes</h6>
+            ${timelineHtml(history, "Nothing recorded against this request yet.")}
+          </div>`,
+        confirmLabel: "Close",
+        onConfirm: () => undefined,
+      });
+    }
+
+    /* Who is dealing with a request.
+       A picker over real admin profiles, not a text field - the whole point
+       of recording an owner is that the name means a specific person. */
+    case "assign-request": {
+      const requestId = Number(idAttr);
+      if (!requestId) return;
+
+      const [requests, admins] = await Promise.all([
+        api.getServiceRequests(),
+        api.getUsers().catch(() => []),
+      ]);
+
+      const request = requests.find((r) => r.id === requestId);
+      if (!request) return void toast("That request could not be found.", "warn");
+
+      // Admins only: assigning a farmer to attend to a request would be
+      // meaningless, and the list would be hundreds long.
+      const candidates = admins.filter((u) => u.role === "admin");
+
+      if (candidates.length === 0) {
+        return void toast("No administrator accounts to assign to.", "warn");
+      }
+
+      return openDrawer({
+        title: "Assign this request",
+        subtitle: `${request.farmerName} · ${request.requestType === "new_farm" ? "New farm" : "New zone"}`,
+        bodyHtml: `
+          ${picker({
+            name: "assignee",
+            label: "Assign to",
+            value: request.assignedToProfileId ?? "",
+            placeholder: "Search administrators…",
+            options: candidates.map((u) => ({
+              value: u.id,
+              label: u.name || u.email,
+              secondary: u.email,
+            })),
+          })}
+          <p class="muted">
+            Assigning does not change the status. Somebody usually picks a request up before it
+            is scheduled, and "booked, nobody owns it yet" is a real state worth being able to see.
+          </p>`,
+        confirmLabel: "Save",
+        onConfirm: (values) => {
+          const assignee = values["assignee"] ?? "";
+
+          void assignRequest(requestId, assignee || null)
+            .then((r) => {
+              toast(r.message, "success");
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not assign the request",
+                error instanceof Error ? error.message : "The request could not be assigned.",
+              );
+            });
+        },
+      });
+    }
+
+    /* The activity log, as a file. CSV for anything, XLSX for the one people
+       actually open in Excel - see item 7 for why the plain CSV was useless
+       in a South African locale. */
+    case "export-activity-csv": {
+      const log = await getActivityLog();
+
+      // downloadExcelSafeCsv, not downloadCSV: the plain one produced a file
+      // Excel opened with every value in column A on a South African
+      // machine. See lib/workbook.ts.
+      downloadExcelSafeCsv(
+        "agroflow-activity",
+        toCSV(
+          ["When (SAST)", "Who", "What happened", "Farm", "Action code"],
+          log.rows.map((r) => [
+            fmtDateTimeSast(r.createdAt),
+            r.actorName,
+            r.summary,
+            r.farmName ?? "",
+            r.action,
+          ]),
+        ),
+      );
+
+      return void toast(`Exported ${log.rows.length} actions.`, "success");
+    }
+
+    case "export-activity-xlsx": {
+      const log = await getActivityLog();
+      await exportActivityWorkbook(log.rows);
+      return void toast(`Exported ${log.rows.length} actions.`, "success");
+    }
+
     case "go-mqtt-logins":
       return void go("mqttLogins");
 
@@ -1703,11 +1890,8 @@ case "delete-user": {
               <div class="detail-row"><span>Status</span><b>${esc(a.status)}</b></div>
             </div>
           </div>
-          <div class="drawer-section"><h6>Notes</h6>
-            ${a.notes.length
-              ? `<ul class="drawer-list">${a.notes.map((n) =>
-                  `<li>${esc(n.note)} <span class="muted">— ${esc(n.author)}, ${esc(n.when)}</span></li>`).join("")}</ul>`
-              : `<p class="muted">No notes recorded.</p>`}
+          <div class="drawer-section"><h6>History</h6>
+            ${alertTimeline(a)}
           </div>`,
         confirmLabel: "Resolve alert",
         onConfirm: () => {
@@ -1717,10 +1901,32 @@ case "delete-user": {
         },
       });
     }
-    case "assign-alert":
+    /* A picker over real administrator accounts. Typing a name into a text
+       field meant "Leruo", "leruo" and "L. Mosiane" were three different
+       assignees as far as the Assigned-to filter was concerned. */
+    case "assign-alert": {
+      const admins = (await api.getUsers().catch(() => [])).filter((u) => u.role === "admin");
+
+      if (admins.length === 0) {
+        return void toast("No administrator accounts to assign to.", "warn");
+      }
+
+      const current = api.findAlert(idAttr);
+
       return openDrawer({
         title: `Assign ${idAttr}`,
-        fields: [{ label: "Administrator", value: "", editable: true, name: "admin" }],
+        subtitle: current?.title,
+        bodyHtml: picker({
+          name: "admin",
+          label: "Assign to",
+          value: current?.assignedTo ?? "",
+          placeholder: "Search administrators…",
+          options: admins.map((u) => ({
+            value: u.name || u.email,
+            label: u.name || u.email,
+            secondary: u.email,
+          })),
+        }),
         confirmLabel: "Assign",
         onConfirm: (v) => {
           void api.assignAlert(idAttr, v["admin"] ?? "").then(() => {
@@ -1728,6 +1934,7 @@ case "delete-user": {
           });
         },
       });
+    }
     case "note-alert":
       return openDrawer({
         title: `Add note — ${idAttr}`,

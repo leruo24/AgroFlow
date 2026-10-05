@@ -700,3 +700,75 @@ export type HealthResponse = {
 export function getPlatformHealth(): Promise<HealthResponse> {
   return authorizedJson<HealthResponse>("/api/admin/health", "GET");
 }
+
+/* ---------------- Activity / audit log (item 5) ----------------
+
+   The append-only record of what administrators do (migration 0037). The
+   page this feeds used to say there was nowhere to read this from, which
+   was true. */
+
+export type AuditRow = {
+  id: number;
+  createdAt: string;
+  actorName: string;
+  action: string;
+  /** One readable sentence, built server-side so the page and the exports
+      cannot describe the same action three different ways. */
+  summary: string;
+  entityType: string;
+  entityId: string | null;
+  farmId: number | null;
+  farmName: string | null;
+  /** JSON string - before/after for whatever changed. */
+  details: string;
+};
+
+export type AuditFilterOption = { value: string; label: string };
+
+export type AuditLogResponse = {
+  rows: AuditRow[];
+  total: number;
+  actions: AuditFilterOption[];
+  actors: AuditFilterOption[];
+};
+
+export function getActivityLog(params: {
+  action?: string;
+  actor?: string;
+  farmId?: number;
+  from?: string;
+  to?: string;
+} = {}): Promise<AuditLogResponse> {
+  const q = new URLSearchParams();
+  if (params.action) q.set("action", params.action);
+  if (params.actor) q.set("actor", params.actor);
+  if (params.farmId) q.set("farmId", String(params.farmId));
+  if (params.from) q.set("from", params.from);
+  if (params.to) q.set("to", params.to);
+
+  const qs = q.toString();
+  return authorizedJson<AuditLogResponse>(
+    `/api/admin/activity${qs ? `?${qs}` : ""}`,
+    "GET",
+  );
+}
+
+/** Everything that ever happened to one thing, oldest first - the timeline
+    on a request, an alert or a kit. */
+export function getEntityTimeline(entityType: string, entityId: string): Promise<AuditRow[]> {
+  return authorizedJson<AuditRow[]>(
+    `/api/admin/activity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`,
+    "GET",
+  );
+}
+
+/** Who is dealing with a request. Independent of status: somebody picks a
+    request up before it is scheduled. */
+export function assignRequest(
+  requestId: number,
+  assignedToProfileId: string | null,
+): Promise<{ requestId: number; assignedTo: string | null; message: string }> {
+  return authorizedJson(`/api/admin/requests/${requestId}/assign`, "PUT", {
+    assignedToProfileId,
+  });
+}

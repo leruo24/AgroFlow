@@ -289,10 +289,11 @@ public static class ZoneHardwareEndpoints
 
     private static Task<IResult> ChangeWifiAsync(
         long zoneId, ClaimsPrincipal user, NpgsqlDataSource dataSource,
-        ILoggerFactory loggerFactory, CancellationToken cancellationToken)
+        AuditLog audit, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
         => IssueSetupCommandAsync(
-            zoneId, user, dataSource, loggerFactory, DeviceSetupCommands.ChangeWifi,
-            requireFarmAccess: true, requireOnline: true, cancellationToken);
+            zoneId, user, dataSource, audit, loggerFactory, DeviceSetupCommands.ChangeWifi,
+            requireFarmAccess: true, requireOnline: true,
+            cancellationToken: cancellationToken);
 
     // ------------------------------------------------------------------
     // ADMIN
@@ -300,10 +301,11 @@ public static class ZoneHardwareEndpoints
 
     private static Task<IResult> AdminChangeWifiAsync(
         long zoneId, ClaimsPrincipal user, NpgsqlDataSource dataSource,
-        ILoggerFactory loggerFactory, CancellationToken cancellationToken)
+        AuditLog audit, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
         => IssueSetupCommandAsync(
-            zoneId, user, dataSource, loggerFactory, DeviceSetupCommands.ChangeWifi,
-            requireFarmAccess: false, requireOnline: true, cancellationToken);
+            zoneId, user, dataSource, audit, loggerFactory, DeviceSetupCommands.ChangeWifi,
+            requireFarmAccess: false, requireOnline: true,
+            cancellationToken: cancellationToken);
 
     // open_setup keeps the WiFi, so an offline board is not a hard stop the
     // way it is for change_wifi: the command sits pending and the replay
@@ -313,18 +315,21 @@ public static class ZoneHardwareEndpoints
     // give someone standing in a field.
     private static Task<IResult> AdminOpenSetupAsync(
         long zoneId, ClaimsPrincipal user, NpgsqlDataSource dataSource,
-        ILoggerFactory loggerFactory, CancellationToken cancellationToken)
+        AuditLog audit, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
         => IssueSetupCommandAsync(
-            zoneId, user, dataSource, loggerFactory, DeviceSetupCommands.OpenSetup,
-            requireFarmAccess: false, requireOnline: false, cancellationToken);
+            zoneId, user, dataSource, audit, loggerFactory, DeviceSetupCommands.OpenSetup,
+            requireFarmAccess: false, requireOnline: false,
+            cancellationToken: cancellationToken);
 
     // Cuts one board off. Sets token_revoked_at (so every device endpoint
     // 401s it, and three of those make the board wipe its own credentials)
     // and burns its pooled MQTT login.
     private static async Task<IResult> AdminRevokeAsync(
         long zoneId,
+        ClaimsPrincipal user,
         NpgsqlDataSource dataSource,
         MqttCredentialPoolService pool,
+        AuditLog audit,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
@@ -363,6 +368,13 @@ public static class ZoneHardwareEndpoints
             "Revoked device {DeviceId} (hardware {HardwareId}) on zone {ZoneId}. Burned MQTT login: {Username}.",
             deviceId, hardwareId, zoneId, burnedUsername ?? "none");
 
+        // Irreversible and destructive, so it is exactly the kind of action
+        // the record exists for.
+        await audit.WriteAsync(
+            user, AuditActions.DeviceRevoked, "hardware", hardwareId.ToString(),
+            details: new { zoneId, deviceId, burnedMqttUsername = burnedUsername },
+            cancellationToken: cancellationToken);
+
         return Results.Ok(new
         {
             hardwareId,
@@ -390,6 +402,7 @@ public static class ZoneHardwareEndpoints
         long zoneId,
         ClaimsPrincipal user,
         NpgsqlDataSource dataSource,
+        AuditLog audit,
         ILoggerFactory loggerFactory,
         string command,
         bool requireFarmAccess,
@@ -471,6 +484,19 @@ public static class ZoneHardwareEndpoints
         insert.Parameters.AddWithValue(command);
 
         var commandId = (Guid)(await insert.ExecuteScalarAsync(cancellationToken))!;
+
+        // Recorded for BOTH audiences: a farmer pressing Change WiFi in the
+        // app and an admin doing it from the console write the same row, so
+        // "why did this kit drop off the network on Tuesday?" has one answer
+        // rather than two half-answers.
+        await audit.WriteAsync(
+            user,
+            command == DeviceSetupCommands.ChangeWifi
+                ? AuditActions.DeviceChangeWifi
+                : AuditActions.DeviceOpenSetup,
+            "zone", zoneId.ToString(),
+            details: new { deviceId, command, commandId },
+            cancellationToken: cancellationToken);
 
         logger.LogInformation(
             "Queued {Command} for device {DeviceId} on zone {ZoneId} as command {CommandId}.",

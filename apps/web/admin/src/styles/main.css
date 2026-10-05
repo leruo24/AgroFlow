@@ -1574,3 +1574,70 @@ tbody tr:last-child td{border-bottom:none}
   .attn-card, .card-clickable{ transition:none; }
   .attn-card:hover, .card-clickable:hover{ transform:none; }
 }
+
+/* ---- Timelines (item 5) -------------------------------------------------
+   A request or an alert read top to bottom in the order things happened.
+   Submitted -> Assigned -> Scheduled -> Completed, each with a name and a
+   time, so "who attended to this?" has an answer on the page rather than in
+   somebody's memory. */
+.timeline{
+  list-style:none;
+  margin:0;
+  padding:0 0 0 6px;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+.timeline-item{
+  display:flex;
+  gap:12px;
+  padding:0 0 16px;
+  position:relative;
+}
+/* The connecting line, drawn behind the dots. Not on the last item, so the
+   timeline ends rather than trailing off. */
+.timeline-item:not(:last-child)::before{
+  content:"";
+  position:absolute;
+  left:5px;
+  top:14px;
+  bottom:0;
+  width:2px;
+  background:var(--divider);
+}
+.timeline-dot{
+  position:relative;
+  z-index:1;
+  flex:none;
+  width:12px;height:12px;
+  margin-top:3px;
+  border-radius:50%;
+  background:var(--brand);
+  box-shadow:0 0 0 3px var(--surface);
+}
+.timeline-item b{ display:block; font-size:.9rem; font-weight:600; color:var(--text); }
+.timeline-when{ display:block; font-size:.78rem; color:var(--text-2); margin-top:2px; }
+
+/* A step that has not happened yet - shown greyed so the shape of the whole
+   process is visible, not just the parts already done. */
+.timeline-item.is-pending .timeline-dot{ background:var(--border-strong); }
+.timeline-item.is-pending b{ color:var(--muted); font-weight:500; }
+
+/* A table cell that is a way in, not just text (item A's list -> detail
+   pattern). Underlined on hover rather than always, so a column of names
+   does not read as a wall of links. */
+.cell-link{
+  color:inherit;
+  text-decoration:none;
+  border-bottom:1px dashed var(--border-strong, #cbd5d0);
+}
+.cell-link:hover,
+.cell-link:focus-visible{
+  color:var(--brand, #184d35);
+  border-bottom-color:currentColor;
+}
+.cell-link:focus-visible{
+  outline:2px solid var(--brand, #184d35);
+  outline-offset:2px;
+  border-radius:3px;
+}

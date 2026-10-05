@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using AgroFlow.Api.Auth;
+using AgroFlow.Api.Services;
 using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
@@ -26,19 +28,22 @@ public static class FarmEndpoints
     // Hides a farm and its zones from default lists, reports and automatic
     // reports, keeping every row. See migration 0036.
     private static async Task<IResult> ArchiveFarmAsync(
-        long id, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+        long id, ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        AuditLog audit, ILoggerFactory loggerFactory)
     {
-        return await SetArchivedAsync(id, archived: true, dataSource, loggerFactory);
+        return await SetArchivedAsync(id, archived: true, user, dataSource, audit, loggerFactory);
     }
 
     private static async Task<IResult> RestoreFarmAsync(
-        long id, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+        long id, ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        AuditLog audit, ILoggerFactory loggerFactory)
     {
-        return await SetArchivedAsync(id, archived: false, dataSource, loggerFactory);
+        return await SetArchivedAsync(id, archived: false, user, dataSource, audit, loggerFactory);
     }
 
     private static async Task<IResult> SetArchivedAsync(
-        long id, bool archived, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+        long id, bool archived, ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        AuditLog audit, ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmEndpoints");
 
@@ -71,6 +76,11 @@ public static class FarmEndpoints
             cmd.Parameters.AddWithValue(id);
             await cmd.ExecuteNonQueryAsync();
         }
+
+        await audit.WriteAsync(
+            user,
+            archived ? AuditActions.FarmArchived : AuditActions.FarmRestored,
+            "farm", id.ToString(), farmId: id);
 
         return Results.Ok(new
         {

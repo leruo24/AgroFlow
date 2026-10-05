@@ -86,6 +86,17 @@ type ServiceRequestRow = {
   status: ServiceRequestStatus;
   created_at: string;
   updated_at: string;
+
+  /* Migration 0037. Optional on the TYPE as well as nullable in the column,
+     because before that migration PostgREST does not return them at all -
+     so `undefined` is "the column is not there yet" and `null` is "there,
+     but nobody has done this step". The timeline says something different
+     for each. */
+  assigned_to_profile_id?: string | null;
+  scheduled_by_profile_id?: string | null;
+  scheduled_at?: string | null;
+  completed_by_profile_id?: string | null;
+  completed_at?: string | null;
 };
 
 /** location is stored as one text field ("Region, Province" by
@@ -255,8 +266,11 @@ export const api = {
 
   users = rows.map((u) => ({
     id: u.id,
-    name: u.name || "(no name on file)",
+    // The email when there is no name: "(no name on file)" is a label about
+    // our data, not a way to identify the person in front of you (item 8).
+    name: u.name || u.email,
     email: u.email,
+    role: u.role ?? "farm_user",
     phone: u.phone ?? "",
     farm: u.farm_name ?? "Unassigned",
 
@@ -336,7 +350,10 @@ export const api = {
   async getServiceRequests(): Promise<ServiceRequest[]> {
     const { data, error } = await supabase
       .from("service_request")
-      .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at")
+      // One string literal on purpose: supabase-js infers the row shape from
+      // the select text, and a concatenated expression defeats that. The tail
+      // after updated_at is the who/when chain from migration 0037.
+      .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at, assigned_to_profile_id, scheduled_by_profile_id, scheduled_at, completed_by_profile_id, completed_at")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -357,6 +374,29 @@ export const api = {
 
     if (farmerError) throw farmerError;
     if (farmError) throw farmError;
+
+    /* The admins named in the chain. A separate lookup rather than three
+       joins because the same person usually appears in several columns of
+       several rows, and one `in` query answers all of them. */
+    const adminIds = [...new Set(
+      rows.flatMap((r) => [
+        r.assigned_to_profile_id,
+        r.scheduled_by_profile_id,
+        r.completed_by_profile_id,
+      ]).filter((id): id is string => typeof id === "string" && id.length > 0),
+    )];
+
+    const adminMap = new Map<string, string>();
+    if (adminIds.length > 0) {
+      const { data: admins } = await supabase
+        .from("profile")
+        .select("id, name, email")
+        .in("id", adminIds);
+
+      for (const a of (admins ?? []) as { id: string; name: string | null; email: string | null }[]) {
+        adminMap.set(a.id, a.name || a.email || "Unknown");
+      }
+    }
 
     const farmerMap = new Map(
       (farmers ?? []).map((farmer: { id: string; name: string; email: string }) => [
@@ -390,6 +430,22 @@ export const api = {
         status: row.status,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+
+        // The who/when chain. Undefined rather than null when the column is
+        // absent (0037 not applied), so the timeline can tell "not recorded"
+        // from "not done yet" and say the right thing for each.
+        assignedToProfileId: row.assigned_to_profile_id ?? null,
+        assignedToName: row.assigned_to_profile_id
+          ? adminMap.get(row.assigned_to_profile_id) ?? "Unknown"
+          : null,
+        scheduledByName: row.scheduled_by_profile_id
+          ? adminMap.get(row.scheduled_by_profile_id) ?? "Unknown"
+          : null,
+        scheduledAt: row.scheduled_at ?? null,
+        completedByName: row.completed_by_profile_id
+          ? adminMap.get(row.completed_by_profile_id) ?? "Unknown"
+          : null,
+        completedAt: row.completed_at ?? null,
       };
     });
   },
