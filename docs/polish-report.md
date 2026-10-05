@@ -1,6 +1,7 @@
 # Bugfix and polish pass
 
-Branch `fix/polish-before-deploy`, ten commits, one per item of the brief.
+Branch `fix/polish-before-deploy`, one commit per item of the brief, plus
+`feat/designed-reports` for item 8b once its two templates arrived.
 
 This is the report for item 12. It says what changed, what each change was
 actually fixing, what I did not do and why, and what to click to check it.
@@ -20,29 +21,77 @@ actually fixing, what I did not do and why, and what to click to check it.
 | 6 | Free-text forms, a crop list the engine could not read | Done — two wizards, pickers, crop list fixed |
 | 7 | "Export summary" was unreadable in Excel | Done — real `.xlsx`, a PDF, nine CSVs fixed |
 | 8 | Irrigation data named no farm; litres from the wrong column | Done — plus alerts, farmers, dates |
-| 8b | Reports as designed PDFs matching two templates | **Stopped — both templates are missing** |
+| 8b | Reports as designed PDFs matching two templates | Done — both templates arrived; see below |
 | B | Debug pass | Done — ten false-success toasts removed |
-| 9–11 | Tests, checks, land | Done — 615 tests pass |
+| 9–11 | Tests, checks, land | Done — 631 tests pass |
 
 ---
 
-## Item 8b is the one thing I did not do
+## Item 8b — the designed report
 
-The brief says: *"match `agroflow-report-template.pdf` and
-`agroflow-data-template.xlsx`. If either is missing, stop this item and tell
-me."*
+Both templates arrived after the first pass, so this is now done.
 
-Both are missing. Neither is in `C:\Users\leruo\Downloads\` nor anywhere in
-the repository — I searched both by name and by pattern. So item 8b is
-stopped, untouched, as instructed.
+Picking a zone for a water usage report used to produce the same terse
+farm-wide summary as picking "All zones". It now produces the document in
+`agroflow-report-template.pdf`:
 
-Nothing else depends on it. Report PDFs still work as they did: the Reports
-page's live report section produces real PDFs from the API (QuestPDF), and
-item 7 added a platform summary PDF. What 8b would have changed is their
-**design** — matching your templates' layout, charts and typography — and
-guessing at that is exactly what the instruction exists to prevent.
+- **Page 1** — the week in four figures, "How your system works" in plain
+  sentences, and water used per day.
+- **Page 2** — what the crop needed against what it got, the soil moisture
+  trace with its healthy band and a marker at every pump run, and the week's
+  advice with the source of each line.
+- **Page 3** — the area forecast against the sensor in the tub, the daily
+  table with a week totals row, and a glossary of the three terms the report
+  cannot avoid using.
 
-**To unblock it:** put both files in `Downloads` and say so.
+Plus the workbook from `agroflow-data-template.xlsx` — Summary, Daily and
+Weather comparison — at `GET /api/farmer/reports/water-usage/xlsx?zoneId=…`.
+
+Both are rendered from one `WaterUsageReportModel`. That is the entire reason
+it exists: the first thing that would go wrong is the spreadsheet disagreeing
+with the document about a total.
+
+**Nothing changed for "All zones".** The farm-wide report is untouched, so the
+scheduler, the Telegram delivery and the admin console all go on working. The
+zone now travels into the stored regeneration path too, so regenerating a
+report returns the document the farmer actually received.
+
+### Two things nearly shipped broken, both silently
+
+**SVG text renders only in Lato.** QuestPDF has no chart element and the
+packaged build does not expose SkiaSharp, so the charts are generated as SVG.
+But QuestPDF resolves a `font-family` only against the fonts it has
+registered, and it ships exactly one. Naming Helvetica, Arial or sans-serif
+does not fall back — it drops the `<text>` element. The first render had
+every bar in place and not one axis label, value or legend, and nothing threw.
+Caught by rendering the PDF and looking at it.
+
+**A decimal comma is invisible damage.** Inside an SVG path it truncates the
+shape, and Skia draws the result as a blank box rather than failing. In the
+workbook it makes Excel read the cell as text, so the column still looks right
+and every total quietly stops counting it. Everything numeric now goes through
+`InvariantCulture`, and two tests force `af-ZA` to prove it.
+
+### The workbook is written by hand
+
+No spreadsheet library exists in the backend, and the brief's one new
+dependency went to `exceljs` in the admin. An `.xlsx` is a zip of XML, and the
+subset needed for sheets of labelled numbers is small enough to write
+honestly — inline strings rather than a shared string table, since the saving
+is irrelevant at this size and the table is the fiddliest part of the format.
+Sheet names are sanitised: Excel rejects `: \ / ? * [ ]` and anything over 31
+characters by refusing to open the file at all, and a zone name is whatever
+the farmer typed.
+
+### What it will not print
+
+A zone with no flow rate yields no water figure anywhere — **not a zero**. In
+the PDF that is an em dash; in the workbook an empty cell, which is what
+Excel's own `SUM` and `AVERAGE` ignore. Migration `0018` is explicit about
+this, and a zero reads as a pump that ran and delivered nothing. A day with no
+reading leaves a gap in the line rather than a segment drawn across it,
+because a straight line over a missing day is an invented measurement. A crop
+with no planting date simply has no growth stage line.
 
 ---
 
@@ -273,7 +322,10 @@ Then mobile, on a device or emulator:
 
 23. Reports → "Make me this report". It either produces one or says
     "This report couldn't be made. Try again later." — never a bare 500.
-24. The app icon is the AgroFlow icon, with no watermark, and the adaptive
+24. Reports → Water usage → pick **one zone** (not "All zones"), submit. The
+    PDF that arrives is three pages with charts, not the one-page summary.
+    Pick "All zones" and you get the summary — both are correct.
+25. The app icon is the AgroFlow icon, with no watermark, and the adaptive
     icon is not an icon-inside-an-icon.
 
 ---
@@ -311,7 +363,7 @@ for finished.
 | Check | Result |
 |---|---|
 | `dotnet build` (API) | 0 warnings, 0 errors |
-| `dotnet test` (Domain) | 615 passed, 0 failed (607 before) |
+| `dotnet test` (Domain) | 631 passed, 0 failed (607 before this branch) |
 | `tsc --noEmit` (admin) | clean |
 | `npm run build` (admin) | clean |
 | `tsc --noEmit` (mobile) | clean |
