@@ -400,6 +400,7 @@ app.MapReportScheduleEndpoints();
 app.MapHealthEndpoints();
 app.MapAuditLogEndpoints();
 app.MapAdminSummaryEndpoints();
+app.MapPlatformConfigEndpoints();
 
 // One pass over the objects the migrations should have created, logged
 // at Warning per missing one. Read-only, and deliberately not awaited:

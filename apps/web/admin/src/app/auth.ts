@@ -42,6 +42,34 @@ export function getAdminProfile(): AdminProfile | null {
   return profile;
 }
 
+/** Re-reads the signed-in admin's own profile row.
+ *
+ * Needed after they edit their own name in Settings: the header greets them
+ * by it, and without this it would keep showing the old one until the next
+ * sign-in. Deliberately silent on failure - the save itself has already
+ * succeeded, and a stale header is not worth an error dialog over. */
+export async function refreshAdminProfile(): Promise<void> {
+  const userId = session?.user?.id;
+  if (!userId) return;
+
+  const fresh = await loadProfile(userId);
+  if (!fresh) return;
+
+  profile = fresh;
+  notify();
+}
+
+/** Changes the signed-in admin's password through Supabase Auth.
+ *
+ * Supabase Auth owns credentials - there is no password column in `profile`
+ * and the API has no endpoint for this - so it goes straight to the auth
+ * client. The current session stays valid, which is why the page can tell
+ * them they are still signed in here. */
+export async function changeMyPassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw new Error(error.message);
+}
+
 /** True only for a signed-in session whose profile.role is 'admin'. */
 export function isAdminAuthenticated(): boolean {
   return profile?.role === "admin";

@@ -29,17 +29,22 @@ import {
   getActivityLog,
   getEntityTimeline,
   KIT_TYPES,
+  getPlatformConfig,
+  updateMyProfile,
+  getMyTelegramStatus,
+  requestMyTelegramCode,
+  disconnectMyTelegram,
   type AuditRow,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
-import { picker, detailList, wizard } from "@/ui/patterns";
+import { picker, detailList, wizard, errorState } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, exportRowsWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml } from "@/pages/analytics";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
-import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
+import { go, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
 import { refreshHealthPanel } from "@/app/health";
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
@@ -50,7 +55,7 @@ import type { AdminAlert, DateRangePreset, Farm, FilterState, AlertPriority, Ser
 import { zoneRow } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
-import { signOut, getAdminProfile } from "@/app/auth";
+import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
 import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf } from "@/services/agroFlowApi";
 
 
@@ -2632,21 +2637,126 @@ case "delete-user": {
     case "export-dashboard": return exportCurrent("dashboard");
 
     /* settings */
-    /* The Settings form has nowhere to write to - there is no settings table
-       anywhere in the schema, and every field on that page shows the default
-       the platform is built with. So this says what happened: the values were
-       kept for this session and the platform's own defaults are unchanged.
-       It used to say "Settings saved.", which was not true, and an admin who
-       believed it would have reported a bug the next time they signed in. */
-    case "save-settings":
-      return toast(
-        "Kept for this session. The platform's own defaults are set in code and are unchanged.",
-        "info",
+    /* Settings that actually write somewhere (item 2).
+       The twenty-odd fake fields they replace are gone, along with
+       save-settings, manage-roles, backup-now, restore and download-backup -
+       each of which reported a success for work nothing did. */
+    // The Retry on either Settings panel's error state.
+    case "go-settings-account":
+      return void refreshMyTelegramStatus();
+
+    case "go-settings-thresholds":
+      return void loadPlatformThresholds();
+
+    case "save-my-profile": {
+      const v = collectFields();
+      const name = (v["myName"] ?? "").trim();
+
+      if (name.length === 0) {
+        return void toast("Your name cannot be blank.", "warn");
+      }
+
+      try {
+        await updateMyProfile({ name, phone: (v["myPhone"] ?? "").trim() || null });
+        toast("Your details are saved.", "success");
+
+        // The header shows the signed-in admin's name, so it has to be told.
+        await refreshAdminProfile();
+        updateHeaderIdentity();
+      } catch (error) {
+        showErrorModal(
+          "Could not save your details",
+          error instanceof Error ? error.message : "Your details could not be saved.",
+        );
+      }
+
+      return;
+    }
+
+    case "change-my-password": {
+      const v = collectFields();
+      const password = v["newPassword"] ?? "";
+      const again = v["newPasswordAgain"] ?? "";
+
+      // Checked here as well as by Supabase so the answer arrives in the
+      // page rather than as an API error, and so the mismatch case - which
+      // Supabase cannot see at all - is caught.
+      if (password.length < 8) {
+        return void toast("Use at least 8 characters.", "warn");
+      }
+
+      if (password !== again) {
+        return void toast("The two passwords do not match.", "warn");
+      }
+
+      try {
+        await changeMyPassword(password);
+
+        // Cleared from the DOM immediately. A password sitting in an input
+        // survives every later screenshot and shoulder-glance.
+        document.querySelectorAll<HTMLInputElement>(
+          '[data-field="newPassword"], [data-field="newPasswordAgain"]',
+        ).forEach((el) => { el.value = ""; });
+
+        toast("Your password is changed.", "success");
+      } catch (error) {
+        showErrorModal(
+          "Could not change your password",
+          error instanceof Error ? error.message : "The password could not be changed.",
+        );
+      }
+
+      return;
+    }
+
+    case "connect-my-telegram": {
+      try {
+        const result = await requestMyTelegramCode();
+
+        // A modal, not a toast: this is a code somebody has to read and use,
+        // and a toast disappears while they are still finding the app.
+        showErrorModal(
+          "Connect Telegram",
+          `${result.code}\n\n` +
+            (result.deepLink
+              ? `Open this link on the phone with Telegram: ${result.deepLink}\n\n`
+              : "") +
+            `Send this code to the AgroFlow bot. It expires ${fmtDateTimeSast(result.expiresAt)} ` +
+            `and can be used once.`,
+        );
+
+        await refreshMyTelegramStatus();
+      } catch (error) {
+        showErrorModal(
+          "Could not create a connect code",
+          error instanceof Error ? error.message : "The code could not be created.",
+        );
+      }
+
+      return;
+    }
+
+    case "disconnect-my-telegram": {
+      const confirmed = window.confirm(
+        "Disconnect Telegram?\n\n" +
+        "You will stop receiving platform messages there until you connect again.",
       );
 
-    /* manage-roles, backup-now, restore and download-backup are gone, with
-       the buttons that fired them: each toasted a success for work nothing
-       did. See the Backup & Recovery tab for what is actually true. */
+      if (!confirmed) return;
+
+      try {
+        await disconnectMyTelegram();
+        toast("Telegram disconnected.", "info");
+        await refreshMyTelegramStatus();
+      } catch (error) {
+        showErrorModal(
+          "Could not disconnect Telegram",
+          error instanceof Error ? error.message : "Telegram could not be disconnected.",
+        );
+      }
+
+      return;
+    }
   }
 }
 
@@ -2714,6 +2824,62 @@ async function runComparison(): Promise<void> {
     </table></div>`;
 
   toast("Comparison generated.", "success");
+}
+
+/* The Settings page's two asynchronous panels.
+ *
+ * Rendered empty by settingsTabBody and filled here, because a tab body is a
+ * synchronous string and both of these need the network. Each one handles its
+ * own failure in place: a Telegram status that cannot be fetched must not
+ * take the rest of the page down with it. */
+export async function refreshMyTelegramStatus(): Promise<void> {
+  const host = document.getElementById("myTelegramStatus");
+  if (!host) return;
+
+  try {
+    const status = await getMyTelegramStatus();
+
+    host.innerHTML = status.linked
+      ? `<p>Connected. Platform messages reach you on Telegram.</p>
+         <div class="form-foot">
+           <button class="btn ghost" data-act="disconnect-my-telegram">Disconnect</button>
+         </div>`
+      : `<p class="muted">
+           Not connected. You will not receive platform messages on Telegram until you connect.
+         </p>
+         <div class="form-foot">
+           <button class="btn" data-act="connect-my-telegram">Connect Telegram</button>
+         </div>`;
+  } catch (error) {
+    host.innerHTML = errorState({
+      title: "Telegram status could not be checked",
+      detail: error instanceof Error ? error.message : "The server did not answer.",
+      retryAct: "go-settings-account",
+    });
+  }
+}
+
+export async function loadPlatformThresholds(): Promise<void> {
+  const host = document.getElementById("platformThresholds");
+  if (!host) return;
+
+  try {
+    const { groups } = await getPlatformConfig();
+
+    host.innerHTML = groups.map((group) => `
+      <div class="settings-block">
+        <h4>${esc(group.title)}</h4>
+        ${detailList(group.values.map((v) => [v.label, esc(v.value)] as [string, string]))}
+        ${group.values.map((v) => `<p class="muted sm">${esc(v.label)}: ${esc(v.explains)}</p>`).join("")}
+        <p class="muted">Set in: ${esc(group.setIn)}. Changing one needs a restart of the API.</p>
+      </div>`).join("");
+  } catch (error) {
+    host.innerHTML = errorState({
+      title: "The platform thresholds could not be read",
+      detail: error instanceof Error ? error.message : "The server did not answer.",
+      retryAct: "go-settings-thresholds",
+    });
+  }
 }
 
 /* The comparison table's rows, read back out of the DOM.
@@ -3311,6 +3477,12 @@ async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
 export function wirePageInteractions(): void {
   // The drawer calls this after it writes its HTML - see lib/drawer.ts.
   window.agroflowBindDrawerPickers = wirePickers;
+
+  // And the router calls this after a Settings tab renders.
+  onSettingsTabRendered((tab) => {
+    if (tab === "My account") void refreshMyTelegramStatus();
+    if (tab === "Platform thresholds") void loadPlatformThresholds();
+  });
 
   wireFilters();
   wireLiveReports();
