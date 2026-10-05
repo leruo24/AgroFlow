@@ -49,8 +49,26 @@ internal enum XlsxStyle
 /// the saving is irrelevant and the risk is not.
 internal static class XlsxWriter
 {
-    internal sealed record Cell(string? Text, double? Number, XlsxStyle Style)
+    internal sealed record Cell(string? Text, double? Number, XlsxStyle Style, string? Formula = null)
     {
+        /// A live Excel formula, written without its leading `=`.
+        ///
+        /// WHY ANY FORMULA AT ALL
+        /// The sheet states that litres are pump minutes times the flow rate.
+        /// Written as a value, that is a claim the reader has to take on
+        /// trust and cannot correct: a farmer who measures their pump at 1.3
+        /// L/min instead of the 1.5 on file has to redo every row by hand.
+        /// Written as a formula, they change the flow rate on the Summary
+        /// sheet and the whole workbook follows.
+        ///
+        /// No cached <v> is written alongside, so Excel calculates on open.
+        /// That is correct for Excel and LibreOffice; a plain XML reader that
+        /// does not evaluate formulas sees an empty cell, which is why the
+        /// columns somebody is most likely to script against - the totals -
+        /// stay values.
+        public static Cell Calc(string formula, XlsxStyle style) =>
+            new(null, null, style, formula);
+
         public static Cell Of(string text, XlsxStyle style = XlsxStyle.Normal) => new(text, null, style);
 
         public static Cell Of(double value, XlsxStyle style = XlsxStyle.Normal) => new(null, value, style);
@@ -311,7 +329,12 @@ internal static class XlsxWriter
                 var reference = $"{ColumnName(c)}{r + 1}";
                 var style = (int)cell.Style;
 
-                if (cell.Number is { } number)
+                if (cell.Formula is { } formula)
+                {
+                    sb.Append(CultureInfo.InvariantCulture,
+                        $"<c r=\"{reference}\" s=\"{style}\"><f>{E(formula)}</f></c>");
+                }
+                else if (cell.Number is { } number)
                 {
                     // "R" round-trips, and InvariantCulture keeps the decimal
                     // point a point. A comma here is not a formatting nicety:

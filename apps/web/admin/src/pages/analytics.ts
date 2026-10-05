@@ -1,12 +1,13 @@
+import { getAdminProfile } from "@/app/auth";
 import { api } from "@/data/api";
-import { esc, fmtInt, fmtDate, fmtPct, fmtLitres, fmtDateTimeSast } from "@/lib/format";
+import { esc, fmtInt, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters, rangeLabel } from "@/lib/filters";
 import {
   PROVINCES, REGIONS, CROPS,
 } from "@/data/referenceData";
 import {
-  badge, kpiCard, panel, table, pageHeader, filterBar, resultCount,
-  lineChart, barChart, donut, meter,
+  kpiCard, panel, table, pageHeader, filterBar, resultCount,
+  lineChart, barChart, donut,
 } from "@/ui/components";
 import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
@@ -70,7 +71,7 @@ function groupByRegion(events: IrrigationEvent[]): Record<string, number> {
 }
 
 export async function irrigationPage(): Promise<string> {
-  const [schedules, events] = await Promise.all([api.getSchedules(), api.getIrrigationEvents()]);
+  const events = await api.getIrrigationEvents();
   const f = getFilter("irrigation");
 
   const filteredEvents = applyFilters(events, f, {
@@ -80,14 +81,6 @@ export async function irrigationPage(): Promise<string> {
     province: (e) => e.province,
     region: (e) => e.region,
     crop: (e) => e.crop,
-  });
-
-  const filteredSchedules = applyFilters(schedules, f, {
-    search: (s) => `${s.zone} ${s.farm} ${s.crop} ${s.device}`,
-    farm: (s) => s.farm,
-    province: (s) => s.province,
-    region: (s) => s.region,
-    crop: (s) => s.crop,
   });
 
   const withEstimate = estimable(filteredEvents);
@@ -164,24 +157,28 @@ export async function irrigationPage(): Promise<string> {
   ${panel("Water Usage by Farm", "Top farms by estimated volume delivered (kL)", "",
     byFarm.length ? barChart(byFarm) : `<div class="empty-state">No data in this range.</div>`)}
 
-  ${panel("Irrigation Schedules", "View, edit or remove schedules recorded from farms",
-    resultCount(filteredSchedules.length, schedules.length, "schedules"),
-    table(["Zone", "Farm", "Crop", "Device", "Cadence", "Duration", "Compliance", "Last Run", "Actions"],
-      filteredSchedules, (s) => [
-        esc(s.zone),
-        esc(s.farm),
-        badge(s.crop, "info"),
-        `<span class="mono">${esc(s.device)}</span>`,
-        esc(s.cadence),
-        `${fmtInt(s.durationMin)} min`,
-        `<span class="compliance">${meter(s.compliancePct, s.compliancePct > 90 ? "good" : s.compliancePct > 75 ? "warn" : "bad")}<b>${fmtPct(s.compliancePct)}</b></span>`,
-        fmtDate(s.lastRun),
-        `<span class="row-act">
-          <a href="#" data-act="view-schedule" data-id="${s.id}">View</a>
-          <a href="#" data-act="edit-schedule" data-id="${s.id}">Edit</a>
-          <a href="#" class="danger" data-act="delete-schedule" data-id="${s.id}">Delete</a>
-        </span>`,
-      ], "No schedules match the current filters."))}
+  ${
+    /* This was a table of schedules with a Cadence, a Compliance meter and
+       View/Edit/Delete links. It could never have a row in it: the
+       irrigation_schedule table it read was DROPPED in migration 0010, and
+       schedules have lived as columns on the zone itself ever since - one per
+       zone, not a list. So the panel rendered an empty table under a heading
+       promising something, and an admin reading it would conclude no farm had
+       a schedule, which is the opposite of true.
+
+       An empty table is not mock data, but it is a false impression, and the
+       fix is the same: say what is actually the case and where to go. */
+    panel("Watering schedules", "", "", `
+      <p>
+        Each zone has its own watering schedule, set on the zone rather than kept in a
+        separate list. Open a zone from <b>Farms &amp; zones</b> to see or change its
+        start time, how long it runs, and whether it waters automatically.
+      </p>
+      <p class="muted">
+        Farmers set these from the app for their own zones. The schedule a zone is on
+        is shown on its detail panel, next to the moisture threshold the engine uses.
+      </p>`)
+  }
 
   ${panel("Historical Irrigation Events", `Most recent 25 events in range · ${rangeLabel(f)}`,
     resultCount(Math.min(recent.length, 25), filteredEvents.length, "events"),
@@ -234,13 +231,22 @@ function liveReportsPanel(farms: ReportFarm[] | null): string {
     </div>
     ${[
       ["moisture", "Moisture and irrigation over time"],
-      ["water-usage", "Water usage per zone (estimated)"],
+      ["water-usage", "Water usage - all zones, or pick one (estimated)"],
       ["schedule", "Suggested 7-day irrigation schedule"],
     ].map(([id, label]) => `
       <div class="filter-buttons" style="margin-top:12px">
         <span style="min-width:260px;display:inline-block">${esc(label ?? "")}</span>
         <button class="btn sm" data-act="live-report-view" data-report="${id}">View</button>
         <button class="btn ghost sm" data-act="live-report-pdf" data-report="${id}">PDF</button>
+        ${
+          // Only water usage has a workbook: it is the report with a table of
+          // numbers somebody wants to chart or paste. A schedule is advice
+          // and a moisture report is a trace - neither is improved by being
+          // a spreadsheet.
+          id === "water-usage"
+            ? `<button class="btn ghost sm" data-act="live-report-xlsx" data-report="${id}">Excel</button>`
+            : ""
+        }
       </div>`).join("")}
     <div id="liveReportResult" class="cmp-result"></div>`;
 
@@ -429,8 +435,15 @@ export function timelineHtml(rows: AuditRow[], emptyText: string): string {
 
 /* ================================ SETTINGS =============================== */
 
+/* Three tabs, down from five.
+ *
+ * "General", "Notifications", "Platform Defaults" and "Security" are gone
+ * entirely. Between them they held about twenty fields, and not one was read
+ * by anything - no settings table exists in this schema. Removing them is the
+ * honest half of item 2; the other half is that the thresholds which ARE real
+ * were invisible, and now are not. */
 export const SETTINGS_TABS: SettingsTab[] = [
-  "General", "Notifications", "Platform Defaults", "Security", "Backup & Recovery",
+  "My account", "Platform thresholds", "Backup & Recovery",
 ];
 
 export async function settingsPage(): Promise<string> {
@@ -446,68 +459,64 @@ export async function settingsPage(): Promise<string> {
   `)}`;
 }
 
-function toggleRow(label: string, sub: string, on: boolean): string {
-  return `<div class="set-row">
-    <div><b>${esc(label)}</b><div class="sub">${esc(sub)}</div></div>
-    <span class="toggle ${on ? "on" : ""}" data-toggle role="switch" aria-checked="${on}" tabindex="0"></span>
-  </div>`;
-}
 
 export function settingsTabBody(tab: SettingsTab): string {
-  const save = `<button class="btn" data-act="save-settings">Save changes</button>`;
-
   switch (tab) {
-    case "General":
-      return `<div class="fields">
-        <label class="f">Platform name<input type="text" value="AgroFlow" /></label>
-        <label class="f">Support email<input type="text" value="support@agroflow.co.za" /></label>
-        <label class="f">Default province
-          <select>${PROVINCES.map((p) => `<option${p === "Western Cape" ? " selected" : ""}>${esc(p)}</option>`).join("")}</select>
-        </label>
-        <label class="f">Units<select><option>Metric (L, °C, ha)</option><option>Imperial</option></select></label>
-        <label class="f">Time zone<select><option>SAST (UTC+2)</option><option>UTC</option></select></label>
-        <label class="f">Date format<select><option>YYYY-MM-DD</option><option>DD/MM/YYYY</option></select></label>
-      </div><div class="form-foot">${save}</div>`;
+    /* Everything here writes somewhere real: profile goes to
+       PUT /api/farmer/profile, the password goes to Supabase Auth, and
+       Telegram goes to /api/telegram/me. */
+    case "My account": {
+      const profile = getAdminProfile();
 
-    case "Notifications":
-      return `<div class="set-rows">
-        ${toggleRow("Email notifications", "Alert assignment and escalation notices", true)}
-        ${toggleRow("SMS alerts", "Critical platform incidents only", true)}
-        ${toggleRow("Daily operations digest", "Summary of open alerts and jobs at 07:00", true)}
-        ${toggleRow("Weekly platform report", "Growth, connectivity and maintenance summary", false)}
-        ${toggleRow("Farm approval requests", "Notify when a new farm awaits approval", true)}
-        ${toggleRow("Failed job notifications", "Backup, sync and scheduled task failures", true)}
-      </div><div class="form-foot">${save}</div>`;
+      return `
+      <div class="settings-block">
+        <h4>Your details</h4>
+        <p class="muted">Signed in as ${esc(profile?.email ?? "an administrator")}.</p>
+        <div class="fields">
+          <label class="f">Full name
+            <input type="text" data-field="myName" value="${esc(profile?.name ?? "")}" />
+          </label>
+          <label class="f">Phone number
+            <input type="text" data-field="myPhone" placeholder="+27 82 000 0000" />
+          </label>
+        </div>
+        <div class="form-foot">
+          <button class="btn" data-act="save-my-profile">Save my details</button>
+        </div>
+      </div>
 
-    case "Platform Defaults":
-      return `<div class="fields">
-        <label class="f">Device offline threshold (minutes)<input type="number" value="30" min="5" /></label>
-        <label class="f">Maintenance due warning (days)<input type="number" value="14" min="1" /></label>
-        <label class="f">Alert auto-escalation (hours)<input type="number" value="24" min="1" /></label>
-        <label class="f">Default report period<select><option>Last 30 days</option><option>This quarter</option><option>This year</option></select></label>
+      <div class="settings-block">
+        <h4>Password</h4>
+        <p class="muted">
+          Changes your sign-in password immediately. You stay signed in on this computer;
+          anywhere else you are signed in will need the new one.
+        </p>
+        <div class="fields">
+          <label class="f">New password
+            <input type="password" data-field="newPassword" autocomplete="new-password" />
+          </label>
+          <label class="f">Type it again
+            <input type="password" data-field="newPasswordAgain" autocomplete="new-password" />
+          </label>
+        </div>
+        <div class="form-foot">
+          <button class="btn" data-act="change-my-password">Change password</button>
+        </div>
       </div>
-      <div class="set-rows" style="margin-top:8px">
-        ${toggleRow("Auto-assign alerts", "Route new alerts to the on-duty administrator", true)}
-        ${toggleRow("Require approval for new farms", "New registrations enter Pending Approval", true)}
-      </div>
-      <div class="form-foot">${save}</div>`;
 
-    case "Security":
-      return `<div class="fields">
-        <label class="f">Session timeout (minutes)<input type="number" value="30" min="5" /></label>
-        <label class="f">Password minimum length<input type="number" value="12" min="8" /></label>
-        <label class="f">Failed login lockout<input type="number" value="5" min="3" /></label>
-      </div>
-      <div class="set-rows" style="margin-top:8px">
-        ${toggleRow("Require 2FA for administrators", "Enforced at next login", true)}
-        ${toggleRow("Restrict admin access by IP", "Allow-list only", false)}
-        ${toggleRow("Log all administrator actions", "Written to Platform Activity", true)}
-      </div>
-      <div class="form-foot">${save}</div>
-      <p class="muted">
-        An account is either an administrator or a farmer, set on their profile. There is no
-        finer-grained permission set to manage.
-      </p>`;
+      <div class="settings-block">
+        <h4>Telegram</h4>
+        <div id="myTelegramStatus">
+          <p class="muted">Checking…</p>
+        </div>
+      </div>`;
+    }
+
+    case "Platform thresholds":
+      // Filled by loadPlatformThresholds() once the tab renders - these come
+      // from the API, which reads the same configuration the services do, so
+      // the page cannot drift from what is actually running.
+      return `<div id="platformThresholds"><p class="muted">Loading…</p></div>`;
 
     /* This tab used to state a last cloud backup time, a last local backup
        time, a retention policy and "82% of 500 GB", with a meter drawn from

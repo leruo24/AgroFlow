@@ -582,6 +582,48 @@ public static class ReportEndpoints
      *
      * Splitting them on a parameter rather than on a new route keeps one URL
      * in the scheduler's regeneration path and one in the mobile app. */
+    /* "All zones": the whole farm, in the same designed template (item 3).
+     *
+     * The farm report is the per-zone report repeated with a summary in
+     * front - literally, in that each zone's section is rendered by the same
+     * code as its single-zone report. A farmer who pulls both documents must
+     * not find them disagreeing about the same zone. */
+    private static async Task<IResult> BuildFarmDesignedAsync(
+        ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        long farmId, DateOnly from, DateOnly to,
+        AgroFlow.Business.Fao56EngineController engine,
+        bool asWorkbook,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+        if (from > to) return Results.BadRequest(new { error = "from must not be after to." });
+
+        if (to.DayNumber - from.DayNumber >= MaxRangeDays)
+        {
+            return Results.BadRequest(new { error = $"Date range must not exceed {MaxRangeDays} days." });
+        }
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var farm = await FarmWaterUsageReportBuilder.BuildAsync(
+            connection, engine, userId, farmId, from, to, cancellationToken);
+
+        if (farm is null) return Results.NotFound(new { error = "No such farm." });
+
+        var stamp = $"{from:yyyy-MM-dd}-to-{to:yyyy-MM-dd}";
+        var slug = Slug(farm.FarmName);
+
+        return asWorkbook
+            ? Results.File(
+                FarmWaterUsageWorkbook.Render(farm),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"agroflow-water-{slug}-{stamp}.xlsx")
+            : Results.File(
+                DesignedFarmWaterUsagePdf.Render(farm),
+                "application/pdf",
+                $"agroflow-water-{slug}-{stamp}.pdf");
+    }
+
     private static async Task<IResult> BuildDesignedAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource,
         long zoneId, DateOnly from, DateOnly to,
@@ -638,15 +680,27 @@ public static class ReportEndpoints
     }
 
     private static async Task<IResult> GetWaterUsageXlsxAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to,
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId, long? zoneId,
+        DateOnly? from, DateOnly? to,
         AgroFlow.Business.Fao56EngineController engine, CancellationToken cancellationToken)
     {
-        if (zoneId is null) return Results.BadRequest(new { error = "zoneId is required." });
         if (from is null || to is null) return Results.BadRequest(new { error = "from and to dates are required (yyyy-MM-dd)." });
 
-        return await BuildDesignedAsync(
-            user, dataSource, zoneId.Value, from.Value, to.Value, engine,
-            asWorkbook: true, cancellationToken);
+        if (zoneId is not null)
+        {
+            return await BuildDesignedAsync(
+                user, dataSource, zoneId.Value, from.Value, to.Value, engine,
+                asWorkbook: true, cancellationToken);
+        }
+
+        if (farmId is not null)
+        {
+            return await BuildFarmDesignedAsync(
+                user, dataSource, farmId.Value, from.Value, to.Value, engine,
+                asWorkbook: true, cancellationToken);
+        }
+
+        return Results.BadRequest(new { error = "Either farmId or zoneId is required." });
     }
 
     internal static async Task<IResult> GetWaterUsagePdfAsync(
@@ -658,6 +712,15 @@ public static class ReportEndpoints
         {
             return await BuildDesignedAsync(
                 user, dataSource, zoneId.Value, from.Value, to.Value, engine,
+                asWorkbook: false, cancellationToken);
+        }
+
+        // "All zones" now gets the designed template too (item 3), instead of
+        // the one-page summary it used to share with nothing else.
+        if (farmId is not null && from is not null && to is not null)
+        {
+            return await BuildFarmDesignedAsync(
+                user, dataSource, farmId.Value, from.Value, to.Value, engine,
                 asWorkbook: false, cancellationToken);
         }
 
@@ -689,18 +752,17 @@ public static class ReportEndpoints
 
         var bytes = Document.Create(container => container.Page(page =>
         {
-            page.Size(PageSizes.A4);
-            page.Margin(36);
-            page.DefaultTextStyle(t => t.FontSize(10));
+            ReportShell.ApplyPageDefaults(page);
 
-            page.Header().Column(col =>
-            {
-                col.Item().Text("Water usage report (estimated)").FontSize(18).SemiBold();
-                col.Item().Text($"{farmName}  |  {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
-                col.Item().Text($"Generated {generated:yyyy-MM-dd HH:mm} (SAST)").FontColor(Colors.Grey.Darken1);
-            });
+            page.Header().Element(c => ReportShell.Header(
+                c,
+                "Water Usage Report",
+                $"{farmName}  ·  {from:yyyy-MM-dd} to {to:yyyy-MM-dd}",
+                ReportShell.GeneratedLine(generated)));
 
-            page.Content().PaddingVertical(12).Column(col =>
+            page.Footer().Element(c => ReportShell.Footer(c, DesignedWaterUsagePdf.EstimateNote));
+
+            page.Content().PaddingHorizontal(34).PaddingTop(18).PaddingBottom(12).Column(col =>
             {
                 col.Spacing(10);
                 col.Item().Text(note).Italic();
@@ -751,11 +813,6 @@ public static class ReportEndpoints
                 }
             });
 
-            page.Footer().AlignCenter().Text(t =>
-            {
-                t.Span("Page ");
-                t.CurrentPageNumber();
-            });
         })).GeneratePdf();
 
         return Results.File(bytes, "application/pdf", $"water-usage-farm{farmId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
@@ -784,20 +841,25 @@ public static class ReportEndpoints
         var hasData = root.GetProperty("status").GetString() == "ok";
         var thresholds = root.GetProperty("thresholds");
 
+        // The designed shell (item 3): the same green band, logo and footer as
+        // the water usage report, so the three farmer-facing reports look
+        // like one product rather than three. The CONTENT below is unchanged -
+        // this report's figures were already right, and rewriting working
+        // report logic to match a template was not what was asked for.
         var bytes = Document.Create(container => container.Page(page =>
         {
-            page.Size(PageSizes.A4);
-            page.Margin(36);
-            page.DefaultTextStyle(t => t.FontSize(10));
+            ReportShell.ApplyPageDefaults(page);
 
-            page.Header().Column(col =>
-            {
-                col.Item().Text("Soil moisture and irrigation report").FontSize(18).SemiBold();
-                col.Item().Text($"{zoneName}  |  {from:yyyy-MM-dd} to {to:yyyy-MM-dd}");
-                col.Item().Text($"Generated {generated:yyyy-MM-dd HH:mm} (SAST)").FontColor(Colors.Grey.Darken1);
-            });
+            page.Header().Element(c => ReportShell.Header(
+                c,
+                "Soil Moisture Report",
+                $"{zoneName}  ·  {FarmWaterUsageReportBuilder.DescribePeriod(from!.Value, to!.Value)}",
+                ReportShell.GeneratedLine(generated)));
 
-            page.Content().PaddingVertical(12).Column(col =>
+            page.Footer().Element(c => ReportShell.Footer(
+                c, "Soil moisture is relative to this zone's setup: 100% = soaked and drained, 0% = dry."));
+
+            page.Content().PaddingHorizontal(34).PaddingTop(18).PaddingBottom(12).Column(col =>
             {
                 col.Spacing(10);
 
@@ -889,11 +951,6 @@ public static class ReportEndpoints
                 });
             });
 
-            page.Footer().AlignCenter().Text(t =>
-            {
-                t.Span("Page ");
-                t.CurrentPageNumber();
-            });
         })).GeneratePdf();
 
         return Results.File(bytes, "application/pdf", $"moisture-zone{zoneId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
@@ -933,18 +990,18 @@ public static class ReportEndpoints
 
         var bytes = Document.Create(container => container.Page(page =>
         {
-            page.Size(PageSizes.A4);
-            page.Margin(36);
-            page.DefaultTextStyle(t => t.FontSize(10));
+            ReportShell.ApplyPageDefaults(page);
 
-            page.Header().Column(col =>
-            {
-                col.Item().Text("Suggested irrigation schedule").FontSize(18).SemiBold();
-                col.Item().Text($"{farmName}  |  next 7 days from {today}");
-                col.Item().Text($"Generated {generated:yyyy-MM-dd HH:mm} (SAST)").FontColor(Colors.Grey.Darken1);
-            });
+            page.Header().Element(c => ReportShell.Header(
+                c,
+                "Watering Schedule & Advice",
+                $"{farmName}  ·  the next 7 days from {today}",
+                ReportShell.GeneratedLine(generated)));
 
-            page.Content().PaddingVertical(12).Column(col =>
+            page.Footer().Element(c => ReportShell.Footer(
+                c, "Advice comes from FAO-56 crop guidance, the farm's weather and each zone's own moisture threshold."));
+
+            page.Content().PaddingHorizontal(34).PaddingTop(18).PaddingBottom(12).Column(col =>
             {
                 col.Spacing(8);
                 col.Item().Text(
@@ -1112,11 +1169,6 @@ public static class ReportEndpoints
                 }
             });
 
-            page.Footer().AlignCenter().Text(t =>
-            {
-                t.Span("Page ");
-                t.CurrentPageNumber();
-            });
         })).GeneratePdf();
 
         return Results.File(bytes, "application/pdf", $"schedule-farm{farmId}-{today}.pdf");

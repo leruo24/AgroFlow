@@ -32,10 +32,12 @@ export interface PageOptions {
 export type PageRenderer = (opts?: PageOptions) => Promise<string>;
 
 export type SettingsTab =
-  | "General"
-  | "Notifications"
-  | "Platform Defaults"
-  | "Security"
+  /* Three, down from five. "General", "Notifications", "Platform Defaults"
+     and "Security" held about twenty fields between them and not one was
+     read by anything - there is no settings table in this schema. See
+     settingsTabBody. */
+  | "My account"
+  | "Platform thresholds"
   | "Backup & Recovery";
 
 /* -------------------------------- UI bits ---------------------------------- */

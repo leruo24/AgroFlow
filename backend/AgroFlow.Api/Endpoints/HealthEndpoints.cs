@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using AgroFlow.Api.Auth;
 using AgroFlow.Api.Mqtt;
+using AgroFlow.Api.Services;
 using AgroFlow.Api.Services.Notifications;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -59,12 +60,15 @@ public static class HealthEndpoints
         IOptions<TelegramOptions> telegram,
         TelegramPollingService poller,
         IConfiguration configuration,
+        SchemaCheck schema,
         CancellationToken cancellationToken)
     {
         var checks = new List<HealthCheck>
         {
             CheckApi(),
+            CheckDeployment(),
             await CheckDatabaseAsync(dataSource, cancellationToken),
+            await CheckSchemaAsync(schema, cancellationToken),
             CheckMqtt(mqtt),
             CheckTelegram(telegram.Value, poller),
             await CheckWeatherAsync(dataSource, cancellationToken),
@@ -111,6 +115,90 @@ public static class HealthEndpoints
         return new HealthCheck(
             "api", "API", Ok,
             $"Version {version}. Running for {DescribeSpan(uptime)}.");
+    }
+
+    /// Which commit is actually running.
+    ///
+    /// WHY THIS IS A HEALTH CHECK AND NOT A FOOTNOTE
+    /// "The code is pushed" and "the code is deployed" are two separate
+    /// events, and nothing in this project reconciled them. An admin audit
+    /// log that records nothing looks identical whether the feature is broken
+    /// or simply not deployed yet, and the second is far more likely - but
+    /// answering it meant opening the Railway dashboard and comparing a
+    /// deployment id against a git log by eye.
+    ///
+    /// Railway injects these three on every deployment. Running anywhere
+    /// else - a laptop, a different host - they are simply absent, which is
+    /// reported as "not a Railway deployment" rather than as a fault.
+    private static HealthCheck CheckDeployment()
+    {
+        var sha = Environment.GetEnvironmentVariable("RAILWAY_GIT_COMMIT_SHA");
+        var branch = Environment.GetEnvironmentVariable("RAILWAY_GIT_BRANCH");
+        var deployment = Environment.GetEnvironmentVariable("RAILWAY_DEPLOYMENT_ID");
+
+        if (string.IsNullOrWhiteSpace(sha) && string.IsNullOrWhiteSpace(deployment))
+        {
+            return new HealthCheck(
+                "deployment", "Deployment", Ok,
+                "Running outside Railway (local or another host), so there is no deployment to report.");
+        }
+
+        var shortSha = string.IsNullOrWhiteSpace(sha) ? "unknown" : sha[..Math.Min(7, sha.Length)];
+        var where = string.IsNullOrWhiteSpace(branch) ? "an unnamed branch" : branch;
+
+        // A deployment built from anything but dev is worth an amber light:
+        // dev is where this project's work lands, and main has sat far behind
+        // it for months. Not red - deploying a release branch on purpose is
+        // legitimate - but it should never be a surprise.
+        var status = string.Equals(branch, "dev", StringComparison.OrdinalIgnoreCase) ? Ok : Warning;
+
+        var detail = $"Commit {shortSha} from {where}."
+            + (string.IsNullOrWhiteSpace(deployment) ? "" : $" Deployment {deployment[..Math.Min(8, deployment.Length)]}.")
+            + (status == Warning ? " Work lands on dev - check this is the branch you meant to deploy." : "");
+
+        return new HealthCheck("deployment", "Deployment", status, detail);
+    }
+
+    /// Have the migrations this build expects actually been applied?
+    ///
+    /// Migrations 0033 to 0036 were missed once already and nothing said so
+    /// until a farmer's report failed with a bare 500. See Services/SchemaCheck.
+    private static async Task<HealthCheck> CheckSchemaAsync(SchemaCheck schema, CancellationToken ct)
+    {
+        var result = await schema.RunAsync(ct);
+
+        if (result.CouldNotCheck)
+        {
+            return new HealthCheck(
+                "schema", "Database schema", Warning,
+                "Could not be checked - see the database check above.");
+        }
+
+        var audit = await schema.CheckAuditWritableAsync(ct);
+
+        if (result.AllPresent && audit.CanInsert)
+        {
+            return new HealthCheck(
+                "schema", "Database schema", Ok,
+                $"All {result.Present.Count} expected objects are present. {audit.Detail}");
+        }
+
+        // Down, not warning, when something is missing. A missing table is not
+        // a degraded service - every endpoint that touches it returns an error
+        // every single time, and that is what the sidebar light is for.
+        var problems = new List<string>();
+
+        if (result.Missing.Count > 0)
+        {
+            problems.Add($"Missing: {string.Join(", ", result.Missing)}.");
+        }
+
+        if (!audit.CanInsert) problems.Add(audit.Detail);
+
+        return new HealthCheck(
+            "schema", "Database schema",
+            result.Missing.Count > 0 ? Down : Warning,
+            string.Join(" ", problems) + " Nothing is applied automatically.");
     }
 
     private static async Task<HealthCheck> CheckDatabaseAsync(

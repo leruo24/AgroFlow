@@ -145,12 +145,26 @@ export function renderSettingsTab(tab: string): void {
   if (!body) return;
   const safe: SettingsTab = (SETTINGS_TABS as string[]).includes(tab)
     ? (tab as SettingsTab)
-    : "General";
+    : "My account";
   body.innerHTML = settingsTabBody(safe);
   body.classList.remove("tab-in");
   requestAnimationFrame(() => body.classList.add("tab-in"));
   animateIn(body);
   afterRender?.();
+
+  // Two of the three tabs have a panel that needs the network, and a tab
+  // body is a synchronous string. Router-level rather than inside
+  // settingsTabBody so the page stays a pure function of its inputs.
+  settingsTabLoader?.(safe);
+}
+
+/* Set by app/interactions.ts at startup. Here rather than imported because
+   router already imports the pages, and the pages import interactions - a
+   direct import would close that loop. */
+let settingsTabLoader: ((tab: SettingsTab) => void) | null = null;
+
+export function onSettingsTabRendered(fn: (tab: SettingsTab) => void): void {
+  settingsTabLoader = fn;
 }
 
 export function positionTabUnderline(): void {

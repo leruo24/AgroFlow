@@ -393,6 +393,24 @@ export async function downloadReportPdf(path: string, fileName: string): Promise
  * printed, filed and emailed, so it has to carry its own figures, timestamp
  * and the name of whoever produced it, independent of the session that asked
  * for it. See backend/.../AdminSummaryEndpoints.cs. */
+/* Any authorised file, by full API path. downloadReportPdf takes a path
+   relative to /api/farmer/reports and always names the file a .pdf, which the
+   workbook route is neither. */
+export async function downloadReportFile(path: string, fileName: string): Promise<void> {
+  const response = await reportFetch(path);
+  const blob = await response.blob();
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 export async function downloadSummaryPdf(): Promise<void> {
   const response = await reportFetch("/api/admin/summary.pdf");
   const blob = await response.blob();
@@ -406,6 +424,56 @@ export async function downloadSummaryPdf(): Promise<void> {
   a.remove();
 
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+/* ---------------- Settings (item 2) ----------------
+
+   WHAT THE SETTINGS PAGE USED TO BE
+   Twenty-odd fields across five tabs - platform name, support email, session
+   timeout, password minimum length, alert auto-escalation, six notification
+   toggles - every one of them a hard-coded value with a Save button and
+   nothing behind it. There is no settings table in this schema. An admin
+   could change any of them, be told it was saved, and nothing anywhere would
+   be different.
+
+   What follows is what is actually real. */
+
+export type PlatformConfigValue = { label: string; value: string; explains: string };
+export type PlatformConfigGroup = { title: string; setIn: string; values: PlatformConfigValue[] };
+
+/** The thresholds the running services actually use, read from the same
+    configuration they read. Read-only: these are environment variables on the
+    deployment, which is the right place for them. */
+export function getPlatformConfig(): Promise<{ groups: PlatformConfigGroup[] }> {
+  return authorizedJson<{ groups: PlatformConfigGroup[] }>("/api/admin/platform-config", "GET");
+}
+
+/** The signed-in admin's own name and phone. The endpoint lives under
+    /api/farmer because that is where it was written, but it gates on the
+    caller's own id and nothing else - it updates whoever is holding the
+    token, which here is the admin. */
+export function updateMyProfile(input: { name: string; phone: string | null }): Promise<void> {
+  return authorizedJson<void>("/api/farmer/profile", "PUT", input);
+}
+
+export type TelegramLinkStatus = { linked: boolean; alertsEnabled: boolean };
+
+export function getMyTelegramStatus(): Promise<TelegramLinkStatus> {
+  return authorizedJson<TelegramLinkStatus>("/api/telegram/me", "GET");
+}
+
+export function requestMyTelegramCode(): Promise<EnrollmentCodeLikeTelegram> {
+  return authorizedJson<EnrollmentCodeLikeTelegram>("/api/telegram/me/code", "POST", {});
+}
+
+export type EnrollmentCodeLikeTelegram = {
+  code: string;
+  deepLink: string | null;
+  expiresAt: string;
+};
+
+export function disconnectMyTelegram(): Promise<void> {
+  return authorizedJson<void>("/api/telegram/me", "DELETE");
 }
 
 /* ---------------- Hardware (firmware v1.3.0) ----------------
@@ -431,7 +499,7 @@ export async function downloadSummaryPdf(): Promise<void> {
 
 async function authorizedJson<T>(
   path: string,
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   body?: unknown,
 ): Promise<T> {
   const { data } = await supabase.auth.getSession();
