@@ -326,6 +326,7 @@ export const api = {
       id: f.farm_id,
       name: f.name,
       owner: f.owner_name ?? "Unassigned",
+      ownerId: f.owner_id,
       province,
       region,
       health: "Attention Required",

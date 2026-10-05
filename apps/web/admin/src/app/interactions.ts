@@ -2,7 +2,7 @@
 
 import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms } from "@/data/api";
 import { toast } from "@/lib/toast";
-import { openDrawer } from "@/lib/drawer";
+import { openDrawer, closeDrawer } from "@/lib/drawer";
 import {
   createFarmer,
   deleteFarm,
@@ -28,12 +28,13 @@ import {
   assignRequest,
   getActivityLog,
   getEntityTimeline,
+  KIT_TYPES,
   type AuditRow,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
-import { picker, detailList } from "@/ui/patterns";
+import { picker, detailList, wizard } from "@/ui/patterns";
 import { exportActivityWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml } from "@/pages/analytics";
 import { requestTimeline, formatCrop } from "@/pages/requests";
@@ -44,9 +45,10 @@ import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
-import { TECHNICIANS } from "@/data/referenceData";
-import type { AdminAlert, DateRangePreset, FilterState, AlertPriority } from "@/types/models";
+import { TECHNICIANS, ZONE_CROPS } from "@/data/referenceData";
+import type { AdminAlert, DateRangePreset, Farm, FilterState, AlertPriority } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
+import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile } from "@/app/auth";
 import { getReportZones, getReportJson, downloadReportPdf } from "@/services/agroFlowApi";
@@ -152,9 +154,7 @@ function wireWizards(): void {
 
     /* Every field marked data-required must have a value before Next.
        Returns the first problem in plain words, or null. */
-    const validateStep = (): string | null => {
-      const step = Number(wiz.dataset["step"] ?? "0");
-      const section = wiz.querySelector<HTMLElement>('[data-wizard-step="' + step + '"]');
+    const validateSection = (section: HTMLElement | null): string | null => {
       if (!section) return null;
 
       const fields = section.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-required]");
@@ -167,6 +167,47 @@ function wireWizards(): void {
 
       return null;
     };
+
+    const validateStep = (): string | null => {
+      const step = Number(wiz.dataset["step"] ?? "0");
+      return validateSection(wiz.querySelector<HTMLElement>('[data-wizard-step="' + step + '"]'));
+    };
+
+    /* Confirm re-checks EVERY step, not just the review step it sits on.
+       A field can be emptied after it was passed - clearing a farm name and
+       walking forward again would otherwise write a nameless farm. The
+       listener is on capture so it can stop the click before the delegated
+       data-act handler on document sees it. */
+    const findFirstProblem = (): { step: number; message: string } | null => {
+      const sections = Array.from(
+        wiz.querySelectorAll<HTMLElement>("[data-wizard-step]"),
+      ).sort((a, b) => Number(a.dataset["wizardStep"]) - Number(b.dataset["wizardStep"]));
+
+      for (const section of sections) {
+        const message = validateSection(section);
+        if (message) return { step: Number(section.dataset["wizardStep"]), message };
+      }
+
+      return null;
+    };
+
+    confirmBtn?.addEventListener(
+      "click",
+      (event) => {
+        const problem = findFirstProblem();
+        if (!problem) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Jump back to the step that is actually wrong rather than reporting
+        // it on the review screen, where the field is not even visible.
+        wiz.dataset["step"] = String(problem.step);
+        render();
+        showError(problem.message);
+      },
+      true,
+    );
 
     next?.addEventListener("click", () => {
       const problem = validateStep();
@@ -593,6 +634,25 @@ function alertTimeline(a: AdminAlert): string {
   </ol>`;
 }
 
+/* Today as yyyy-mm-dd in SAST (UTC+2, no DST).
+   Shifting before slicing the ISO string is what makes this right: at 01:30
+   on the 6th in Johannesburg, toISOString() still reads the 5th, so a visit
+   booked late at night would default to yesterday. */
+function todayIso(): string {
+  return new Date(Date.now() + 2 * 60 * 60_000).toISOString().slice(0, 10);
+}
+
+/* Re-points an element at a different action so one case can delegate to
+   another without duplicating it. The clone is not inserted in the document;
+   handleAction only ever reads data-act and data-id off it. */
+function withAct(el: HTMLElement, act: string): HTMLElement {
+  const proxy = document.createElement("span");
+  proxy.dataset["act"] = act;
+  const id = el.dataset["id"];
+  if (id) proxy.dataset["id"] = id;
+  return proxy;
+}
+
 async function handleAction(el: HTMLElement): Promise<void> {
   const act = el.dataset["act"];
   const idAttr = el.dataset["id"] ?? "";
@@ -773,7 +833,9 @@ case "delete-user": {
     /* farmer onboarding — real calls to AgroFlow.Api, not demo/mock like the
        rest of this file. Requires an admin to be signed in via Supabase Auth
        (no login flow exists in this dashboard yet - see agroFlowApi.ts). */
-    case "create-farmer-direct":
+    case "create-farmer-direct": {
+      const farmList = await api.getFarms().catch(() => []);
+
       return openDrawer({
         title: "Create farmer account",
         subtitle: "Admin sets the email and a temporary password directly.",
@@ -781,8 +843,21 @@ case "delete-user": {
           { label: "Full name", value: "", editable: true, name: "name" },
           { label: "Email", value: "", editable: true, name: "email" },
           { label: "Temporary password", value: "", editable: true, name: "password" },
-          { label: "Farm ID", value: "", editable: true, name: "farmId" },
         ],
+        // A farm id is a bigint nobody knows by heart. Typed wrong - and a
+        // digit out is easy - the new account is attached to a stranger's
+        // farm, with access to their readings.
+        bodyHtml: picker({
+          name: "farmId",
+          label: "Farm",
+          placeholder: "Search farms…",
+          emptyText: "No farms on file yet. The account can be created without one.",
+          options: farmList.map((f) => ({
+            value: String(f.id),
+            label: f.name,
+            secondary: `${f.owner} · ${f.region || f.province || "Location not set"}`,
+          })),
+        }),
         confirmLabel: "Create account",
         onConfirm: (v) => {
           void createFarmer({
@@ -796,14 +871,27 @@ case "delete-user": {
               toast(err instanceof Error ? err.message : "Failed to create farmer account.", "warn"));
         },
       });
-    case "invite-farmer":
+    }
+    case "invite-farmer": {
+      const farmList = await api.getFarms().catch(() => []);
+
       return openDrawer({
         title: "Invite farmer",
         subtitle: "Sends a one-time Supabase Auth magic link — the farmer sets their own password.",
+        bodyHtml: picker({
+          name: "farmId",
+          label: "Farm",
+          placeholder: "Search farms…",
+          emptyText: "No farms on file yet. The invitation can be sent without one.",
+          options: farmList.map((f) => ({
+            value: String(f.id),
+            label: f.name,
+            secondary: `${f.owner} · ${f.region || f.province || "Location not set"}`,
+          })),
+        }),
         fields: [
           { label: "Full name", value: "", editable: true, name: "name" },
           { label: "Email", value: "", editable: true, name: "email" },
-          { label: "Farm ID", value: "", editable: true, name: "farmId" },
         ],
         confirmLabel: "Send invite",
         onConfirm: (v) => {
@@ -817,149 +905,350 @@ case "delete-user": {
               toast(err instanceof Error ? err.message : "Failed to send invite.", "warn"));
         },
       });
+    }
 
     /* farms */
     case "view-farm": return openFarmDetail(numId);
-    case "add-farm": {
-  try {
-    const farmers = await getFarmers();
+    /* Register a kit, as five steps instead of a zone id typed from memory.
+     *
+     * WHAT WAS WRONG BEFORE
+     * An enrollment code could only be made from a scheduled request, and
+     * only ever for a zone chosen out of one farm's list. Registering a kit
+     * for anything else meant going to the request queue and finding a row
+     * that fitted - or there was no route at all. The zone is what the claim
+     * resolves, so getting it wrong attaches a farmer's kit to somebody
+     * else's block and the soil readings arrive against the wrong crop.
+     *
+     * Each picker narrows the next: a farmer's farms, that farm's zones. The
+     * farm list is filtered on ownerId, not on the owner's name - two
+     * farmers can share a name. */
+    case "register-hardware": {
+      let farmers;
+      let farms;
+      try {
+        [farmers, farms] = await Promise.all([getFarmers(), api.getFarms()]);
+      } catch (e) {
+        showErrorModal(
+          "Could not load the farmer and farm lists",
+          e instanceof Error ? e.message : "The lists could not be retrieved.",
+        );
+        return;
+      }
 
-    if (farmers.length === 0) {
-      showErrorModal(
-        "There are no existing farmers available. Register a farmer first.",
-        "No farmers available",
-      );
-      return;
+      // Only farmers who have somewhere to put a kit. Offering the rest
+      // leads to an empty farm step with nothing to explain it.
+      const withFarms = farmers.filter((f) => farms.some((farm) => farm.ownerId === f.id));
+
+      if (withFarms.length === 0) {
+        showErrorModal(
+          "No farms to register a kit to",
+          "A kit is enrolled onto a zone, and a zone belongs to a farm. Register a farm first.",
+        );
+        return;
+      }
+
+      return openDrawer({
+        title: "Register hardware",
+        wide: true,
+        bodyHtml: wizard({
+          id: "register-hardware",
+          title: "Register a kit",
+          subtitle: "Five steps. The code is created at the end.",
+          confirmLabel: "Create the enrollment code",
+          confirmAct: "wizard-register-hardware",
+          steps: [
+            {
+              title: "Farmer",
+              hint: "Whose kit this is.",
+              bodyHtml: picker({
+                name: "kitOwnerId",
+                label: "Farmer",
+                required: true,
+                requiredMessage: "Choose whose kit this is.",
+                placeholder: "Search by name or email…",
+                options: withFarms.map((f) => ({
+                  value: f.id,
+                  label: f.name,
+                  secondary: f.email,
+                })),
+              }),
+            },
+            {
+              title: "Farm",
+              hint: "Which of their farms.",
+              bodyHtml: `
+                <div id="kitFarmPicker">
+                  <p class="muted">Choose a farmer first.</p>
+                  <input type="hidden" data-field="kitFarmId" value="" data-required
+                    data-required-message="Choose the farm this kit is going to." />
+                </div>`,
+            },
+            {
+              title: "Zone",
+              hint: "The block this kit will water. This is what the kit is actually attached to.",
+              bodyHtml: `
+                <div id="kitZonePicker">
+                  <p class="muted">Choose a farm first.</p>
+                  <input type="hidden" data-field="kitZoneId" value="" data-required
+                    data-required-message="Choose the zone this kit will water." />
+                </div>`,
+            },
+            {
+              title: "Kit",
+              hint: "What is being installed, and what to call it.",
+              bodyHtml: `
+                ${picker({
+                  name: "kitType",
+                  label: "Kit type",
+                  required: true,
+                  requiredMessage: "Choose the kit type.",
+                  value: KIT_TYPES[0].value,
+                  options: KIT_TYPES.map((k) => ({
+                    value: k.value,
+                    label: k.label,
+                    secondary: k.secondary,
+                  })),
+                  hint: "Only kits whose firmware can complete the claim are listed.",
+                })}
+                <label class="f">
+                  Name for this kit (optional)
+                  <input type="text" data-field="kitName" placeholder="e.g. North Block controller" />
+                  <span class="muted">Left blank, it is named after its zone.</span>
+                </label>`,
+            },
+            {
+              title: "Review",
+              hint: "Check this, then create the code.",
+              bodyHtml: `<div id="kitReview" class="review-pane"></div>`,
+            },
+          ],
+        }),
+
+        onOpen: () => {
+          wirePickers();
+          wireWizards();
+          wireKitWizard(farms);
+        },
+      });
     }
 
-    const farmerOptions = farmers
-      .map(
-        (farmer) =>
-          `<option value="${farmer.id}">
-            ${farmer.name || farmer.email} (${farmer.email})
-          </option>`,
-      )
-      .join("");
+    case "wizard-register-hardware": {
+      const v = collectFields();
+      const zoneId = Number(v["kitZoneId"]);
+      if (!zoneId) return void toast("Choose the zone this kit will water.", "warn");
 
-    openDrawer({
-      title: "Register new farm",
-      subtitle: "Link a new farm to an existing farmer.",
-      wide: true,
+      try {
+        const result = await createEnrollmentCode({
+          zoneId,
+          deviceName: v["kitName"]?.trim() || undefined,
+          deviceType: v["kitType"] || KIT_TYPES[0].value,
+        });
 
-      fields: [
-        {
-          label: "Farm name",
-          value: "",
-          editable: true,
-          name: "farmName",
-        },
-        {
-          label: "Location",
-          value: "",
-          editable: true,
-          name: "location",
-        },
-        {
-          label: "Farm size (hectares)",
-          value: "",
-          editable: true,
-          name: "farmSize",
-        },
-      ],
+        closeDrawer();
 
-      bodyHtml: `
-        <div class="drawer-field">
-          <span>Farmer / Owner</span>
-          <select data-field="ownerId">
-            <option value="">Select an existing farmer</option>
-            ${farmerOptions}
-          </select>
-        </div>
-
-        <div class="drawer-field">
-          <span>Number of zones</span>
-          <input
-            type="number"
-            min="1"
-            max="50"
-            value="1"
-            data-register-farm-zone-count
-          />
-        </div>
-
-        <div id="registerFarmZones"></div>
-      `,
-
-      confirmLabel: "Register Farm",
-
-      onOpen: () => {
-        wireRegisterFarmZones();
-      },
-
-      onConfirm: async (v) => {
-        const zoneCount = Math.max(
-          1,
-          Math.min(
-            50,
-            Number(
-              document.querySelector<HTMLInputElement>(
-                "[data-register-farm-zone-count]",
-              )?.value,
-            ) || 1,
-          ),
+        // A modal, not a toast. This is a credential the installer has to
+        // write down, and a toast disappears while they look for a pen.
+        showErrorModal(
+          "Enrollment code",
+          `${result.enrollmentCode}\n\n` +
+            `Give this to the installer. They enter it on the kit's setup page, once.\n` +
+            `It expires ${fmtDate(result.expiresAt)} and cannot be shown again - nothing stores it in a readable form.`,
         );
 
-        const zones = Array.from(
-          { length: zoneCount },
-          (_, i) => ({
-            name: v[`zone_name_${i}`] ?? "",
-            sizeHectares:
-              Number(v[`zone_size_${i}`]) || 0,
-            cropType:
-              v[`zone_crop_${i}`] ?? "",
-          }),
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          "Could not create the enrollment code",
+          e instanceof Error ? e.message : "The code could not be created.",
         );
+        return;
+      }
+    }
 
-        try {
-          await registerFarm({
-            ownerId: v["ownerId"] ?? "",
-            farm: {
-              farmName: v["farmName"] ?? "",
-              location: v["location"] ?? "",
-              sizeHectares:
-                Number(v["farmSize"]) || 0,
-              zones,
+    /* Register a new farm, as four steps instead of one long form.
+     *
+     * WHAT WAS WRONG WITH THE FORM IT REPLACES
+     * Nine fields in one drawer, the owner as a <select> of every farmer, the
+     * location as free text, and the crop as a text input. Three things went
+     * wrong routinely: a mistyped crop ("Grapes") produced a zone the FAO-56
+     * engine cannot advise on and nothing said so; a farm got no coordinates
+     * at all, so its weather lookup had nothing to go on; and a validation
+     * error arrived after all nine fields were filled.
+     *
+     * Now: pick the farmer, place the farm on a map, describe the zones from
+     * a crop list the engine actually knows, and see all of it before
+     * anything is written. */
+    case "add-farm": {
+      let farmers;
+      try {
+        farmers = await getFarmers();
+      } catch (e) {
+        showErrorModal(
+          "Could not load the farmer list",
+          e instanceof Error ? e.message : "The farmer list could not be retrieved.",
+        );
+        return;
+      }
+
+      if (farmers.length === 0) {
+        showErrorModal(
+          "No farmers yet",
+          "A farm belongs to a farmer, so there is nobody to register this one to. Create a farmer account first.",
+        );
+        return;
+      }
+
+      return openDrawer({
+        title: "Register a new farm",
+        wide: true,
+        bodyHtml: wizard({
+          id: "register-farm",
+          title: "Register a new farm",
+          subtitle: "Four steps. Nothing is saved until the last one.",
+          confirmLabel: "Register the farm",
+          confirmAct: "wizard-register-farm",
+          steps: [
+            {
+              title: "Farmer",
+              hint: "Who this farm belongs to.",
+              bodyHtml: picker({
+                name: "ownerId",
+                label: "Farmer",
+                required: true,
+                requiredMessage: "Choose the farmer this farm belongs to.",
+                placeholder: "Search by name or email…",
+                hint: "Only existing farmer accounts can own a farm.",
+                options: farmers.map((f) => ({
+                  value: f.id,
+                  label: f.name,
+                  secondary: f.email,
+                })),
+              }),
             },
-          });
+            {
+              title: "Farm details",
+              hint: "Where it is and how big it is.",
+              bodyHtml: `
+                <div class="fields">
+                  <label class="f">
+                    Farm name
+                    <input
+                      type="text"
+                      data-field="farmName"
+                      data-required
+                      data-required-message="Give the farm a name."
+                      placeholder="Sunrise Valley Farm"
+                    />
+                  </label>
+                  <label class="f">
+                    Nearest town or district
+                    <input
+                      type="text"
+                      data-field="location"
+                      data-required
+                      data-required-message="Say roughly where the farm is."
+                      placeholder="Ceres, Western Cape"
+                    />
+                  </label>
+                  <label class="f">
+                    Farm size (hectares)
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      data-field="farmSize"
+                      data-required
+                      data-required-message="Enter the farm size in hectares."
+                      placeholder="0"
+                    />
+                  </label>
+                </div>
+                ${locationPickerHtml({})}`,
+            },
+            {
+              title: "Zones",
+              hint: "One per irrigated block. Each one gets its own advice.",
+              bodyHtml: `
+                <label class="f">
+                  How many zones?
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value="1"
+                    data-register-farm-zone-count
+                  />
+                </label>
+                <div id="registerFarmZones"></div>`,
+            },
+            {
+              title: "Review",
+              hint: "Check this, then register.",
+              bodyHtml: `<div id="registerFarmReview" class="review-pane"></div>`,
+            },
+          ],
+        }),
 
-          toast(
-            `${v["farmName"] || "Farm"} registered successfully.`,
-            "success",
-          );
+        onOpen: () => {
+          wirePickers();
+          wireRegisterFarmZones();
+          wireWizards();
+          wireRegisterFarmReview();
 
-          return void refresh();
-        } catch (e) {
-          showErrorModal(
-            e instanceof Error
-              ? e.message
-              : "Unable to register farm.",
-            "Unable to register farm",
-          );
-        }
-      },
-    });
+          /* The map lives on step 2, which is display:none when the drawer
+             opens, so it is mounted now and told to re-measure when the step
+             becomes visible. Mounting it lazily on first reveal would be
+             neater but needs an observer per wizard; this is one call. */
+          const mapHost = document.querySelector<HTMLElement>("[data-map-pick]");
+          if (mapHost) void mountLocationPicker(mapHost);
+        },
+      });
+    }
 
-    return;
-  } catch (e) {
-    showErrorModal(
-      e instanceof Error
-        ? e.message
-        : "Unable to load farmers.",
-      "Unable to load farmers",
-    );
-    return;
-  }
-}
+    /* The wizard's Confirm. wireWizards has already re-validated every step,
+       so what is missing here can only be something the steps do not mark
+       required - the zone arithmetic the API also enforces. Checked here too
+       so the admin is told in the drawer rather than by a 400. */
+    case "wizard-register-farm": {
+      const v = collectFields();
+
+      const zoneCount = registerFarmZoneCount();
+      const zones = Array.from({ length: zoneCount }, (_, i) => ({
+        name: (v[`zone_name_${i}`] ?? "").trim(),
+        sizeHectares: Number(v[`zone_size_${i}`]) || 0,
+        cropType: v[`zone_crop_${i}`] ?? "",
+      }));
+
+      const problem = validateRegisterFarmZones(zones, Number(v["farmSize"]) || 0);
+      if (problem) return void toast(problem, "warn");
+
+      const latitude = v["latitude"] ? Number(v["latitude"]) : null;
+      const longitude = v["longitude"] ? Number(v["longitude"]) : null;
+
+      try {
+        await registerFarm({
+          ownerId: v["ownerId"] ?? "",
+          farm: {
+            farmName: (v["farmName"] ?? "").trim(),
+            location: (v["location"] ?? "").trim(),
+            sizeHectares: Number(v["farmSize"]) || 0,
+            latitude,
+            longitude,
+            zones,
+          },
+        });
+
+        closeDrawer();
+        toast(`${v["farmName"] || "The farm"} is registered.`, "success");
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          "Could not register the farm",
+          e instanceof Error ? e.message : "The farm could not be registered.",
+        );
+        return;
+      }
+    }
         /* onboarding */
     case "onboarding-next": {
       const v = collectFields();
@@ -1851,24 +2140,27 @@ case "delete-user": {
     case "schedule-device-maint":
       return openDrawer({
         title: `Schedule service — ${idAttr}`,
+        bodyHtml: picker({
+          name: "tech",
+          label: "Technician",
+          required: true,
+          requiredMessage: "Choose a technician.",
+          placeholder: "Search technicians…",
+          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
+        }),
         fields: [
-          { label: "Technician", value: TECHNICIANS[0], editable: true, name: "tech" },
-          { label: "Date", value: "2026-07-29", editable: true, name: "date" },
+          // Today, not a date hardcoded during development - that one is now
+          // in the past, so every scheduled visit defaulted to overdue.
+          { label: "Date", value: todayIso(), editable: true, name: "date" },
         ],
         confirmLabel: "Schedule",
         onConfirm: () => toast("Maintenance scheduled (demo).", "success"),
       });
+    // The old free-text version of this wrote nothing at all - it toasted
+    // "registered (demo)" and the kit never existed. Kept as an alias so an
+    // older bookmark or button still reaches the real wizard.
     case "add-device":
-      return openDrawer({
-        title: "Register hardware",
-        fields: [
-          { label: "Device ID", value: "ESP32-", editable: true, name: "id" },
-          { label: "Type", value: "ESP32 Controller", editable: true, name: "type" },
-          { label: "Farm", value: "", editable: true, name: "farm" },
-        ],
-        confirmLabel: "Register",
-        onConfirm: (v) => toast(`${v["id"] || "Device"} registered (demo).`, "success"),
-      });
+      return handleAction(withAct(el, "register-hardware"));
 
     /* alerts */
     case "view-alert": {
@@ -1979,7 +2271,16 @@ case "delete-user": {
     case "assign-tech":
       return openDrawer({
         title: `Assign technician — ${idAttr}`,
-        fields: [{ label: "Technician", value: TECHNICIANS[0], editable: true, name: "tech" }],
+        // A name typed by hand meant the same person appeared as three
+        // different technicians in the Assigned-to filter.
+        bodyHtml: picker({
+          name: "tech",
+          label: "Technician",
+          required: true,
+          requiredMessage: "Choose a technician.",
+          placeholder: "Search technicians…",
+          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
+        }),
         confirmLabel: "Assign",
         onConfirm: (v) => {
           void api.assignTechnician(idAttr, v["tech"] ?? "").then(() => {
@@ -2031,11 +2332,18 @@ case "delete-user": {
     case "schedule-maint":
       return openDrawer({
         title: "Schedule maintenance",
+        bodyHtml: picker({
+          name: "tech",
+          label: "Technician",
+          required: true,
+          requiredMessage: "Choose a technician.",
+          placeholder: "Search technicians…",
+          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
+        }),
         fields: [
           { label: "Device ID", value: "", editable: true, name: "device" },
           { label: "Issue", value: "", editable: true, name: "issue" },
-          { label: "Technician", value: TECHNICIANS[0], editable: true, name: "tech" },
-          { label: "Date", value: "2026-07-29", editable: true, name: "date" },
+          { label: "Date", value: todayIso(), editable: true, name: "date" },
         ],
         confirmLabel: "Schedule",
         onConfirm: () => toast("Maintenance scheduled (demo).", "success"),
@@ -2377,20 +2685,254 @@ function wireRegisterFarmZones(): void {
   countInput.dataset["bound"] = "1";
 
   const renderZones = () => {
-    const count = Math.max(
-      1,
-      Math.min(50, Number(countInput.value) || 1),
-    );
+    const count = registerFarmZoneCount();
+
+    // What was already typed is read before the rebuild and put back after.
+    // Nudging the count from 3 to 4 used to wipe the first three zones.
+    const existing = collectFields();
 
     container.innerHTML = Array.from(
       { length: count },
       (_, i) => zoneRow(i),
     ).join("");
+
+    container
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]")
+      .forEach((el) => {
+        const name = el.dataset["field"] ?? "";
+        if (existing[name]) el.value = existing[name];
+      });
   };
 
   countInput.addEventListener("input", renderZones);
 
   renderZones();
+}
+
+
+/* The kit wizard's two dependent steps.
+ *
+ * Each one is rebuilt when the step before it changes, rather than rendered
+ * once from everything: a farm list that still shows the previous farmer's
+ * farms is how a kit ends up on the wrong property. Rebuilding also clears
+ * the hidden field, so a stale zone id cannot survive a change of farm and
+ * be submitted. */
+function wireKitWizard(farms: Farm[]): void {
+  const wiz = document.querySelector<HTMLElement>('[data-wizard="register-hardware"]');
+  if (!wiz) return;
+
+  const farmHost = document.getElementById("kitFarmPicker");
+  const zoneHost = document.getElementById("kitZonePicker");
+  const review = document.getElementById("kitReview");
+  if (!farmHost || !zoneHost || !review) return;
+
+  let chosenFarmName = "";
+  let chosenZoneName = "";
+
+  const renderZonePlaceholder = (message: string): void => {
+    chosenZoneName = "";
+    zoneHost.innerHTML = `
+      <p class="muted">${esc(message)}</p>
+      <input type="hidden" data-field="kitZoneId" value="" data-required
+        data-required-message="Choose the zone this kit will water." />`;
+  };
+
+  const renderReview = (): void => {
+    const v = collectFields();
+    const kit = KIT_TYPES.find((k) => k.value === v["kitType"]);
+
+    review.innerHTML = detailList([
+      ["Farm", esc(chosenFarmName || "Not chosen")],
+      ["Zone", esc(chosenZoneName || "Not chosen")],
+      ["Kit type", esc(kit?.label ?? v["kitType"] ?? "Not chosen")],
+      ["Kit name", esc(v["kitName"]?.trim() || "Named after its zone")],
+    ]) + `
+      <p class="muted">
+        Creating the code does not install anything. It makes a single-use credential,
+        valid for 24 hours, that the installer enters on the kit once.
+      </p>`;
+  };
+
+  wiz.addEventListener("picker:change", (event) => {
+    const detail = (event as CustomEvent<{ name: string; value: string }>).detail;
+
+    if (detail.name === "kitOwnerId") {
+      const theirs = farms.filter((f) => f.ownerId === detail.value);
+
+      chosenFarmName = "";
+      renderZonePlaceholder("Choose a farm first.");
+
+      farmHost.innerHTML = picker({
+        name: "kitFarmId",
+        label: "Farm",
+        required: true,
+        requiredMessage: "Choose the farm this kit is going to.",
+        placeholder: "Search this farmer's farms…",
+        emptyText: "This farmer has no farms on file.",
+        options: theirs.map((f) => ({
+          value: String(f.id),
+          label: f.name,
+          secondary: `${f.region || f.province || "Location not set"} · ${f.hectares} ha`,
+        })),
+      });
+
+      // The new picker's own markup has to be bound; wirePickers skips what
+      // it has already bound, so this does not rebind the rest.
+      wirePickers();
+      return;
+    }
+
+    if (detail.name === "kitFarmId") {
+      const farmId = Number(detail.value);
+      chosenFarmName = farms.find((f) => f.id === farmId)?.name ?? "";
+      renderZonePlaceholder("Loading this farm's zones…");
+
+      void getReportZones(farmId)
+        .then((zones) => {
+          if (zones.length === 0) {
+            // A farm with no zones cannot take a kit at all: hardware.zone_id
+            // is what the claim resolves. Saying so here beats a picker with
+            // nothing in it.
+            renderZonePlaceholder(
+              "This farm has no zones yet. Add one before registering a kit to it.",
+            );
+            return;
+          }
+
+          zoneHost.innerHTML = picker({
+            name: "kitZoneId",
+            label: "Zone",
+            required: true,
+            requiredMessage: "Choose the zone this kit will water.",
+            placeholder: "Search this farm's zones…",
+            options: zones.map((z) => ({
+              value: String(z.zoneId),
+              label: z.name,
+              secondary: z.cropType ? `Crop: ${z.cropType}` : "No crop set",
+            })),
+          });
+
+          wirePickers();
+        })
+        .catch(() => {
+          renderZonePlaceholder("This farm's zones could not be loaded. Go back and try again.");
+        });
+
+      return;
+    }
+
+    if (detail.name === "kitZoneId") {
+      chosenZoneName =
+        zoneHost.querySelector<HTMLElement>(".picker-option.is-selected .picker-option-main b")
+          ?.textContent?.trim() ?? "";
+    }
+  });
+
+  wiz.querySelector("[data-wizard-next]")?.addEventListener("click", () => {
+    window.setTimeout(renderReview, 0);
+  });
+  wiz.querySelector("[data-wizard-back]")?.addEventListener("click", () => {
+    window.setTimeout(renderReview, 0);
+  });
+
+  renderReview();
+}
+
+/* The count, clamped to what the API will accept (1-50). Read from the DOM
+   rather than passed around, because the repeater and the confirm handler
+   both need it and the input is the only thing that knows. */
+function registerFarmZoneCount(): number {
+  const input = document.querySelector<HTMLInputElement>("[data-register-farm-zone-count]");
+  return Math.max(1, Math.min(50, Number(input?.value) || 1));
+}
+
+/* The two rules the wizard's per-field validation cannot express.
+   Both are enforced by the API as well; checked here so the answer arrives
+   in the drawer the admin is looking at rather than as a 400. */
+function validateRegisterFarmZones(
+  zones: { name: string; sizeHectares: number; cropType: string }[],
+  farmSize: number,
+): string | null {
+  const total = zones.reduce((sum, z) => sum + z.sizeHectares, 0);
+
+  if (farmSize > 0 && total > farmSize) {
+    return `The zones add up to ${total.toFixed(1)} ha, which is more than the farm's ${farmSize.toFixed(1)} ha.`;
+  }
+
+  const names = zones.map((z) => z.name.trim().toLowerCase());
+  const duplicate = names.find((n, i) => n.length > 0 && names.indexOf(n) !== i);
+  if (duplicate) {
+    return `Two zones are both called "${duplicate}". Zone names have to differ.`;
+  }
+
+  return null;
+}
+
+/* The review step, rebuilt every time it is shown.
+ *
+ * Rebuilt rather than filled once, because the admin can go back and change
+ * anything - a review screen showing stale values is worse than no review
+ * screen, since it is the thing they are trusting before they commit. */
+function wireRegisterFarmReview(): void {
+  const wiz = document.querySelector<HTMLElement>('[data-wizard="register-farm"]');
+  const pane = document.getElementById("registerFarmReview");
+  if (!wiz || !pane) return;
+
+  const cropLabel = (value: string): string =>
+    ZONE_CROPS.find((c) => c.value === value)?.label ?? value;
+
+  const render = (): void => {
+    const v = collectFields();
+    const ownerName = document
+      .querySelector<HTMLElement>('[data-picker="ownerId"] .picker-option.is-selected .picker-option-main b')
+      ?.textContent?.trim();
+
+    const zones = Array.from({ length: registerFarmZoneCount() }, (_, i) => ({
+      name: v[`zone_name_${i}`] ?? "",
+      size: v[`zone_size_${i}`] ?? "",
+      crop: v[`zone_crop_${i}`] ?? "",
+    }));
+
+    const coords =
+      v["latitude"] && v["longitude"]
+        ? `${Number(v["latitude"]).toFixed(5)}, ${Number(v["longitude"]).toFixed(5)}`
+        : "Not set - the weather lookup will fall back to the district";
+
+    pane.innerHTML = `
+      ${detailList([
+        ["Farmer", esc(ownerName ?? "Not chosen")],
+        ["Farm name", esc(v["farmName"] ?? "")],
+        ["Where", esc(v["location"] ?? "")],
+        ["Size", v["farmSize"] ? `${esc(v["farmSize"])} ha` : ""],
+        ["Coordinates", esc(coords)],
+        ["Zones", String(zones.length)],
+      ])}
+      <table class="table review-zones">
+        <thead><tr><th>Zone</th><th>Size</th><th>Crop</th></tr></thead>
+        <tbody>
+          ${zones
+            .map(
+              (z) => `<tr>
+                <td>${esc(z.name || "(no name)")}</td>
+                <td>${z.size ? `${esc(z.size)} ha` : "—"}</td>
+                <td>${z.crop ? esc(cropLabel(z.crop)) : "—"}</td>
+              </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+  };
+
+  // The wizard has no "step changed" event, so the two buttons that can
+  // reach the review step both trigger a rebuild.
+  wiz.querySelector("[data-wizard-next]")?.addEventListener("click", () => {
+    window.setTimeout(render, 0);
+  });
+  wiz.querySelector("[data-wizard-back]")?.addEventListener("click", () => {
+    window.setTimeout(render, 0);
+  });
+
+  render();
 }
 
 /* ---- Live farm reports (real endpoints; the cards above are demo data) ---- */
@@ -2535,6 +3077,9 @@ async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
 }
 
 export function wirePageInteractions(): void {
+  // The drawer calls this after it writes its HTML - see lib/drawer.ts.
+  window.agroflowBindDrawerPickers = wirePickers;
+
   wireFilters();
   wireLiveReports();
  wireOnboardingZones();

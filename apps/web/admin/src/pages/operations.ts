@@ -39,7 +39,7 @@ export async function hardwarePage(): Promise<string> {
   return `
   ${pageHeader("Farm Hardware", "All registered hardware across every farm on the platform.",
     `<button class="btn ghost" data-act="go-mqtt-logins">MQTT logins</button>
-     <button class="btn" data-act="add-device">+ Register Hardware</button>`)}
+     <button class="btn" data-act="register-hardware">+ Register a kit</button>`)}
 
   <div class="grid kpis four">
     ${kpiCard({ label: "Total Hardware", value: total, icon: Icon.radio })}

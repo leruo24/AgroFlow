@@ -129,8 +129,20 @@ export function picker(opts: {
   emptyText?: string;
   required?: boolean;
   hint?: string;
+  /* Shown by the wizard when nothing has been chosen. Named after the thing,
+     not the field: "Choose the farmer this farm belongs to." */
+  requiredMessage?: string;
 }): string {
   const hasOptions = opts.options.length > 0;
+
+  /* data-required on the HIDDEN input, not on the search box. The search box
+     holds whatever was typed to filter the list, which is not a choice -
+     requiring it would pass validation for a farm nobody selected. */
+  const requiredAttrs = opts.required
+    ? ` data-required data-required-message="${esc(
+        opts.requiredMessage ?? `Choose a ${opts.label.toLowerCase()} before continuing.`,
+      )}"`
+    : "";
 
   return `
     <div class="picker" data-picker="${esc(opts.name)}">
@@ -152,9 +164,9 @@ export function picker(opts: {
         <div class="picker-list" id="picker-list-${esc(opts.name)}" role="listbox">
           ${opts.options.map((o) => pickerOption(opts.name, o, o.value === opts.value)).join("")}
         </div>
-        <input type="hidden" data-field="${esc(opts.name)}" value="${esc(opts.value ?? "")}" />`
+        <input type="hidden" data-field="${esc(opts.name)}" value="${esc(opts.value ?? "")}"${requiredAttrs} />`
         : `<p class="picker-empty">${esc(opts.emptyText ?? "Nothing to choose from yet.")}</p>
-           <input type="hidden" data-field="${esc(opts.name)}" value="" />`}
+           <input type="hidden" data-field="${esc(opts.name)}" value=""${requiredAttrs} />`}
     </div>`;
 }
 
@@ -201,6 +213,11 @@ export function wizard(opts: {
   subtitle?: string;
   steps: WizardStep[];
   confirmLabel?: string;
+  /* The data-act that actually writes. Left off for a wizard whose confirm
+     is wired by hand. wireWizards() validates every step before this fires,
+     so the handler can trust what collectFields() gives it. */
+  confirmAct?: string;
+  confirmId?: string;
 }): string {
   return `
     <div class="wizard" data-wizard="${esc(opts.id)}" data-step="0" data-steps="${opts.steps.length}">
@@ -240,7 +257,14 @@ export function wizard(opts: {
         <button type="button" class="btn ghost" data-wizard-back disabled>Back</button>
         <span class="wizard-count"><b data-wizard-current>1</b> of ${opts.steps.length}</span>
         <button type="button" class="btn" data-wizard-next>Next</button>
-        <button type="button" class="btn" data-wizard-confirm hidden>
+        <button
+          type="button"
+          class="btn"
+          data-wizard-confirm
+          ${opts.confirmAct ? `data-act="${esc(opts.confirmAct)}"` : ""}
+          ${opts.confirmId ? `data-id="${esc(opts.confirmId)}"` : ""}
+          hidden
+        >
           ${esc(opts.confirmLabel ?? "Confirm")}
         </button>
       </div>

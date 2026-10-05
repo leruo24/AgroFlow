@@ -198,6 +198,12 @@ export interface Farm {
   id: number;
   name: string;
   owner: string;
+
+  /** farm.owner_id. The NAME is not an identifier: two farmers can share
+      one, and a dependent picker that filtered farms by owner name would
+      show one farmer another's farms. Null for a farm with no owner on
+      file. */
+  ownerId: string | null;
   province: string;
   region: string;
   health: FarmHealth;

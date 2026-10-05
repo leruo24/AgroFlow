@@ -1,4 +1,8 @@
 import { pageHeader, panel } from "@/ui/components";
+/* The crop list is the engine-resolvable one, not free text: a crop the
+   FAO-56 engine cannot resolve means the zone silently never gets advice.
+   See data/referenceData.ts. */
+import { ZONE_CROPS } from "@/data/referenceData";
 
 /* ============================================================================
 Farmer Onboarding — two-step wizard.
@@ -16,6 +20,8 @@ export function zoneRow(index: number): string {
       <input
         type="text"
         data-field="zone_name_${index}"
+        data-required
+        data-required-message="Give zone ${index + 1} a name."
         placeholder="e.g. North Block"
       />
     </label>
@@ -24,20 +30,27 @@ export function zoneRow(index: number): string {
       <span>Zone ${index + 1} size (hectares)</span>
       <input
         type="number"
-        min="0"
+        min="0.1"
         step="0.1"
         data-field="zone_size_${index}"
+        data-required
+        data-required-message="Enter a size in hectares for zone ${index + 1}."
         placeholder="0"
       />
     </label>
 
     <label class="drawer-field">
-      <span>Zone ${index + 1} crop type</span>
-      <input
-        type="text"
+      <span>Zone ${index + 1} crop</span>
+      <select
         data-field="zone_crop_${index}"
-        placeholder="e.g. Apples"
-      />
+        data-required
+        data-required-message="Choose a crop for zone ${index + 1}."
+      >
+        <option value="">Choose a crop…</option>
+        ${ZONE_CROPS.map(
+          (c) => `<option value="${c.value}">${c.label}</option>`,
+        ).join("")}
+      </select>
     </label>
   </div>`;
 }

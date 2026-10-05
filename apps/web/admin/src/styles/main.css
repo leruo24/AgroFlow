@@ -1641,3 +1641,58 @@ tbody tr:last-child td{border-bottom:none}
   outline-offset:2px;
   border-radius:3px;
 }
+
+/* ===================================================================
+   MAP LOCATION PICKER (item 6)
+
+   The canvas needs an explicit height: Leaflet measures its container, and
+   a container sized by its contents is zero tall, which renders as nothing
+   at all rather than as a broken map.
+   =================================================================== */
+.map-pick{
+  margin-top:16px;
+}
+.map-pick-canvas{
+  height:300px;
+  border:1px solid var(--border, #dfe6e2);
+  border-radius:10px;
+  background:var(--surface-2, #f4f7f5);
+  /* Leaflet's own panes sit above a lot; keep it under the drawer chrome. */
+  z-index:0;
+}
+.map-pick-status{
+  margin:8px 0 0;
+  font-size:13px;
+  color:var(--muted, #5d6b64);
+}
+.map-pick-fields{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:12px;
+}
+@media (max-width:640px){
+  .map-pick-fields{ grid-template-columns:1fr; }
+  .map-pick-canvas{ height:220px; }
+}
+
+/* ===================================================================
+   WIZARD REVIEW STEP (item 6)
+   =================================================================== */
+.review-pane .detail-list{
+  margin-bottom:16px;
+}
+.review-zones{
+  width:100%;
+  font-size:14px;
+}
+.review-zones th{
+  text-align:left;
+  font-weight:600;
+  color:var(--muted, #5d6b64);
+}
+.review-zones td,
+.review-zones th{
+  padding:7px 10px;
+  border-bottom:1px solid var(--border, #dfe6e2);
+}

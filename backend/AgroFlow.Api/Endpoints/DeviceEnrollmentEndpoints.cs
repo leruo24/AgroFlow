@@ -6,8 +6,20 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-public record EnrollDeviceRequest(long ZoneId, string? DeviceId, string? DeviceName);
+public record EnrollDeviceRequest(
+    long ZoneId, string? DeviceId, string? DeviceName, string? DeviceType = null);
 public record EnrollDeviceResponse(long HardwareId, string EnrollmentCode, DateTimeOffset ExpiresAt);
+
+// The kit types whose firmware can complete the claim. Validated rather
+// than trusted: a hardware row with a device_type no board reports would
+// sit at 'enrolled' forever, looking like an installation that failed.
+// Mirrors KIT_TYPES in the admin's services/agroFlowApi.ts.
+internal static class EnrollableKitTypes
+{
+    public const string Default = "ESP32";
+
+    public static readonly string[] Supported = { Default };
+}
 
 // FirmwareVersion is new in v1.3.0 - the board reports what it is running at
 // claim time, which is what the Kit screen shows and what tells you when
@@ -114,14 +126,28 @@ public static class DeviceEnrollmentEndpoints
             return Results.BadRequest("zoneId is required.");
         }
 
+        var deviceType = string.IsNullOrWhiteSpace(request.DeviceType)
+            ? EnrollableKitTypes.Default
+            : request.DeviceType.Trim();
+
+        if (!EnrollableKitTypes.Supported.Contains(deviceType, StringComparer.OrdinalIgnoreCase))
+        {
+            return Results.BadRequest(new
+            {
+                error = $"'{deviceType}' is not a kit AgroFlow can enrol. " +
+                        $"Supported: {string.Join(", ", EnrollableKitTypes.Supported)}.",
+            });
+        }
+
         var code = GenerateEnrollmentCode();
         var expiresAt = DateTimeOffset.UtcNow.Add(EnrollmentCodeLifetime);
 
         await using var connection = await dataSource.OpenConnectionAsync();
         await using var cmd = new NpgsqlCommand(
             "insert into hardware (device_name, device_type, zone_id, device_id, enrollment_status, enrollment_code, enrollment_code_expires_at) " +
-            "values ($1, 'ESP32', $2, $3, 'enrolled', $4, $5) returning hardware_id", connection);
-        cmd.Parameters.AddWithValue(request.DeviceName ?? $"Zone {request.ZoneId} ESP32");
+            "values ($1, $2, $3, $4, 'enrolled', $5, $6) returning hardware_id", connection);
+        cmd.Parameters.AddWithValue(request.DeviceName ?? $"Zone {request.ZoneId} {deviceType}");
+        cmd.Parameters.AddWithValue(deviceType);
         cmd.Parameters.AddWithValue(request.ZoneId);
         cmd.Parameters.AddWithValue((object?)request.DeviceId?.Trim().ToUpperInvariant() ?? DBNull.Value);
         cmd.Parameters.AddWithValue(code);
@@ -135,7 +161,7 @@ public static class DeviceEnrollmentEndpoints
         await audit.WriteAsync(
             user, AgroFlow.Api.Services.AuditActions.EnrollmentCodeCreated,
             "hardware", hardwareId.ToString(),
-            details: new { zoneId = request.ZoneId, expiresAt });
+            details: new { zoneId = request.ZoneId, deviceType, expiresAt });
 
         return Results.Ok(new EnrollDeviceResponse(hardwareId, code, expiresAt));
     }

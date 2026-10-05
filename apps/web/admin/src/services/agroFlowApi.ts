@@ -181,6 +181,11 @@ export async function registerFarm(input: {
     farmName: string;
     location: string;
     sizeHectares: number;
+    /* farm.latitude/longitude (migration 0010). Optional, and null when the
+       admin skipped the map: the weather lookup then falls back to the
+       district, which is worse than a pin but better than a wrong pin. */
+    latitude?: number | null;
+    longitude?: number | null;
     zones: {
       name: string;
       sizeHectares: number;
@@ -571,9 +576,27 @@ export type EnrollmentCodeResult = {
 /* The code the installer types into the kit's setup page. Single-use, 24-hour,
    and the ONLY authorisation /api/devices/claim needs - which is why there is
    no "show it again": the response below is the one time it exists. */
+/* The kit types the claim flow can actually finish.
+ *
+ * ONE ENTRY, DELIBERATELY
+ * Enrolling a kit writes a hardware row that a board then claims with the
+ * code, and only the ESP32 irrigation node's firmware does that. A picker
+ * offering "Weather Station" or "Gateway" would create rows nothing can ever
+ * claim - a kit that shows as enrolled forever and never comes online. When
+ * a second kind of board ships, it belongs here and the wizard picks it up
+ * without further change. */
+export const KIT_TYPES = [
+  {
+    value: "ESP32",
+    label: "ESP32 irrigation node",
+    secondary: "Soil moisture, valve control and flow metering on one board",
+  },
+] as const;
+
 export function createEnrollmentCode(input: {
   zoneId: number;
   deviceName?: string;
+  deviceType?: string;
 }): Promise<EnrollmentCodeResult> {
   return authorizedJson<EnrollmentCodeResult>("/api/devices/enroll", "POST", input);
 }
