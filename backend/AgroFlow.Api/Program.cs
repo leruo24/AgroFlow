@@ -208,6 +208,7 @@ builder.Services.AddSingleton<FarmRequestNotifier>();
 // Singleton because it holds only the data source, like the other
 // writers here.
 builder.Services.AddSingleton<AuditLog>();
+builder.Services.AddSingleton<SchemaCheck>();
 
 // Self-service password recovery over Telegram. Supabase's own email reset
 // needs SMTP that this project has never configured, so the mobile
@@ -399,6 +400,16 @@ app.MapReportScheduleEndpoints();
 app.MapHealthEndpoints();
 app.MapAuditLogEndpoints();
 app.MapAdminSummaryEndpoints();
+
+// One pass over the objects the migrations should have created, logged
+// at Warning per missing one. Read-only, and deliberately not awaited:
+// a slow or unreachable database must delay the API coming up, not stop
+// it - the health endpoint reports the same thing on demand.
+_ = Task.Run(async () =>
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<SchemaCheck>().LogAtStartupAsync();
+});
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

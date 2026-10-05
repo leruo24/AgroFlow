@@ -127,14 +127,33 @@ public sealed class AuditLog
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Loud, because a missing audit row is a hole in a record whose
-            // value is being complete - but not fatal, because the action it
-            // describes has already happened and must not be rolled back for
-            // bookkeeping.
+            // Loud, and WITH THE REASON. The first version logged that the
+            // write had failed but not why, which is the difference between
+            // "migration 0037 was never applied" and "the API's role may not
+            // insert" - two problems with completely different fixes that
+            // produce exactly the same symptom: every admin action succeeds
+            // and the Activity page stays empty.
+            //
+            // Not fatal, deliberately: the action it describes has already
+            // happened and must not be rolled back for bookkeeping. Revoking
+            // a stolen kit has to work during the one incident the log exists
+            // to record.
+            var diagnosis = ex is PostgresException pg
+                ? pg.SqlState switch
+                {
+                    "42P01" => "admin_audit_log does not exist - migration 0037 has not been applied.",
+                    "42703" => "A column is missing - migration 0037 may have been applied partially.",
+                    "42501" => "This database role is not permitted to INSERT into admin_audit_log. " +
+                               "Apply migration 0038, which grants it.",
+                    _ => $"Postgres reported {pg.SqlState}: {pg.MessageText}",
+                }
+                : $"Not a database error: {ex.GetType().Name}.";
+
             _logger.LogError(ex,
                 "Could not write the audit row for {Action} on {EntityType} {EntityId}. " +
-                "The action itself succeeded. If this repeats, check that migration 0037 is applied.",
-                action, entityType, entityId);
+                "The action itself succeeded, but it has NOT been recorded. {Diagnosis} " +
+                "GET /api/admin/health reports the same thing under \"Database schema\".",
+                action, entityType, entityId, diagnosis);
         }
     }
 
