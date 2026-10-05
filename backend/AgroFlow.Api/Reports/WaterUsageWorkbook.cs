@@ -1,0 +1,291 @@
+using System.Globalization;
+using Cell = AgroFlow.Api.Reports.XlsxWriter.Cell;
+using Sheet = AgroFlow.Api.Reports.XlsxWriter.Sheet;
+
+namespace AgroFlow.Api.Reports;
+
+/// The water usage report as a workbook, built to
+/// docs/agroflow-data-template.xlsx.
+///
+/// WHY THIS EXISTS ALONGSIDE THE PDF
+/// The PDF is for reading; this is for working with. A farmer or an extension
+/// officer who wants to chart three months, or paste a week into a funding
+/// application, needs the numbers as numbers - not as text in a document that
+/// has already rounded them for display.
+///
+/// Both are rendered from the same WaterUsageReportModel, so the two cannot
+/// disagree about a total. That is the whole reason the model exists.
+internal static class WaterUsageWorkbook
+{
+    public static byte[] Render(WaterUsageReportModel m)
+    {
+        return XlsxWriter.Build(new[]
+        {
+            SummarySheet(m),
+            DailySheet(m),
+            WeatherSheet(m),
+        });
+    }
+
+    private static string Period(WaterUsageReportModel m)
+    {
+        var from = m.From.ToDateTime(TimeOnly.MinValue);
+        var to = m.To.ToDateTime(TimeOnly.MinValue);
+
+        return $"{from.ToString("d MMM", CultureInfo.InvariantCulture)} – " +
+               $"{to.ToString("d MMM yyyy", CultureInfo.InvariantCulture)}";
+    }
+
+    private static string ZoneTitle(WaterUsageReportModel m)
+    {
+        return string.IsNullOrWhiteSpace(m.CropLabel) ? m.ZoneName : $"{m.ZoneName} ({m.CropLabel})";
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Sheet 1 — Summary
+     * ------------------------------------------------------------------ */
+
+    private static Sheet SummarySheet(WaterUsageReportModel m)
+    {
+        var sheet = new Sheet
+        {
+            Name = "Summary",
+            ColumnWidths = new[] { 40.0, 14.0, 10.0 },
+        };
+
+        sheet.Add(Cell.Of("AgroFlow — Water Usage Data", XlsxStyle.Title));
+        sheet.Add(Cell.Of($"Farm: {m.FarmName}   ·   Zone: {ZoneTitle(m)}", XlsxStyle.Subtitle));
+        sheet.Add(Cell.Of(
+            $"Period: {Period(m)}   ·   Generated " +
+            $"{m.GeneratedAtSast.ToString("d MMM yyyy HH:mm", CultureInfo.InvariantCulture)} SAST",
+            XlsxStyle.Subtitle));
+        sheet.AddBlank();
+
+        sheet.Add(Cell.Of("Key figures", XlsxStyle.SectionHeader),
+                  Cell.Of("", XlsxStyle.SectionHeader),
+                  Cell.Of("", XlsxStyle.SectionHeader));
+
+        sheet.Add(Cell.Of("Measure", XlsxStyle.TableHeader),
+                  Cell.Of("Value", XlsxStyle.TableHeader),
+                  Cell.Of("Unit", XlsxStyle.TableHeader));
+
+        // Every one of these is a number cell, not a formatted string, so the
+        // sheet can be charted and summed. Where a figure cannot be worked
+        // out the cell is left EMPTY rather than zeroed - see Cell.Blank.
+        sheet.Add(Cell.Of("Pump flow rate"),
+                  Cell.Maybe(m.FlowRateLpm, XlsxStyle.OneDecimal),
+                  Cell.Of("L/min"));
+
+        sheet.Add(Cell.Of("Pump runs"),
+                  Cell.Of(m.TotalRuns, XlsxStyle.Integer),
+                  Cell.Of("runs"));
+
+        sheet.Add(Cell.Of("Total pump minutes"),
+                  Cell.Of(m.TotalMinutes, XlsxStyle.OneDecimal),
+                  Cell.Of("min"));
+
+        sheet.Add(Cell.Of("Estimated water used"),
+                  Cell.Maybe(m.TotalLitres, XlsxStyle.OneDecimal),
+                  Cell.Of("L"));
+
+        sheet.Add(Cell.Of("Crop water need"),
+                  Cell.Maybe(m.TotalNeedLitres, XlsxStyle.OneDecimal),
+                  Cell.Of("L"));
+
+        sheet.Add(Cell.Of("Difference (given − needed)"),
+                  Cell.Maybe(m.Difference, XlsxStyle.OneDecimal),
+                  Cell.Of("L"));
+
+        sheet.Add(Cell.Of("Days too dry"),
+                  Cell.Of(m.DaysTooDry, XlsxStyle.Integer),
+                  Cell.Of("days"));
+
+        sheet.Add(Cell.Of("Average soil moisture"),
+                  Cell.Maybe(m.AvgMoisturePercent, XlsxStyle.OneDecimal),
+                  Cell.Of("%"));
+
+        sheet.Add(Cell.Of("Rain over the period"),
+                  Cell.Of(m.TotalRainMm, XlsxStyle.OneDecimal),
+                  Cell.Of("mm"));
+
+        sheet.AddBlank();
+
+        sheet.Add(Cell.Of("Notes", XlsxStyle.SectionHeader),
+                  Cell.Of("", XlsxStyle.SectionHeader),
+                  Cell.Of("", XlsxStyle.SectionHeader));
+
+        sheet.Add(Cell.Of(
+            "Litres are estimated: pump minutes × flow rate. There is no flow meter on any AgroFlow node.",
+            XlsxStyle.Note));
+
+        sheet.Add(Cell.Of(
+            "Crop water need comes from the FAO-56 method (weather app + crop growth stage) × the zone's area.",
+            XlsxStyle.Note));
+
+        sheet.Add(Cell.Of(
+            "Soil moisture is relative to this zone's setup: 100% = soaked and drained, 0% = dry.",
+            XlsxStyle.Note));
+
+        sheet.Add(Cell.Of(
+            "An empty cell means the figure could not be worked out, which is not the same as zero.",
+            XlsxStyle.Note));
+
+        if (m.FlowRateLpm is null)
+        {
+            sheet.AddBlank();
+            sheet.Add(Cell.Of(
+                "This zone has no flow rate on file, so no water volume can be estimated for it. " +
+                "Set one and every litre figure in this workbook will fill in.",
+                XlsxStyle.Bold));
+        }
+
+        return sheet;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Sheet 2 — Daily
+     * ------------------------------------------------------------------ */
+
+    private static Sheet DailySheet(WaterUsageReportModel m)
+    {
+        var sheet = new Sheet
+        {
+            // The zone goes in the tab name, because somebody comparing two
+            // zones will have both workbooks open at once.
+            Name = $"Daily - {m.ZoneName}",
+            ColumnWidths = new[] { 16.0, 11.0, 13.0, 13.0, 16.0, 17.0, 14.0, 13.0, 16.0, 15.0, 10.0, 26.0 },
+        };
+
+        sheet.Add(Cell.Of($"Daily data — {ZoneTitle(m)}", XlsxStyle.Title));
+        sheet.Add(Cell.Of(
+            "Litres (est.) = pump minutes × the flow rate on the Summary sheet. " +
+            "An empty cell means the figure could not be worked out.",
+            XlsxStyle.Note));
+        sheet.AddBlank();
+
+        sheet.Add(
+            Cell.Of("Date", XlsxStyle.TableHeader),
+            Cell.Of("Pump runs", XlsxStyle.TableHeader),
+            Cell.Of("Pump minutes", XlsxStyle.TableHeader),
+            Cell.Of("Litres (est.)", XlsxStyle.TableHeader),
+            Cell.Of("Crop water need (L)", XlsxStyle.TableHeader),
+            Cell.Of("Avg soil moisture (%)", XlsxStyle.TableHeader),
+            Cell.Of("Area max temp (°C)", XlsxStyle.TableHeader),
+            Cell.Of("Tub max temp (°C)", XlsxStyle.TableHeader),
+            Cell.Of("Area humidity (%)", XlsxStyle.TableHeader),
+            Cell.Of("Tub humidity (%)", XlsxStyle.TableHeader),
+            Cell.Of("Rain (mm)", XlsxStyle.TableHeader),
+            Cell.Of("Note", XlsxStyle.TableHeader));
+
+        foreach (var d in m.Days)
+        {
+            sheet.Add(
+                Cell.Of(d.LongLabel),
+                Cell.Of(d.PumpRuns, XlsxStyle.Integer),
+                Cell.Of(d.PumpMinutes, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.Litres, XlsxStyle.TwoDecimals),
+                Cell.Maybe(d.NeedLitres, XlsxStyle.TwoDecimals),
+                Cell.Maybe(d.AvgMoisturePercent, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.AreaMaxC, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.TubMaxC, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.AreaHumidity, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.TubHumidity, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.RainMm, XlsxStyle.OneDecimal),
+                Cell.Of(d.Note));
+        }
+
+        sheet.Add(
+            Cell.Of("Week total / average", XlsxStyle.Total),
+            Cell.Of(m.TotalRuns, XlsxStyle.TotalInteger),
+            Cell.Of(m.TotalMinutes, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.TotalLitres, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.TotalNeedLitres, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgMoisturePercent, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgAreaTempC, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgTubTempC, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgAreaHumidity, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgTubHumidity, XlsxStyle.TotalOneDecimal),
+            Cell.Of(m.TotalRainMm, XlsxStyle.TotalOneDecimal),
+            Cell.Of("", XlsxStyle.Total));
+
+        return sheet;
+    }
+
+    /* ------------------------------------------------------------------ *
+     * Sheet 3 — Weather comparison
+     * ------------------------------------------------------------------ */
+
+    private static Sheet WeatherSheet(WaterUsageReportModel m)
+    {
+        var sheet = new Sheet
+        {
+            Name = "Weather comparison",
+            ColumnWidths = new[] { 16.0, 14.0, 14.0, 15.0, 17.0, 16.0, 15.0, 26.0 },
+        };
+
+        sheet.Add(Cell.Of("Weather: area forecast vs in the tub", XlsxStyle.Title));
+        sheet.Add(Cell.Of(
+            "Area = the weather app (Open-Meteo). Tub = the DHT11 sensor next to the plants. " +
+            "A sheltered tub running warmer and more humid than its area is normal.",
+            XlsxStyle.Note));
+        sheet.AddBlank();
+
+        sheet.Add(
+            Cell.Of("Date", XlsxStyle.TableHeader),
+            Cell.Of("Area max °C", XlsxStyle.TableHeader),
+            Cell.Of("Tub max °C", XlsxStyle.TableHeader),
+            Cell.Of("Difference °C", XlsxStyle.TableHeader),
+            Cell.Of("Area humidity %", XlsxStyle.TableHeader),
+            Cell.Of("Tub humidity %", XlsxStyle.TableHeader),
+            Cell.Of("Difference %", XlsxStyle.TableHeader),
+            Cell.Of("Rain (mm)", XlsxStyle.TableHeader));
+
+        foreach (var d in m.Days)
+        {
+            sheet.Add(
+                Cell.Of(d.LongLabel),
+                Cell.Maybe(d.AreaMaxC, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.TubMaxC, XlsxStyle.OneDecimal),
+                Cell.Maybe(Difference(d.TubMaxC, d.AreaMaxC), XlsxStyle.OneDecimal),
+                Cell.Maybe(d.AreaHumidity, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.TubHumidity, XlsxStyle.OneDecimal),
+                Cell.Maybe(Difference(d.TubHumidity, d.AreaHumidity), XlsxStyle.OneDecimal),
+                Cell.Maybe(d.RainMm, XlsxStyle.OneDecimal));
+        }
+
+        sheet.Add(
+            Cell.Of("Average", XlsxStyle.Total),
+            Cell.Maybe(m.AvgAreaTempC, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgTubTempC, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(Difference(m.AvgTubTempC, m.AvgAreaTempC), XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgAreaHumidity, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgTubHumidity, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(Difference(m.AvgTubHumidity, m.AvgAreaHumidity), XlsxStyle.TotalOneDecimal),
+            Cell.Of(m.TotalRainMm, XlsxStyle.TotalOneDecimal));
+
+        sheet.AddBlank();
+
+        if (m.AvgTubTempC is { } tub && m.AvgAreaTempC is { } area)
+        {
+            var warmer = tub - area >= 0 ? "warmer" : "cooler";
+
+            sheet.Add(Cell.Of(
+                $"Inside the tub it was on average " +
+                $"{Math.Abs(tub - area).ToString("0.0", CultureInfo.InvariantCulture)} °C {warmer} than the " +
+                "area forecast. AgroFlow uses the area forecast for its water calculations and the tub " +
+                "sensor as a check on it.",
+                XlsxStyle.Bold));
+        }
+
+        return sheet;
+    }
+
+    /// Rounded for the same reason the model's totals are: subtracting two
+    /// doubles that look like 28.2 and 26 gives 2.1999999999999993, and the
+    /// workbook stores what it is given. The cell would display 2.2 and hold
+    /// something else, which anyone filtering or comparing on it would hit.
+    private static double? Difference(double? a, double? b)
+    {
+        return a is { } x && b is { } y ? Math.Round(x - y, 3) : null;
+    }
+}
