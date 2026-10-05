@@ -2513,46 +2513,12 @@ case "delete-user": {
         },
       });
 
-    /* irrigation schedules */
-    case "view-schedule": {
-      const s = api.findSchedule(numId);
-      if (!s) return;
-      return openDrawer({
-        title: s.zone,
-        subtitle: `${s.farm} · ${s.crop}`,
-        fields: [
-          { label: "Device", value: s.device },
-          { label: "Cadence", value: s.cadence },
-          { label: "Duration", value: `${s.durationMin} min` },
-          { label: "Compliance", value: fmtPct(s.compliancePct) },
-          { label: "Last run", value: fmtDate(s.lastRun) },
-          { label: "Active", value: s.active ? "Yes" : "No" },
-        ],
-      });
-    }
-    case "edit-schedule": {
-      const s = api.findSchedule(numId);
-      if (!s) return;
-      return openDrawer({
-        title: `Edit ${s.zone}`,
-        subtitle: s.farm,
-        fields: [
-          { label: "Cadence", value: s.cadence, editable: true, name: "cadence" },
-          { label: "Duration (minutes)", value: String(s.durationMin), editable: true, name: "duration" },
-        ],
-        confirmLabel: "Save changes",
-        onConfirm: (v) => {
-          void api.updateSchedule(numId, {
-            cadence: v["cadence"] ?? s.cadence,
-            durationMin: Number(v["duration"] ?? s.durationMin) || s.durationMin,
-          }).then(() => { toast("Schedule updated.", "success"); void refresh(); });
-        },
-      });
-    }
-    case "delete-schedule":
-      await api.deleteSchedule(numId);
-      toast("Schedule deleted.", "warn");
-      return void refresh();
+    /* The view/edit/delete-schedule handlers are gone with the table that
+       linked to them. They read api.findSchedule, which reads a working copy
+       that is permanently empty: irrigation_schedule was dropped in migration
+       0010 and schedules live as columns on the zone now. Nothing could ever
+       reach them, and the Edit one offered to save a "cadence" no part of the
+       system has had for several migrations. */
 
     /* reports */
     case "generate-report": {

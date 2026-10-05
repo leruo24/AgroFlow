@@ -265,7 +265,10 @@ Nothing breaks; the record is just not being kept yet.
 
 ---
 
-## Smoke test — about 20 minutes
+## Smoke test — about 25 minutes
+
+Extended for the final pass: platform status, the rebuilt Settings page,
+all-zones reports and the archive flow.
 
 Admin first. Sign in as an administrator.
 
@@ -311,21 +314,48 @@ Admin first. Sign in as an administrator.
 19. Any page's Export CSV. Open it in Excel: columns are separate, not all in
     column A.
 
-**The honest bits (2 min)**
-20. Settings → Backup & Recovery. No invented backup dates, no 82% meter, no
-    buttons that do nothing.
-21. A kit's detail drawer: uptime reads "Not measured", never "0.0%".
-22. Irrigation Data: no row says "Unassigned". If any zone lacks a flow rate,
-    a note says how many events are excluded and why.
+**Platform status and settings (3 min) — added for the final pass**
+20. Click the status in the sidebar foot. Eight checks, including
+    **Deployment** (which commit and branch is running) and **Database
+    schema** (every migration this build expects). Both should be green; a red
+    schema check names the migration to apply.
+21. Settings → **My account**. Change your name, Save, and watch the header
+    greeting change. Then Telegram: Connect shows a code in a modal.
+22. Settings → **Platform thresholds**. Real values, read-only, each saying
+    which environment variable sets it. No Save button, because there is
+    nothing here to save.
+23. Settings → **Backup & Recovery**. No invented backup dates, no 82% meter,
+    no buttons that do nothing.
+24. A kit's detail drawer: uptime reads "Not measured", never "0.0%".
+25. Irrigation Data: no row says "Unassigned". If any zone lacks a flow rate,
+    a note says how many events are excluded and why. The **Watering
+    schedules** panel explains where schedules live rather than showing an
+    empty table of a dropped concept.
+
+**Reports and archiving (4 min) — added for the final pass**
+26. Reports → live reports → pick a farm and dates, leave the zone on **all**,
+    press **PDF**. You get the farm-wide designed report: a summary page with
+    a line per zone, then each zone, then the weather once.
+27. Same again with **one zone** chosen. You get that zone's own report, and
+    its figures match its row in the farm summary.
+28. Press **Excel** instead. Open it: Summary, one Daily sheet per zone, and
+    Weather. Change a flow rate on Summary and the Litres column recalculates —
+    it is a formula, not a value.
+29. If any zone has no flow rate, the farm report names it and leaves it out
+    of the total rather than counting it as zero.
+30. **Archive a test farm** (Farms & zones → a farm → Archive). It leaves
+    every list, report and total. Press **Restore** and it comes back
+    unchanged — nothing was deleted.
+31. **Activity** shows the archive and the restore, with your name on each.
 
 Then mobile, on a device or emulator:
 
-23. Reports → "Make me this report". It either produces one or says
+32. Reports → "Make me this report". It either produces one or says
     "This report couldn't be made. Try again later." — never a bare 500.
-24. Reports → Water usage → pick **one zone** (not "All zones"), submit. The
-    PDF that arrives is three pages with charts, not the one-page summary.
-    Pick "All zones" and you get the summary — both are correct.
-25. The app icon is the AgroFlow icon, with no watermark, and the adaptive
+33. Reports → Water usage → pick **one zone**, submit. Three pages with
+    charts. Pick **All zones** and you get the farm-wide version — both are
+    the designed template now.
+34. The app icon is the AgroFlow icon, with no watermark, and the adaptive
     icon is not an icon-inside-an-icon.
 
 ---

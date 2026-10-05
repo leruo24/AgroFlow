@@ -1,13 +1,13 @@
 import { getAdminProfile } from "@/app/auth";
 import { api } from "@/data/api";
-import { esc, fmtInt, fmtDate, fmtPct, fmtLitres, fmtDateTimeSast } from "@/lib/format";
+import { esc, fmtInt, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters, rangeLabel } from "@/lib/filters";
 import {
   PROVINCES, REGIONS, CROPS,
 } from "@/data/referenceData";
 import {
-  badge, kpiCard, panel, table, pageHeader, filterBar, resultCount,
-  lineChart, barChart, donut, meter,
+  kpiCard, panel, table, pageHeader, filterBar, resultCount,
+  lineChart, barChart, donut,
 } from "@/ui/components";
 import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
@@ -71,7 +71,7 @@ function groupByRegion(events: IrrigationEvent[]): Record<string, number> {
 }
 
 export async function irrigationPage(): Promise<string> {
-  const [schedules, events] = await Promise.all([api.getSchedules(), api.getIrrigationEvents()]);
+  const events = await api.getIrrigationEvents();
   const f = getFilter("irrigation");
 
   const filteredEvents = applyFilters(events, f, {
@@ -81,14 +81,6 @@ export async function irrigationPage(): Promise<string> {
     province: (e) => e.province,
     region: (e) => e.region,
     crop: (e) => e.crop,
-  });
-
-  const filteredSchedules = applyFilters(schedules, f, {
-    search: (s) => `${s.zone} ${s.farm} ${s.crop} ${s.device}`,
-    farm: (s) => s.farm,
-    province: (s) => s.province,
-    region: (s) => s.region,
-    crop: (s) => s.crop,
   });
 
   const withEstimate = estimable(filteredEvents);
@@ -165,24 +157,28 @@ export async function irrigationPage(): Promise<string> {
   ${panel("Water Usage by Farm", "Top farms by estimated volume delivered (kL)", "",
     byFarm.length ? barChart(byFarm) : `<div class="empty-state">No data in this range.</div>`)}
 
-  ${panel("Irrigation Schedules", "View, edit or remove schedules recorded from farms",
-    resultCount(filteredSchedules.length, schedules.length, "schedules"),
-    table(["Zone", "Farm", "Crop", "Device", "Cadence", "Duration", "Compliance", "Last Run", "Actions"],
-      filteredSchedules, (s) => [
-        esc(s.zone),
-        esc(s.farm),
-        badge(s.crop, "info"),
-        `<span class="mono">${esc(s.device)}</span>`,
-        esc(s.cadence),
-        `${fmtInt(s.durationMin)} min`,
-        `<span class="compliance">${meter(s.compliancePct, s.compliancePct > 90 ? "good" : s.compliancePct > 75 ? "warn" : "bad")}<b>${fmtPct(s.compliancePct)}</b></span>`,
-        fmtDate(s.lastRun),
-        `<span class="row-act">
-          <a href="#" data-act="view-schedule" data-id="${s.id}">View</a>
-          <a href="#" data-act="edit-schedule" data-id="${s.id}">Edit</a>
-          <a href="#" class="danger" data-act="delete-schedule" data-id="${s.id}">Delete</a>
-        </span>`,
-      ], "No schedules match the current filters."))}
+  ${
+    /* This was a table of schedules with a Cadence, a Compliance meter and
+       View/Edit/Delete links. It could never have a row in it: the
+       irrigation_schedule table it read was DROPPED in migration 0010, and
+       schedules have lived as columns on the zone itself ever since - one per
+       zone, not a list. So the panel rendered an empty table under a heading
+       promising something, and an admin reading it would conclude no farm had
+       a schedule, which is the opposite of true.
+
+       An empty table is not mock data, but it is a false impression, and the
+       fix is the same: say what is actually the case and where to go. */
+    panel("Watering schedules", "", "", `
+      <p>
+        Each zone has its own watering schedule, set on the zone rather than kept in a
+        separate list. Open a zone from <b>Farms &amp; zones</b> to see or change its
+        start time, how long it runs, and whether it waters automatically.
+      </p>
+      <p class="muted">
+        Farmers set these from the app for their own zones. The schedule a zone is on
+        is shown on its detail panel, next to the moisture threshold the engine uses.
+      </p>`)
+  }
 
   ${panel("Historical Irrigation Events", `Most recent 25 events in range · ${rangeLabel(f)}`,
     resultCount(Math.min(recent.length, 25), filteredEvents.length, "events"),
