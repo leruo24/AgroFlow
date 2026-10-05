@@ -37,6 +37,68 @@ public record ReportRequestRow(
 // note on why the work does not happen inside this request.
 public static class ReportRequestEndpoints
 {
+    /* WHY EVERY HANDLER HERE IS WRAPPED
+     *
+     * This endpoint had no try/catch at all, so ANY database exception
+     * escaped as a bare 500 and the app showed the farmer
+     * "AgroFlow API request failed (500)" - a sentence that tells them
+     * nothing and tells us nothing either.
+     *
+     * The most likely cause by far is the simplest: migrations 0034/0035
+     * have not been applied, so `report_request` does not exist and Postgres
+     * answers 42P01. That is a deployment state, not a bug, and it must read
+     * as one in the log while the farmer still gets plain words.
+     *
+     * Ordered by how likely each is in practice - see the report.
+     */
+    private const string UndefinedTable = "42P01";
+    private const string UndefinedColumn = "42703";
+    private const string InsufficientPrivilege = "42501";
+
+    /// The farmer-facing sentence. Deliberately the SAME one whatever broke:
+    /// none of the real reasons - a missing table, a revoked grant, a null
+    /// flow rate - are things a farmer can act on, and the real reason is in
+    /// the log and the row for whoever can.
+    private const string FarmerFacingFailure =
+        "This report couldn't be made. Try again later.";
+
+    /// Turns an exception into a logged diagnosis plus a plain 503.
+    ///
+    /// 503 and not 500: every cause below is "this is not set up / not
+    /// available right now", which is a temporary state the farmer should
+    /// retry, not a bug in their request.
+    private static IResult Failure(ILogger logger, Exception ex, string what)
+    {
+        if (ex is PostgresException pg)
+        {
+            var diagnosis = pg.SqlState switch
+            {
+                UndefinedTable =>
+                    $"Table '{pg.TableName ?? "report_request"}' does not exist. " +
+                    "Apply migrations 0034_report_request.sql and 0035_report_schedule.sql.",
+
+                UndefinedColumn =>
+                    $"Column '{pg.ColumnName}' is missing on '{pg.TableName}'. " +
+                    "A migration is applied only partially - re-run the latest one.",
+
+                InsufficientPrivilege =>
+                    $"Permission denied on '{pg.TableName}'. Check the GRANT and RLS policy in the migration.",
+
+                _ => $"Postgres {pg.SqlState}: {pg.MessageText}",
+            };
+
+            logger.LogError(ex, "{What} failed. {Diagnosis}", what, diagnosis);
+        }
+        else
+        {
+            logger.LogError(ex, "{What} failed.", what);
+        }
+
+        return Results.Json(
+            new { error = FarmerFacingFailure },
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
     public static void MapReportRequestEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/api/farmer/report-requests").RequireAuthorization();
@@ -46,10 +108,32 @@ public static class ReportRequestEndpoints
     }
 
     private static async Task<IResult> ListAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+        ClaimsPrincipal user,
+        NpgsqlDataSource dataSource,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
+        var logger = loggerFactory.CreateLogger("AgroFlow.Api.ReportRequests");
+
+        try
+        {
+            return await ListInnerAsync(userId, dataSource, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // An empty list rather than an error: the Reports screen's own
+            // request form must stay usable even when the history behind it
+            // cannot be read.
+            logger.LogError(ex, "Could not list report requests for {ProfileId}.", userId);
+            return Results.Ok(Array.Empty<ReportRequestRow>());
+        }
+    }
+
+    private static async Task<IResult> ListInnerAsync(
+        Guid userId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         // profile_id = the requester, which is what the RLS policy scopes by
@@ -108,9 +192,29 @@ public static class ReportRequestEndpoints
         CreateReportRequestBody request,
         ClaimsPrincipal user,
         NpgsqlDataSource dataSource,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+
+        var logger = loggerFactory.CreateLogger("AgroFlow.Api.ReportRequests");
+
+        try
+        {
+            return await CreateInnerAsync(request, userId, dataSource, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Failure(logger, ex, "Creating a report request");
+        }
+    }
+
+    private static async Task<IResult> CreateInnerAsync(
+        CreateReportRequestBody request,
+        Guid userId,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
 
         var reportType = request.ReportType?.Trim().ToLowerInvariant();
 

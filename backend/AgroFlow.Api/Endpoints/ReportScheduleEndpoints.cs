@@ -145,10 +145,36 @@ public static class ReportScheduleEndpoints
     // ------------------------------------------------------------------
 
     private static async Task<IResult> GetForFarmerAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+        ClaimsPrincipal user,
+        NpgsqlDataSource dataSource,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
+        try
+        {
+            return await GetForFarmerInnerAsync(userId, dataSource, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // "No automatic reports" is the honest answer when the table is
+            // not there yet, and it is also the right one: nothing IS being
+            // sent. A 500 here would break the whole Reports screen for a
+            // card that is hidden anyway when disabled.
+            loggerFactory
+                .CreateLogger("AgroFlow.Api.ReportSchedule")
+                .LogError(ex, "Could not read the auto-report schedule for {ProfileId}.", userId);
+
+            return Results.Ok(new AutoReportSummaryResponse(
+                false, null, Array.Empty<string>(), Array.Empty<string>(),
+                ReportSchedulePolicy.Describe(false, ReportFrequency.Weekly, Array.Empty<string>())));
+        }
+    }
+
+    private static async Task<IResult> GetForFarmerInnerAsync(
+        Guid userId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         await using var cmd = new NpgsqlCommand(
