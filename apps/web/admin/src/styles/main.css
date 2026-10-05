@@ -102,23 +102,110 @@ a{color:inherit}
 }
 
 /* ------------------------------ auth screen ------------------------------- */
+/* THE BUG THIS FIXES: min-height was 100%, which resolves against the
+   parent's height - and #root has none. So the gradient only ever covered
+   the card's own height and the page showed a green band across the top with
+   a white half underneath. Viewport units resolve against the viewport, so
+   the background fills the screen whatever the card does.
+
+   dvh after vh so that a phone's retracting address bar does not leave a
+   white strip; browsers without dvh keep the vh value. */
 .auth-screen{
-  min-height:100%;display:flex;align-items:center;justify-content:center;
-  padding:24px;background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));
+  min-height:100vh;
+  min-height:100dvh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px 16px;
+  background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));
 }
+
 .auth-card{
-  width:100%;max-width:360px;background:var(--surface);border-radius:var(--radius);
-  box-shadow:var(--shadow-lg);padding:32px 28px;display:flex;flex-direction:column;gap:16px;
+  width:100%;
+  /* 440px: wide enough that a long email does not wrap in the field, narrow
+     enough to stay a card rather than a page. */
+  max-width:440px;
+  background:var(--surface);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-lg);
+  padding:40px 36px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
 }
-.auth-brand{text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:4px}
-.auth-brand .leaf{color:var(--brand)}
-.auth-brand .leaf svg{width:32px;height:32px}
-.auth-brand p{font-size:13px}
+
+.auth-brand{
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  margin-bottom:6px;
+}
+.auth-logo{ width:68px; height:68px; border-radius:16px; background:#fff; }
+.auth-brand h1{ font-size:1.6rem; letter-spacing:-.02em; margin:4px 0 0; }
+.auth-brand p{ font-size:.9rem; margin:0; }
+
+/* 16px labels and 46px inputs: at 14px with a 38px box this read as a
+   settings sub-form rather than the front door to the console. 16px also
+   stops iOS zooming the page when a field is focused. */
+.auth-card .drawer-field{ gap:6px; }
+.auth-card .drawer-field span{ font-size:16px; font-weight:600; color:var(--text); }
+.auth-card .drawer-field input{
+  min-height:46px;
+  padding:0 14px;
+  font-size:16px;
+  border-radius:var(--radius-sm);
+}
+.auth-card .drawer-field input:focus{
+  outline:none;
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(66,195,199,.25);
+}
+
 .auth-error{
-  font-size:13px;color:var(--bad);background:rgba(220,38,38,.08);
-  border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-sm);padding:8px 11px;
+  font-size:.88rem;color:var(--bad);background:rgba(220,38,38,.08);
+  border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-sm);padding:10px 12px;
 }
-.auth-submit{width:100%;text-align:center;margin-top:4px}
+
+.auth-submit{
+  width:100%;
+  text-align:center;
+  margin-top:4px;
+  min-height:48px;
+  font-size:1rem;
+  justify-content:center;
+}
+
+.auth-back{
+  text-align:center;
+  margin:0;
+  font-size:.88rem;
+}
+.auth-back button{
+  background:none;
+  border:none;
+  padding:6px 10px;
+  border-radius:var(--radius-sm);
+  font:inherit;
+  font-size:.88rem;
+  color:var(--text-2);
+  cursor:pointer;
+  text-decoration:underline;
+}
+.auth-back button:hover{ color:var(--text); }
+.auth-back button:focus-visible,
+.auth-submit:focus-visible{
+  outline:3px solid var(--accent);
+  outline-offset:2px;
+}
+
+@media (max-width:480px){
+  .auth-screen{ padding:16px; align-items:flex-start; padding-top:40px; }
+  .auth-card{ padding:28px 20px; }
+  .auth-logo{ width:56px; height:56px; }
+  .auth-brand h1{ font-size:1.4rem; }
+}
 
 /* ------------------------------- sidebar --------------------------------- */
 .sidebar{
