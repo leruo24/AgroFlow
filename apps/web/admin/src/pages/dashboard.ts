@@ -127,7 +127,8 @@ async function renderDashboard(): Promise<string> {
 
   return `
   ${pageHeader("Home", "What needs attention today, across every farm.",
-    `<button class="btn ghost" data-act="export-dashboard">Export summary</button>`)}
+    `<button class="btn ghost" data-act="export-dashboard">Export to Excel</button>
+     <button class="btn ghost" data-act="export-dashboard-pdf">Export PDF</button>`)}
 
   <section class="attn-section" aria-labelledby="attnHeading">
     <h3 id="attnHeading" class="section-heading">Needs attention</h3>

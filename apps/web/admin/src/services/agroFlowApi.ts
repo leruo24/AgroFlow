@@ -387,6 +387,27 @@ export async function downloadReportPdf(path: string, fileName: string): Promise
   a.remove();
   URL.revokeObjectURL(url);
 }
+/* The platform summary as a PDF (item 7).
+ *
+ * Built server-side rather than in the browser, unlike the .xlsx: a PDF gets
+ * printed, filed and emailed, so it has to carry its own figures, timestamp
+ * and the name of whoever produced it, independent of the session that asked
+ * for it. See backend/.../AdminSummaryEndpoints.cs. */
+export async function downloadSummaryPdf(): Promise<void> {
+  const response = await reportFetch("/api/admin/summary.pdf");
+  const blob = await response.blob();
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `agroflow-summary-${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 /* ---------------- Hardware (firmware v1.3.0) ----------------
 
    WHY THESE GO THROUGH THE API AND NOT SUPABASE

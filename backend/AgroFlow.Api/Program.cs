@@ -398,6 +398,7 @@ app.MapReportRequestEndpoints();
 app.MapReportScheduleEndpoints();
 app.MapHealthEndpoints();
 app.MapAuditLogEndpoints();
+app.MapAdminSummaryEndpoints();
 app.MapFarmEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();

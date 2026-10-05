@@ -35,10 +35,10 @@ import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard } from "@/ui/patterns";
-import { exportActivityWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
+import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml } from "@/pages/analytics";
 import { requestTimeline, formatCrop } from "@/pages/requests";
-import { toCSV, downloadCSV } from "@/lib/csv";
+import { toCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
 import { refreshHealthPanel } from "@/app/health";
 import {
@@ -46,12 +46,12 @@ import {
 } from "@/lib/filters";
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { TECHNICIANS, ZONE_CROPS } from "@/data/referenceData";
-import type { AdminAlert, DateRangePreset, Farm, FilterState, AlertPriority } from "@/types/models";
+import type { AdminAlert, DateRangePreset, Farm, FilterState, AlertPriority, ServiceRequest } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile } from "@/app/auth";
-import { getReportZones, getReportJson, downloadReportPdf } from "@/services/agroFlowApi";
+import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf } from "@/services/agroFlowApi";
 
 
 /* ------------------------------- pickers -------------------------------- */
@@ -306,7 +306,7 @@ async function exportCurrent(kind: string): Promise<void> {
         date: (u) => u.dateJoined, farm: (u) => u.farm, status: (u) => u.status,
         telegram: (u) => telegramState(u),
       }).map((u) => [u.name, u.email, u.phone, u.farm, u.status, telegramState(u), u.dateJoined, u.lastActive]);
-      downloadCSV("agroflow-users.csv", toCSV(
+      downloadExcelSafeCsv("agroflow-users.csv", toCSV(
         ["Name", "Email", "Phone", "Farm", "Status", "Alerts", "Joined", "Last active"], rows));
       break;
     }
@@ -315,7 +315,7 @@ async function exportCurrent(kind: string): Promise<void> {
         search: (x) => `${x.name} ${x.owner}`, date: (x) => x.registered,
         province: (x) => x.province, region: (x) => x.region, status: (x) => x.status,
       }).map((x) => [x.name, x.owner, x.province, x.region, x.users, x.devices, x.health, x.status, x.registered]);
-      downloadCSV("agroflow-farms.csv", toCSV(["Farm", "Owner", "Province", "Region", "Users", "Devices", "Health", "Status", "Registered"], rows));
+      downloadExcelSafeCsv("agroflow-farms.csv", toCSV(["Farm", "Owner", "Province", "Region", "Users", "Devices", "Health", "Status", "Registered"], rows));
       break;
     }
     case "hardware": {
@@ -324,7 +324,7 @@ async function exportCurrent(kind: string): Promise<void> {
         farm: (h) => h.farm, deviceType: (h) => h.type, status: (h) => h.status,
         maintenanceState: (h) => h.maintenanceState,
       }).map((h) => [h.id, h.type, h.farm, h.province, h.firmware, h.battery ?? "Mains", h.uptimePct, h.status, h.maintenanceState, h.installed]);
-      downloadCSV("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime %", "Status", "Maintenance", "Installed"], rows));
+      downloadExcelSafeCsv("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime %", "Status", "Maintenance", "Installed"], rows));
       break;
     }
     case "alerts": {
@@ -333,7 +333,7 @@ async function exportCurrent(kind: string): Promise<void> {
         administrator: (a) => a.assignedTo ?? "", status: (a) => a.status,
         priority: (a) => a.priority, eventType: (a) => a.category,
       }).map((a) => [a.id, a.raised, a.category, a.title, a.farm ?? "Platform", a.user ?? "", a.assignedTo ?? "", a.priority, a.status]);
-      downloadCSV("agroflow-alerts.csv", toCSV(["ID", "Raised", "Category", "Alert", "Farm", "User", "Assigned", "Priority", "Status"], rows));
+      downloadExcelSafeCsv("agroflow-alerts.csv", toCSV(["ID", "Raised", "Category", "Alert", "Farm", "User", "Assigned", "Priority", "Status"], rows));
       break;
     }
     case "maintenance": {
@@ -342,7 +342,7 @@ async function exportCurrent(kind: string): Promise<void> {
         farm: (m) => m.farm, status: (m) => m.status, priority: (m) => m.priority,
         deviceType: (m) => m.deviceType,
       }).map((m) => [m.id, m.device, m.deviceType, m.farm, m.issue, m.priority, m.technician ?? "", m.scheduledFor, m.status, m.completedOn ?? ""]);
-      downloadCSV("agroflow-maintenance.csv", toCSV(["Job", "Device", "Type", "Farm", "Issue", "Priority", "Technician", "Scheduled", "Status", "Completed"], rows));
+      downloadExcelSafeCsv("agroflow-maintenance.csv", toCSV(["Job", "Device", "Type", "Farm", "Issue", "Priority", "Technician", "Scheduled", "Status", "Completed"], rows));
       break;
     }
     case "irrigation": {
@@ -350,7 +350,7 @@ async function exportCurrent(kind: string): Promise<void> {
         date: (e) => e.date, farm: (e) => e.farm, province: (e) => e.province,
         region: (e) => e.region, crop: (e) => e.crop,
       }).map((e) => [e.date, e.farm, e.zone, e.crop, e.province, e.region, e.litres, e.durationMin, e.onSchedule ? "Yes" : "No"]);
-      downloadCSV("agroflow-irrigation.csv", toCSV(["Date", "Farm", "Zone", "Crop", "Province", "Region", "Estimated litres", "Minutes", "On schedule"], rows));
+      downloadExcelSafeCsv("agroflow-irrigation.csv", toCSV(["Date", "Farm", "Zone", "Crop", "Province", "Region", "Estimated litres", "Minutes", "On schedule"], rows));
       break;
     }
     case "activity": {
@@ -359,17 +359,132 @@ async function exportCurrent(kind: string): Promise<void> {
         administrator: (a) => a.administrator, farm: (a) => a.farm ?? "",
         eventType: (a) => a.eventType, status: (a) => a.outcome,
       }).map((a) => [a.timestamp, a.administrator, a.eventType, a.farm ?? "Platform", a.target ?? "", a.outcome]);
-      downloadCSV("agroflow-platform-activity.csv", toCSV(["Timestamp", "Administrator", "Action", "Farm", "Affected", "Outcome"], rows));
+      downloadExcelSafeCsv("agroflow-platform-activity.csv", toCSV(["Timestamp", "Administrator", "Action", "Farm", "Affected", "Outcome"], rows));
       break;
     }
+    /* The platform summary, as a real .xlsx.
+     *
+     * WHAT THIS REPLACED
+     * `Object.entries(kpis)` straight into a two-column CSV. The labels were
+     * therefore property names - "farmersNotReceivingAlerts" - and the file
+     * opened in Excel with both columns crammed into column A, because Excel
+     * splits a CSV on the locale's list separator and ours is a semicolon.
+     * It was, in practice, unreadable.
+     *
+     * A workbook has no separator to guess, numbers stay numbers and
+     * percentages stay percentages, so whoever opens it can chart or average
+     * the figures instead of re-typing them. */
     case "dashboard": {
-      const k = await api.getKpis();
-      const rows = Object.entries(k).map(([key, value]) => [key, String(value)]);
-      downloadCSV("agroflow-platform-summary.csv", toCSV(["Metric", "Value"], rows));
-      break;
+      const profile = getAdminProfile();
+
+      const [k, allFarms, allAlerts, allRequests] = await Promise.all([
+        api.getKpis(),
+        api.getFarms(),
+        api.getAlerts(),
+        // A summary is still worth having if the request list is the one
+        // thing that fails; the Requests sheet simply comes out empty.
+        api.getServiceRequests().catch(() => [] as ServiceRequest[]),
+      ]);
+
+      const openAlerts = allAlerts.filter((a) => !["Resolved", "Closed"].includes(a.status));
+
+      await exportSummaryWorkbook({
+        generatedBy: profile?.name || profile?.email || "an administrator",
+        sections: [
+          {
+            title: "Farms and farmers",
+            rows: [
+              { label: "Farms on the platform", value: k.totalFarms, format: "int" },
+              { label: "Farmer accounts", value: k.totalUsers, format: "int" },
+              { label: "Accounts active", value: k.activeUsers, format: "int" },
+              {
+                // The one figure on this sheet that is a problem rather than
+                // a statistic: these farmers receive nothing at all - no
+                // weather warning, no equipment failure, no password reset.
+                label: "Farmers who would receive no alerts (Telegram not connected)",
+                value: k.farmersNotReceivingAlerts,
+                format: "int",
+              },
+            ],
+          },
+          {
+            title: "Kits",
+            rows: [
+              { label: "Kits registered", value: k.totalHardware, format: "int" },
+              { label: "Kits reporting in", value: k.connectedHardware, format: "int" },
+              {
+                label: "Share of kits online",
+                // Excel's percent format multiplies by 100, so the value
+                // stored has to be the fraction, not the figure shown.
+                value: k.totalHardware > 0 ? k.connectedHardware / k.totalHardware : 0,
+                format: "pct",
+              },
+            ],
+          },
+          {
+            title: "Outstanding work",
+            rows: [
+              { label: "Alerts still open", value: k.activeAlerts, format: "int" },
+              { label: "Maintenance jobs not finished", value: k.openMaintenance, format: "int" },
+              {
+                label: "Farm requests waiting for a decision",
+                value: allRequests.filter((r) => r.status === "pending").length,
+                format: "int",
+              },
+            ],
+          },
+        ],
+
+        farms: allFarms.map((f) => ({
+          name: f.name,
+          owner: f.owner,
+          location: [f.region, f.province].filter(Boolean).join(", ") || "Not set",
+          zones: f.zones?.length ?? 0,
+          kitsOnline: 0,
+          kitsTotal: f.devices,
+          status: f.status,
+        })),
+
+        alerts: openAlerts.map((a) => ({
+          raised: a.raised,
+          title: a.title,
+          farm: a.farm ?? "Platform",
+          priority: a.priority,
+          status: a.status,
+        })),
+
+        requests: allRequests.map((r) => ({
+          farmer: r.farmerName,
+          type: r.requestType === "new_farm" ? "New farm" : "New zone",
+          location: r.location ?? "Not stated",
+          status: r.status,
+          submitted: fmtDateTimeSast(r.createdAt),
+          assignedTo: r.assignedToName ?? "Nobody yet",
+          scheduledBy: r.scheduledByName ?? "",
+          completedBy: r.completedByName ?? "",
+        })),
+      });
+
+      // Its own message: this export ignores the page filters, unlike every
+      // other one here, because it is a snapshot of the whole platform.
+      return void toast("Platform summary exported.", "success");
     }
   }
   toast(`Export complete — filters applied (${rangeLabel(f)}).`, "success");
+}
+
+/* The same summary as a PDF, for printing, filing or attaching to an email.
+   Built by the API, not here - see downloadSummaryPdf. */
+async function exportSummaryPdf(): Promise<void> {
+  try {
+    await downloadSummaryPdf();
+    toast("Platform summary PDF downloaded.", "success");
+  } catch (error) {
+    showErrorModal(
+      "Could not build the summary PDF",
+      error instanceof Error ? error.message : "The summary could not be built. Try again shortly.",
+    );
+  }
 }
 
 /* ------------------------------ detail views ----------------------------- */
@@ -1982,6 +2097,9 @@ case "delete-user": {
       return void toast(`Exported ${log.rows.length} actions.`, "success");
     }
 
+    case "export-dashboard-pdf":
+      return void exportSummaryPdf();
+
     case "export-activity-xlsx": {
       const log = await getActivityLog();
       await exportActivityWorkbook(log.rows);
@@ -2411,7 +2529,7 @@ case "delete-user": {
         province: (e) => e.province, region: (e) => e.region,
       });
       const rows = events.slice(0, 500).map((e) => [e.date, e.farm, e.region, e.crop, e.litres]);
-      downloadCSV(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
+      downloadExcelSafeCsv(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
         toCSV(["Date", "Farm", "Region", "Crop", "Estimated litres"], rows));
       await api.logReportGenerated(`${name} (CSV)`);
       return toast(`${name} exported.`, "success");
