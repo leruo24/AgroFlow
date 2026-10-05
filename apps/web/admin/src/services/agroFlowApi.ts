@@ -393,6 +393,24 @@ export async function downloadReportPdf(path: string, fileName: string): Promise
  * printed, filed and emailed, so it has to carry its own figures, timestamp
  * and the name of whoever produced it, independent of the session that asked
  * for it. See backend/.../AdminSummaryEndpoints.cs. */
+/* Any authorised file, by full API path. downloadReportPdf takes a path
+   relative to /api/farmer/reports and always names the file a .pdf, which the
+   workbook route is neither. */
+export async function downloadReportFile(path: string, fileName: string): Promise<void> {
+  const response = await reportFetch(path);
+  const blob = await response.blob();
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 export async function downloadSummaryPdf(): Promise<void> {
   const response = await reportFetch("/api/admin/summary.pdf");
   const blob = await response.blob();

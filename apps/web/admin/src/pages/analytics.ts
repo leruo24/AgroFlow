@@ -235,13 +235,22 @@ function liveReportsPanel(farms: ReportFarm[] | null): string {
     </div>
     ${[
       ["moisture", "Moisture and irrigation over time"],
-      ["water-usage", "Water usage per zone (estimated)"],
+      ["water-usage", "Water usage - all zones, or pick one (estimated)"],
       ["schedule", "Suggested 7-day irrigation schedule"],
     ].map(([id, label]) => `
       <div class="filter-buttons" style="margin-top:12px">
         <span style="min-width:260px;display:inline-block">${esc(label ?? "")}</span>
         <button class="btn sm" data-act="live-report-view" data-report="${id}">View</button>
         <button class="btn ghost sm" data-act="live-report-pdf" data-report="${id}">PDF</button>
+        ${
+          // Only water usage has a workbook: it is the report with a table of
+          // numbers somebody wants to chart or paste. A schedule is advice
+          // and a moisture report is a trace - neither is improved by being
+          // a spreadsheet.
+          id === "water-usage"
+            ? `<button class="btn ghost sm" data-act="live-report-xlsx" data-report="${id}">Excel</button>`
+            : ""
+        }
       </div>`).join("")}
     <div id="liveReportResult" class="cmp-result"></div>`;
 

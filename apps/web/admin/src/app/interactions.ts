@@ -56,7 +56,7 @@ import { zoneRow } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf } from "@/services/agroFlowApi";
+import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 
 
 /* ------------------------------- pickers -------------------------------- */
@@ -2607,6 +2607,7 @@ case "delete-user": {
     case "run-comparison": return runComparison();    
     case "live-report-view": return liveReportRun(el.dataset["report"] ?? "", false);
     case "live-report-pdf": return liveReportRun(el.dataset["report"] ?? "", true);
+    case "live-report-xlsx": return liveReportXlsx();
     /* A real file, from what is on screen. The comparison table is rendered
        into #cmpResult by runComparison; reading it back is what makes
        this export match exactly what the admin is looking at, rather than
@@ -3442,6 +3443,35 @@ function liveRender(kind: string, d: any): string {
     : `<p>${liveEsc(d.message)}</p>`;
 }
 
+/* The same report as a workbook. Only water usage has one - see the note on
+   the button in pages/analytics.ts. */
+async function liveReportXlsx(): Promise<void> {
+  const farmId = Number(liveVal("liveFarm"));
+  const zoneId = Number(liveVal("liveZone"));
+  const from = liveVal("liveFrom"), to = liveVal("liveTo");
+
+  if (!farmId) return toast("Pick a farm first.", "info");
+  if (!from || !to) return toast("Pick a from and to date.", "info");
+
+  const query = zoneId
+    ? `zoneId=${zoneId}&from=${from}&to=${to}`
+    : `farmId=${farmId}&from=${from}&to=${to}`;
+
+  try {
+    await downloadReportFile(
+      `/api/farmer/reports/water-usage/xlsx?${query}`,
+      `agroflow-water-usage-${from}-to-${to}.xlsx`,
+    );
+
+    toast("Workbook downloaded.", "success");
+  } catch (e) {
+    showErrorModal(
+      "Could not build the workbook",
+      e instanceof Error ? e.message : "The workbook could not be built.",
+    );
+  }
+}
+
 async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
   const farmId = Number(liveVal("liveFarm"));
   const zoneId = Number(liveVal("liveZone"));
@@ -3455,7 +3485,12 @@ async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
   } else if (kind === "water-usage") {
     if (!farmId) return toast("Pick a farm first.", "info");
     if (!from || !to) return toast("Pick a from and to date.", "info");
-    path = `water-usage?farmId=${farmId}&from=${from}&to=${to}`;
+
+    // A chosen zone gets that zone's own designed report; "all zones" gets
+    // the farm-wide one, which is the same document with a summary in front.
+    path = zoneId
+      ? `water-usage?farmId=${farmId}&zoneId=${zoneId}&from=${from}&to=${to}`
+      : `water-usage?farmId=${farmId}&from=${from}&to=${to}`;
   } else if (kind === "schedule") {
     if (!farmId) return toast("Pick a farm first.", "info");
     path = `schedule?farmId=${farmId}`;
