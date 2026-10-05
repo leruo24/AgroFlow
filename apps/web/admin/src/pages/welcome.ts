@@ -91,7 +91,7 @@ export const WELCOME_HTML = `
 
     <header class="landing-top">
       <div class="landing-brand">
-        <span class="landing-leaf">${Icon.sprout}</span>
+        <img class="landing-logo" src="brand/agroflow-icon-192.png" alt="" width="40" height="40" />
         <span class="landing-wordmark">AgroFlow</span>
       </div>
       <button type="button" class="btn landing-login-top" id="welcomeLogin">Admin login</button>

@@ -1106,6 +1106,7 @@ tbody tr:last-child td{border-bottom:none}
 .landing-brand{ display:flex; align-items:center; gap:10px; }
 .landing-leaf{ display:inline-flex; color:var(--accent); }
 .landing-leaf svg{ width:26px; height:26px; }
+.landing-logo{ width:40px; height:40px; border-radius:10px; background:#fff; flex:none; }
 .landing-wordmark{ font-size:1.05rem; font-weight:700; letter-spacing:.01em; }
 
 .landing-main{
