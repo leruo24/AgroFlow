@@ -17,9 +17,21 @@ import { getReportFarms, type ReportFarm } from "@/services/agroFlowApi";
 /* ============================ IRRIGATION DATA ============================ */
 /* Historical analytics for administrators — NOT live irrigation control.   */
 
+/* Only events whose zone HAS a flow rate can be added up.
+ *
+ * IrrigationEvent.litres is null when the zone has no rate on file, and
+ * migration 0018 is explicit that this must read as "no estimate available"
+ * rather than as zero. Treating null as 0 in a sum is the same mistake in a
+ * subtler place: it silently drags a month's total down and the chart shows a
+ * dip that never happened. These are left out of the figures instead, and the
+ * page says how many were left out. */
+function estimable(events: IrrigationEvent[]): (IrrigationEvent & { litres: number })[] {
+  return events.filter((e): e is IrrigationEvent & { litres: number } => e.litres !== null);
+}
+
 function groupByMonth(events: IrrigationEvent[]): SeriesPoint[] {
   const map = new Map<string, number>();
-  for (const e of events) {
+  for (const e of estimable(events)) {
     const key = e.date.slice(0, 7);
     map.set(key, (map.get(key) ?? 0) + e.litres);
   }
@@ -30,7 +42,7 @@ function groupByMonth(events: IrrigationEvent[]): SeriesPoint[] {
 
 function groupByFarm(events: IrrigationEvent[]): SeriesPoint[] {
   const map = new Map<string, number>();
-  for (const e of events) map.set(e.farm, (map.get(e.farm) ?? 0) + e.litres);
+  for (const e of estimable(events)) map.set(e.farm, (map.get(e.farm) ?? 0) + e.litres);
   return [...map.entries()]
     .sort(([, a], [, b]) => b - a)
     .slice(0, 8)
@@ -39,7 +51,21 @@ function groupByFarm(events: IrrigationEvent[]): SeriesPoint[] {
 
 function groupByRegion(events: IrrigationEvent[]): Record<string, number> {
   const map: Record<string, number> = {};
-  for (const e of events) map[e.region] = (map[e.region] ?? 0) + Math.round(e.litres / 1000);
+
+  for (const e of estimable(events)) {
+    // "No region on file", not "": an empty key rendered as a nameless slice
+    // of the donut that nobody could identify.
+    const key = e.region || "No region on file";
+    map[key] = (map[key] ?? 0) + e.litres;
+  }
+
+  // Rounded to kL once, at the end. Rounding each event first and then
+  // summing lost most of the volume: a 400 L event rounds to 0 kL, so a
+  // region watering in short bursts reported almost nothing.
+  for (const key of Object.keys(map)) {
+    map[key] = Math.round((map[key] ?? 0) / 1000);
+  }
+
   return map;
 }
 
@@ -64,10 +90,11 @@ export async function irrigationPage(): Promise<string> {
     crop: (s) => s.crop,
   });
 
-  const totalLitres = filteredEvents.reduce((a, e) => a + e.litres, 0);
+  const withEstimate = estimable(filteredEvents);
+  const noEstimate = filteredEvents.length - withEstimate.length;
+
+  const totalLitres = withEstimate.reduce((a, e) => a + e.litres, 0);
   const totalMinutes = filteredEvents.reduce((a, e) => a + e.durationMin, 0);
-  const onSchedule = filteredEvents.filter((e) => e.onSchedule).length;
-  const compliance = filteredEvents.length ? (onSchedule / filteredEvents.length) * 100 : 0;
 
   const monthly = groupByMonth(filteredEvents);
   const byFarm = groupByFarm(filteredEvents);
@@ -95,11 +122,36 @@ export async function irrigationPage(): Promise<string> {
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Water Delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet })}
-    ${kpiCard({ label: "Irrigation Events", value: filteredEvents.length, icon: Icon.repeat })}
-    ${kpiCard({ label: "Total Duration", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
-    ${kpiCard({ label: "Schedule Compliance", value: compliance, format: "pct", icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Water delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet })}
+    ${kpiCard({ label: "Irrigation events", value: filteredEvents.length, icon: Icon.repeat })}
+    ${kpiCard({ label: "Total pump time", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
+    ${
+      /* This tile used to read "Schedule Compliance" and show a percentage
+         computed from a field that was hardcoded true - so it always said
+         100%. Nothing in the schema records whether an irrigation ran to
+         schedule, so the honest tile is the one that says how much of this
+         range can be estimated at all. */
+      kpiCard({
+        label: "Events we can estimate",
+        value: filteredEvents.length ? (withEstimate.length / filteredEvents.length) * 100 : 0,
+        format: "pct",
+        trend: noEstimate > 0
+          ? { dir: "down", text: `${noEstimate} zone(s) have no flow rate set` }
+          : undefined,
+        icon: Icon.circleCheck,
+      })
+    }
   </div>
+
+  ${
+    noEstimate > 0
+      ? `<div class="notice">
+           ${noEstimate} of these ${filteredEvents.length} events are not in the water figures:
+           their zone has no flow rate on file, so no volume can be estimated for them.
+           Set a flow rate on the zone and they will be included.
+         </div>`
+      : ""
+  }
 
   <div class="grid split-2">
     ${panel("Monthly Irrigation Trend", `Estimated water delivered per month (kL) · ${rangeLabel(f)}`, "",
@@ -133,14 +185,17 @@ export async function irrigationPage(): Promise<string> {
 
   ${panel("Historical Irrigation Events", `Most recent 25 events in range · ${rangeLabel(f)}`,
     resultCount(Math.min(recent.length, 25), filteredEvents.length, "events"),
-    table(["Date", "Farm", "Zone", "Crop", "Volume", "Duration", "On Schedule"], recent, (e) => [
+    table(["Date (SAST)", "Farm", "Zone", "Crop", "Estimated volume", "Pump time"], recent, (e) => [
       fmtDate(e.date),
       esc(e.farm),
       esc(e.zone),
-      esc(e.crop),
-      fmtLitres(e.litres),
+      esc(e.crop || "No crop set"),
+      // Never "0 L" for a zone with no flow rate: a zero reads as a pump
+      // that ran and delivered nothing.
+      e.litres === null
+        ? `<span class="muted" title="This zone has no flow rate on file, so no volume can be estimated.">No estimate</span>`
+        : fmtLitres(e.litres),
       `${fmtInt(e.durationMin)} min`,
-      e.onSchedule ? badge("Yes", "good") : badge("Missed", "warn"),
     ], "No irrigation events in this range."))}
   `;
 }
@@ -213,7 +268,9 @@ export async function reportsPage(): Promise<string> {
     province: (m) => m.province,
   });
 
-  const waterInRange = filteredEvents.reduce((a, e) => a + e.litres, 0);
+  // estimable(), not a plain sum: an event whose zone has no flow rate has
+  // no volume to add, and counting it as 0 would quietly lower the figure.
+  const waterInRange = estimable(filteredEvents).reduce((a, e) => a + e.litres, 0);
 
   return `
   ${pageHeader("Reports & Analytics", "Generate, compare and export platform reports across farms, regions and time periods.")}

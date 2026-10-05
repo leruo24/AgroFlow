@@ -158,13 +158,15 @@ public static class AdminSummaryEndpoints
         // runs them once; doing this as nine queries would be nine times the
         // latency for the same answer.
         //
-        // `is not true` rather than `= false` on archived: the column is
-        // nullable on rows that predate 0036, and a NULL there means "never
-        // archived", not "unknown".
+        // Archiving is farm.status = 'Inactive' (migration 0036), not an
+        // `archived` flag - there is no such column. The comparison is
+        // lower()'d because farm.status has never had a CHECK constraint and
+        // both 'Active' and 'active' exist in the live data; 0036 explains
+        // why the rows were not rewritten.
         const string sql = """
             select
-              (select count(*) from farm where archived is not true),
-              (select count(*) from farm where archived is true),
+              (select count(*) from farm where lower(coalesce(status, 'Active')) <> 'inactive'),
+              (select count(*) from farm where lower(coalesce(status, 'Active')) = 'inactive'),
               (select count(*) from profile where role = 'farm_user'),
               (select count(*) from profile where role = 'farm_user' and telegram_chat_id is null),
               (select count(*) from zone),
@@ -188,9 +190,10 @@ public static class AdminSummaryEndpoints
     private static async Task<List<FarmLine>> ReadFarmsAsync(
         NpgsqlConnection connection, CancellationToken ct)
     {
-        // Archived farms are left out, for the same reason they are left out
-        // of the console's lists: they are retired, and a summary that counts
-        // them reads as a platform twice the size it is.
+        // Archived farms (status 'Inactive', case-insensitively - see 0036)
+        // are left out for the same reason the console's lists leave them
+        // out: they are retired, and a summary that counts them reads as a
+        // platform twice the size it is.
         const string sql = """
             select f.name,
                    coalesce(nullif(p.name, ''), p.email, 'No owner on file'),
@@ -202,7 +205,7 @@ public static class AdminSummaryEndpoints
                    coalesce(f.status, 'Active')
               from farm f
               left join profile p on p.id = f.owner_id
-             where f.archived is not true
+             where lower(coalesce(f.status, 'Active')) <> 'inactive'
              order by f.name
             """;
 

@@ -349,8 +349,19 @@ async function exportCurrent(kind: string): Promise<void> {
       const rows = applyFilters(await api.getIrrigationEvents(), f, {
         date: (e) => e.date, farm: (e) => e.farm, province: (e) => e.province,
         region: (e) => e.region, crop: (e) => e.crop,
-      }).map((e) => [e.date, e.farm, e.zone, e.crop, e.province, e.region, e.litres, e.durationMin, e.onSchedule ? "Yes" : "No"]);
-      downloadExcelSafeCsv("agroflow-irrigation.csv", toCSV(["Date", "Farm", "Zone", "Crop", "Province", "Region", "Estimated litres", "Minutes", "On schedule"], rows));
+        // "No estimate" rather than an empty cell or a 0: the person reading
+        // the file has to be able to tell a zone with no flow rate from a
+        // pump that ran and delivered nothing. The "On schedule" column is
+        // gone - nothing in the schema records it, and it was exporting a
+        // hardcoded "Yes" for every row.
+      }).map((e) => [
+        e.date, e.farm, e.zone, e.crop, e.province, e.region,
+        e.litres === null ? "No estimate" : e.litres,
+        e.durationMin,
+      ]);
+      downloadExcelSafeCsv("agroflow-irrigation.csv", toCSV(
+        ["Date (SAST)", "Farm", "Zone", "Crop", "Province", "Region", "Estimated litres", "Pump minutes"],
+        rows));
       break;
     }
     case "activity": {
@@ -2017,17 +2028,13 @@ case "delete-user": {
       const requestId = Number(idAttr);
       if (!requestId) return;
 
-      const [requests, admins] = await Promise.all([
+      const [requests, candidates] = await Promise.all([
         api.getServiceRequests(),
-        api.getUsers().catch(() => []),
+        api.getAdministrators().catch(() => []),
       ]);
 
       const request = requests.find((r) => r.id === requestId);
       if (!request) return void toast("That request could not be found.", "warn");
-
-      // Admins only: assigning a farmer to attend to a request would be
-      // meaningless, and the list would be hundreds long.
-      const candidates = admins.filter((u) => u.role === "admin");
 
       if (candidates.length === 0) {
         return void toast("No administrator accounts to assign to.", "warn");
@@ -2315,7 +2322,7 @@ case "delete-user": {
        field meant "Leruo", "leruo" and "L. Mosiane" were three different
        assignees as far as the Assigned-to filter was concerned. */
     case "assign-alert": {
-      const admins = (await api.getUsers().catch(() => [])).filter((u) => u.role === "admin");
+      const admins = await api.getAdministrators().catch(() => []);
 
       if (admins.length === 0) {
         return void toast("No administrator accounts to assign to.", "warn");
@@ -2528,7 +2535,10 @@ case "delete-user": {
         date: (e) => e.date, farm: (e) => e.farm,
         province: (e) => e.province, region: (e) => e.region,
       });
-      const rows = events.slice(0, 500).map((e) => [e.date, e.farm, e.region, e.crop, e.litres]);
+      const rows = events.slice(0, 500).map((e) => [
+        e.date, e.farm, e.region, e.crop,
+        e.litres === null ? "No estimate" : e.litres,
+      ]);
       downloadExcelSafeCsv(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
         toCSV(["Date", "Farm", "Region", "Crop", "Estimated litres"], rows));
       await api.logReportGenerated(`${name} (CSV)`);
@@ -2580,6 +2590,12 @@ async function runComparison(): Promise<void> {
     const acc: Record<string, number> = {};
     for (const e of events) {
       if (!inWindow(e.date, from, to)) continue;
+
+      // Skipped, not counted as zero. A comparison between two periods is
+      // exactly where a silent zero does the most damage: it reads as a real
+      // drop in water use rather than as a zone nobody set a flow rate on.
+      if (e.litres === null) continue;
+
       acc[keyOf(e)] = (acc[keyOf(e)] ?? 0) + e.litres;
     }
     return acc;

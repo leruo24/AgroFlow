@@ -321,9 +321,23 @@ export interface IrrigationEvent {
   crop: string;
   province: string;
   region: string;
-  litres: number;
+
+  /** ESTIMATED litres: runtime_seconds / 60 * zone.flow_rate_lpm (migration
+      0018). There is no flow meter on any AgroFlow node, so this is inferred,
+      never measured, and anything rendering it must say so.
+
+      NULL when the zone has no flow rate on file - which means no estimate
+      can be made. That is not the same as 0, and must never be shown as 0: a
+      zero would read as a pump that ran and delivered nothing. */
+  litres: number | null;
+
   durationMin: number;
-  onSchedule: boolean;
+
+  /** No schedule-adherence column exists anywhere in the schema, so this
+      cannot be computed and is always null. It was previously hardcoded
+      true, which rendered as "every irrigation ran on schedule" - a claim
+      nothing in the data supports. */
+  onSchedule: boolean | null;
 }
 
 /* --------------------------------- activity ----------------------------------------- */

@@ -37,7 +37,15 @@ export const fmtLitres = (n: number | null | undefined): string => {
   return `${Math.round(v)} L (est.)`;
 };
 
-export const fmtDate = (iso: string): string => (iso ? iso.slice(0, 10) : "—");
+/* Kept as the name every page already calls, but no longer a string slice.
+ *
+ * `iso.slice(0, 10)` took the UTC date off a timestamptz, so anything that
+ * happened between midnight and 02:00 South African time was dated to the
+ * previous day - and the same event was dated differently depending on which
+ * column a page happened to read. It now goes through the one SAST formatter
+ * below, so every date in the console agrees. A plain "yyyy-mm-dd" passed in
+ * still comes back as that same day. */
+export const fmtDate = (iso: string | null | undefined): string => fmtDateSast(iso);
 
 /* ONE date format for the whole console, in SAST.
  *

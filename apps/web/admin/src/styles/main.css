@@ -1696,3 +1696,18 @@ tbody tr:last-child td{border-bottom:none}
   padding:7px 10px;
   border-bottom:1px solid var(--border, #dfe6e2);
 }
+
+/* An inline explanation attached to the figures above it - not an error and
+   not a toast. Used where a page has to say why a number is smaller than the
+   row count it sits next to (item 8). */
+.notice{
+  margin:0 0 16px;
+  padding:12px 14px;
+  border:1px solid var(--border, #dfe6e2);
+  border-left:3px solid var(--brand, #184d35);
+  border-radius:8px;
+  background:var(--surface-2, #f4f7f5);
+  color:var(--text, #1b2320);
+  font-size:14px;
+  line-height:1.5;
+}
