@@ -58,8 +58,8 @@ public sealed class SchemaCheck
     /// skipped file, which is the failure that actually happened.
     private static readonly SchemaObject[] Expected =
     {
-        new("0027", "table", "fao56_zone_day",
-            "select to_regclass('public.fao56_zone_day')",
+        new("0027", "table", "zone_water_balance",
+            "select to_regclass('public.zone_water_balance')",
             "The FAO-56 engine cannot store or read its water balance."),
 
         new("0028", "column", "hardware.device_token_hash",
@@ -70,20 +70,20 @@ public sealed class SchemaCheck
             "select to_regclass('public.mqtt_credential_pool')",
             "No MQTT logins can be issued to new kits."),
 
-        new("0030", "column", "zone.irrigation_mode",
-            "select 1 from information_schema.columns where table_name = 'zone' and column_name = 'irrigation_mode'",
-            "Zones cannot be switched between automatic and manual watering."),
+        new("0030", "constraint", "irrigation_commands accepts setup commands",
+            "select 1 from pg_constraint where conname = 'irrigation_commands_command_check' and pg_get_constraintdef(oid) like '%change_wifi%'",
+            "Nothing can be sent to a kit - no WiFi change and no setup mode."),
 
-        new("0031", "table", "device_command",
-            "select to_regclass('public.device_command')",
-            "Nothing can be sent to a kit - no WiFi change, no setup mode, no stop."),
+        new("0031", "policy", "zone_water_balance_all_admin",
+            "select 1 from pg_policies where tablename = 'zone_water_balance' and policyname = 'zone_water_balance_all_admin'",
+            "Admins cannot read the engine's water balance."),
 
-        new("0032", "table", "farm_request_notification",
-            "select to_regclass('public.farm_request_notification')",
+        new("0032", "table", "service_request_notification",
+            "select to_regclass('public.service_request_notification')",
             "Farmers get no Telegram message when a request changes, or get the same one twice."),
 
-        new("0033", "column", "alert.seen_at",
-            "select 1 from information_schema.columns where table_name = 'alert' and column_name = 'seen_at'",
+        new("0033", "column", "alert.read_at",
+            "select 1 from information_schema.columns where table_name = 'alert' and column_name = 'read_at'",
             "Whether a farmer ever saw an alert is not recorded."),
 
         new("0034", "table", "report_request",
