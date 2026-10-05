@@ -39,6 +39,7 @@
 
 import { supabase } from "@/lib/supabase";
 import {
+  getMqttLogins,
   getAdminHardware,
   updateServiceRequestStatusThroughApi,
   type AdminHardwareRow,
@@ -60,17 +61,9 @@ type HardwareRow = {
   hardware_id: number; device_name: string; device_type: string;
   zone_id: number | null; status: string; last_seen: string; created_at: string;
 };
-type AlertRow = {
-  id: number; zone_id: number | null; severity: string; message: string;
-  status: string; created_at: string;
-};
 type MaintenanceRow = {
   maintenance_id: number; farm_id: number | null; hardware_id: number | null;
   scheduled_date: string | null; description: string; status: string; created_at: string;
-};
-type IrrigationEventRow = {
-  id: number; zone_id: number; started_at: string;
-  runtime_seconds: number; estimated_litres: number;
 };
 
 type ServiceRequestRow = {
@@ -85,6 +78,17 @@ type ServiceRequestRow = {
   status: ServiceRequestStatus;
   created_at: string;
   updated_at: string;
+
+  /* Migration 0037. Optional on the TYPE as well as nullable in the column,
+     because before that migration PostgREST does not return them at all -
+     so `undefined` is "the column is not there yet" and `null` is "there,
+     but nobody has done this step". The timeline says something different
+     for each. */
+  assigned_to_profile_id?: string | null;
+  scheduled_by_profile_id?: string | null;
+  scheduled_at?: string | null;
+  completed_by_profile_id?: string | null;
+  completed_at?: string | null;
 };
 
 /** location is stored as one text field ("Region, Province" by
@@ -125,16 +129,6 @@ async function fetchFarmNameMap(): Promise<Map<number, string>> {
   const { data, error } = await supabase.from("farm").select("farm_id, name");
   if (error) throw error;
   return new Map((data ?? []).map((f: { farm_id: number; name: string }) => [f.farm_id, f.name]));
-}
-
-/** Name + derived province/region for every farm - used where a filter
-    dropdown needs real distinct values (see getIrrigationEvents()). */
-async function fetchFarmLookup(): Promise<Map<number, { name: string; province: string; region: string }>> {
-  const { data, error } = await supabase.from("farm").select("farm_id, name, location");
-  if (error) throw error;
-  return new Map((data as { farm_id: number; name: string; location: string }[] ?? []).map((f) => [
-    f.farm_id, { name: f.name, ...splitLocation(f.location) },
-  ]));
 }
 
 async function fetchZoneMap(): Promise<Map<number, ZoneRow>> {
@@ -187,7 +181,9 @@ export const api = {
   /* ------------------------------- reads ------------------------------- */
   async getKpis(): Promise<Kpis> {
     const [u, f, h, a, m] = await Promise.all([
-      api.getUsers(), api.getFarms(), api.getHardware(), api.getAlerts(), api.getMaintenance(),
+      // getFarmerAccounts, not getUsers: "Farmer accounts" must not count
+      // the administrators /api/users now also returns.
+      api.getFarmerAccounts(), api.getFarms(), api.getHardware(), api.getAlerts(), api.getMaintenance(),
     ]);
     return {
       totalFarms: f.length,
@@ -236,6 +232,19 @@ export const api = {
     for (const h of list) dist[h.status] = (dist[h.status] ?? 0) + 1;
     return dist;
   },
+  /* FARMERS ONLY. /api/users returns administrators too, because the Assign
+     pickers need them - but the Farmers page and every farmer count must not
+     include staff accounts, or the platform looks like it has more farmers
+     than it does. getAdministrators() below is the other half. */
+  async getFarmerAccounts(): Promise<User[]> {
+    return (await api.getUsers()).filter((u) => u.role !== "admin");
+  },
+
+  /* The people a request or an alert can be assigned to. */
+  async getAdministrators(): Promise<User[]> {
+    return (await api.getUsers()).filter((u) => u.role === "admin");
+  },
+
   async getUsers(): Promise<User[]> {
   type ApiUserRow = {
     id: string;
@@ -254,8 +263,11 @@ export const api = {
 
   users = rows.map((u) => ({
     id: u.id,
-    name: u.name || "(no name on file)",
+    // The email when there is no name: "(no name on file)" is a label about
+    // our data, not a way to identify the person in front of you (item 8).
+    name: u.name || u.email,
     email: u.email,
+    role: u.role ?? "farm_user",
     phone: u.phone ?? "",
     farm: u.farm_name ?? "Unassigned",
 
@@ -311,6 +323,7 @@ export const api = {
       id: f.farm_id,
       name: f.name,
       owner: f.owner_name ?? "Unassigned",
+      ownerId: f.owner_id,
       province,
       region,
       health: "Attention Required",
@@ -335,7 +348,10 @@ export const api = {
   async getServiceRequests(): Promise<ServiceRequest[]> {
     const { data, error } = await supabase
       .from("service_request")
-      .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at")
+      // One string literal on purpose: supabase-js infers the row shape from
+      // the select text, and a concatenated expression defeats that. The tail
+      // after updated_at is the who/when chain from migration 0037.
+      .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at, assigned_to_profile_id, scheduled_by_profile_id, scheduled_at, completed_by_profile_id, completed_at")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -356,6 +372,29 @@ export const api = {
 
     if (farmerError) throw farmerError;
     if (farmError) throw farmError;
+
+    /* The admins named in the chain. A separate lookup rather than three
+       joins because the same person usually appears in several columns of
+       several rows, and one `in` query answers all of them. */
+    const adminIds = [...new Set(
+      rows.flatMap((r) => [
+        r.assigned_to_profile_id,
+        r.scheduled_by_profile_id,
+        r.completed_by_profile_id,
+      ]).filter((id): id is string => typeof id === "string" && id.length > 0),
+    )];
+
+    const adminMap = new Map<string, string>();
+    if (adminIds.length > 0) {
+      const { data: admins } = await supabase
+        .from("profile")
+        .select("id, name, email")
+        .in("id", adminIds);
+
+      for (const a of (admins ?? []) as { id: string; name: string | null; email: string | null }[]) {
+        adminMap.set(a.id, a.name || a.email || "Unknown");
+      }
+    }
 
     const farmerMap = new Map(
       (farmers ?? []).map((farmer: { id: string; name: string; email: string }) => [
@@ -389,6 +428,22 @@ export const api = {
         status: row.status,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+
+        // The who/when chain. Undefined rather than null when the column is
+        // absent (0037 not applied), so the timeline can tell "not recorded"
+        // from "not done yet" and say the right thing for each.
+        assignedToProfileId: row.assigned_to_profile_id ?? null,
+        assignedToName: row.assigned_to_profile_id
+          ? adminMap.get(row.assigned_to_profile_id) ?? "Unknown"
+          : null,
+        scheduledByName: row.scheduled_by_profile_id
+          ? adminMap.get(row.scheduled_by_profile_id) ?? "Unknown"
+          : null,
+        scheduledAt: row.scheduled_at ?? null,
+        completedByName: row.completed_by_profile_id
+          ? adminMap.get(row.completed_by_profile_id) ?? "Unknown"
+          : null,
+        completedAt: row.completed_at ?? null,
       };
     });
   },
@@ -463,29 +518,83 @@ export const api = {
     });
     return hardware;
   },
+  /* Alerts, with the farm and the farmer they concern (item 8).
+   *
+   * THREE COLUMNS WERE EMPTY OR UNREADABLE.
+   *
+   * - FARM resolved through two separate unfiltered selects, the same chain
+   *   that made every irrigation row read "Unassigned": past supabase-js's
+   *   default 1000-row cap, or for any zone the second select happened not to
+   *   return, the lookup missed and the cell fell back to nothing. It is now
+   *   one query with the zone and farm embedded.
+   *
+   * - USER was hardcoded null, so the column was a page of dashes. The
+   *   person an alert concerns is the farm's owner, which the same join
+   *   already brings back.
+   *
+   * - RAISED was the raw timestamp, rendered straight into the table, so the
+   *   page showed "2026-10-03T14:05:12.345Z". The ISO string is kept in the
+   *   model - it is what sorting and the date filter need - and the pages
+   *   format it in SAST at the point of display.
+   */
   async getAlerts(): Promise<AdminAlert[]> {
-    const [{ data, error }, zoneMap, farmNames] = await Promise.all([
-      supabase.from("alert").select("id, zone_id, severity, message, status, created_at"),
-      fetchZoneMap(),
-      fetchFarmNameMap(),
-    ]);
+    type EmbeddedAlertRow = {
+      id: number;
+      severity: string;
+      message: string;
+      status: string | null;
+      created_at: string;
+      zone: {
+        id: number;
+        name: string | null;
+        farm: {
+          farm_id: number;
+          name: string;
+          status: string | null;
+          owner: { name: string | null; email: string | null } | null;
+        } | null;
+      } | null;
+    };
+
+    // One string literal: supabase-js infers the row shape from the select
+    // text, and a concatenated expression defeats that inference.
+    const { data, error } = await supabase
+      .from("alert")
+      .select("id, severity, message, status, created_at, zone:zone_id(id, name, farm:farm_id(farm_id, name, status, owner:owner_id(name, email)))")
+      .order("created_at", { ascending: false });
+
     if (error) throw error;
 
-    alerts = (data as AlertRow[] ?? []).map((a) => {
-      const zone = a.zone_id !== null ? zoneMap.get(a.zone_id) : undefined;
-      return {
-        id: String(a.id),
-        raised: a.created_at,
-        category: a.severity,
-        title: a.message,
-        farm: zone ? farmNames.get(zone.farm_id) ?? null : null,
-        user: null,
-        assignedTo: null,
-        priority: "Medium" as AlertPriority,
-        status: (a.status as AdminAlert["status"]) ?? "New",
-        notes: [],
-      };
-    });
+    alerts = ((data as unknown as EmbeddedAlertRow[] | null) ?? [])
+      // An archived farm's alerts are archived with it. Leaving them in meant
+      // retired test farms kept raising the Critical and Unassigned counts on
+      // a page whose whole job is to show what needs attention now.
+      .filter((a) => !isArchived(a.zone?.farm?.status))
+      .map((a) => {
+        const farm = a.zone?.farm ?? null;
+        const owner = farm?.owner ?? null;
+
+        return {
+          id: String(a.id),
+          /** ISO, formatted for display by the page - see the note above. */
+          raised: a.created_at,
+          category: a.severity,
+          title: a.message,
+          farm: farm?.name ?? null,
+          user: owner?.name || owner?.email || null,
+
+          // Nothing writes either of these: alert has no assignee or
+          // priority column. Left null and Medium rather than invented, and
+          // the Assign action writes to the session's working copy only -
+          // see the file header.
+          assignedTo: null,
+          priority: "Medium" as AlertPriority,
+
+          status: (a.status as AdminAlert["status"]) ?? "New",
+          notes: [],
+        };
+      });
+
     return alerts;
   },
   async getMaintenance(): Promise<MaintenanceJob[]> {
@@ -518,29 +627,105 @@ export const api = {
     // redesign separately rather than guess at it here.
     return Promise.resolve(schedules);
   },
+  /* Irrigation events, with the farm they belong to and an honest volume.
+   *
+   * THREE THINGS WERE WRONG HERE (item 8).
+   *
+   * 1. EVERY ROW SAID "Unassigned". The farm was resolved by looking the
+   *    event's zone up in one map and that zone's farm_id up in another. Both
+   *    maps are built by separate unfiltered selects, and supabase-js caps a
+   *    select at 1000 rows by default - so past that, or for any zone the
+   *    second select happened not to return, the chain broke and the row fell
+   *    through to the fallback. The fallback then read as a farm name, which
+   *    is why the page looked like it had data about nothing.
+   *
+   *    It is now one query with the zone and farm embedded, so the farm
+   *    either comes back on the row or the row genuinely has no zone.
+   *
+   * 2. LITRES CAME FROM estimated_litres. That column is written by whatever
+   *    produced the row and has gone stale against zone.flow_rate_lpm; the
+   *    canonical formula, documented in migration 0018, is
+   *    runtime_seconds / 60 * flow_rate_lpm. It is computed here so one
+   *    answer comes out of one place.
+   *
+   *    A zone with NO flow rate yields null, not 0. 0018 is explicit about
+   *    this: a zone whose rate nobody has entered must read as "no estimate
+   *    available" rather than as a confident zero, which would look like a
+   *    pump that ran and delivered nothing.
+   *
+   * 3. ARCHIVED FARMS WERE INCLUDED, so retired test farms kept appearing in
+   *    the totals and the charts.
+   */
   async getIrrigationEvents(): Promise<IrrigationEvent[]> {
-    const [{ data, error }, zoneMap, farmLookup] = await Promise.all([
-      supabase.from("irrigation_event").select("id, zone_id, started_at, runtime_seconds, estimated_litres").order("started_at", { ascending: false }).limit(500),
-      fetchZoneMap(),
-      fetchFarmLookup(),
-    ]);
+    type EmbeddedRow = {
+      id: number;
+      started_at: string;
+      runtime_seconds: number | null;
+      zone: {
+        id: number;
+        name: string | null;
+        crop_type: string | null;
+        flow_rate_lpm: number | null;
+        status: string | null;
+        farm: {
+          farm_id: number;
+          name: string;
+          location: string | null;
+          status: string | null;
+        } | null;
+      } | null;
+    };
+
+    // One string literal: supabase-js infers the row shape from the select
+    // text, and a concatenated expression defeats that inference.
+    const { data, error } = await supabase
+      .from("irrigation_event")
+      .select("id, started_at, runtime_seconds, zone:zone_id(id, name, crop_type, flow_rate_lpm, status, farm:farm_id(farm_id, name, location, status))")
+      .order("started_at", { ascending: false })
+      .limit(500);
+
     if (error) throw error;
 
-    return (data as IrrigationEventRow[] ?? []).map((e) => {
-      const zone = zoneMap.get(e.zone_id);
-      const farm = zone ? farmLookup.get(zone.farm_id) : undefined;
-      return {
-        date: e.started_at.slice(0, 10),
-        farm: farm?.name ?? "Unassigned",
-        zone: zone?.name ?? String(e.zone_id),
-        crop: zone?.crop_type ?? "",
-        province: farm?.province ?? "",
-        region: farm?.region ?? "",
-        litres: Number(e.estimated_litres ?? 0),
-        durationMin: Math.round(Number(e.runtime_seconds ?? 0) / 60),
-        onSchedule: true,
-      };
-    });
+    const rows = (data as unknown as EmbeddedRow[] | null) ?? [];
+
+    return rows
+      // Archived farms are hidden here rather than filtered by the page,
+      // because applyFilters cannot remove rows from a total the page has
+      // already summed.
+      .filter((e) => !isArchived(e.zone?.farm?.status))
+      .map((e) => {
+        const zone = e.zone;
+        const farm = zone?.farm ?? null;
+        const { province, region } = splitLocation(farm?.location ?? "");
+
+        const runtimeSeconds = Number(e.runtime_seconds ?? 0);
+        const flowRate = zone?.flow_rate_lpm;
+
+        return {
+          date: e.started_at.slice(0, 10),
+          // "No farm on record" rather than "Unassigned": it describes our
+          // data, and it cannot be mistaken for the name of a farm.
+          farm: farm?.name ?? "No farm on record",
+          zone: zone?.name ?? (zone ? `Zone ${zone.id}` : "Zone not on record"),
+          crop: zone?.crop_type ?? "",
+          province,
+          region,
+
+          // The formula from 0018, never the stored column. Null when the
+          // zone has no flow rate - see the note above.
+          litres:
+            flowRate === null || flowRate === undefined
+              ? null
+              : Math.round((runtimeSeconds / 60) * Number(flowRate)),
+
+          durationMin: Math.round(runtimeSeconds / 60),
+
+          // There is no schedule-adherence column anywhere in the schema, so
+          // this cannot be computed. It used to be hardcoded true, which read
+          // as "every irrigation ran on schedule" - a claim nothing supports.
+          onSchedule: null,
+        };
+      });
   },
   /** No activity-log table exists anywhere in the schema - not empty,
       genuinely nothing to query (see recordActivity() above). Empty
@@ -806,4 +991,97 @@ export async function getFarmAlertHistory(farmId: number): Promise<AdminAlertHis
   }
 
   return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/* ---------------- Home's attention queue (item A) ----------------
+
+   Each of these answers one card on Home. They are separate calls rather
+   than one endpoint so that a failure in any single queue leaves the rest of
+   Home working - see dashboard.ts, which catches each one on its own. */
+
+export type ZoneNeedingSetup = {
+  zoneId: number;
+  zoneName: string;
+  farmId: number;
+  farmName: string;
+  /** Which fields are missing, in plain words. */
+  missing: string[];
+};
+
+/* Zones the FAO-56 engine cannot fully advise on.
+
+   These are the ones where a farmer is getting less than the system can
+   actually give them, and - unlike an alert - nothing raises them on its
+   own. Read straight from Supabase under RLS, like the rest of the farm
+   data the console shows. */
+export async function getFarmsNeedingSetup(): Promise<ZoneNeedingSetup[]> {
+  const [{ data: zones, error }, farmNames] = await Promise.all([
+    supabase
+      .from("zone")
+      .select("id, name, farm_id, crop_type, planting_date, area_m2, flow_rate_lpm, status"),
+    fetchFarmNameMap(),
+  ]);
+
+  if (error) throw error;
+
+  const farmCoords = new Map<number, boolean>();
+  try {
+    const { data } = await supabase.from("farm").select("farm_id, latitude, longitude, status");
+    for (const f of (data ?? []) as { farm_id: number; latitude: number | null; longitude: number | null; status: string | null }[]) {
+      // Archived farms are not work anybody should be doing.
+      if (isArchived(f.status)) continue;
+      farmCoords.set(f.farm_id, f.latitude !== null && f.longitude !== null);
+    }
+  } catch {
+    // Coordinates unknown - the other checks below still stand.
+  }
+
+  const out: ZoneNeedingSetup[] = [];
+
+  for (const z of (zones ?? []) as {
+    id: number; name: string | null; farm_id: number; crop_type: string | null;
+    planting_date: string | null; area_m2: number | null; flow_rate_lpm: number | null;
+    status: string | null;
+  }[]) {
+    if (isArchived(z.status)) continue;
+    // A zone on a farm that is archived (or that we could not read) is not
+    // outstanding work either.
+    if (!farmCoords.has(z.farm_id)) continue;
+
+    const missing: string[] = [];
+    if (!z.crop_type) missing.push("crop");
+    if (!z.planting_date) missing.push("planting date");
+    if (z.area_m2 === null) missing.push("area");
+    if (z.flow_rate_lpm === null) missing.push("flow rate");
+    if (!farmCoords.get(z.farm_id)) missing.push("farm location");
+
+    if (missing.length > 0) {
+      out.push({
+        zoneId: z.id,
+        zoneName: z.name ?? `Zone ${z.id}`,
+        farmId: z.farm_id,
+        farmName: farmNames.get(z.farm_id) ?? "Unassigned",
+        missing,
+      });
+    }
+  }
+
+  return out;
+}
+
+export async function getMqttPoolHealth(): Promise<{ freeCount: number; runningLow: boolean }> {
+  const pool = await getMqttLogins();
+  return { freeCount: pool.freeCount, runningLow: pool.runningLow };
+}
+
+/* Reports a farmer asked for that could not be made. Nothing else surfaces
+   these - the farmer sees "try again later" and the team never hears. */
+export async function getFailedReportCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from("report_request")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "failed");
+
+  if (error) throw error;
+  return count ?? 0;
 }

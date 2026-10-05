@@ -32,7 +32,7 @@ function telegramCell(u: User): string {
 }
 
 export async function usersPage(): Promise<string> {
-  const users = await api.getUsers();
+  const users = await api.getFarmerAccounts();
   const f = getFilter("users");
 
   const filtered = applyFilters(users, f, {

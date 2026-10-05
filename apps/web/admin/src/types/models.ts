@@ -111,6 +111,11 @@ export interface User {
   farm: string;
   status: UserStatus;
 
+  /** profile.role. Needed to tell an administrator from a farmer - the
+      Assign picker must offer only people who can actually attend to a
+      request, and a list of every farmer would be hundreds long. */
+  role: string;
+
   /** Whether this farmer has actually connected Telegram (profile.
       telegram_chat_id is not null). False means they receive NOTHING -
       no weather warnings, no equipment failures, no password resets -
@@ -157,6 +162,16 @@ export interface ServiceRequest {
   status: ServiceRequestStatus;
   createdAt: string;
   updatedAt: string;
+
+  /* The accountability chain (migration 0037). All optional: rows created
+     before that migration have nulls, which read correctly as "we do not
+     know who did this" - because we genuinely do not. */
+  assignedToProfileId?: string | null;
+  assignedToName?: string | null;
+  scheduledByName?: string | null;
+  scheduledAt?: string | null;
+  completedByName?: string | null;
+  completedAt?: string | null;
 }
 
 /* ---------------------------------- farms ------------------------------------ */
@@ -183,6 +198,12 @@ export interface Farm {
   id: number;
   name: string;
   owner: string;
+
+  /** farm.owner_id. The NAME is not an identifier: two farmers can share
+      one, and a dependent picker that filtered farms by owner name would
+      show one farmer another's farms. Null for a farm with no owner on
+      file. */
+  ownerId: string | null;
   province: string;
   region: string;
   health: FarmHealth;
@@ -300,9 +321,23 @@ export interface IrrigationEvent {
   crop: string;
   province: string;
   region: string;
-  litres: number;
+
+  /** ESTIMATED litres: runtime_seconds / 60 * zone.flow_rate_lpm (migration
+      0018). There is no flow meter on any AgroFlow node, so this is inferred,
+      never measured, and anything rendering it must say so.
+
+      NULL when the zone has no flow rate on file - which means no estimate
+      can be made. That is not the same as 0, and must never be shown as 0: a
+      zero would read as a pump that ran and delivered nothing. */
+  litres: number | null;
+
   durationMin: number;
-  onSchedule: boolean;
+
+  /** No schedule-adherence column exists anywhere in the schema, so this
+      cannot be computed and is always null. It was previously hardcoded
+      true, which rendered as "every irrigation ran on schedule" - a claim
+      nothing in the data supports. */
+  onSchedule: boolean | null;
 }
 
 /* --------------------------------- activity ----------------------------------------- */

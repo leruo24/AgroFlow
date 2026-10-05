@@ -1,5 +1,5 @@
 import { api } from "@/data/api";
-import { esc, fmtInt, fmtDate, fmtPct, fmtLitres } from "@/lib/format";
+import { esc, fmtInt, fmtDate, fmtPct, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters, rangeLabel } from "@/lib/filters";
 import {
   PROVINCES, REGIONS, CROPS,
@@ -10,14 +10,28 @@ import {
 } from "@/ui/components";
 import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
+import { emptyState, withErrorState } from "@/ui/patterns";
+import { getActivityLog, type AuditRow } from "@/services/agroFlowApi";
 import { getReportFarms, type ReportFarm } from "@/services/agroFlowApi";
 
 /* ============================ IRRIGATION DATA ============================ */
 /* Historical analytics for administrators — NOT live irrigation control.   */
 
+/* Only events whose zone HAS a flow rate can be added up.
+ *
+ * IrrigationEvent.litres is null when the zone has no rate on file, and
+ * migration 0018 is explicit that this must read as "no estimate available"
+ * rather than as zero. Treating null as 0 in a sum is the same mistake in a
+ * subtler place: it silently drags a month's total down and the chart shows a
+ * dip that never happened. These are left out of the figures instead, and the
+ * page says how many were left out. */
+function estimable(events: IrrigationEvent[]): (IrrigationEvent & { litres: number })[] {
+  return events.filter((e): e is IrrigationEvent & { litres: number } => e.litres !== null);
+}
+
 function groupByMonth(events: IrrigationEvent[]): SeriesPoint[] {
   const map = new Map<string, number>();
-  for (const e of events) {
+  for (const e of estimable(events)) {
     const key = e.date.slice(0, 7);
     map.set(key, (map.get(key) ?? 0) + e.litres);
   }
@@ -28,7 +42,7 @@ function groupByMonth(events: IrrigationEvent[]): SeriesPoint[] {
 
 function groupByFarm(events: IrrigationEvent[]): SeriesPoint[] {
   const map = new Map<string, number>();
-  for (const e of events) map.set(e.farm, (map.get(e.farm) ?? 0) + e.litres);
+  for (const e of estimable(events)) map.set(e.farm, (map.get(e.farm) ?? 0) + e.litres);
   return [...map.entries()]
     .sort(([, a], [, b]) => b - a)
     .slice(0, 8)
@@ -37,7 +51,21 @@ function groupByFarm(events: IrrigationEvent[]): SeriesPoint[] {
 
 function groupByRegion(events: IrrigationEvent[]): Record<string, number> {
   const map: Record<string, number> = {};
-  for (const e of events) map[e.region] = (map[e.region] ?? 0) + Math.round(e.litres / 1000);
+
+  for (const e of estimable(events)) {
+    // "No region on file", not "": an empty key rendered as a nameless slice
+    // of the donut that nobody could identify.
+    const key = e.region || "No region on file";
+    map[key] = (map[key] ?? 0) + e.litres;
+  }
+
+  // Rounded to kL once, at the end. Rounding each event first and then
+  // summing lost most of the volume: a 400 L event rounds to 0 kL, so a
+  // region watering in short bursts reported almost nothing.
+  for (const key of Object.keys(map)) {
+    map[key] = Math.round((map[key] ?? 0) / 1000);
+  }
+
   return map;
 }
 
@@ -62,10 +90,11 @@ export async function irrigationPage(): Promise<string> {
     crop: (s) => s.crop,
   });
 
-  const totalLitres = filteredEvents.reduce((a, e) => a + e.litres, 0);
+  const withEstimate = estimable(filteredEvents);
+  const noEstimate = filteredEvents.length - withEstimate.length;
+
+  const totalLitres = withEstimate.reduce((a, e) => a + e.litres, 0);
   const totalMinutes = filteredEvents.reduce((a, e) => a + e.durationMin, 0);
-  const onSchedule = filteredEvents.filter((e) => e.onSchedule).length;
-  const compliance = filteredEvents.length ? (onSchedule / filteredEvents.length) * 100 : 0;
 
   const monthly = groupByMonth(filteredEvents);
   const byFarm = groupByFarm(filteredEvents);
@@ -93,11 +122,36 @@ export async function irrigationPage(): Promise<string> {
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Water Delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet })}
-    ${kpiCard({ label: "Irrigation Events", value: filteredEvents.length, icon: Icon.repeat })}
-    ${kpiCard({ label: "Total Duration", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
-    ${kpiCard({ label: "Schedule Compliance", value: compliance, format: "pct", icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Water delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet })}
+    ${kpiCard({ label: "Irrigation events", value: filteredEvents.length, icon: Icon.repeat })}
+    ${kpiCard({ label: "Total pump time", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
+    ${
+      /* This tile used to read "Schedule Compliance" and show a percentage
+         computed from a field that was hardcoded true - so it always said
+         100%. Nothing in the schema records whether an irrigation ran to
+         schedule, so the honest tile is the one that says how much of this
+         range can be estimated at all. */
+      kpiCard({
+        label: "Events we can estimate",
+        value: filteredEvents.length ? (withEstimate.length / filteredEvents.length) * 100 : 0,
+        format: "pct",
+        trend: noEstimate > 0
+          ? { dir: "down", text: `${noEstimate} zone(s) have no flow rate set` }
+          : undefined,
+        icon: Icon.circleCheck,
+      })
+    }
   </div>
+
+  ${
+    noEstimate > 0
+      ? `<div class="notice">
+           ${noEstimate} of these ${filteredEvents.length} events are not in the water figures:
+           their zone has no flow rate on file, so no volume can be estimated for them.
+           Set a flow rate on the zone and they will be included.
+         </div>`
+      : ""
+  }
 
   <div class="grid split-2">
     ${panel("Monthly Irrigation Trend", `Estimated water delivered per month (kL) · ${rangeLabel(f)}`, "",
@@ -131,14 +185,17 @@ export async function irrigationPage(): Promise<string> {
 
   ${panel("Historical Irrigation Events", `Most recent 25 events in range · ${rangeLabel(f)}`,
     resultCount(Math.min(recent.length, 25), filteredEvents.length, "events"),
-    table(["Date", "Farm", "Zone", "Crop", "Volume", "Duration", "On Schedule"], recent, (e) => [
+    table(["Date (SAST)", "Farm", "Zone", "Crop", "Estimated volume", "Pump time"], recent, (e) => [
       fmtDate(e.date),
       esc(e.farm),
       esc(e.zone),
-      esc(e.crop),
-      fmtLitres(e.litres),
+      esc(e.crop || "No crop set"),
+      // Never "0 L" for a zone with no flow rate: a zero reads as a pump
+      // that ran and delivered nothing.
+      e.litres === null
+        ? `<span class="muted" title="This zone has no flow rate on file, so no volume can be estimated.">No estimate</span>`
+        : fmtLitres(e.litres),
       `${fmtInt(e.durationMin)} min`,
-      e.onSchedule ? badge("Yes", "good") : badge("Missed", "warn"),
     ], "No irrigation events in this range."))}
   `;
 }
@@ -211,7 +268,9 @@ export async function reportsPage(): Promise<string> {
     province: (m) => m.province,
   });
 
-  const waterInRange = filteredEvents.reduce((a, e) => a + e.litres, 0);
+  // estimable(), not a plain sum: an event whose zone has no flow rate has
+  // no volume to add, and counting it as 0 would quietly lower the figure.
+  const waterInRange = estimable(filteredEvents).reduce((a, e) => a + e.litres, 0);
 
   return `
   ${pageHeader("Reports & Analytics", "Generate, compare and export platform reports across farms, regions and time periods.")}
@@ -256,8 +315,7 @@ export async function reportsPage(): Promise<string> {
           </div>
           <div class="report-actions">
             <button class="btn sm" data-act="generate-report" data-report="${esc(r.name)}">Generate</button>
-            <button class="btn ghost sm" data-act="export-report-pdf" data-report="${esc(r.name)}">PDF</button>
-            <button class="btn ghost sm" data-act="export-report-excel" data-report="${esc(r.name)}">Excel</button>
+                  <button class="btn ghost sm" data-act="export-report-excel" data-report="${esc(r.name)}">Excel</button>
             <button class="btn ghost sm" data-act="export-report-csv" data-report="${esc(r.name)}">CSV</button>
           </div>
         </div>`).join("")}
@@ -294,22 +352,79 @@ export async function reportsPage(): Promise<string> {
 
 /* =========================== PLATFORM ACTIVITY =========================== */
 
-/** No activity-log table exists anywhere in the schema (see
-    data/api.ts's getActivity()) - this is a genuine "not built yet", not
-    an empty result to filter. No filter bar, no table: those would imply
-    there's a real feature underneath with nothing in it right now. */
+/* The audit log (migration 0037): who did what, newest first.
+ *
+ * Every row is one sentence, built on the SERVER so this page, the CSV and
+ * the XLSX cannot describe the same action three different ways. */
 export async function activityPage(): Promise<string> {
-  return `
-  ${pageHeader("Platform Activity", "History of significant administrator and platform actions.")}
+  return withErrorState("Activity", async () => {
+    const f = getFilter("activity");
 
-  ${panel("Not yet implemented", "", "", `
-    <div class="empty-state">
-      Platform Activity has no backing table yet - there is nowhere to
-      record or read administrator actions from. This is a gap to build,
-      not empty data.
-    </div>
-  `)}
-  `;
+    const log = await getActivityLog({
+      // eventType and administrator already exist on FilterState and mean
+      // exactly this, so the activity page reuses them rather than widening
+      // the shared shape with two near-duplicates.
+      ...(f.eventType ? { action: f.eventType } : {}),
+      ...(f.administrator ? { actor: f.administrator } : {}),
+    });
+
+    if (log.rows.length === 0) {
+      return `
+      ${pageHeader("Activity", "Who did what, across the platform.")}
+      ${emptyState({
+        title: "No activity recorded yet",
+        body:
+          "Every status change, assignment, revoke and archive is recorded here with who did it " +
+          "and when, from the moment the activity log table is in place.",
+      })}`;
+    }
+
+    return `
+    ${pageHeader("Activity", "Who did what, across the platform.",
+      `<button class="btn ghost" data-act="export-activity-csv">Export CSV</button>
+       <button class="btn ghost" data-act="export-activity-xlsx">Export Excel</button>`)}
+
+    ${filterBar({
+      page: "activity",
+      filter: f,
+      searchPlaceholder: "Search this page…",
+      selects: [
+        { key: "eventType", label: "Action", options: log.actions.map((a) => a.label) },
+        { key: "administrator", label: "Administrator", options: log.actors.map((a) => a.label) },
+      ],
+    })}
+
+    ${panel("Administrator actions", "Newest first",
+      resultCount(log.rows.length, log.total, "actions"),
+      table(["When", "Who", "What", "Farm"], log.rows, (r) => [
+        esc(fmtDateTimeSast(r.createdAt)),
+        esc(r.actorName),
+        // The summary already names the actor; the What column carries the
+        // action so the two columns are not the same sentence twice.
+        esc(r.summary.replace(new RegExp("^" + r.actorName + "\\s*"), "")),
+        r.farmName ? esc(r.farmName) : `<span class="muted">—</span>`,
+      ], "No actions match the current filters."))}
+    `;
+  });
+}
+
+/* A timeline for one item, oldest first - the shape a person reads a history
+   in, which is the opposite of the activity list above. */
+export function timelineHtml(rows: AuditRow[], emptyText: string): string {
+  if (rows.length === 0) return `<p class="muted">${esc(emptyText)}</p>`;
+
+  return `<ol class="timeline">${rows
+    .map(
+      (r) => `
+      <li class="timeline-item">
+        <span class="timeline-dot" aria-hidden="true"></span>
+        <div>
+          <b>${esc(r.summary)}</b>
+          <span class="timeline-when">${esc(fmtDateTimeSast(r.createdAt))}</span>
+        </div>
+      </li>`,
+    )
+    .join("")}</ol>`;
 }
 
 /* ================================ SETTINGS =============================== */
@@ -388,24 +503,38 @@ export function settingsTabBody(tab: SettingsTab): string {
         ${toggleRow("Restrict admin access by IP", "Allow-list only", false)}
         ${toggleRow("Log all administrator actions", "Written to Platform Activity", true)}
       </div>
-      <div class="form-foot">
-        ${save}
-        <button class="btn dark" data-act="manage-roles">Manage roles &amp; permissions</button>
-      </div>`;
+      <div class="form-foot">${save}</div>
+      <p class="muted">
+        An account is either an administrator or a farmer, set on their profile. There is no
+        finer-grained permission set to manage.
+      </p>`;
 
+    /* This tab used to state a last cloud backup time, a last local backup
+       time, a retention policy and "82% of 500 GB", with a meter drawn from
+       that 82 - all of it invented. None of those numbers came from anywhere;
+       there is no backup system in this project to report on, and no local
+       storage to be 82% full. Three buttons underneath claimed to start a
+       backup, restore one and download an archive, and did none of it.
+
+       Fabricated facts are worse than a gap: somebody could have read that
+       line and concluded the data was safe. What follows is what is actually
+       true about where AgroFlow's data lives. */
     case "Backup & Recovery":
       return `<div class="detail-list">
-        <div class="detail-row"><span>Last cloud backup</span><b>2026-07-22 04:20</b></div>
-        <div class="detail-row"><span>Last local backup</span><b>2026-07-22 03:55</b></div>
-        <div class="detail-row"><span>Backup frequency</span><b>Hourly (local) · Daily (cloud)</b></div>
-        <div class="detail-row"><span>Retention policy</span><b>30 days rolling</b></div>
-        <div class="detail-row"><span>Storage used</span><b>82% of 500 GB</b></div>
+        <div class="detail-row"><span>Where the data lives</span><b>Supabase Postgres</b></div>
+        <div class="detail-row"><span>Who backs it up</span><b>Supabase, on the project's plan</b></div>
+        <div class="detail-row"><span>Managed from</span><b>The Supabase dashboard, not here</b></div>
       </div>
-      ${meter(82, "warn")}
-      <div class="form-foot">
-        <button class="btn" data-act="backup-now">Back up now</button>
-        <button class="btn dark" data-act="restore">Restore from backup</button>
-        <button class="btn ghost" data-act="download-backup">Download archive</button>
-      </div>`;
+      <p class="muted">
+        Backups and point-in-time recovery are part of the Supabase project and are configured in
+        the Supabase dashboard under Database → Backups. AgroFlow holds no separate copy of the
+        data and has nothing of its own to back up or restore, so there is nothing to start from
+        this page.
+      </p>
+      <p class="muted">
+        Two things in AgroFlow are deliberately never deleted and so need no backup of their own:
+        archiving a farm hides it and keeps every row (migration 0036), and the administrator
+        activity log cannot be updated or deleted at all (migration 0037).
+      </p>`;
   }
 }

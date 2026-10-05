@@ -37,7 +37,73 @@ export const fmtLitres = (n: number | null | undefined): string => {
   return `${Math.round(v)} L (est.)`;
 };
 
-export const fmtDate = (iso: string): string => (iso ? iso.slice(0, 10) : "—");
+/* Kept as the name every page already calls, but no longer a string slice.
+ *
+ * `iso.slice(0, 10)` took the UTC date off a timestamptz, so anything that
+ * happened between midnight and 02:00 South African time was dated to the
+ * previous day - and the same event was dated differently depending on which
+ * column a page happened to read. It now goes through the one SAST formatter
+ * below, so every date in the console agrees. A plain "yyyy-mm-dd" passed in
+ * still comes back as that same day. */
+export const fmtDate = (iso: string | null | undefined): string => fmtDateSast(iso);
+
+/* ONE date format for the whole console, in SAST.
+ *
+ * Pages were showing three different things: a raw ISO string
+ * ("2026-10-03T14:05:22.481Z"), a bare yyyy-mm-dd, and whatever
+ * toLocaleString() produced on that admin's machine. An admin comparing an
+ * alert's time against a request's time could not tell whether they were in
+ * the same timezone, let alone the same minute.
+ *
+ * South Africa has no daylight saving, so a fixed +2 offset is exact and
+ * needs no timezone database - the same choice the API and the FAO-56 engine
+ * already make. The offset is applied explicitly rather than relying on the
+ * browser's locale, so the console reads the same on a laptop set to UTC. */
+const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "03 Oct 2026, 16:05" — the console's only datetime format. */
+export function fmtDateTimeSast(iso: string | null | undefined): string {
+  if (!iso) return "—";
+
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "—";
+
+  const d = new Date(t + SAST_OFFSET_MS);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+
+  return `${pad(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ` +
+         `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+/** "03 Oct 2026" — the same format with the time dropped. */
+export function fmtDateSast(iso: string | null | undefined): string {
+  const full = fmtDateTimeSast(iso);
+  return full === "—" ? full : full.split(",")[0] ?? full;
+}
+
+/** "4 minutes ago" / "2 days ago". For "last seen" columns, where the gap
+    matters more than the wall-clock time. */
+export function fmtAgo(iso: string | null | undefined): string {
+  if (!iso) return "never";
+
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "—";
+
+  const mins = Math.floor((Date.now() - t) / 60000);
+  if (mins < 1) return "just now";
+  if (mins === 1) return "1 minute ago";
+  if (mins < 60) return `${mins} minutes ago`;
+
+  const hours = Math.floor(mins / 60);
+  if (hours === 1) return "1 hour ago";
+  if (hours < 24) return `${hours} hours ago`;
+
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
 
 export const trendClass = (dir: TrendDirection): string => (dir === "up" ? "up" : "down");
 

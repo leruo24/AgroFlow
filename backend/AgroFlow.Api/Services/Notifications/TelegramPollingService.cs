@@ -35,6 +35,12 @@ public sealed class TelegramPollingService : BackgroundService
     // we want.
     private long _offset;
 
+    // When getUpdates last came back successfully. Read by
+    // GET /api/admin/health, which is the only way an admin can tell a bot
+    // that is quiet because nobody is messaging it from one that stopped
+    // polling an hour ago. Written on the success path only.
+    public DateTimeOffset? LastSuccessfulPollUtc { get; private set; }
+
     // Telegram renders message text literally, so this is a line break in the
     // chat. Deliberately not Environment.NewLine, which would be CRLF on a
     // Windows developer machine and LF on the deployed Linux container.
@@ -80,6 +86,11 @@ public sealed class TelegramPollingService : BackgroundService
             {
                 var updates = await _client.GetUpdatesAsync(_offset, stoppingToken);
                 consecutiveFailures = 0;
+
+                // Stamped on the SUCCESS path only, so the health check can
+                // tell "quiet because nobody is messaging the bot" (recent
+                // stamp, no updates) from "stopped polling an hour ago".
+                LastSuccessfulPollUtc = DateTimeOffset.UtcNow;
 
                 foreach (var update in updates)
                 {

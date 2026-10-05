@@ -11,17 +11,28 @@ export const SHELL_HTML = `
   <div class="app" id="appShell">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <span class="leaf">${Icon.sprout}</span>
+        <!-- Relative path: the site is served from a sub-path on GitHub
+             Pages, not a domain root. alt is empty because the wordmark
+             beside it already says "AgroFlow" - a screen reader should not
+             hear the name twice. -->
+        <img class="brand-logo" src="brand/agroflow-icon-192.png" alt="" width="36" height="36" />
         <div>
           <h1>AgroFlow</h1>
           <div class="sub">Administration</div>
         </div>
       </div>
       <nav class="nav" id="nav"></nav>
-      <div class="side-foot">
+      <!-- Driven by GET /api/admin/health, refreshed every 60 s (see
+           app/health.ts). Starts as "Checking…" rather than an assumed
+           state: claiming everything is fine before anything has been
+           checked is worse than saying nothing. Clicking it opens the
+           System health card on Home. -->
+      <button class="side-foot" id="platformStatus" data-act="open-health" type="button">
         <b>Platform status</b>
-        Monitoring not yet implemented
-      </div>
+        <span class="side-foot-state" id="platformStatusText">
+          <i class="dot dot-unknown"></i>Checking…
+        </span>
+      </button>
     </aside>
 
     <div class="main">
@@ -32,7 +43,7 @@ export const SHELL_HTML = `
         </div>
         <div class="header-r">
           <input id="headerSearch" class="search" type="text" placeholder="Search this page…" />
-          <div class="status-chip status-chip-unknown">Monitoring not yet implemented</div>
+          <div class="status-chip status-chip-unknown" id="headerStatusChip">Checking…</div>
           <button id="avatarBtn" class="avatar" title="Account menu" aria-label="Account menu">··</button>
           <div id="avatarMenu" class="menu">
             <div class="menu-head">

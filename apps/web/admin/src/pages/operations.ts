@@ -1,5 +1,5 @@
 import { api } from "@/data/api";
-import { esc, fmtInt, fmtDate } from "@/lib/format";
+import { esc, fmtInt, fmtDate, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
 import { HARDWARE_TYPES, PROVINCES } from "@/data/referenceData";
 import {
@@ -39,7 +39,7 @@ export async function hardwarePage(): Promise<string> {
   return `
   ${pageHeader("Farm Hardware", "All registered hardware across every farm on the platform.",
     `<button class="btn ghost" data-act="go-mqtt-logins">MQTT logins</button>
-     <button class="btn" data-act="add-device">+ Register Hardware</button>`)}
+     <button class="btn" data-act="register-hardware">+ Register a kit</button>`)}
 
   <div class="grid kpis four">
     ${kpiCard({ label: "Total Hardware", value: total, icon: Icon.radio })}
@@ -164,14 +164,16 @@ export async function alertsPage(): Promise<string> {
 
   ${panel("Alert Queue", "Workflow: New → Assigned → In Progress → Escalated → Waiting → Resolved → Closed",
     resultCount(filtered.length, alerts.length, "alerts"),
-    table(["ID", "Raised", "Category", "Alert", "Farm", "User", "Assigned To", "Priority", "Status", "Actions"],
+    table(["ID", "Raised (SAST)", "Category", "Alert", "Farm", "Farmer", "Assigned To", "Priority", "Status", "Actions"],
       filtered, (a) => [
         `<span class="mono">${esc(a.id)}</span>`,
-        `<span class="mono sm">${esc(a.raised)}</span>`,
+        // fmtDateTimeSast, not the raw column: this cell used to render
+        // "2026-10-03T14:05:12.345Z".
+        `<span class="sm">${esc(fmtDateTimeSast(a.raised))}</span>`,
         badge(a.category, "info"),
         esc(a.title),
         esc(a.farm ?? "Platform"),
-        a.user ? esc(a.user) : `<span class="muted">—</span>`,
+        a.user ? esc(a.user) : `<span class="muted">No farmer on file</span>`,
         a.assignedTo ? esc(a.assignedTo) : `<span class="muted">Unassigned</span>`,
         badge(a.priority),
         badge(a.status),

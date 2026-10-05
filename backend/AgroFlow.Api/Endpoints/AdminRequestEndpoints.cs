@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using AgroFlow.Api.Auth;
+using AgroFlow.Api.Services;
 using AgroFlow.Api.Services.Notifications;
 using AgroFlow.Business;
 using Npgsql;
@@ -6,6 +8,8 @@ using Npgsql;
 namespace AgroFlow.Api.Endpoints;
 
 public record UpdateRequestStatusRequest(string Status);
+
+public record AssignRequestBody(Guid? AssignedToProfileId);
 
 public record UpdateRequestStatusResponse(long Id, string Status, string? Message);
 
@@ -35,13 +39,112 @@ public static class AdminRequestEndpoints
             .AddEndpointFilter<AdminOnlyFilter>();
 
         admin.MapPut("/{requestId:long}/status", UpdateStatusAsync);
+
+        // Who owns this request. Separate from status on purpose:
+        // somebody picks a request up before it is scheduled, and
+        // "assigned to" is the answer to "who is dealing with this?"
+        admin.MapPut("/{requestId:long}/assign", AssignAsync);
+    }
+
+    /* Stamps the "by" and "at" columns for the step a request just moved to.
+     *
+     * Separate from the status UPDATE rather than folded into it because the
+     * columns differ per status, and a single UPDATE with five CASE
+     * expressions is the kind of SQL nobody can read six months later.
+     *
+     * Only ever SETS. Moving a request back to pending does not clear
+     * scheduled_by - it genuinely was scheduled by that person, and erasing
+     * that is the opposite of what an accountability chain is for. */
+    private static async Task StampWhoAndWhenAsync(
+        NpgsqlDataSource dataSource,
+        long requestId,
+        string status,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(user.FindFirstValue("sub"), out var actorId)) return;
+
+        var sql = status switch
+        {
+            "scheduled" =>
+                "update service_request set scheduled_by_profile_id = $2, scheduled_at = now() where id = $1",
+            "completed" =>
+                "update service_request set completed_by_profile_id = $2, completed_at = now() where id = $1",
+            _ => null,
+        };
+
+        if (sql is null) return;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var cmd = new NpgsqlCommand(sql, connection);
+        cmd.Parameters.AddWithValue(requestId);
+        cmd.Parameters.AddWithValue(actorId);
+
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /* Who is dealing with this request.
+     *
+     * Deliberately independent of status: somebody picks a request up before
+     * it is scheduled, and an unassigned-but-scheduled request is a real and
+     * useful state ("booked, nobody owns it yet"). Passing null un-assigns. */
+    private static async Task<IResult> AssignAsync(
+        long requestId,
+        AssignRequestBody body,
+        ClaimsPrincipal user,
+        NpgsqlDataSource dataSource,
+        AuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        await using var cmd = new NpgsqlCommand(
+            """
+            update service_request
+               set assigned_to_profile_id = $2, updated_at = now()
+             where id = $1
+            returning (select coalesce(nullif(p.name, ''), p.email) from profile p where p.id = $2)
+            """,
+            connection);
+
+        cmd.Parameters.AddWithValue(requestId);
+        cmd.Parameters.AddWithValue(
+            NpgsqlTypes.NpgsqlDbType.Uuid,
+            (object?)body.AssignedToProfileId ?? DBNull.Value);
+
+        object? assignedName;
+        await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+        {
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return Results.NotFound(new { error = "No such request." });
+            }
+
+            assignedName = reader.IsDBNull(0) ? null : reader.GetString(0);
+        }
+
+        await audit.WriteAsync(
+            user, AuditActions.RequestAssigned, "service_request", requestId.ToString(),
+            details: new { assignedTo = assignedName, assignedToProfileId = body.AssignedToProfileId },
+            cancellationToken: cancellationToken);
+
+        return Results.Ok(new
+        {
+            requestId,
+            assignedTo = assignedName,
+            message = assignedName is null
+                ? "Nobody is assigned to this request."
+                : $"Assigned to {assignedName}.",
+        });
     }
 
     private static async Task<IResult> UpdateStatusAsync(
         long requestId,
         UpdateRequestStatusRequest request,
+        ClaimsPrincipal user,
         NpgsqlDataSource dataSource,
         FarmRequestNotifier requestNotifier,
+        AuditLog audit,
         CancellationToken cancellationToken)
     {
         var status = FarmRequestMessages.Normalise(request.Status);
@@ -104,6 +207,20 @@ public static class AdminRequestEndpoints
         // check just avoids the round trip.
         if (!string.Equals(previousStatus, status, StringComparison.OrdinalIgnoreCase))
         {
+            // The "by" and "at" columns for this step (0037). Which one is
+            // set depends on where the request moved TO, so the timeline can
+            // say "Scheduled by Leruo on Tuesday" rather than only showing a
+            // status word.
+            await StampWhoAndWhenAsync(dataSource, requestId, status, user, cancellationToken);
+
+            await audit.WriteAsync(
+                user,
+                AuditActions.RequestStatusChanged,
+                "service_request",
+                requestId.ToString(),
+                details: new { from = previousStatus, to = status },
+                cancellationToken: cancellationToken);
+
             await requestNotifier.NotifyAsync(requestId, cancellationToken);
         }
 

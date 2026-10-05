@@ -1,125 +1,193 @@
-import { api } from "@/data/api";
-import { esc, fmtInt, fmtPct, fmtPct2 } from "@/lib/format";
+import { api, getFarmsNeedingSetup, getMqttPoolHealth, getFailedReportCount } from "@/data/api";
+import { esc, fmtInt, fmtPct, fmtPct2, fmtDateTimeSast } from "@/lib/format";
 import {
   badge, kpiCard, panel, barChart, lineChart, donut, table,
-  pageHeader, routeLink, meter,
+  pageHeader, routeLink,
 } from "@/ui/components";
+import { attentionQueue, withErrorState, type AttentionCard } from "@/ui/patterns";
+import { healthPanelHtml } from "@/app/health";
 import { Icon } from "@/lib/icons";
 
+/* HOME — the queue of what needs a person, then the numbers.
+ *
+ * WHY THIS CHANGED
+ * The dashboard used to open on twelve KPI tiles. Every one of them was a
+ * fact and none of them was a task: an admin arriving in the morning could
+ * read "3 Active Alerts" and still have no idea what to do first, or where
+ * the alerts were. The tiles were also inert - the number told you something
+ * was there, and then made you go and find it.
+ *
+ * So the first thing on the page is now a list of things WAITING FOR A
+ * PERSON, each one a button that opens exactly that work. The KPI tiles are
+ * still here, below, and every one of them is now clickable and lands on the
+ * matching filtered list.
+ */
 export async function dashboardPage(): Promise<string> {
-  const [kpis, trends, growth, health, farmDist, hwDist, alerts, maintenance, activity] =
-    await Promise.all([
-      api.getKpis(), api.getTrends(), api.getGrowth(), api.getSystemHealth(),
-      api.getFarmHealthDistribution(), api.getHardwareStatusDistribution(),
-      api.getAlerts(), api.getMaintenance(), api.getActivity(),
-    ]);
+  return withErrorState("Home", renderDashboard);
+}
 
-  const openAlerts = alerts
-    .filter((a) => !["Resolved", "Closed"].includes(a.status))
-    .sort((a, b) => {
-      const order = { Critical: 0, High: 1, Medium: 2, Low: 3 };
-      return order[a.priority] - order[b.priority];
-    })
-    .slice(0, 6);
+async function renderDashboard(): Promise<string> {
+  const [
+    kpis, trends, growth, farmDist, hwDist,
+    alerts, maintenance, requests, hardware,
+    zonesNeedingSetup, mqttPool, failedReports,
+  ] = await Promise.all([
+    api.getKpis(), api.getTrends(), api.getGrowth(),
+    api.getFarmHealthDistribution(), api.getHardwareStatusDistribution(),
+    api.getAlerts(), api.getMaintenance(), api.getServiceRequests(), api.getHardware(),
+    // Each of these is allowed to fail on its own: one unavailable queue
+    // must not take down the whole of Home.
+    getFarmsNeedingSetup().catch(() => []),
+    getMqttPoolHealth().catch(() => null),
+    getFailedReportCount().catch(() => 0),
+  ]);
+
+  const openAlerts = alerts.filter((a) => !["Resolved", "Closed"].includes(a.status));
+
+  const criticalAlerts = openAlerts.filter(
+    (a) => a.priority === "Critical" || a.priority === "High",
+  );
+
+  const newRequests = requests.filter((r) => r.status === "pending");
+
+  // "Offline" here is the monitor service's judgement (hardware.status),
+  // which is the one an admin should act on - a kit quiet long enough to be
+  // worth a phone call, not one that missed a single reading.
+  const kitsNeedingHelp = hardware.filter(
+    (h) => h.status === "Offline" || h.status === "Fault",
+  );
 
   const openJobs = maintenance.filter((m) => m.status !== "Completed").slice(0, 5);
-  const recentActivity = activity.slice(0, 7);
+
+  /* The queue. Order is by how much it costs to ignore: a farmer waiting on
+     a request, then a crop at risk, then equipment, then setup gaps, then
+     housekeeping. Cards with a count of zero are not rendered at all - an
+     empty queue should look empty, not like a list of things that are fine. */
+  const attention: AttentionCard[] = [
+    {
+      title: "New requests waiting",
+      count: newRequests.length,
+      body: "Farmers waiting to hear back about a new farm or zone.",
+      act: "go-requests-pending",
+      tone: "bad",
+      icon: Icon.inbox,
+    },
+    {
+      title: "Open critical alerts",
+      count: criticalAlerts.length,
+      body: "Zones or equipment needing attention now.",
+      act: "go-alerts-critical",
+      tone: "bad",
+      icon: Icon.triangleAlert,
+    },
+    {
+      title: "Kits offline or faulty",
+      count: kitsNeedingHelp.length,
+      body: "Not reporting. The farm may be watering blind.",
+      act: "go-kits-offline",
+      tone: "warn",
+      icon: Icon.radio,
+    },
+    {
+      title: "Zones missing setup",
+      count: zonesNeedingSetup.length,
+      body: "No planting date, area, flow rate or location - the engine cannot advise.",
+      act: "go-zones-setup",
+      tone: "warn",
+      icon: Icon.sprout,
+    },
+    {
+      title: "Farmers without Telegram",
+      count: kpis.farmersNotReceivingAlerts,
+      body: "They get no alerts at all until they connect.",
+      act: "go-users-no-telegram",
+      tone: "warn",
+      icon: Icon.userX,
+    },
+    {
+      title: "MQTT logins running low",
+      // The card is about the shortage, so the count is how many are LEFT.
+      count: mqttPool?.runningLow ? Math.max(mqttPool.freeCount, 1) : 0,
+      body: mqttPool?.runningLow
+        ? `Only ${mqttPool.freeCount} free. New kits will fall back to the shared login.`
+        : "",
+      act: "go-mqtt-logins",
+      tone: "info",
+      icon: Icon.wifi,
+    },
+    {
+      title: "Failed reports",
+      count: failedReports,
+      body: "A farmer asked for a report and it could not be made.",
+      act: "go-reports-failed",
+      tone: "info",
+      icon: Icon.barChart,
+    },
+  ];
 
   return `
-  ${pageHeader("Dashboard", "Platform oversight across all farms, users and hardware.",
-    `<button class="btn ghost" data-act="export-dashboard">Export summary</button>`)}
+  ${pageHeader("Home", "What needs attention today, across every farm.",
+    `<button class="btn ghost" data-act="export-dashboard">Export to Excel</button>
+     <button class="btn ghost" data-act="export-dashboard-pdf">Export PDF</button>`)}
 
+  <section class="attn-section" aria-labelledby="attnHeading">
+    <h3 id="attnHeading" class="section-heading">Needs attention</h3>
+    ${attentionQueue(attention)}
+  </section>
+
+  <h3 class="section-heading">At a glance</h3>
+
+  <!-- Every tile is a link to the list it counts. A number you cannot click
+       makes the admin go and find the thing it refers to. -->
   <div class="grid kpis">
-    ${kpiCard({ label: "Total Farms", value: kpis.totalFarms, trend: trends["totalFarms"] ?? undefined, icon: Icon.tractor })}
-    ${kpiCard({ label: "Total Users", value: kpis.totalUsers, trend: trends["totalUsers"] ?? undefined, icon: Icon.users })}
-    ${kpiCard({ label: "Connected Hardware", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: Icon.radio })}
-    ${kpiCard({ label: "Active Alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: Icon.bell })}
-    ${/* Shown only when there is something to act on, so it reads as a task
-          rather than as another number that is always zero. Clicking through
-          lands on the users list already filtered to exactly these farmers. */
-      kpis.farmersNotReceivingAlerts > 0
-      ? kpiCard({
-          label: "Not Receiving Alerts",
-          value: kpis.farmersNotReceivingAlerts,
-          trend: { dir: "down", text: "Telegram not connected" },
-          icon: Icon.userX,
-        })
-      : ""}
-    ${kpiCard({ label: "Open Maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: Icon.wrench })}
-    ${kpiCard({ label: "System Uptime", value: kpis.systemUptime, format: "pct", trend: trends["systemUptime"] ?? undefined, icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Farms", value: kpis.totalFarms, trend: trends["totalFarms"] ?? undefined, icon: Icon.tractor, act: "go-farms" })}
+    ${kpiCard({ label: "Farmers", value: kpis.totalUsers, trend: trends["totalUsers"] ?? undefined, icon: Icon.users, act: "go-users" })}
+    ${kpiCard({ label: "Kits online", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: Icon.radio, act: "go-kits" })}
+    ${kpiCard({ label: "Open alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: Icon.bell, act: "go-alerts" })}
+    ${kpiCard({ label: "Open maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: Icon.wrench, act: "go-maintenance" })}
+    ${kpiCard({ label: "Requests waiting", value: newRequests.length, icon: Icon.inbox, act: "go-requests-pending" })}
   </div>
 
-  <div class="grid kpis secondary">
-    ${kpiCard({ label: "Device Connectivity", value: kpis.deviceConnectivity, format: "pct", trend: trends["deviceConnectivity"] ?? undefined })}
-    ${kpiCard({ label: "Platform Availability", value: kpis.platformAvailability, format: "pct2", trend: trends["platformAvailability"] ?? undefined })}
-    ${kpiCard({ label: "New Farms This Month", value: kpis.newFarmsThisMonth, trend: trends["newFarmsThisMonth"] ?? undefined })}
-    ${kpiCard({ label: "New Users This Week", value: kpis.newUsersThisWeek, trend: trends["newUsersThisWeek"] ?? undefined })}
-  </div>
+  <!-- Health, from GET /api/admin/health. Rendered server-truthfully: a
+       check that cannot be read says so rather than showing a green dot. -->
+  <div id="healthPanel">${await healthPanelHtml()}</div>
 
   <div class="grid split-2">
-    ${panel("Platform Growth", "New users and farms per month", routeLink("reports", "Full reports →"), `
+    ${panel("Growth", "New farmers and farms per month", routeLink("reports", "Full reports →"), `
       <div class="chart-legend">
-        <span><i class="sw" style="background:#22c55e"></i>Users</span>
+        <span><i class="sw" style="background:#22c55e"></i>Farmers</span>
         <span><i class="sw" style="background:#38bdf8"></i>Farms</span>
       </div>
       ${lineChart(growth.users, "#22c55e")}
       ${lineChart(growth.farms, "#38bdf8")}
     `)}
-    ${panel("Farm Health", "Across all registered farms", routeLink("farms", "View farms →"),
+    ${panel("Farm health", "Across all registered farms", routeLink("farms", "View farms →"),
       donut(farmDist, ["#22c55e", "#f59e0b", "#ef4444"]))}
   </div>
 
   <div class="grid split-2">
-    ${panel("Device Connectivity", "Hardware status distribution", routeLink("hardware", "View hardware →"),
+    ${panel("Kit connectivity", "Hardware status distribution", routeLink("hardware", "View kits →"),
       donut(hwDist, ["#22c55e", "#f59e0b", "#94a3b8", "#ef4444"]))}
-    ${panel("Maintenance & Support Trend", "Jobs raised vs support tickets per month", "", `
+    ${panel("Maintenance trend", "Jobs raised per month", "", `
       <div class="chart-legend">
         <span><i class="sw" style="background:#f59e0b"></i>Maintenance</span>
-        <span><i class="sw" style="background:#a78bfa"></i>Support</span>
       </div>
       ${barChart(growth.maintenance)}
     `)}
   </div>
 
-  ${Object.keys(health).length
-    ? panel("System Health", "Core platform services", routeLink("alerts", "Operations centre →"), `
-        <div class="health-grid">
-          ${Object.entries(health).map(([name, svc]) => `
-            <div class="health-card">
-              <div class="health-top">
-                <span class="dot-r ${svc.ok ? "dot-good" : "dot-bad dot-throb"}"></span>
-                <b>${esc(name)}</b>
-              </div>
-              <div class="health-status">${esc(svc.status)}</div>
-              ${svc.latencyMs !== null ? `<div class="health-latency">${fmtInt(svc.latencyMs)} ms</div>` : ""}
-            </div>`).join("")}
-        </div>
-        <div class="uptime-row">
-          <span>30-day uptime</span>${meter(kpis.systemUptime)}<b>${fmtPct(kpis.systemUptime)}</b>
-        </div>
-      `)
-    // No monitoring/health-check table exists anywhere in the schema
-    // (see data/api.ts's getSystemHealth()) - a real gap, not empty data.
-    // Was previously a hardcoded "All systems operational" - that was a
-    // lie the UI told with no data behind it at all.
-    : panel("System Health", "", "", `
-        <div class="empty-state">
-          Not yet implemented - there is no monitoring/health-check table
-          to report on.
-        </div>
-      `)}
-
   <div class="grid split-2">
-    ${panel("Priority Alerts", "Requiring administrator action", routeLink("alerts", "View all →"),
-      table(["ID", "Alert", "Farm", "Priority", "Status"], openAlerts, (a) => [
-        `<span class="mono">${esc(a.id)}</span>`,
-        esc(a.title),
-        esc(a.farm ?? "Platform"),
-        badge(a.priority),
-        badge(a.status),
-      ], "No open alerts."))}
+    ${panel("Priority alerts", "Needing an administrator", routeLink("alerts", "View all →"),
+      table(["Raised", "Alert", "Farm", "Priority", "Status"],
+        criticalAlerts.slice(0, 6), (a) => [
+          esc(fmtDateTimeSast(a.raised)),
+          `<a href="#" data-act="view-alert" data-id="${esc(a.id)}">${esc(a.title)}</a>`,
+          esc(a.farm ?? "No farm (test data)"),
+          badge(a.priority),
+          badge(a.status),
+        ], "No open critical alerts."))}
 
-    ${panel("Open Maintenance", "Scheduled and overdue jobs", routeLink("maintenance", "View all →"),
+    ${panel("Open maintenance", "Scheduled and overdue jobs", routeLink("maintenance", "View all →"),
       table(["Device", "Farm", "Technician", "Status"], openJobs, (m) => [
         `<span class="mono">${esc(m.device)}</span>`,
         esc(m.farm),
@@ -128,15 +196,12 @@ export async function dashboardPage(): Promise<string> {
       ], "No open maintenance."))}
   </div>
 
-  ${panel("Recent Platform Activity", "Latest administrator actions", routeLink("activity", "Platform activity →"),
-    table(["Time", "Administrator", "Action", "Target", "Outcome"], recentActivity, (a) => [
-      `<span class="mono sm">${esc(a.timestamp)}</span>`,
-      esc(a.administrator),
-      esc(a.eventType),
-      esc(a.target ?? "—"),
-      badge(a.outcome),
-    ]))}
-
-  <p class="page-note">${esc(`${fmtInt(kpis.activeUsers)} active accounts · ${fmtInt(kpis.disabledUsers)} disabled · platform availability ${fmtPct2(kpis.platformAvailability)}`)}</p>
+  <p class="page-note">${esc(
+    `${fmtInt(kpis.activeUsers)} active accounts · ${fmtInt(kpis.disabledUsers)} disabled` +
+    (kpis.platformAvailability > 0 ? ` · platform availability ${fmtPct2(kpis.platformAvailability)}` : ""),
+  )}</p>
   `;
 }
+
+/* Kept for the uptime row in the health panel. */
+export { fmtPct };

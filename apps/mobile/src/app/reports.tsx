@@ -127,10 +127,28 @@ export default function ReportsScreen() {
       setMessage(result.message);
       await load();
     } catch (submitError) {
+      // The farmer sees one plain sentence whatever went wrong.
+      //
+      // The raw message used to go straight through, which is how a missing
+      // migration reached them as "AgroFlow API request failed (500)" - a
+      // sentence that tells them nothing and that they cannot act on. The
+      // real reason is in the server log, where somebody can.
+      //
+      // A 400 IS passed through, because those are the farmer's own input:
+      // "A soil moisture report is for one zone" is worth reading.
+      const message =
+        submitError instanceof Error ? submitError.message : '';
+
+      const isOurFault =
+        message.includes('500') ||
+        message.includes('503') ||
+        message.toLowerCase().includes('failed') ||
+        message.length === 0;
+
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : 'Your report could not be requested.'
+        isOurFault
+          ? "This report couldn't be made. Try again later."
+          : message
       );
     } finally {
       setSubmitting(false);

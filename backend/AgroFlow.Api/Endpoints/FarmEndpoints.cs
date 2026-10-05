@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using AgroFlow.Api.Auth;
+using AgroFlow.Api.Services;
 using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
@@ -26,19 +28,22 @@ public static class FarmEndpoints
     // Hides a farm and its zones from default lists, reports and automatic
     // reports, keeping every row. See migration 0036.
     private static async Task<IResult> ArchiveFarmAsync(
-        long id, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+        long id, ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        AuditLog audit, ILoggerFactory loggerFactory)
     {
-        return await SetArchivedAsync(id, archived: true, dataSource, loggerFactory);
+        return await SetArchivedAsync(id, archived: true, user, dataSource, audit, loggerFactory);
     }
 
     private static async Task<IResult> RestoreFarmAsync(
-        long id, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+        long id, ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        AuditLog audit, ILoggerFactory loggerFactory)
     {
-        return await SetArchivedAsync(id, archived: false, dataSource, loggerFactory);
+        return await SetArchivedAsync(id, archived: false, user, dataSource, audit, loggerFactory);
     }
 
     private static async Task<IResult> SetArchivedAsync(
-        long id, bool archived, NpgsqlDataSource dataSource, ILoggerFactory loggerFactory)
+        long id, bool archived, ClaimsPrincipal user, NpgsqlDataSource dataSource,
+        AuditLog audit, ILoggerFactory loggerFactory)
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmEndpoints");
 
@@ -72,6 +77,11 @@ public static class FarmEndpoints
             await cmd.ExecuteNonQueryAsync();
         }
 
+        await audit.WriteAsync(
+            user,
+            archived ? AuditActions.FarmArchived : AuditActions.FarmRestored,
+            "farm", id.ToString(), farmId: id);
+
         return Results.Ok(new
         {
             farmId = id,
@@ -92,7 +102,12 @@ public record RegisterFarmDetails(
     string FarmName,
     string Location,
     double SizeHectares,
-    List<RegisterFarmZone> Zones
+    List<RegisterFarmZone> Zones,
+    // farm.latitude/longitude (migration 0010): what the weather lookup and
+    // the FAO-56 engine read. Nullable because a farm registered without a
+    // pin is still a valid farm - it just falls back to its district.
+    double? Latitude = null,
+    double? Longitude = null
 );
 
 public record RegisterFarmZone(
@@ -251,6 +266,8 @@ private static async Task<IResult> RegisterFarmAsync(
                 name,
                 location,
                 total_area,
+                latitude,
+                longitude,
                 status
             )
             values (
@@ -258,6 +275,8 @@ private static async Task<IResult> RegisterFarmAsync(
                 $2,
                 $3,
                 $4,
+                $5,
+                $6,
                 'Active'
             )
             returning farm_id
@@ -280,6 +299,17 @@ private static async Task<IResult> RegisterFarmAsync(
 
         farmCommand.Parameters.AddWithValue(
             request.Farm.SizeHectares);
+
+        // DBNull rather than 0: zero is a real coordinate in the Gulf of
+        // Guinea, and a farm with no pin must read as "unknown", not as a
+        // point off the coast of Ghana.
+        farmCommand.Parameters.AddWithValue(
+            NpgsqlTypes.NpgsqlDbType.Double,
+            (object?)request.Farm.Latitude ?? DBNull.Value);
+
+        farmCommand.Parameters.AddWithValue(
+            NpgsqlTypes.NpgsqlDbType.Double,
+            (object?)request.Farm.Longitude ?? DBNull.Value);
 
         var farmIdObject =
             await farmCommand.ExecuteScalarAsync();

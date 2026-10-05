@@ -181,6 +181,11 @@ export async function registerFarm(input: {
     farmName: string;
     location: string;
     sizeHectares: number;
+    /* farm.latitude/longitude (migration 0010). Optional, and null when the
+       admin skipped the map: the weather lookup then falls back to the
+       district, which is worse than a pin but better than a wrong pin. */
+    latitude?: number | null;
+    longitude?: number | null;
     zones: {
       name: string;
       sizeHectares: number;
@@ -382,6 +387,27 @@ export async function downloadReportPdf(path: string, fileName: string): Promise
   a.remove();
   URL.revokeObjectURL(url);
 }
+/* The platform summary as a PDF (item 7).
+ *
+ * Built server-side rather than in the browser, unlike the .xlsx: a PDF gets
+ * printed, filed and emailed, so it has to carry its own figures, timestamp
+ * and the name of whoever produced it, independent of the session that asked
+ * for it. See backend/.../AdminSummaryEndpoints.cs. */
+export async function downloadSummaryPdf(): Promise<void> {
+  const response = await reportFetch("/api/admin/summary.pdf");
+  const blob = await response.blob();
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `agroflow-summary-${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 /* ---------------- Hardware (firmware v1.3.0) ----------------
 
    WHY THESE GO THROUGH THE API AND NOT SUPABASE
@@ -571,9 +597,27 @@ export type EnrollmentCodeResult = {
 /* The code the installer types into the kit's setup page. Single-use, 24-hour,
    and the ONLY authorisation /api/devices/claim needs - which is why there is
    no "show it again": the response below is the one time it exists. */
+/* The kit types the claim flow can actually finish.
+ *
+ * ONE ENTRY, DELIBERATELY
+ * Enrolling a kit writes a hardware row that a board then claims with the
+ * code, and only the ESP32 irrigation node's firmware does that. A picker
+ * offering "Weather Station" or "Gateway" would create rows nothing can ever
+ * claim - a kit that shows as enrolled forever and never comes online. When
+ * a second kind of board ships, it belongs here and the wizard picks it up
+ * without further change. */
+export const KIT_TYPES = [
+  {
+    value: "ESP32",
+    label: "ESP32 irrigation node",
+    secondary: "Soil moisture, valve control and flow metering on one board",
+  },
+] as const;
+
 export function createEnrollmentCode(input: {
   zoneId: number;
   deviceName?: string;
+  deviceType?: string;
 }): Promise<EnrollmentCodeResult> {
   return authorizedJson<EnrollmentCodeResult>("/api/devices/enroll", "POST", input);
 }
@@ -673,4 +717,102 @@ export function runAdviceNow(zoneId: number): Promise<RunAdviceResult> {
     "POST",
     {},
   );
+}
+
+/* ---------------- Platform health (item 4) ----------------
+
+   Replaces the three "Monitoring not yet implemented" strings. One endpoint
+   feeds the sidebar light, the header chip and Home's card, so they cannot
+   disagree about whether the platform is well. */
+
+export type HealthCheck = {
+  key: string;
+  name: string;
+  /** ok | warning | down */
+  status: string;
+  /** A sentence an admin can act on, not a code. */
+  detail: string;
+  responseMs: number | null;
+};
+
+export type HealthResponse = {
+  overall: string;
+  checkedAt: string;
+  checks: HealthCheck[];
+};
+
+export function getPlatformHealth(): Promise<HealthResponse> {
+  return authorizedJson<HealthResponse>("/api/admin/health", "GET");
+}
+
+/* ---------------- Activity / audit log (item 5) ----------------
+
+   The append-only record of what administrators do (migration 0037). The
+   page this feeds used to say there was nowhere to read this from, which
+   was true. */
+
+export type AuditRow = {
+  id: number;
+  createdAt: string;
+  actorName: string;
+  action: string;
+  /** One readable sentence, built server-side so the page and the exports
+      cannot describe the same action three different ways. */
+  summary: string;
+  entityType: string;
+  entityId: string | null;
+  farmId: number | null;
+  farmName: string | null;
+  /** JSON string - before/after for whatever changed. */
+  details: string;
+};
+
+export type AuditFilterOption = { value: string; label: string };
+
+export type AuditLogResponse = {
+  rows: AuditRow[];
+  total: number;
+  actions: AuditFilterOption[];
+  actors: AuditFilterOption[];
+};
+
+export function getActivityLog(params: {
+  action?: string;
+  actor?: string;
+  farmId?: number;
+  from?: string;
+  to?: string;
+} = {}): Promise<AuditLogResponse> {
+  const q = new URLSearchParams();
+  if (params.action) q.set("action", params.action);
+  if (params.actor) q.set("actor", params.actor);
+  if (params.farmId) q.set("farmId", String(params.farmId));
+  if (params.from) q.set("from", params.from);
+  if (params.to) q.set("to", params.to);
+
+  const qs = q.toString();
+  return authorizedJson<AuditLogResponse>(
+    `/api/admin/activity${qs ? `?${qs}` : ""}`,
+    "GET",
+  );
+}
+
+/** Everything that ever happened to one thing, oldest first - the timeline
+    on a request, an alert or a kit. */
+export function getEntityTimeline(entityType: string, entityId: string): Promise<AuditRow[]> {
+  return authorizedJson<AuditRow[]>(
+    `/api/admin/activity/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`,
+    "GET",
+  );
+}
+
+/** Who is dealing with a request. Independent of status: somebody picks a
+    request up before it is scheduled. */
+export function assignRequest(
+  requestId: number,
+  assignedToProfileId: string | null,
+): Promise<{ requestId: number; assignedTo: string | null; message: string }> {
+  return authorizedJson(`/api/admin/requests/${requestId}/assign`, "PUT", {
+    assignedToProfileId,
+  });
 }

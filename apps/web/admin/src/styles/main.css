@@ -102,23 +102,110 @@ a{color:inherit}
 }
 
 /* ------------------------------ auth screen ------------------------------- */
+/* THE BUG THIS FIXES: min-height was 100%, which resolves against the
+   parent's height - and #root has none. So the gradient only ever covered
+   the card's own height and the page showed a green band across the top with
+   a white half underneath. Viewport units resolve against the viewport, so
+   the background fills the screen whatever the card does.
+
+   dvh after vh so that a phone's retracting address bar does not leave a
+   white strip; browsers without dvh keep the vh value. */
 .auth-screen{
-  min-height:100%;display:flex;align-items:center;justify-content:center;
-  padding:24px;background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));
+  min-height:100vh;
+  min-height:100dvh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px 16px;
+  background:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2));
 }
+
 .auth-card{
-  width:100%;max-width:360px;background:var(--surface);border-radius:var(--radius);
-  box-shadow:var(--shadow-lg);padding:32px 28px;display:flex;flex-direction:column;gap:16px;
+  width:100%;
+  /* 440px: wide enough that a long email does not wrap in the field, narrow
+     enough to stay a card rather than a page. */
+  max-width:440px;
+  background:var(--surface);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-lg);
+  padding:40px 36px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
 }
-.auth-brand{text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:4px}
-.auth-brand .leaf{color:var(--brand)}
-.auth-brand .leaf svg{width:32px;height:32px}
-.auth-brand p{font-size:13px}
+
+.auth-brand{
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+  margin-bottom:6px;
+}
+.auth-logo{ width:68px; height:68px; border-radius:16px; background:#fff; }
+.auth-brand h1{ font-size:1.6rem; letter-spacing:-.02em; margin:4px 0 0; }
+.auth-brand p{ font-size:.9rem; margin:0; }
+
+/* 16px labels and 46px inputs: at 14px with a 38px box this read as a
+   settings sub-form rather than the front door to the console. 16px also
+   stops iOS zooming the page when a field is focused. */
+.auth-card .drawer-field{ gap:6px; }
+.auth-card .drawer-field span{ font-size:16px; font-weight:600; color:var(--text); }
+.auth-card .drawer-field input{
+  min-height:46px;
+  padding:0 14px;
+  font-size:16px;
+  border-radius:var(--radius-sm);
+}
+.auth-card .drawer-field input:focus{
+  outline:none;
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(66,195,199,.25);
+}
+
 .auth-error{
-  font-size:13px;color:var(--bad);background:rgba(220,38,38,.08);
-  border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-sm);padding:8px 11px;
+  font-size:.88rem;color:var(--bad);background:rgba(220,38,38,.08);
+  border:1px solid rgba(220,38,38,.25);border-radius:var(--radius-sm);padding:10px 12px;
 }
-.auth-submit{width:100%;text-align:center;margin-top:4px}
+
+.auth-submit{
+  width:100%;
+  text-align:center;
+  margin-top:4px;
+  min-height:48px;
+  font-size:1rem;
+  justify-content:center;
+}
+
+.auth-back{
+  text-align:center;
+  margin:0;
+  font-size:.88rem;
+}
+.auth-back button{
+  background:none;
+  border:none;
+  padding:6px 10px;
+  border-radius:var(--radius-sm);
+  font:inherit;
+  font-size:.88rem;
+  color:var(--text-2);
+  cursor:pointer;
+  text-decoration:underline;
+}
+.auth-back button:hover{ color:var(--text); }
+.auth-back button:focus-visible,
+.auth-submit:focus-visible{
+  outline:3px solid var(--accent);
+  outline-offset:2px;
+}
+
+@media (max-width:480px){
+  .auth-screen{ padding:16px; align-items:flex-start; padding-top:40px; }
+  .auth-card{ padding:28px 20px; }
+  .auth-logo{ width:56px; height:56px; }
+  .auth-brand h1{ font-size:1.4rem; }
+}
 
 /* ------------------------------- sidebar --------------------------------- */
 .sidebar{
@@ -1019,6 +1106,7 @@ tbody tr:last-child td{border-bottom:none}
 .landing-brand{ display:flex; align-items:center; gap:10px; }
 .landing-leaf{ display:inline-flex; color:var(--accent); }
 .landing-leaf svg{ width:26px; height:26px; }
+.landing-logo{ width:40px; height:40px; border-radius:10px; background:#fff; flex:none; }
 .landing-wordmark{ font-size:1.05rem; font-weight:700; letter-spacing:.01em; }
 
 .landing-main{
@@ -1152,4 +1240,474 @@ tbody tr:last-child td{border-bottom:none}
 
 @media (prefers-reduced-motion: reduce){
   .landing *{ animation:none !important; transition:none !important; }
+}
+
+/* ==========================================================================
+   ITEM A — the click-driven console.
+   Styles for ui/patterns.ts: the attention queue, pickers, wizards, detail
+   panels, empty and error states.
+
+   Tokens only - every colour below is one of the variables defined at the
+   top of this file. No new palette, no new font.
+   ========================================================================== */
+
+.section-heading{
+  margin:28px 0 12px;
+  font-size:1rem;
+  font-weight:700;
+  color:var(--text);
+}
+.section-heading:first-child{ margin-top:0; }
+
+/* ---- Attention queue ---------------------------------------------------- */
+.attn-section{ margin-bottom:8px; }
+
+.attn-grid{
+  display:grid;
+  gap:12px;
+  grid-template-columns:repeat(auto-fit, minmax(290px, 1fr));
+}
+
+.attn-card{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  width:100%;
+  text-align:left;
+  padding:16px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  border-left-width:4px;
+  background:var(--surface);
+  cursor:pointer;
+  transition:transform .12s var(--ease), box-shadow .12s var(--ease), border-color .12s var(--ease);
+}
+.attn-card:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(20,26,20,.08); }
+.attn-card:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+
+/* The left edge carries the urgency. The count and the words carry it too,
+   so colour is never the only signal. */
+.attn-bad{ border-left-color:var(--bad); }
+.attn-warn{ border-left-color:var(--warn); }
+.attn-info{ border-left-color:var(--info); }
+
+.attn-ico{ display:inline-flex; flex:none; color:var(--text-2); }
+.attn-ico svg{ width:22px; height:22px; }
+
+.attn-body{ display:flex; flex-direction:column; gap:3px; flex:1; min-width:0; }
+.attn-title{ font-weight:700; color:var(--text); font-size:.95rem; }
+.attn-sub{ font-size:.82rem; line-height:1.45; color:var(--text-2); }
+
+.attn-count{
+  flex:none;
+  min-width:34px;
+  text-align:center;
+  font-size:1.25rem;
+  font-weight:800;
+  color:var(--text);
+}
+
+.attn-clear{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:18px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--surface-2);
+}
+.attn-clear-ico{ display:inline-flex; color:var(--good); }
+.attn-clear-ico svg{ width:26px; height:26px; }
+.attn-clear b{ display:block; color:var(--text); }
+.attn-clear p{ margin:2px 0 0; font-size:.85rem; }
+
+/* ---- Clickable KPI tiles ------------------------------------------------ */
+.card-clickable{
+  cursor:pointer;
+  text-align:left;
+  font:inherit;
+  border:1px solid var(--border);
+  transition:transform .12s var(--ease), box-shadow .12s var(--ease);
+}
+.card-clickable:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(20,26,20,.08); }
+.card-clickable:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+
+/* ---- Empty and error states --------------------------------------------- */
+.empty-state-card,
+.error-state-card{
+  display:flex;
+  gap:14px;
+  align-items:flex-start;
+  padding:24px;
+  border-radius:12px;
+  border:1px dashed var(--border-strong);
+  background:var(--surface-2);
+}
+.empty-state-card{ flex-direction:column; align-items:center; text-align:center; }
+.empty-state-ico{ display:inline-flex; color:var(--muted); }
+.empty-state-ico svg{ width:30px; height:30px; }
+.empty-state-card h4,
+.error-state-card h4{ margin:0; font-size:1rem; color:var(--text); }
+.empty-state-card p,
+.error-state-card p{ margin:4px 0 0; font-size:.88rem; line-height:1.5; color:var(--text-2); max-width:48ch; }
+.empty-state-card .btn{ margin-top:8px; }
+
+.error-state-card{ border-style:solid; border-color:var(--bad); background:#fff; align-items:center; }
+.error-state-ico{ display:inline-flex; color:var(--bad); flex:none; }
+.error-state-ico svg{ width:26px; height:26px; }
+.error-state-body{ flex:1; }
+
+/* ---- Pickers ------------------------------------------------------------ */
+.picker{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+.picker-label{ font-size:.85rem; font-weight:600; color:var(--text); }
+.picker-label .req{ color:var(--bad); }
+.picker-hint{ margin:0; font-size:.8rem; color:var(--text-2); }
+
+.picker-search{
+  min-height:42px;
+  padding:0 12px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:#fff;
+  font-size:.92rem;
+  color:var(--text);
+}
+.picker-search:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(66,195,199,.18); }
+
+.picker-list{
+  max-height:230px;
+  overflow-y:auto;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:#fff;
+}
+
+.picker-option{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  width:100%;
+  padding:10px 12px;
+  text-align:left;
+  background:none;
+  border:none;
+  border-bottom:1px solid var(--divider);
+  cursor:pointer;
+  font:inherit;
+}
+.picker-option:last-child{ border-bottom:none; }
+.picker-option:hover:not(.is-disabled){ background:var(--surface-2); }
+.picker-option:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+
+/* Selection is a left bar plus a tint plus bold text - never colour alone. */
+.picker-option.is-selected{
+  background:var(--surface-2);
+  box-shadow:inset 3px 0 0 var(--brand);
+}
+.picker-option.is-selected b{ color:var(--brand); }
+.picker-option.is-disabled{ opacity:.5; cursor:not-allowed; }
+.picker-option[hidden]{ display:none; }
+
+.picker-option-main{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.picker-option-main b{ font-size:.9rem; color:var(--text); }
+.picker-option-sub{ font-size:.78rem; color:var(--text-2); }
+.picker-option-meta{ flex:none; font-size:.75rem; color:var(--warn); font-weight:600; }
+
+.picker-empty{
+  margin:0;
+  padding:12px;
+  border:1px dashed var(--border-strong);
+  border-radius:8px;
+  font-size:.85rem;
+  color:var(--text-2);
+}
+
+/* ---- Wizards ------------------------------------------------------------ */
+.wizard{ display:flex; flex-direction:column; gap:18px; }
+.wizard-head h3{ margin:0 0 4px; font-size:1.15rem; }
+
+.wizard-rail{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.wizard-rail-step{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  padding:6px 12px 6px 6px;
+  border-radius:999px;
+  background:var(--surface-2);
+  font-size:.8rem;
+  color:var(--text-2);
+}
+.wizard-rail-step.is-current{ background:var(--brand); color:#fff; }
+.wizard-rail-step.is-done{ background:var(--good); color:#fff; }
+.wizard-rail-n{
+  display:grid; place-items:center;
+  width:21px; height:21px;
+  border-radius:50%;
+  background:rgba(255,255,255,.35);
+  font-weight:700; font-size:.72rem;
+}
+.wizard-rail-step:not(.is-current):not(.is-done) .wizard-rail-n{ background:var(--border); color:var(--text-2); }
+
+.wizard-step{ display:none; }
+.wizard-step.is-current{ display:block; }
+.wizard-step h4{ margin:0 0 4px; font-size:1rem; }
+.wizard-step-hint{ margin:0 0 14px; font-size:.85rem; }
+
+.wizard-error{
+  margin:0;
+  padding:10px 12px;
+  border-radius:8px;
+  background:#fdecea;
+  border:1px solid var(--bad);
+  color:#8a2a22;
+  font-size:.86rem;
+}
+
+.wizard-foot{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding-top:14px;
+  border-top:1px solid var(--divider);
+}
+.wizard-count{ margin-left:auto; font-size:.82rem; color:var(--text-2); }
+.wizard-foot .btn[hidden]{ display:none; }
+
+/* ---- Detail panels ------------------------------------------------------ */
+.detail{ display:flex; flex-direction:column; gap:18px; }
+.detail-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+.detail-head h3{ margin:0; font-size:1.1rem; }
+.detail-head p{ margin:3px 0 0; font-size:.85rem; }
+
+.detail-actions{ display:flex; flex-wrap:wrap; gap:8px; }
+
+.detail-section{ border-top:1px solid var(--divider); padding-top:14px; }
+.detail-section h6{
+  margin:0 0 10px;
+  font-size:.74rem;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+
+.related-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; }
+.related-list a{
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+  padding:9px 10px;
+  border-radius:8px;
+  text-decoration:none;
+  color:var(--text);
+}
+.related-list a:hover{ background:var(--surface-2); }
+.related-list a b{ font-size:.89rem; }
+.related-list a span{ font-size:.78rem; color:var(--text-2); }
+
+/* ---- Confirm dialogs ---------------------------------------------------- */
+.confirm-body{ display:flex; flex-direction:column; gap:10px; }
+.confirm-consequence{ margin:0; font-size:.95rem; line-height:1.55; color:var(--text); font-weight:600; }
+.confirm-body p{ margin:0; font-size:.86rem; line-height:1.55; }
+.confirm-alt{
+  margin:0;
+  padding:10px 12px;
+  border-radius:8px;
+  background:var(--surface-2);
+  font-size:.85rem;
+  color:var(--text-2);
+}
+
+/* ---- Sidebar brand + status --------------------------------------------- */
+.brand-logo{
+  width:36px; height:36px;
+  border-radius:9px;
+  flex:none;
+  background:#fff;
+}
+
+/* The status block is a button now (it opens the health card), so it needs
+   resetting out of the browser default button styling. */
+.side-foot{
+  display:block;
+  width:100%;
+  text-align:left;
+  font:inherit;
+  background:none;
+  border:none;
+  cursor:pointer;
+  border-top:1px solid rgba(255,255,255,.12);
+}
+.side-foot:hover{ background:rgba(255,255,255,.06); }
+.side-foot:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
+.side-foot-state{ display:flex; align-items:center; gap:7px; margin-top:4px; }
+
+.dot{ width:9px; height:9px; border-radius:50%; flex:none; display:inline-block; }
+.dot-good{ background:var(--good); }
+.dot-warn{ background:var(--warn); }
+.dot-bad{ background:var(--bad); }
+.dot-unknown{ background:var(--neutral); }
+
+/* ---- Health card -------------------------------------------------------- */
+.health-good{ border-left:3px solid var(--good); }
+.health-warn{ border-left:3px solid var(--warn); }
+.health-bad{ border-left:3px solid var(--bad); }
+.health-neutral{ border-left:3px solid var(--neutral); }
+.health-foot{ margin:12px 0 0; font-size:.78rem; }
+.health-unavailable{ display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+.health-unavailable p{ margin:0; font-size:.88rem; color:var(--text-2); }
+
+@media (max-width:900px){
+  .attn-grid{ grid-template-columns:1fr; }
+  .wizard-rail-t{ display:none; }
+  .wizard-rail-step{ padding:6px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .attn-card, .card-clickable{ transition:none; }
+  .attn-card:hover, .card-clickable:hover{ transform:none; }
+}
+
+/* ---- Timelines (item 5) -------------------------------------------------
+   A request or an alert read top to bottom in the order things happened.
+   Submitted -> Assigned -> Scheduled -> Completed, each with a name and a
+   time, so "who attended to this?" has an answer on the page rather than in
+   somebody's memory. */
+.timeline{
+  list-style:none;
+  margin:0;
+  padding:0 0 0 6px;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+.timeline-item{
+  display:flex;
+  gap:12px;
+  padding:0 0 16px;
+  position:relative;
+}
+/* The connecting line, drawn behind the dots. Not on the last item, so the
+   timeline ends rather than trailing off. */
+.timeline-item:not(:last-child)::before{
+  content:"";
+  position:absolute;
+  left:5px;
+  top:14px;
+  bottom:0;
+  width:2px;
+  background:var(--divider);
+}
+.timeline-dot{
+  position:relative;
+  z-index:1;
+  flex:none;
+  width:12px;height:12px;
+  margin-top:3px;
+  border-radius:50%;
+  background:var(--brand);
+  box-shadow:0 0 0 3px var(--surface);
+}
+.timeline-item b{ display:block; font-size:.9rem; font-weight:600; color:var(--text); }
+.timeline-when{ display:block; font-size:.78rem; color:var(--text-2); margin-top:2px; }
+
+/* A step that has not happened yet - shown greyed so the shape of the whole
+   process is visible, not just the parts already done. */
+.timeline-item.is-pending .timeline-dot{ background:var(--border-strong); }
+.timeline-item.is-pending b{ color:var(--muted); font-weight:500; }
+
+/* A table cell that is a way in, not just text (item A's list -> detail
+   pattern). Underlined on hover rather than always, so a column of names
+   does not read as a wall of links. */
+.cell-link{
+  color:inherit;
+  text-decoration:none;
+  border-bottom:1px dashed var(--border-strong, #cbd5d0);
+}
+.cell-link:hover,
+.cell-link:focus-visible{
+  color:var(--brand, #184d35);
+  border-bottom-color:currentColor;
+}
+.cell-link:focus-visible{
+  outline:2px solid var(--brand, #184d35);
+  outline-offset:2px;
+  border-radius:3px;
+}
+
+/* ===================================================================
+   MAP LOCATION PICKER (item 6)
+
+   The canvas needs an explicit height: Leaflet measures its container, and
+   a container sized by its contents is zero tall, which renders as nothing
+   at all rather than as a broken map.
+   =================================================================== */
+.map-pick{
+  margin-top:16px;
+}
+.map-pick-canvas{
+  height:300px;
+  border:1px solid var(--border, #dfe6e2);
+  border-radius:10px;
+  background:var(--surface-2, #f4f7f5);
+  /* Leaflet's own panes sit above a lot; keep it under the drawer chrome. */
+  z-index:0;
+}
+.map-pick-status{
+  margin:8px 0 0;
+  font-size:13px;
+  color:var(--muted, #5d6b64);
+}
+.map-pick-fields{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin-top:12px;
+}
+@media (max-width:640px){
+  .map-pick-fields{ grid-template-columns:1fr; }
+  .map-pick-canvas{ height:220px; }
+}
+
+/* ===================================================================
+   WIZARD REVIEW STEP (item 6)
+   =================================================================== */
+.review-pane .detail-list{
+  margin-bottom:16px;
+}
+.review-zones{
+  width:100%;
+  font-size:14px;
+}
+.review-zones th{
+  text-align:left;
+  font-weight:600;
+  color:var(--muted, #5d6b64);
+}
+.review-zones td,
+.review-zones th{
+  padding:7px 10px;
+  border-bottom:1px solid var(--border, #dfe6e2);
+}
+
+/* An inline explanation attached to the figures above it - not an error and
+   not a toast. Used where a page has to say why a number is smaller than the
+   row count it sits next to (item 8). */
+.notice{
+  margin:0 0 16px;
+  padding:12px 14px;
+  border:1px solid var(--border, #dfe6e2);
+  border-left:3px solid var(--brand, #184d35);
+  border-radius:8px;
+  background:var(--surface-2, #f4f7f5);
+  color:var(--text, #1b2320);
+  font-size:14px;
+  line-height:1.5;
 }

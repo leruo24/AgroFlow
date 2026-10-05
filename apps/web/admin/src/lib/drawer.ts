@@ -1,5 +1,14 @@
 /* Slide-out drawer — detail views, edit forms and confirmations. */
 
+declare global {
+  interface Window {
+    /* Set by app/interactions.ts at startup. Pickers rendered into a drawer
+       need their click handlers attached after the drawer writes its HTML,
+       and the drawer is the only thing that knows when that happened. */
+    agroflowBindDrawerPickers?: () => void;
+  }
+}
+
 import { Icon } from "@/lib/icons";
 
 export interface DrawerField {
@@ -87,6 +96,12 @@ export function openDrawer(opts: DrawerOptions): void {
     </div>`;
 
   overlay.classList.add("open");
+
+  // Any picker in a drawer is bound before the caller's own onOpen runs, so
+  // a drawer that only needs a picker does not have to supply a hook. Set on
+  // window rather than imported, because lib/ must not depend on app/.
+  window.agroflowBindDrawerPickers?.();
+
   opts.onOpen?.();
 
   panel.querySelectorAll("[data-drawer-close]").forEach((b) =>

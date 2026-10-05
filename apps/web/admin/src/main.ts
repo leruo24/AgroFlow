@@ -16,6 +16,7 @@ import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/in
 import { initAuth, onAuthChange, isAdminAuthenticated } from "@/app/auth";
 import { LOGIN_HTML, wireLogin } from "@/pages/login";
 import { WELCOME_HTML, wireWelcome } from "@/pages/welcome";
+import { startHealthPolling, stopHealthPolling } from "@/app/health";
 
 declare global {
   interface Window {
@@ -73,6 +74,9 @@ function render(state: ViewState): void {
   const root = getRoot();
   root.innerHTML = ""; // unconditional clear - the only way any state's markup ends up in #root
 
+  // Leaving the signed-in shell tears its timers down with it.
+  if (state !== "signed-in") stopHealthPolling();
+
   if (state === "loading") {
     root.innerHTML = `<div class="boot-loading" aria-live="polite">Loading…</div>`;
     return;
@@ -111,6 +115,12 @@ function render(state: ViewState): void {
   initHeader();
   bootRouter();
   updateHeaderIdentity();
+
+  // The sidebar light and the header chip, refreshed every minute. Started
+  // here rather than at boot because both elements only exist inside the
+  // signed-in shell, and stopped on sign-out so a logged-out tab is not
+  // polling an admin-only endpoint it can no longer reach.
+  startHealthPolling();
 }
 
 async function boot(): Promise<void> {

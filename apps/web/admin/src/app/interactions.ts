@@ -2,7 +2,7 @@
 
 import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms } from "@/data/api";
 import { toast } from "@/lib/toast";
-import { openDrawer } from "@/lib/drawer";
+import { openDrawer, closeDrawer } from "@/lib/drawer";
 import {
   createFarmer,
   deleteFarm,
@@ -25,23 +25,214 @@ import {
   archiveFarm,
   restoreFarm,
   runAdviceNow,
+  assignRequest,
+  getActivityLog,
+  getEntityTimeline,
+  KIT_TYPES,
+  type AuditRow,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
-import { toCSV, downloadCSV } from "@/lib/csv";
+import { picker, detailList, wizard } from "@/ui/patterns";
+import { exportActivityWorkbook, exportSummaryWorkbook, exportRowsWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
+import { timelineHtml } from "@/pages/analytics";
+import { requestTimeline, formatCrop } from "@/pages/requests";
+import { toCSV } from "@/lib/csv";
 import { go, refresh, renderSettingsTab, positionTabUnderline, appState } from "@/app/router";
+import { refreshHealthPanel } from "@/app/health";
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
-import { esc, fmtInt, fmtPct, fmtDate, fmtLitres } from "@/lib/format";
-import { TECHNICIANS } from "@/data/referenceData";
-import type { DateRangePreset, FilterState, AlertPriority } from "@/types/models";
+import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
+import { TECHNICIANS, ZONE_CROPS } from "@/data/referenceData";
+import type { AdminAlert, DateRangePreset, Farm, FilterState, AlertPriority, ServiceRequest } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
+import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile } from "@/app/auth";
-import { getReportZones, getReportJson, downloadReportPdf } from "@/services/agroFlowApi";
+import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf } from "@/services/agroFlowApi";
 
+
+/* ------------------------------- pickers -------------------------------- */
+
+/* A picker is a search box over a list of real options. Choosing one writes
+   its value into the hidden field the wizard reads, so a form can never end
+   up holding a farm name that does not exist - which is the whole reason
+   these replaced the free-text fields. */
+function wirePickers(): void {
+  document.querySelectorAll<HTMLElement>("[data-picker]").forEach((host) => {
+    if (host.dataset["bound"]) return;
+    host.dataset["bound"] = "1";
+
+    const name = host.dataset["picker"] ?? "";
+    const search = host.querySelector<HTMLInputElement>(".picker-search");
+    const hidden = host.querySelector<HTMLInputElement>('[data-field="' + name + '"]');
+
+    search?.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+
+      host.querySelectorAll<HTMLElement>(".picker-option").forEach((opt) => {
+        const hay = opt.dataset["search"] ?? "";
+        opt.hidden = q.length > 0 && !hay.includes(q);
+      });
+    });
+
+    host.querySelectorAll<HTMLButtonElement>(".picker-option").forEach((opt) => {
+      opt.addEventListener("click", () => {
+        if (opt.disabled) return;
+
+        host.querySelectorAll(".picker-option").forEach((o) => {
+          o.classList.remove("is-selected");
+          o.setAttribute("aria-selected", "false");
+        });
+
+        opt.classList.add("is-selected");
+        opt.setAttribute("aria-selected", "true");
+
+        if (hidden) hidden.value = opt.dataset["value"] ?? "";
+
+        // Tell the wizard a choice was made, so a later step can rebuild
+        // itself from it (zones depend on the farm, farms on the farmer).
+        host.dispatchEvent(
+          new CustomEvent("picker:change", {
+            bubbles: true,
+            detail: { name, value: opt.dataset["value"] ?? "" },
+          }),
+        );
+      });
+    });
+  });
+}
+
+/* ------------------------------- wizards -------------------------------- */
+
+/* Steps, validation per step, and Back that keeps what was entered.
+   Validation is deliberately per step: one long form that validates at the
+   end tells the admin about a mistake they made six fields ago. */
+function wireWizards(): void {
+  document.querySelectorAll<HTMLElement>("[data-wizard]").forEach((wiz) => {
+    if (wiz.dataset["bound"]) return;
+    wiz.dataset["bound"] = "1";
+
+    const total = Number(wiz.dataset["steps"] ?? "1");
+    const back = wiz.querySelector<HTMLButtonElement>("[data-wizard-back]");
+    const next = wiz.querySelector<HTMLButtonElement>("[data-wizard-next]");
+    const confirmBtn = wiz.querySelector<HTMLButtonElement>("[data-wizard-confirm]");
+    const errorEl = wiz.querySelector<HTMLElement>("[data-wizard-error]");
+    const counter = wiz.querySelector<HTMLElement>("[data-wizard-current]");
+
+    const showError = (message: string | null): void => {
+      if (!errorEl) return;
+      errorEl.textContent = message ?? "";
+      errorEl.hidden = message === null;
+    };
+
+    const render = (): void => {
+      const step = Number(wiz.dataset["step"] ?? "0");
+
+      wiz.querySelectorAll<HTMLElement>("[data-wizard-step]").forEach((el) => {
+        el.classList.toggle("is-current", Number(el.dataset["wizardStep"]) === step);
+      });
+
+      wiz.querySelectorAll<HTMLElement>("[data-rail]").forEach((el) => {
+        const i = Number(el.dataset["rail"]);
+        el.classList.toggle("is-current", i === step);
+        el.classList.toggle("is-done", i < step);
+      });
+
+      if (back) back.disabled = step === 0;
+      if (counter) counter.textContent = String(step + 1);
+
+      // The last step is the review step, so Next becomes Confirm there.
+      const last = step === total - 1;
+      if (next) next.hidden = last;
+      if (confirmBtn) confirmBtn.hidden = !last;
+
+      showError(null);
+    };
+
+    /* Every field marked data-required must have a value before Next.
+       Returns the first problem in plain words, or null. */
+    const validateSection = (section: HTMLElement | null): string | null => {
+      if (!section) return null;
+
+      const fields = section.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-required]");
+
+      for (const el of Array.from(fields)) {
+        if (!el.value.trim()) {
+          return el.dataset["requiredMessage"] ?? "Please complete this step before continuing.";
+        }
+      }
+
+      return null;
+    };
+
+    const validateStep = (): string | null => {
+      const step = Number(wiz.dataset["step"] ?? "0");
+      return validateSection(wiz.querySelector<HTMLElement>('[data-wizard-step="' + step + '"]'));
+    };
+
+    /* Confirm re-checks EVERY step, not just the review step it sits on.
+       A field can be emptied after it was passed - clearing a farm name and
+       walking forward again would otherwise write a nameless farm. The
+       listener is on capture so it can stop the click before the delegated
+       data-act handler on document sees it. */
+    const findFirstProblem = (): { step: number; message: string } | null => {
+      const sections = Array.from(
+        wiz.querySelectorAll<HTMLElement>("[data-wizard-step]"),
+      ).sort((a, b) => Number(a.dataset["wizardStep"]) - Number(b.dataset["wizardStep"]));
+
+      for (const section of sections) {
+        const message = validateSection(section);
+        if (message) return { step: Number(section.dataset["wizardStep"]), message };
+      }
+
+      return null;
+    };
+
+    confirmBtn?.addEventListener(
+      "click",
+      (event) => {
+        const problem = findFirstProblem();
+        if (!problem) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        // Jump back to the step that is actually wrong rather than reporting
+        // it on the review screen, where the field is not even visible.
+        wiz.dataset["step"] = String(problem.step);
+        render();
+        showError(problem.message);
+      },
+      true,
+    );
+
+    next?.addEventListener("click", () => {
+      const problem = validateStep();
+      if (problem) {
+        showError(problem);
+        return;
+      }
+
+      const step = Number(wiz.dataset["step"] ?? "0");
+      wiz.dataset["step"] = String(Math.min(step + 1, total - 1));
+      render();
+    });
+
+    back?.addEventListener("click", () => {
+      // Nothing is cleared: going back and forward keeps every value,
+      // because re-typing a farm details is exactly the frustration this
+      // whole pattern exists to remove.
+      const step = Number(wiz.dataset["step"] ?? "0");
+      wiz.dataset["step"] = String(Math.max(step - 1, 0));
+      render();
+    });
+
+    render();
+  });
+}
 
 /* ----------------------------- filter toolbar ---------------------------- */
 
@@ -115,7 +306,7 @@ async function exportCurrent(kind: string): Promise<void> {
         date: (u) => u.dateJoined, farm: (u) => u.farm, status: (u) => u.status,
         telegram: (u) => telegramState(u),
       }).map((u) => [u.name, u.email, u.phone, u.farm, u.status, telegramState(u), u.dateJoined, u.lastActive]);
-      downloadCSV("agroflow-users.csv", toCSV(
+      downloadExcelSafeCsv("agroflow-users.csv", toCSV(
         ["Name", "Email", "Phone", "Farm", "Status", "Alerts", "Joined", "Last active"], rows));
       break;
     }
@@ -124,7 +315,7 @@ async function exportCurrent(kind: string): Promise<void> {
         search: (x) => `${x.name} ${x.owner}`, date: (x) => x.registered,
         province: (x) => x.province, region: (x) => x.region, status: (x) => x.status,
       }).map((x) => [x.name, x.owner, x.province, x.region, x.users, x.devices, x.health, x.status, x.registered]);
-      downloadCSV("agroflow-farms.csv", toCSV(["Farm", "Owner", "Province", "Region", "Users", "Devices", "Health", "Status", "Registered"], rows));
+      downloadExcelSafeCsv("agroflow-farms.csv", toCSV(["Farm", "Owner", "Province", "Region", "Users", "Devices", "Health", "Status", "Registered"], rows));
       break;
     }
     case "hardware": {
@@ -132,8 +323,12 @@ async function exportCurrent(kind: string): Promise<void> {
         search: (h) => `${h.id} ${h.type} ${h.farm}`, date: (h) => h.installed,
         farm: (h) => h.farm, deviceType: (h) => h.type, status: (h) => h.status,
         maintenanceState: (h) => h.maintenanceState,
-      }).map((h) => [h.id, h.type, h.farm, h.province, h.firmware, h.battery ?? "Mains", h.uptimePct, h.status, h.maintenanceState, h.installed]);
-      downloadCSV("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime %", "Status", "Maintenance", "Installed"], rows));
+      // Uptime and battery are not measured anywhere, so they say so
+      // rather than exporting 0 and an assumed "Mains".
+      }).map((h) => [h.id, h.type, h.farm, h.province, h.firmware,
+                     h.battery === null ? "Not reported" : h.battery,
+                     "Not measured", h.status, h.maintenanceState, h.installed]);
+      downloadExcelSafeCsv("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime", "Status", "Maintenance", "Installed"], rows));
       break;
     }
     case "alerts": {
@@ -142,7 +337,7 @@ async function exportCurrent(kind: string): Promise<void> {
         administrator: (a) => a.assignedTo ?? "", status: (a) => a.status,
         priority: (a) => a.priority, eventType: (a) => a.category,
       }).map((a) => [a.id, a.raised, a.category, a.title, a.farm ?? "Platform", a.user ?? "", a.assignedTo ?? "", a.priority, a.status]);
-      downloadCSV("agroflow-alerts.csv", toCSV(["ID", "Raised", "Category", "Alert", "Farm", "User", "Assigned", "Priority", "Status"], rows));
+      downloadExcelSafeCsv("agroflow-alerts.csv", toCSV(["ID", "Raised", "Category", "Alert", "Farm", "User", "Assigned", "Priority", "Status"], rows));
       break;
     }
     case "maintenance": {
@@ -151,15 +346,26 @@ async function exportCurrent(kind: string): Promise<void> {
         farm: (m) => m.farm, status: (m) => m.status, priority: (m) => m.priority,
         deviceType: (m) => m.deviceType,
       }).map((m) => [m.id, m.device, m.deviceType, m.farm, m.issue, m.priority, m.technician ?? "", m.scheduledFor, m.status, m.completedOn ?? ""]);
-      downloadCSV("agroflow-maintenance.csv", toCSV(["Job", "Device", "Type", "Farm", "Issue", "Priority", "Technician", "Scheduled", "Status", "Completed"], rows));
+      downloadExcelSafeCsv("agroflow-maintenance.csv", toCSV(["Job", "Device", "Type", "Farm", "Issue", "Priority", "Technician", "Scheduled", "Status", "Completed"], rows));
       break;
     }
     case "irrigation": {
       const rows = applyFilters(await api.getIrrigationEvents(), f, {
         date: (e) => e.date, farm: (e) => e.farm, province: (e) => e.province,
         region: (e) => e.region, crop: (e) => e.crop,
-      }).map((e) => [e.date, e.farm, e.zone, e.crop, e.province, e.region, e.litres, e.durationMin, e.onSchedule ? "Yes" : "No"]);
-      downloadCSV("agroflow-irrigation.csv", toCSV(["Date", "Farm", "Zone", "Crop", "Province", "Region", "Estimated litres", "Minutes", "On schedule"], rows));
+        // "No estimate" rather than an empty cell or a 0: the person reading
+        // the file has to be able to tell a zone with no flow rate from a
+        // pump that ran and delivered nothing. The "On schedule" column is
+        // gone - nothing in the schema records it, and it was exporting a
+        // hardcoded "Yes" for every row.
+      }).map((e) => [
+        e.date, e.farm, e.zone, e.crop, e.province, e.region,
+        e.litres === null ? "No estimate" : e.litres,
+        e.durationMin,
+      ]);
+      downloadExcelSafeCsv("agroflow-irrigation.csv", toCSV(
+        ["Date (SAST)", "Farm", "Zone", "Crop", "Province", "Region", "Estimated litres", "Pump minutes"],
+        rows));
       break;
     }
     case "activity": {
@@ -168,17 +374,132 @@ async function exportCurrent(kind: string): Promise<void> {
         administrator: (a) => a.administrator, farm: (a) => a.farm ?? "",
         eventType: (a) => a.eventType, status: (a) => a.outcome,
       }).map((a) => [a.timestamp, a.administrator, a.eventType, a.farm ?? "Platform", a.target ?? "", a.outcome]);
-      downloadCSV("agroflow-platform-activity.csv", toCSV(["Timestamp", "Administrator", "Action", "Farm", "Affected", "Outcome"], rows));
+      downloadExcelSafeCsv("agroflow-platform-activity.csv", toCSV(["Timestamp", "Administrator", "Action", "Farm", "Affected", "Outcome"], rows));
       break;
     }
+    /* The platform summary, as a real .xlsx.
+     *
+     * WHAT THIS REPLACED
+     * `Object.entries(kpis)` straight into a two-column CSV. The labels were
+     * therefore property names - "farmersNotReceivingAlerts" - and the file
+     * opened in Excel with both columns crammed into column A, because Excel
+     * splits a CSV on the locale's list separator and ours is a semicolon.
+     * It was, in practice, unreadable.
+     *
+     * A workbook has no separator to guess, numbers stay numbers and
+     * percentages stay percentages, so whoever opens it can chart or average
+     * the figures instead of re-typing them. */
     case "dashboard": {
-      const k = await api.getKpis();
-      const rows = Object.entries(k).map(([key, value]) => [key, String(value)]);
-      downloadCSV("agroflow-platform-summary.csv", toCSV(["Metric", "Value"], rows));
-      break;
+      const profile = getAdminProfile();
+
+      const [k, allFarms, allAlerts, allRequests] = await Promise.all([
+        api.getKpis(),
+        api.getFarms(),
+        api.getAlerts(),
+        // A summary is still worth having if the request list is the one
+        // thing that fails; the Requests sheet simply comes out empty.
+        api.getServiceRequests().catch(() => [] as ServiceRequest[]),
+      ]);
+
+      const openAlerts = allAlerts.filter((a) => !["Resolved", "Closed"].includes(a.status));
+
+      await exportSummaryWorkbook({
+        generatedBy: profile?.name || profile?.email || "an administrator",
+        sections: [
+          {
+            title: "Farms and farmers",
+            rows: [
+              { label: "Farms on the platform", value: k.totalFarms, format: "int" },
+              { label: "Farmer accounts", value: k.totalUsers, format: "int" },
+              { label: "Accounts active", value: k.activeUsers, format: "int" },
+              {
+                // The one figure on this sheet that is a problem rather than
+                // a statistic: these farmers receive nothing at all - no
+                // weather warning, no equipment failure, no password reset.
+                label: "Farmers who would receive no alerts (Telegram not connected)",
+                value: k.farmersNotReceivingAlerts,
+                format: "int",
+              },
+            ],
+          },
+          {
+            title: "Kits",
+            rows: [
+              { label: "Kits registered", value: k.totalHardware, format: "int" },
+              { label: "Kits reporting in", value: k.connectedHardware, format: "int" },
+              {
+                label: "Share of kits online",
+                // Excel's percent format multiplies by 100, so the value
+                // stored has to be the fraction, not the figure shown.
+                value: k.totalHardware > 0 ? k.connectedHardware / k.totalHardware : 0,
+                format: "pct",
+              },
+            ],
+          },
+          {
+            title: "Outstanding work",
+            rows: [
+              { label: "Alerts still open", value: k.activeAlerts, format: "int" },
+              { label: "Maintenance jobs not finished", value: k.openMaintenance, format: "int" },
+              {
+                label: "Farm requests waiting for a decision",
+                value: allRequests.filter((r) => r.status === "pending").length,
+                format: "int",
+              },
+            ],
+          },
+        ],
+
+        farms: allFarms.map((f) => ({
+          name: f.name,
+          owner: f.owner,
+          location: [f.region, f.province].filter(Boolean).join(", ") || "Not set",
+          zones: f.zones?.length ?? 0,
+          kitsOnline: 0,
+          kitsTotal: f.devices,
+          status: f.status,
+        })),
+
+        alerts: openAlerts.map((a) => ({
+          raised: a.raised,
+          title: a.title,
+          farm: a.farm ?? "Platform",
+          priority: a.priority,
+          status: a.status,
+        })),
+
+        requests: allRequests.map((r) => ({
+          farmer: r.farmerName,
+          type: r.requestType === "new_farm" ? "New farm" : "New zone",
+          location: r.location ?? "Not stated",
+          status: r.status,
+          submitted: fmtDateTimeSast(r.createdAt),
+          assignedTo: r.assignedToName ?? "Nobody yet",
+          scheduledBy: r.scheduledByName ?? "",
+          completedBy: r.completedByName ?? "",
+        })),
+      });
+
+      // Its own message: this export ignores the page filters, unlike every
+      // other one here, because it is a snapshot of the whole platform.
+      return void toast("Platform summary exported.", "success");
     }
   }
   toast(`Export complete — filters applied (${rangeLabel(f)}).`, "success");
+}
+
+/* The same summary as a PDF, for printing, filing or attaching to an email.
+   Built by the API, not here - see downloadSummaryPdf. */
+async function exportSummaryPdf(): Promise<void> {
+  try {
+    await downloadSummaryPdf();
+    toast("Platform summary PDF downloaded.", "success");
+  } catch (error) {
+    showErrorModal(
+      "Could not build the summary PDF",
+      error instanceof Error ? error.message : "The summary could not be built. Try again shortly.",
+    );
+  }
 }
 
 /* ------------------------------ detail views ----------------------------- */
@@ -220,8 +541,11 @@ async function openUserProfile(id: string): Promise<void> {
       section("Administrator notes", list(u.notes.map((n) =>
         `${esc(n.note)} <span class="muted">— ${esc(n.author)}, ${esc(n.when)}</span>`))),
     ].join(""),
-    confirmLabel: "Add note",
-    onConfirm: () => toast("Note added (demo).", "success"),
+    /* No confirm button. This drawer is a read of one farmer's record, and
+       its "Add note" claimed to save a note that was never written anywhere -
+       profile has no notes column and nothing was holding it even for the
+       session. The Administrator notes section above still shows whatever is
+       on the record. */
   });
 }
 
@@ -392,14 +716,79 @@ async function openFarmDetail(id: number): Promise<void> {
           void refresh();
         });
       } else {
-        void api.logReportGenerated(`${f.name} farm report`);
-        toast("Farm report generated (demo).", "success");
+        // This used to say a report had been generated. Nothing was: the
+        // call it made is a no-op. Real farm reports are produced by the
+        // live report section of the Reports page, against the API, so this
+        // takes the admin there instead of claiming work it did not do.
+        toast(`Choose ${f.name} under Reports to produce a report for it.`, "info");
+        void go("reports");
       }
     },
   });
 }
 
 /* ------------------------------ action router ---------------------------- */
+
+/* An alert's history as a timeline.
+ *
+ * Built from the alert's own fields and its notes rather than from the audit
+ * log, for the same reason requests.ts does it: this is the CURRENT state of
+ * one alert, and the audit log is the history of admin actions across the
+ * platform. The two answer different questions.
+ *
+ * Steps that have not happened are still shown, greyed, so an admin can see
+ * what is outstanding rather than only what is done. */
+function alertTimeline(a: AdminAlert): string {
+  const step = (label: string, when: string | null, done: boolean): string => `
+    <li class="timeline-item${done ? "" : " is-pending"}">
+      <span class="timeline-dot" aria-hidden="true"></span>
+      <div>
+        <b>${esc(label)}</b>
+        <span class="timeline-when">${when ? esc(when) : "not yet"}</span>
+      </div>
+    </li>`;
+
+  const resolved = ["Resolved", "Closed"].includes(a.status);
+
+  // Notes sit in the middle of the chain in the order they were written.
+  // api.addAlertNote unshifts, so the newest is first - reversed here because
+  // a timeline reads downwards through time.
+  const notes = [...a.notes].reverse().map((n) => `
+    <li class="timeline-item">
+      <span class="timeline-dot" aria-hidden="true"></span>
+      <div>
+        <b>Note by ${esc(n.author)}</b>
+        <span class="timeline-when">${esc(n.when)}</span>
+        <p class="muted">${esc(n.note)}</p>
+      </div>
+    </li>`).join("");
+
+  return `<ol class="timeline">
+    ${step("Raised", a.raised, true)}
+    ${a.assignedTo ? step(`Assigned to ${a.assignedTo}`, null, true) : step("Assigned", null, false)}
+    ${notes}
+    ${step(a.status === "Closed" ? "Closed" : "Resolved", null, resolved)}
+  </ol>`;
+}
+
+/* Today as yyyy-mm-dd in SAST (UTC+2, no DST).
+   Shifting before slicing the ISO string is what makes this right: at 01:30
+   on the 6th in Johannesburg, toISOString() still reads the 5th, so a visit
+   booked late at night would default to yesterday. */
+function todayIso(): string {
+  return new Date(Date.now() + 2 * 60 * 60_000).toISOString().slice(0, 10);
+}
+
+/* Re-points an element at a different action so one case can delegate to
+   another without duplicating it. The clone is not inserted in the document;
+   handleAction only ever reads data-act and data-id off it. */
+function withAct(el: HTMLElement, act: string): HTMLElement {
+  const proxy = document.createElement("span");
+  proxy.dataset["act"] = act;
+  const id = el.dataset["id"];
+  if (id) proxy.dataset["id"] = id;
+  return proxy;
+}
 
 async function handleAction(el: HTMLElement): Promise<void> {
   const act = el.dataset["act"];
@@ -581,7 +970,9 @@ case "delete-user": {
     /* farmer onboarding — real calls to AgroFlow.Api, not demo/mock like the
        rest of this file. Requires an admin to be signed in via Supabase Auth
        (no login flow exists in this dashboard yet - see agroFlowApi.ts). */
-    case "create-farmer-direct":
+    case "create-farmer-direct": {
+      const farmList = await api.getFarms().catch(() => []);
+
       return openDrawer({
         title: "Create farmer account",
         subtitle: "Admin sets the email and a temporary password directly.",
@@ -589,8 +980,21 @@ case "delete-user": {
           { label: "Full name", value: "", editable: true, name: "name" },
           { label: "Email", value: "", editable: true, name: "email" },
           { label: "Temporary password", value: "", editable: true, name: "password" },
-          { label: "Farm ID", value: "", editable: true, name: "farmId" },
         ],
+        // A farm id is a bigint nobody knows by heart. Typed wrong - and a
+        // digit out is easy - the new account is attached to a stranger's
+        // farm, with access to their readings.
+        bodyHtml: picker({
+          name: "farmId",
+          label: "Farm",
+          placeholder: "Search farms…",
+          emptyText: "No farms on file yet. The account can be created without one.",
+          options: farmList.map((f) => ({
+            value: String(f.id),
+            label: f.name,
+            secondary: `${f.owner} · ${f.region || f.province || "Location not set"}`,
+          })),
+        }),
         confirmLabel: "Create account",
         onConfirm: (v) => {
           void createFarmer({
@@ -604,14 +1008,27 @@ case "delete-user": {
               toast(err instanceof Error ? err.message : "Failed to create farmer account.", "warn"));
         },
       });
-    case "invite-farmer":
+    }
+    case "invite-farmer": {
+      const farmList = await api.getFarms().catch(() => []);
+
       return openDrawer({
         title: "Invite farmer",
         subtitle: "Sends a one-time Supabase Auth magic link — the farmer sets their own password.",
+        bodyHtml: picker({
+          name: "farmId",
+          label: "Farm",
+          placeholder: "Search farms…",
+          emptyText: "No farms on file yet. The invitation can be sent without one.",
+          options: farmList.map((f) => ({
+            value: String(f.id),
+            label: f.name,
+            secondary: `${f.owner} · ${f.region || f.province || "Location not set"}`,
+          })),
+        }),
         fields: [
           { label: "Full name", value: "", editable: true, name: "name" },
           { label: "Email", value: "", editable: true, name: "email" },
-          { label: "Farm ID", value: "", editable: true, name: "farmId" },
         ],
         confirmLabel: "Send invite",
         onConfirm: (v) => {
@@ -625,149 +1042,350 @@ case "delete-user": {
               toast(err instanceof Error ? err.message : "Failed to send invite.", "warn"));
         },
       });
+    }
 
     /* farms */
     case "view-farm": return openFarmDetail(numId);
-    case "add-farm": {
-  try {
-    const farmers = await getFarmers();
+    /* Register a kit, as five steps instead of a zone id typed from memory.
+     *
+     * WHAT WAS WRONG BEFORE
+     * An enrollment code could only be made from a scheduled request, and
+     * only ever for a zone chosen out of one farm's list. Registering a kit
+     * for anything else meant going to the request queue and finding a row
+     * that fitted - or there was no route at all. The zone is what the claim
+     * resolves, so getting it wrong attaches a farmer's kit to somebody
+     * else's block and the soil readings arrive against the wrong crop.
+     *
+     * Each picker narrows the next: a farmer's farms, that farm's zones. The
+     * farm list is filtered on ownerId, not on the owner's name - two
+     * farmers can share a name. */
+    case "register-hardware": {
+      let farmers;
+      let farms;
+      try {
+        [farmers, farms] = await Promise.all([getFarmers(), api.getFarms()]);
+      } catch (e) {
+        showErrorModal(
+          "Could not load the farmer and farm lists",
+          e instanceof Error ? e.message : "The lists could not be retrieved.",
+        );
+        return;
+      }
 
-    if (farmers.length === 0) {
-      showErrorModal(
-        "There are no existing farmers available. Register a farmer first.",
-        "No farmers available",
-      );
-      return;
+      // Only farmers who have somewhere to put a kit. Offering the rest
+      // leads to an empty farm step with nothing to explain it.
+      const withFarms = farmers.filter((f) => farms.some((farm) => farm.ownerId === f.id));
+
+      if (withFarms.length === 0) {
+        showErrorModal(
+          "No farms to register a kit to",
+          "A kit is enrolled onto a zone, and a zone belongs to a farm. Register a farm first.",
+        );
+        return;
+      }
+
+      return openDrawer({
+        title: "Register hardware",
+        wide: true,
+        bodyHtml: wizard({
+          id: "register-hardware",
+          title: "Register a kit",
+          subtitle: "Five steps. The code is created at the end.",
+          confirmLabel: "Create the enrollment code",
+          confirmAct: "wizard-register-hardware",
+          steps: [
+            {
+              title: "Farmer",
+              hint: "Whose kit this is.",
+              bodyHtml: picker({
+                name: "kitOwnerId",
+                label: "Farmer",
+                required: true,
+                requiredMessage: "Choose whose kit this is.",
+                placeholder: "Search by name or email…",
+                options: withFarms.map((f) => ({
+                  value: f.id,
+                  label: f.name,
+                  secondary: f.email,
+                })),
+              }),
+            },
+            {
+              title: "Farm",
+              hint: "Which of their farms.",
+              bodyHtml: `
+                <div id="kitFarmPicker">
+                  <p class="muted">Choose a farmer first.</p>
+                  <input type="hidden" data-field="kitFarmId" value="" data-required
+                    data-required-message="Choose the farm this kit is going to." />
+                </div>`,
+            },
+            {
+              title: "Zone",
+              hint: "The block this kit will water. This is what the kit is actually attached to.",
+              bodyHtml: `
+                <div id="kitZonePicker">
+                  <p class="muted">Choose a farm first.</p>
+                  <input type="hidden" data-field="kitZoneId" value="" data-required
+                    data-required-message="Choose the zone this kit will water." />
+                </div>`,
+            },
+            {
+              title: "Kit",
+              hint: "What is being installed, and what to call it.",
+              bodyHtml: `
+                ${picker({
+                  name: "kitType",
+                  label: "Kit type",
+                  required: true,
+                  requiredMessage: "Choose the kit type.",
+                  value: KIT_TYPES[0].value,
+                  options: KIT_TYPES.map((k) => ({
+                    value: k.value,
+                    label: k.label,
+                    secondary: k.secondary,
+                  })),
+                  hint: "Only kits whose firmware can complete the claim are listed.",
+                })}
+                <label class="f">
+                  Name for this kit (optional)
+                  <input type="text" data-field="kitName" placeholder="e.g. North Block controller" />
+                  <span class="muted">Left blank, it is named after its zone.</span>
+                </label>`,
+            },
+            {
+              title: "Review",
+              hint: "Check this, then create the code.",
+              bodyHtml: `<div id="kitReview" class="review-pane"></div>`,
+            },
+          ],
+        }),
+
+        onOpen: () => {
+          wirePickers();
+          wireWizards();
+          wireKitWizard(farms);
+        },
+      });
     }
 
-    const farmerOptions = farmers
-      .map(
-        (farmer) =>
-          `<option value="${farmer.id}">
-            ${farmer.name || farmer.email} (${farmer.email})
-          </option>`,
-      )
-      .join("");
+    case "wizard-register-hardware": {
+      const v = collectFields();
+      const zoneId = Number(v["kitZoneId"]);
+      if (!zoneId) return void toast("Choose the zone this kit will water.", "warn");
 
-    openDrawer({
-      title: "Register new farm",
-      subtitle: "Link a new farm to an existing farmer.",
-      wide: true,
+      try {
+        const result = await createEnrollmentCode({
+          zoneId,
+          deviceName: v["kitName"]?.trim() || undefined,
+          deviceType: v["kitType"] || KIT_TYPES[0].value,
+        });
 
-      fields: [
-        {
-          label: "Farm name",
-          value: "",
-          editable: true,
-          name: "farmName",
-        },
-        {
-          label: "Location",
-          value: "",
-          editable: true,
-          name: "location",
-        },
-        {
-          label: "Farm size (hectares)",
-          value: "",
-          editable: true,
-          name: "farmSize",
-        },
-      ],
+        closeDrawer();
 
-      bodyHtml: `
-        <div class="drawer-field">
-          <span>Farmer / Owner</span>
-          <select data-field="ownerId">
-            <option value="">Select an existing farmer</option>
-            ${farmerOptions}
-          </select>
-        </div>
-
-        <div class="drawer-field">
-          <span>Number of zones</span>
-          <input
-            type="number"
-            min="1"
-            max="50"
-            value="1"
-            data-register-farm-zone-count
-          />
-        </div>
-
-        <div id="registerFarmZones"></div>
-      `,
-
-      confirmLabel: "Register Farm",
-
-      onOpen: () => {
-        wireRegisterFarmZones();
-      },
-
-      onConfirm: async (v) => {
-        const zoneCount = Math.max(
-          1,
-          Math.min(
-            50,
-            Number(
-              document.querySelector<HTMLInputElement>(
-                "[data-register-farm-zone-count]",
-              )?.value,
-            ) || 1,
-          ),
+        // A modal, not a toast. This is a credential the installer has to
+        // write down, and a toast disappears while they look for a pen.
+        showErrorModal(
+          "Enrollment code",
+          `${result.enrollmentCode}\n\n` +
+            `Give this to the installer. They enter it on the kit's setup page, once.\n` +
+            `It expires ${fmtDate(result.expiresAt)} and cannot be shown again - nothing stores it in a readable form.`,
         );
 
-        const zones = Array.from(
-          { length: zoneCount },
-          (_, i) => ({
-            name: v[`zone_name_${i}`] ?? "",
-            sizeHectares:
-              Number(v[`zone_size_${i}`]) || 0,
-            cropType:
-              v[`zone_crop_${i}`] ?? "",
-          }),
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          "Could not create the enrollment code",
+          e instanceof Error ? e.message : "The code could not be created.",
         );
+        return;
+      }
+    }
 
-        try {
-          await registerFarm({
-            ownerId: v["ownerId"] ?? "",
-            farm: {
-              farmName: v["farmName"] ?? "",
-              location: v["location"] ?? "",
-              sizeHectares:
-                Number(v["farmSize"]) || 0,
-              zones,
+    /* Register a new farm, as four steps instead of one long form.
+     *
+     * WHAT WAS WRONG WITH THE FORM IT REPLACES
+     * Nine fields in one drawer, the owner as a <select> of every farmer, the
+     * location as free text, and the crop as a text input. Three things went
+     * wrong routinely: a mistyped crop ("Grapes") produced a zone the FAO-56
+     * engine cannot advise on and nothing said so; a farm got no coordinates
+     * at all, so its weather lookup had nothing to go on; and a validation
+     * error arrived after all nine fields were filled.
+     *
+     * Now: pick the farmer, place the farm on a map, describe the zones from
+     * a crop list the engine actually knows, and see all of it before
+     * anything is written. */
+    case "add-farm": {
+      let farmers;
+      try {
+        farmers = await getFarmers();
+      } catch (e) {
+        showErrorModal(
+          "Could not load the farmer list",
+          e instanceof Error ? e.message : "The farmer list could not be retrieved.",
+        );
+        return;
+      }
+
+      if (farmers.length === 0) {
+        showErrorModal(
+          "No farmers yet",
+          "A farm belongs to a farmer, so there is nobody to register this one to. Create a farmer account first.",
+        );
+        return;
+      }
+
+      return openDrawer({
+        title: "Register a new farm",
+        wide: true,
+        bodyHtml: wizard({
+          id: "register-farm",
+          title: "Register a new farm",
+          subtitle: "Four steps. Nothing is saved until the last one.",
+          confirmLabel: "Register the farm",
+          confirmAct: "wizard-register-farm",
+          steps: [
+            {
+              title: "Farmer",
+              hint: "Who this farm belongs to.",
+              bodyHtml: picker({
+                name: "ownerId",
+                label: "Farmer",
+                required: true,
+                requiredMessage: "Choose the farmer this farm belongs to.",
+                placeholder: "Search by name or email…",
+                hint: "Only existing farmer accounts can own a farm.",
+                options: farmers.map((f) => ({
+                  value: f.id,
+                  label: f.name,
+                  secondary: f.email,
+                })),
+              }),
             },
-          });
+            {
+              title: "Farm details",
+              hint: "Where it is and how big it is.",
+              bodyHtml: `
+                <div class="fields">
+                  <label class="f">
+                    Farm name
+                    <input
+                      type="text"
+                      data-field="farmName"
+                      data-required
+                      data-required-message="Give the farm a name."
+                      placeholder="Sunrise Valley Farm"
+                    />
+                  </label>
+                  <label class="f">
+                    Nearest town or district
+                    <input
+                      type="text"
+                      data-field="location"
+                      data-required
+                      data-required-message="Say roughly where the farm is."
+                      placeholder="Ceres, Western Cape"
+                    />
+                  </label>
+                  <label class="f">
+                    Farm size (hectares)
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      data-field="farmSize"
+                      data-required
+                      data-required-message="Enter the farm size in hectares."
+                      placeholder="0"
+                    />
+                  </label>
+                </div>
+                ${locationPickerHtml({})}`,
+            },
+            {
+              title: "Zones",
+              hint: "One per irrigated block. Each one gets its own advice.",
+              bodyHtml: `
+                <label class="f">
+                  How many zones?
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value="1"
+                    data-register-farm-zone-count
+                  />
+                </label>
+                <div id="registerFarmZones"></div>`,
+            },
+            {
+              title: "Review",
+              hint: "Check this, then register.",
+              bodyHtml: `<div id="registerFarmReview" class="review-pane"></div>`,
+            },
+          ],
+        }),
 
-          toast(
-            `${v["farmName"] || "Farm"} registered successfully.`,
-            "success",
-          );
+        onOpen: () => {
+          wirePickers();
+          wireRegisterFarmZones();
+          wireWizards();
+          wireRegisterFarmReview();
 
-          return void refresh();
-        } catch (e) {
-          showErrorModal(
-            e instanceof Error
-              ? e.message
-              : "Unable to register farm.",
-            "Unable to register farm",
-          );
-        }
-      },
-    });
+          /* The map lives on step 2, which is display:none when the drawer
+             opens, so it is mounted now and told to re-measure when the step
+             becomes visible. Mounting it lazily on first reveal would be
+             neater but needs an observer per wizard; this is one call. */
+          const mapHost = document.querySelector<HTMLElement>("[data-map-pick]");
+          if (mapHost) void mountLocationPicker(mapHost);
+        },
+      });
+    }
 
-    return;
-  } catch (e) {
-    showErrorModal(
-      e instanceof Error
-        ? e.message
-        : "Unable to load farmers.",
-      "Unable to load farmers",
-    );
-    return;
-  }
-}
+    /* The wizard's Confirm. wireWizards has already re-validated every step,
+       so what is missing here can only be something the steps do not mark
+       required - the zone arithmetic the API also enforces. Checked here too
+       so the admin is told in the drawer rather than by a 400. */
+    case "wizard-register-farm": {
+      const v = collectFields();
+
+      const zoneCount = registerFarmZoneCount();
+      const zones = Array.from({ length: zoneCount }, (_, i) => ({
+        name: (v[`zone_name_${i}`] ?? "").trim(),
+        sizeHectares: Number(v[`zone_size_${i}`]) || 0,
+        cropType: v[`zone_crop_${i}`] ?? "",
+      }));
+
+      const problem = validateRegisterFarmZones(zones, Number(v["farmSize"]) || 0);
+      if (problem) return void toast(problem, "warn");
+
+      const latitude = v["latitude"] ? Number(v["latitude"]) : null;
+      const longitude = v["longitude"] ? Number(v["longitude"]) : null;
+
+      try {
+        await registerFarm({
+          ownerId: v["ownerId"] ?? "",
+          farm: {
+            farmName: (v["farmName"] ?? "").trim(),
+            location: (v["location"] ?? "").trim(),
+            sizeHectares: Number(v["farmSize"]) || 0,
+            latitude,
+            longitude,
+            zones,
+          },
+        });
+
+        closeDrawer();
+        toast(`${v["farmName"] || "The farm"} is registered.`, "success");
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          "Could not register the farm",
+          e instanceof Error ? e.message : "The farm could not be registered.",
+        );
+        return;
+      }
+    }
         /* onboarding */
     case "onboarding-next": {
       const v = collectFields();
@@ -901,7 +1519,10 @@ case "delete-user": {
           { label: "Maintenance", value: h.maintenanceState },
           { label: "Firmware", value: h.firmware },
           { label: "Battery", value: h.battery === null ? "Mains powered" : `${h.battery}%` },
-          { label: "Uptime", value: fmtPct(h.uptimePct) },
+          // Never "0.0%". Nothing measures per-kit uptime - there is no
+          // telemetry table for it - and a zero reads as a kit that has
+          // never once been up, which is a fault report, not a blank.
+          { label: "Uptime", value: "Not measured" },
           { label: "Installed", value: fmtDate(h.installed) },
           { label: "Last seen", value: h.lastSeen },
         ],
@@ -1313,6 +1934,199 @@ case "delete-user": {
       }
     }
 
+    /* ---- Home: the attention queue and the KPI tiles ----------------
+       Each one lands on the list it counts, already filtered, so the admin
+       never arrives at a page and has to find the thing again. */
+    case "go-requests-pending":
+      setFilter("requests", { status: "pending" });
+      return void go("requests");
+
+    case "go-alerts-critical":
+      setFilter("alerts", { priority: "Critical" });
+      return void go("alerts");
+
+    case "go-kits-offline":
+      setFilter("hardware", { status: "Offline" });
+      return void go("hardware");
+
+    case "go-zones-setup":
+      // Farms and zones, where the list itself highlights which field each
+      // zone is missing.
+      return void go("farms");
+
+    case "go-users-no-telegram":
+      setFilter("users", { search: "" });
+      return void go("users");
+
+    case "go-reports-failed":
+      return void go("reports");
+
+    case "go-farms":
+      return void go("farms");
+    case "go-users":
+      return void go("users");
+    case "go-kits":
+      return void go("hardware");
+    case "go-alerts":
+      return void go("alerts");
+    case "go-maintenance":
+      return void go("maintenance");
+
+    /* ---- Health ------------------------------------------------------ */
+    case "open-health":
+      // Home holds the card. If we are already there, scroll to it rather
+      // than re-rendering the page under the admin.
+      if (appState.activePage === "dashboard") {
+        document.getElementById("systemHealth")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      return void go("dashboard");
+
+    case "refresh-health":
+      await refreshHealthPanel();
+      return;
+
+    /* The one rule this enforces: never a frozen page. Any page that failed
+       to load renders a Retry that comes back here. */
+    case "retry-page":
+      return void refresh();
+
+    /* One request, end to end: what was asked for, who has touched it, and
+       every recorded change to it.
+       The state chain comes off the row (service_request's own columns); the
+       history below it comes from the audit log, which is the only place that
+       knows a status was changed twice or set back. */
+    case "view-request": {
+      const requestId = Number(idAttr);
+      if (!requestId) return;
+
+      const requests = await api.getServiceRequests();
+      const request = requests.find((r) => r.id === requestId);
+      if (!request) return void toast("That request could not be found.", "warn");
+
+      // The log is a nicety on this panel, not the panel itself: if 0037 has
+      // not been applied the details must still open.
+      const history = await getEntityTimeline("service_request", String(requestId))
+        .catch(() => [] as AuditRow[]);
+
+      return openDrawer({
+        title: `${request.farmerName}`,
+        subtitle: request.requestType === "new_farm" ? "New farm request" : "New zone request",
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section"><h6>What was asked for</h6>
+            ${detailList([
+              ["Farm", esc(request.farmName ?? "New farm request")],
+              ["Crop", esc(formatCrop(request.cropType))],
+              ["Rough size", request.roughSize !== null ? `${request.roughSize} ha` : "Not stated"],
+              ["Location", esc(request.location ?? "Not stated")],
+              ["Contact", esc(request.farmerEmail || "Not on file")],
+              ["Notes", esc(request.notes ?? "None")],
+            ])}
+          </div>
+          <div class="drawer-section"><h6>Where it has got to</h6>
+            ${requestTimeline(request)}
+          </div>
+          <div class="drawer-section"><h6>Recorded changes</h6>
+            ${timelineHtml(history, "Nothing recorded against this request yet.")}
+          </div>`,
+        confirmLabel: "Close",
+        onConfirm: () => undefined,
+      });
+    }
+
+    /* Who is dealing with a request.
+       A picker over real admin profiles, not a text field - the whole point
+       of recording an owner is that the name means a specific person. */
+    case "assign-request": {
+      const requestId = Number(idAttr);
+      if (!requestId) return;
+
+      const [requests, candidates] = await Promise.all([
+        api.getServiceRequests(),
+        api.getAdministrators().catch(() => []),
+      ]);
+
+      const request = requests.find((r) => r.id === requestId);
+      if (!request) return void toast("That request could not be found.", "warn");
+
+      if (candidates.length === 0) {
+        return void toast("No administrator accounts to assign to.", "warn");
+      }
+
+      return openDrawer({
+        title: "Assign this request",
+        subtitle: `${request.farmerName} · ${request.requestType === "new_farm" ? "New farm" : "New zone"}`,
+        bodyHtml: `
+          ${picker({
+            name: "assignee",
+            label: "Assign to",
+            value: request.assignedToProfileId ?? "",
+            placeholder: "Search administrators…",
+            options: candidates.map((u) => ({
+              value: u.id,
+              label: u.name || u.email,
+              secondary: u.email,
+            })),
+          })}
+          <p class="muted">
+            Assigning does not change the status. Somebody usually picks a request up before it
+            is scheduled, and "booked, nobody owns it yet" is a real state worth being able to see.
+          </p>`,
+        confirmLabel: "Save",
+        onConfirm: (values) => {
+          const assignee = values["assignee"] ?? "";
+
+          void assignRequest(requestId, assignee || null)
+            .then((r) => {
+              toast(r.message, "success");
+              void refresh();
+            })
+            .catch((error: unknown) => {
+              showErrorModal(
+                "Could not assign the request",
+                error instanceof Error ? error.message : "The request could not be assigned.",
+              );
+            });
+        },
+      });
+    }
+
+    /* The activity log, as a file. CSV for anything, XLSX for the one people
+       actually open in Excel - see item 7 for why the plain CSV was useless
+       in a South African locale. */
+    case "export-activity-csv": {
+      const log = await getActivityLog();
+
+      // downloadExcelSafeCsv, not downloadCSV: the plain one produced a file
+      // Excel opened with every value in column A on a South African
+      // machine. See lib/workbook.ts.
+      downloadExcelSafeCsv(
+        "agroflow-activity",
+        toCSV(
+          ["When (SAST)", "Who", "What happened", "Farm", "Action code"],
+          log.rows.map((r) => [
+            fmtDateTimeSast(r.createdAt),
+            r.actorName,
+            r.summary,
+            r.farmName ?? "",
+            r.action,
+          ]),
+        ),
+      );
+
+      return void toast(`Exported ${log.rows.length} actions.`, "success");
+    }
+
+    case "export-dashboard-pdf":
+      return void exportSummaryPdf();
+
+    case "export-activity-xlsx": {
+      const log = await getActivityLog();
+      await exportActivityWorkbook(log.rows);
+      return void toast(`Exported ${log.rows.length} actions.`, "success");
+    }
+
     case "go-mqtt-logins":
       return void go("mqttLogins");
 
@@ -1465,24 +2279,37 @@ case "delete-user": {
     case "schedule-device-maint":
       return openDrawer({
         title: `Schedule service — ${idAttr}`,
+        bodyHtml: picker({
+          name: "tech",
+          label: "Technician",
+          required: true,
+          requiredMessage: "Choose a technician.",
+          placeholder: "Search technicians…",
+          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
+        }),
         fields: [
-          { label: "Technician", value: TECHNICIANS[0], editable: true, name: "tech" },
-          { label: "Date", value: "2026-07-29", editable: true, name: "date" },
+          // Today, not a date hardcoded during development - that one is now
+          // in the past, so every scheduled visit defaulted to overdue.
+          { label: "Date", value: todayIso(), editable: true, name: "date" },
         ],
         confirmLabel: "Schedule",
-        onConfirm: () => toast("Maintenance scheduled (demo).", "success"),
+        /* The maintenance list is a session working copy - there is no
+           writer for it (see data/api.ts's header). scheduleVisit at least
+           puts the date and status on the row in front of the admin, which
+           is honest optimistic feedback; the old toast claimed a booking
+           that existed nowhere, not even on screen. */
+        onConfirm: (v) => {
+          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
+            toast("Visit put on the job for this session.", "info");
+            void refresh();
+          });
+        },
       });
+    // The old free-text version of this wrote nothing at all - it toasted
+    // "registered (demo)" and the kit never existed. Kept as an alias so an
+    // older bookmark or button still reaches the real wizard.
     case "add-device":
-      return openDrawer({
-        title: "Register hardware",
-        fields: [
-          { label: "Device ID", value: "ESP32-", editable: true, name: "id" },
-          { label: "Type", value: "ESP32 Controller", editable: true, name: "type" },
-          { label: "Farm", value: "", editable: true, name: "farm" },
-        ],
-        confirmLabel: "Register",
-        onConfirm: (v) => toast(`${v["id"] || "Device"} registered (demo).`, "success"),
-      });
+      return handleAction(withAct(el, "register-hardware"));
 
     /* alerts */
     case "view-alert": {
@@ -1504,11 +2331,8 @@ case "delete-user": {
               <div class="detail-row"><span>Status</span><b>${esc(a.status)}</b></div>
             </div>
           </div>
-          <div class="drawer-section"><h6>Notes</h6>
-            ${a.notes.length
-              ? `<ul class="drawer-list">${a.notes.map((n) =>
-                  `<li>${esc(n.note)} <span class="muted">— ${esc(n.author)}, ${esc(n.when)}</span></li>`).join("")}</ul>`
-              : `<p class="muted">No notes recorded.</p>`}
+          <div class="drawer-section"><h6>History</h6>
+            ${alertTimeline(a)}
           </div>`,
         confirmLabel: "Resolve alert",
         onConfirm: () => {
@@ -1518,10 +2342,32 @@ case "delete-user": {
         },
       });
     }
-    case "assign-alert":
+    /* A picker over real administrator accounts. Typing a name into a text
+       field meant "Leruo", "leruo" and "L. Mosiane" were three different
+       assignees as far as the Assigned-to filter was concerned. */
+    case "assign-alert": {
+      const admins = await api.getAdministrators().catch(() => []);
+
+      if (admins.length === 0) {
+        return void toast("No administrator accounts to assign to.", "warn");
+      }
+
+      const current = api.findAlert(idAttr);
+
       return openDrawer({
         title: `Assign ${idAttr}`,
-        fields: [{ label: "Administrator", value: "", editable: true, name: "admin" }],
+        subtitle: current?.title,
+        bodyHtml: picker({
+          name: "admin",
+          label: "Assign to",
+          value: current?.assignedTo ?? "",
+          placeholder: "Search administrators…",
+          options: admins.map((u) => ({
+            value: u.name || u.email,
+            label: u.name || u.email,
+            secondary: u.email,
+          })),
+        }),
         confirmLabel: "Assign",
         onConfirm: (v) => {
           void api.assignAlert(idAttr, v["admin"] ?? "").then(() => {
@@ -1529,6 +2375,7 @@ case "delete-user": {
           });
         },
       });
+    }
     case "note-alert":
       return openDrawer({
         title: `Add note — ${idAttr}`,
@@ -1573,7 +2420,16 @@ case "delete-user": {
     case "assign-tech":
       return openDrawer({
         title: `Assign technician — ${idAttr}`,
-        fields: [{ label: "Technician", value: TECHNICIANS[0], editable: true, name: "tech" }],
+        // A name typed by hand meant the same person appeared as three
+        // different technicians in the Assigned-to filter.
+        bodyHtml: picker({
+          name: "tech",
+          label: "Technician",
+          required: true,
+          requiredMessage: "Choose a technician.",
+          placeholder: "Search technicians…",
+          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
+        }),
         confirmLabel: "Assign",
         onConfirm: (v) => {
           void api.assignTechnician(idAttr, v["tech"] ?? "").then(() => {
@@ -1625,14 +2481,31 @@ case "delete-user": {
     case "schedule-maint":
       return openDrawer({
         title: "Schedule maintenance",
+        bodyHtml: picker({
+          name: "tech",
+          label: "Technician",
+          required: true,
+          requiredMessage: "Choose a technician.",
+          placeholder: "Search technicians…",
+          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
+        }),
         fields: [
           { label: "Device ID", value: "", editable: true, name: "device" },
           { label: "Issue", value: "", editable: true, name: "issue" },
-          { label: "Technician", value: TECHNICIANS[0], editable: true, name: "tech" },
-          { label: "Date", value: "2026-07-29", editable: true, name: "date" },
+          { label: "Date", value: todayIso(), editable: true, name: "date" },
         ],
         confirmLabel: "Schedule",
-        onConfirm: () => toast("Maintenance scheduled (demo).", "success"),
+        /* The maintenance list is a session working copy - there is no
+           writer for it (see data/api.ts's header). scheduleVisit at least
+           puts the date and status on the row in front of the admin, which
+           is honest optimistic feedback; the old toast claimed a booking
+           that existed nowhere, not even on screen. */
+        onConfirm: (v) => {
+          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
+            toast("Visit put on the job for this session.", "info");
+            void refresh();
+          });
+        },
       });
 
     /* irrigation schedules */
@@ -1682,12 +2555,33 @@ case "delete-user": {
       await api.logReportGenerated(name);
       return toast(`${name} generated for ${rangeLabel(getFilter("reports"))}.`, "success");
     }
-    case "export-report-pdf":
+    /* Excel is real now - the same rows the CSV export writes, in a workbook
+       Excel opens without guessing a separator.
+
+       PDF is NOT offered for these cards any more. There is no per-report-type
+       PDF generator for them, and the button toasted "(demo)" while producing
+       no file. The Reports page's live report section does produce real PDFs,
+       from the API, so that is where the admin is sent. */
     case "export-report-excel": {
       const name = el.dataset["report"] ?? "Report";
-      const fmt = act === "export-report-pdf" ? "PDF" : "Excel";
-      await api.logReportGenerated(`${name} (${fmt})`);
-      return toast(`${name} exported as ${fmt} (demo).`, "info");
+      const f = getFilter("reports");
+
+      const events = applyFilters(await api.getIrrigationEvents(), f, {
+        date: (e) => e.date, farm: (e) => e.farm,
+        province: (e) => e.province, region: (e) => e.region,
+      });
+
+      await exportRowsWorkbook(
+        `agroflow-${name.toLowerCase().replace(/\s+/g, "-")}`,
+        name,
+        ["Date (SAST)", "Farm", "Region", "Crop", "Estimated litres"],
+        events.slice(0, 500).map((e) => [
+          fmtDate(e.date), e.farm, e.region, e.crop,
+          e.litres === null ? "No estimate" : e.litres,
+        ]),
+      );
+
+      return void toast(`${name} exported.`, "success");
     }
     case "export-report-csv": {
       const name = el.dataset["report"] ?? "Report";
@@ -1696,8 +2590,11 @@ case "delete-user": {
         date: (e) => e.date, farm: (e) => e.farm,
         province: (e) => e.province, region: (e) => e.region,
       });
-      const rows = events.slice(0, 500).map((e) => [e.date, e.farm, e.region, e.crop, e.litres]);
-      downloadCSV(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
+      const rows = events.slice(0, 500).map((e) => [
+        e.date, e.farm, e.region, e.crop,
+        e.litres === null ? "No estimate" : e.litres,
+      ]);
+      downloadExcelSafeCsv(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
         toCSV(["Date", "Farm", "Region", "Crop", "Estimated litres"], rows));
       await api.logReportGenerated(`${name} (CSV)`);
       return toast(`${name} exported.`, "success");
@@ -1705,7 +2602,24 @@ case "delete-user": {
     case "run-comparison": return runComparison();    
     case "live-report-view": return liveReportRun(el.dataset["report"] ?? "", false);
     case "live-report-pdf": return liveReportRun(el.dataset["report"] ?? "", true);
-    case "export-comparison": return toast("Comparison exported (demo).", "info");
+    /* A real file, from what is on screen. The comparison table is rendered
+       into #cmpResult by runComparison; reading it back is what makes
+       this export match exactly what the admin is looking at, rather than
+       re-running the comparison and risking a different answer. */
+    case "export-comparison": {
+      const rows = collectComparisonRows();
+
+      if (rows.length === 0) {
+        return void toast("Run a comparison first - there is nothing to export yet.", "warn");
+      }
+
+      downloadExcelSafeCsv(
+        "agroflow-comparison",
+        toCSV(["Group", "Period A (kL)", "Period B (kL)", "Change"], rows),
+      );
+
+      return void toast("Comparison exported.", "success");
+    }
 
     /* exports */
     case "export-users": return exportCurrent("users");
@@ -1718,11 +2632,21 @@ case "delete-user": {
     case "export-dashboard": return exportCurrent("dashboard");
 
     /* settings */
-    case "save-settings": return toast("Settings saved.", "success");
-    case "manage-roles": return toast("Role manager opened (demo).", "info");
-    case "backup-now": return toast("Backup started…", "info");
-    case "restore": return toast("Restore workflow started (demo).", "warn");
-    case "download-backup": return toast("Backup archive download started (demo).", "info");
+    /* The Settings form has nowhere to write to - there is no settings table
+       anywhere in the schema, and every field on that page shows the default
+       the platform is built with. So this says what happened: the values were
+       kept for this session and the platform's own defaults are unchanged.
+       It used to say "Settings saved.", which was not true, and an admin who
+       believed it would have reported a bug the next time they signed in. */
+    case "save-settings":
+      return toast(
+        "Kept for this session. The platform's own defaults are set in code and are unchanged.",
+        "info",
+      );
+
+    /* manage-roles, backup-now, restore and download-backup are gone, with
+       the buttons that fired them: each toasted a success for work nothing
+       did. See the Backup & Recovery tab for what is actually true. */
   }
 }
 
@@ -1748,6 +2672,12 @@ async function runComparison(): Promise<void> {
     const acc: Record<string, number> = {};
     for (const e of events) {
       if (!inWindow(e.date, from, to)) continue;
+
+      // Skipped, not counted as zero. A comparison between two periods is
+      // exactly where a silent zero does the most damage: it reads as a real
+      // drop in water use rather than as a zone nobody set a flow rate on.
+      if (e.litres === null) continue;
+
       acc[keyOf(e)] = (acc[keyOf(e)] ?? 0) + e.litres;
     }
     return acc;
@@ -1784,6 +2714,22 @@ async function runComparison(): Promise<void> {
     </table></div>`;
 
   toast("Comparison generated.", "success");
+}
+
+/* The comparison table's rows, read back out of the DOM.
+ *
+ * Reading the rendered table rather than recomputing is deliberate: the
+ * export then matches exactly what the admin is looking at. Recomputing would
+ * re-read the filters, and if anything had changed since they pressed Compare
+ * the file would disagree with the screen - which is the one thing an export
+ * must never do. */
+function collectComparisonRows(): string[][] {
+  const host = document.getElementById("cmpResult");
+  if (!host) return [];
+
+  return Array.from(host.querySelectorAll("tbody tr")).map((tr) =>
+    Array.from(tr.querySelectorAll("td")).map((td) => td.textContent?.trim() ?? ""),
+  );
 }
 
 function collectFields(): Record<string, string> {
@@ -1971,20 +2917,254 @@ function wireRegisterFarmZones(): void {
   countInput.dataset["bound"] = "1";
 
   const renderZones = () => {
-    const count = Math.max(
-      1,
-      Math.min(50, Number(countInput.value) || 1),
-    );
+    const count = registerFarmZoneCount();
+
+    // What was already typed is read before the rebuild and put back after.
+    // Nudging the count from 3 to 4 used to wipe the first three zones.
+    const existing = collectFields();
 
     container.innerHTML = Array.from(
       { length: count },
       (_, i) => zoneRow(i),
     ).join("");
+
+    container
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]")
+      .forEach((el) => {
+        const name = el.dataset["field"] ?? "";
+        if (existing[name]) el.value = existing[name];
+      });
   };
 
   countInput.addEventListener("input", renderZones);
 
   renderZones();
+}
+
+
+/* The kit wizard's two dependent steps.
+ *
+ * Each one is rebuilt when the step before it changes, rather than rendered
+ * once from everything: a farm list that still shows the previous farmer's
+ * farms is how a kit ends up on the wrong property. Rebuilding also clears
+ * the hidden field, so a stale zone id cannot survive a change of farm and
+ * be submitted. */
+function wireKitWizard(farms: Farm[]): void {
+  const wiz = document.querySelector<HTMLElement>('[data-wizard="register-hardware"]');
+  if (!wiz) return;
+
+  const farmHost = document.getElementById("kitFarmPicker");
+  const zoneHost = document.getElementById("kitZonePicker");
+  const review = document.getElementById("kitReview");
+  if (!farmHost || !zoneHost || !review) return;
+
+  let chosenFarmName = "";
+  let chosenZoneName = "";
+
+  const renderZonePlaceholder = (message: string): void => {
+    chosenZoneName = "";
+    zoneHost.innerHTML = `
+      <p class="muted">${esc(message)}</p>
+      <input type="hidden" data-field="kitZoneId" value="" data-required
+        data-required-message="Choose the zone this kit will water." />`;
+  };
+
+  const renderReview = (): void => {
+    const v = collectFields();
+    const kit = KIT_TYPES.find((k) => k.value === v["kitType"]);
+
+    review.innerHTML = detailList([
+      ["Farm", esc(chosenFarmName || "Not chosen")],
+      ["Zone", esc(chosenZoneName || "Not chosen")],
+      ["Kit type", esc(kit?.label ?? v["kitType"] ?? "Not chosen")],
+      ["Kit name", esc(v["kitName"]?.trim() || "Named after its zone")],
+    ]) + `
+      <p class="muted">
+        Creating the code does not install anything. It makes a single-use credential,
+        valid for 24 hours, that the installer enters on the kit once.
+      </p>`;
+  };
+
+  wiz.addEventListener("picker:change", (event) => {
+    const detail = (event as CustomEvent<{ name: string; value: string }>).detail;
+
+    if (detail.name === "kitOwnerId") {
+      const theirs = farms.filter((f) => f.ownerId === detail.value);
+
+      chosenFarmName = "";
+      renderZonePlaceholder("Choose a farm first.");
+
+      farmHost.innerHTML = picker({
+        name: "kitFarmId",
+        label: "Farm",
+        required: true,
+        requiredMessage: "Choose the farm this kit is going to.",
+        placeholder: "Search this farmer's farms…",
+        emptyText: "This farmer has no farms on file.",
+        options: theirs.map((f) => ({
+          value: String(f.id),
+          label: f.name,
+          secondary: `${f.region || f.province || "Location not set"} · ${f.hectares} ha`,
+        })),
+      });
+
+      // The new picker's own markup has to be bound; wirePickers skips what
+      // it has already bound, so this does not rebind the rest.
+      wirePickers();
+      return;
+    }
+
+    if (detail.name === "kitFarmId") {
+      const farmId = Number(detail.value);
+      chosenFarmName = farms.find((f) => f.id === farmId)?.name ?? "";
+      renderZonePlaceholder("Loading this farm's zones…");
+
+      void getReportZones(farmId)
+        .then((zones) => {
+          if (zones.length === 0) {
+            // A farm with no zones cannot take a kit at all: hardware.zone_id
+            // is what the claim resolves. Saying so here beats a picker with
+            // nothing in it.
+            renderZonePlaceholder(
+              "This farm has no zones yet. Add one before registering a kit to it.",
+            );
+            return;
+          }
+
+          zoneHost.innerHTML = picker({
+            name: "kitZoneId",
+            label: "Zone",
+            required: true,
+            requiredMessage: "Choose the zone this kit will water.",
+            placeholder: "Search this farm's zones…",
+            options: zones.map((z) => ({
+              value: String(z.zoneId),
+              label: z.name,
+              secondary: z.cropType ? `Crop: ${z.cropType}` : "No crop set",
+            })),
+          });
+
+          wirePickers();
+        })
+        .catch(() => {
+          renderZonePlaceholder("This farm's zones could not be loaded. Go back and try again.");
+        });
+
+      return;
+    }
+
+    if (detail.name === "kitZoneId") {
+      chosenZoneName =
+        zoneHost.querySelector<HTMLElement>(".picker-option.is-selected .picker-option-main b")
+          ?.textContent?.trim() ?? "";
+    }
+  });
+
+  wiz.querySelector("[data-wizard-next]")?.addEventListener("click", () => {
+    window.setTimeout(renderReview, 0);
+  });
+  wiz.querySelector("[data-wizard-back]")?.addEventListener("click", () => {
+    window.setTimeout(renderReview, 0);
+  });
+
+  renderReview();
+}
+
+/* The count, clamped to what the API will accept (1-50). Read from the DOM
+   rather than passed around, because the repeater and the confirm handler
+   both need it and the input is the only thing that knows. */
+function registerFarmZoneCount(): number {
+  const input = document.querySelector<HTMLInputElement>("[data-register-farm-zone-count]");
+  return Math.max(1, Math.min(50, Number(input?.value) || 1));
+}
+
+/* The two rules the wizard's per-field validation cannot express.
+   Both are enforced by the API as well; checked here so the answer arrives
+   in the drawer the admin is looking at rather than as a 400. */
+function validateRegisterFarmZones(
+  zones: { name: string; sizeHectares: number; cropType: string }[],
+  farmSize: number,
+): string | null {
+  const total = zones.reduce((sum, z) => sum + z.sizeHectares, 0);
+
+  if (farmSize > 0 && total > farmSize) {
+    return `The zones add up to ${total.toFixed(1)} ha, which is more than the farm's ${farmSize.toFixed(1)} ha.`;
+  }
+
+  const names = zones.map((z) => z.name.trim().toLowerCase());
+  const duplicate = names.find((n, i) => n.length > 0 && names.indexOf(n) !== i);
+  if (duplicate) {
+    return `Two zones are both called "${duplicate}". Zone names have to differ.`;
+  }
+
+  return null;
+}
+
+/* The review step, rebuilt every time it is shown.
+ *
+ * Rebuilt rather than filled once, because the admin can go back and change
+ * anything - a review screen showing stale values is worse than no review
+ * screen, since it is the thing they are trusting before they commit. */
+function wireRegisterFarmReview(): void {
+  const wiz = document.querySelector<HTMLElement>('[data-wizard="register-farm"]');
+  const pane = document.getElementById("registerFarmReview");
+  if (!wiz || !pane) return;
+
+  const cropLabel = (value: string): string =>
+    ZONE_CROPS.find((c) => c.value === value)?.label ?? value;
+
+  const render = (): void => {
+    const v = collectFields();
+    const ownerName = document
+      .querySelector<HTMLElement>('[data-picker="ownerId"] .picker-option.is-selected .picker-option-main b')
+      ?.textContent?.trim();
+
+    const zones = Array.from({ length: registerFarmZoneCount() }, (_, i) => ({
+      name: v[`zone_name_${i}`] ?? "",
+      size: v[`zone_size_${i}`] ?? "",
+      crop: v[`zone_crop_${i}`] ?? "",
+    }));
+
+    const coords =
+      v["latitude"] && v["longitude"]
+        ? `${Number(v["latitude"]).toFixed(5)}, ${Number(v["longitude"]).toFixed(5)}`
+        : "Not set - the weather lookup will fall back to the district";
+
+    pane.innerHTML = `
+      ${detailList([
+        ["Farmer", esc(ownerName ?? "Not chosen")],
+        ["Farm name", esc(v["farmName"] ?? "")],
+        ["Where", esc(v["location"] ?? "")],
+        ["Size", v["farmSize"] ? `${esc(v["farmSize"])} ha` : ""],
+        ["Coordinates", esc(coords)],
+        ["Zones", String(zones.length)],
+      ])}
+      <table class="table review-zones">
+        <thead><tr><th>Zone</th><th>Size</th><th>Crop</th></tr></thead>
+        <tbody>
+          ${zones
+            .map(
+              (z) => `<tr>
+                <td>${esc(z.name || "(no name)")}</td>
+                <td>${z.size ? `${esc(z.size)} ha` : "—"}</td>
+                <td>${z.crop ? esc(cropLabel(z.crop)) : "—"}</td>
+              </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>`;
+  };
+
+  // The wizard has no "step changed" event, so the two buttons that can
+  // reach the review step both trigger a rebuild.
+  wiz.querySelector("[data-wizard-next]")?.addEventListener("click", () => {
+    window.setTimeout(render, 0);
+  });
+  wiz.querySelector("[data-wizard-back]")?.addEventListener("click", () => {
+    window.setTimeout(render, 0);
+  });
+
+  render();
 }
 
 /* ---- Live farm reports (real endpoints; the cards above are demo data) ---- */
@@ -2129,9 +3309,14 @@ async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
 }
 
 export function wirePageInteractions(): void {
+  // The drawer calls this after it writes its HTML - see lib/drawer.ts.
+  window.agroflowBindDrawerPickers = wirePickers;
+
   wireFilters();
   wireLiveReports();
  wireOnboardingZones();
+  wirePickers();
+  wireWizards();
 
   document.querySelectorAll<HTMLElement>("[data-go]").forEach((a) => {
     if (a.dataset["bound"]) return;

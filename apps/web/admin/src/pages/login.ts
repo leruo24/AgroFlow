@@ -3,13 +3,16 @@
    (see app/router.ts): outside the authenticated app shell entirely. */
 
 import { signIn } from "@/app/auth";
-import { Icon } from "@/lib/icons";
 
 export const LOGIN_HTML = `
   <div class="auth-screen">
     <form class="auth-card" id="loginForm" novalidate>
       <div class="auth-brand">
-        <span class="leaf">${Icon.sprout}</span>
+        <!-- The real app icon, the same one on the farmer's phone - so the
+             console looks like part of the same product rather than a
+             separate tool that happens to share a name. Relative path: the
+             site is served from a sub-path on GitHub Pages. -->
+        <img class="auth-logo" src="brand/agroflow-icon-192.png" alt="" width="68" height="68" />
         <h1>AgroFlow</h1>
         <p class="muted">Administration console</p>
       </div>
@@ -27,6 +30,13 @@ export const LOGIN_HTML = `
       <p class="auth-error" id="loginError" hidden></p>
 
       <button type="submit" class="btn auth-submit" id="loginSubmit">Sign in</button>
+
+      <!-- A way out. Someone who followed the console link and is not an
+           administrator had no route back to the page that explains what
+           AgroFlow is - the login card was a dead end. -->
+      <p class="auth-back">
+        <button type="button" id="loginBackHome">Back to home</button>
+      </p>
     </form>
   </div>`;
 
@@ -77,6 +87,12 @@ export function wireLogin(root: HTMLElement): void {
     // On success, app/auth.ts's notify() triggers main.ts's render() with
     // "signed-in", which clears #root and replaces this form entirely -
     // nothing to do here in that case.
+  });
+
+  // Clearing the hash drops #/login, which main.ts's hashchange listener
+  // renders as the landing page.
+  root.querySelector<HTMLButtonElement>("#loginBackHome")?.addEventListener("click", () => {
+    window.location.hash = "";
   });
 
   emailInput.focus();

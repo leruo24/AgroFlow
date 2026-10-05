@@ -22,6 +22,25 @@ public static class UserEndpoints
     {
         await using var connection = await dataSource.OpenConnectionAsync();
 
+        // ONE ROW PER PERSON.
+        //
+        // This used to be a plain left join onto farm_member, so a farmer who
+        // belongs to three farms came back three times and the Farmers page
+        // listed them three times - with the same email, the same Telegram
+        // state and three different farm names. The count at the top of the
+        // page was wrong by the same margin.
+        //
+        // Grouping fixes it, and the farms are joined into one readable cell
+        // rather than one of them being picked arbitrarily. farm_id keeps the
+        // lowest membership so the existing "their farm" links still resolve
+        // to a real farm; it is not meaningful for somebody on several.
+        //
+        // ADMINS ARE INCLUDED NOW. The role filter meant this endpoint could
+        // only ever return farmers, so anything needing a list of
+        // administrators - the Assign pickers on requests and alerts - had
+        // nothing to offer. role travels on each row and the Farmers page
+        // filters on it, which is the right place for a question about what
+        // one page wants to show.
         const string sql = """
             select
                 p.id,
@@ -30,22 +49,22 @@ public static class UserEndpoints
                 p.phone,
                 p.role,
                 p.created_at,
-                fm.farm_id,
-                f.name as farm_name,
+                min(fm.farm_id) as farm_id,
+                nullif(string_agg(distinct f.name, ', '), '') as farm_name,
 
                 -- Read-only, for the admin list's "is this farmer actually
                 -- reachable?" column. A farmer who never pressed Start in the
                 -- bot has no chat id and receives nothing, and until now there
                 -- was no way for anyone to notice that until a storm warning
                 -- failed to arrive.
-                p.telegram_chat_id is not null as telegram_linked,
-                p.telegram_alerts_enabled
+                bool_or(p.telegram_chat_id is not null) as telegram_linked,
+                bool_or(p.telegram_alerts_enabled) as telegram_alerts_enabled
             from profile p
             left join farm_member fm
                 on fm.profile_id = p.id
             left join farm f
                 on f.farm_id = fm.farm_id
-            where p.role = 'farm_user'
+            group by p.id, p.name, p.email, p.phone, p.role, p.created_at
             order by p.created_at desc
             """;
 
