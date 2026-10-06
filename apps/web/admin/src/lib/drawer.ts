@@ -28,7 +28,8 @@ export interface DrawerOptions {
   /** Wider panel for multi-section detail views. */
   wide?: boolean;
   confirmLabel?: string;
-  onConfirm?: (values: Record<string, string>) => void;
+  /** Return false to keep the drawer open (a check failed - what was typed stays). */
+  onConfirm?: (values: Record<string, string>) => void | boolean;
   onOpen?: () => void;
   /** From currentPanelIntent(), taken BEFORE the opener's first await. If a
       newer panel was asked for in the meantime, this one is not opened. */
@@ -141,7 +142,10 @@ export function openDrawer(opts: DrawerOptions): void {
     panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((input) => {
   values[input.dataset["field"] ?? ""] = input.value;
 });
-    opts.onConfirm?.(values);
+    if (opts.onConfirm?.(values) === false) {
+      button.disabled = false;
+      return;
+    }
     closeDrawer();
   });
 

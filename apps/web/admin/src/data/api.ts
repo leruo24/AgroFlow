@@ -486,7 +486,8 @@ export const api = {
       return {
         id: row.id,
         farmerId: row.farmer_id,
-        farmerName: farmer?.name || "(no name on file)",
+        // Item 6c: the email when there is no name - never "(no name on file)".
+        farmerName: farmer?.name || farmer?.email || "Farmer without a name or email",
         farmerEmail: farmer?.email || "",
         farmId: row.farm_id,
         farmName: row.farm_id === null ? null : farmMap.get(row.farm_id) ?? null,
@@ -530,8 +531,9 @@ export const api = {
   async updateServiceRequestStatus(
     id: number,
     status: ServiceRequestStatus,
+    note?: string,
   ): Promise<void> {
-    await updateServiceRequestStatusThroughApi(id, status);
+    await updateServiceRequestStatusThroughApi(id, status, note);
   },
 
   async getHardware(): Promise<Hardware[]> {

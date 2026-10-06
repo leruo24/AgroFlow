@@ -46,9 +46,10 @@ import {
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
-import { picker, detailList, wizard, errorState } from "@/ui/patterns";
+import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml, rememberReportFarm } from "@/pages/analytics";
+import { requestActions } from "@/pages/requests";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
 import { navigate, showPage, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
@@ -63,7 +64,7 @@ import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtm
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -1225,132 +1226,8 @@ case "delete-user": {
      * Now: pick the farmer, place the farm on a map, describe the zones from
      * a crop list the engine actually knows, and see all of it before
      * anything is written. */
-    case "add-farm": {
-      let farmers;
-      try {
-        farmers = await getFarmers();
-      } catch (e) {
-        showErrorModal(
-          "Could not load the farmer list",
-          e instanceof Error ? e.message : "The farmer list could not be retrieved.",
-        );
-        return;
-      }
-
-      if (farmers.length === 0) {
-        showErrorModal(
-          "No farmers yet",
-          "A farm belongs to a farmer, so there is nobody to register this one to. Create a farmer account first.",
-        );
-        return;
-      }
-
-      return openDrawer({
-        title: "Register a new farm",
-        wide: true,
-        bodyHtml: wizard({
-          id: "register-farm",
-          title: "Register a new farm",
-          subtitle: "Four steps. Nothing is saved until the last one.",
-          confirmLabel: "Register the farm",
-          confirmAct: "wizard-register-farm",
-          steps: [
-            {
-              title: "Farmer",
-              hint: "Who this farm belongs to.",
-              bodyHtml: picker({
-                name: "ownerId",
-                label: "Farmer",
-                required: true,
-                requiredMessage: "Choose the farmer this farm belongs to.",
-                placeholder: "Search by name or email…",
-                hint: "Only existing farmer accounts can own a farm.",
-                options: farmers.map((f) => ({
-                  value: f.id,
-                  label: f.name,
-                  secondary: f.email,
-                })),
-              }),
-            },
-            {
-              title: "Farm details",
-              hint: "Where it is and how big it is.",
-              bodyHtml: `
-                <div class="fields">
-                  <label class="f">
-                    Farm name
-                    <input
-                      type="text"
-                      data-field="farmName"
-                      data-required
-                      data-required-message="Give the farm a name."
-                      placeholder="Sunrise Valley Farm"
-                    />
-                  </label>
-                  <label class="f">
-                    Nearest town or district
-                    <input
-                      type="text"
-                      data-field="location"
-                      data-required
-                      data-required-message="Say roughly where the farm is."
-                      placeholder="Ceres, Western Cape"
-                    />
-                  </label>
-                  <label class="f">
-                    Farm size (hectares)
-                    <input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      data-field="farmSize"
-                      data-required
-                      data-required-message="Enter the farm size in hectares."
-                      placeholder="0"
-                    />
-                  </label>
-                </div>
-                ${locationPickerHtml({})}`,
-            },
-            {
-              title: "Zones",
-              hint: "One per irrigated block. Each one gets its own advice.",
-              bodyHtml: `
-                <label class="f">
-                  How many zones?
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value="1"
-                    data-register-farm-zone-count
-                  />
-                </label>
-                <div id="registerFarmZones"></div>`,
-            },
-            {
-              title: "Review",
-              hint: "Check this, then register.",
-              bodyHtml: `<div id="registerFarmReview" class="review-pane"></div>`,
-            },
-          ],
-        }),
-
-        onOpen: () => {
-          wirePickers();
-          wireRegisterFarmZones();
-          wireWizards();
-          wireRegisterFarmReview();
-
-          /* The map lives on step 2, which is display:none when the drawer
-             opens, so it is mounted now and told to re-measure when the step
-             becomes visible. Mounting it lazily on first reveal would be
-             neater but needs an observer per wizard; this is one call. */
-          const mapHost = document.querySelector<HTMLElement>("[data-map-pick]");
-          if (mapHost) void mountLocationPicker(mapHost);
-        },
-      });
-    }
+    case "add-farm":
+      return openRegisterFarmWizard(null);
 
     /* The wizard's Confirm. wireWizards has already re-validated every step,
        so what is missing here can only be something the steps do not mark
@@ -1395,6 +1272,7 @@ case "delete-user": {
 
         closeDrawer();
         toast(`${v["farmName"] || "The farm"} is registered.`, "success");
+        await completeLaunchingRequest(`Completed by registering the farm "${(v["farmName"] ?? "").trim()}".`);
         return void refresh();
       } catch (e) {
         showErrorModal(
@@ -2112,6 +1990,12 @@ case "delete-user": {
       const requests = await api.getServiceRequests();
       const request = requests.find((r) => r.id === requestId);
       if (!request) return void toast("That request could not be found.", "warn");
+      const handledBy = (await getHandling("requests").catch(() => [])).find((h) => h.id === String(requestId));
+      if (handledBy) {
+        request.handledById = handledBy.handledBy;
+        request.handledByName = handledBy.handledByName;
+        request.claimedAt = handledBy.claimedAt;
+      }
 
       // The log is a nicety on this panel, not the panel itself: if 0037 has
       // not been applied the details must still open.
@@ -2126,13 +2010,20 @@ case "delete-user": {
         bodyHtml: `
           <div class="drawer-section"><h6>What was asked for</h6>
             ${detailList([
-              ["Farm", esc(request.farmName ?? "New farm request")],
+              ["Request", request.requestType === "new_farm" ? "New farm" : "New zone"],
+              ["Farm", esc(request.farmName ?? "Not set up yet")],
               ["Crop", esc(formatCrop(request.cropType))],
               ["Rough size", request.roughSize !== null ? `${request.roughSize} ha` : "Not stated"],
               ["Location", esc(request.location ?? "Not stated")],
               ["Contact", esc(request.farmerEmail || "Not on file")],
               ["Notes", esc(request.notes ?? "None")],
             ])}
+          </div>
+          <div class="drawer-section"><h6>Handled by</h6>
+            ${handlingCell("requests", request, getAdminProfile()?.id, request.status === "completed")}
+          </div>
+          <div class="drawer-section"><h6>Next</h6>
+            ${requestActions(request, getAdminProfile()?.id)}
           </div>
           <div class="drawer-section"><h6>Where it has got to</h6>
             ${requestTimeline(request)}
@@ -2182,6 +2073,30 @@ case "delete-user": {
 
     case "go-mqtt-logins":
       return void navigate("mqttLogins");
+
+    /* Item 6c: [Mark complete], with an optional note. */
+    case "request-complete": {
+      const requestId = Number(idAttr);
+      return openDrawer({
+        title: "Mark complete",
+        subtitle: "Your name and the time go on the record.",
+        fields: [{ label: "Note (optional)", value: "", editable: true, name: "note" }],
+        confirmLabel: "Mark complete",
+        onConfirm: (v) => {
+          void api.updateServiceRequestStatus(requestId, "completed", (v["note"] ?? "").trim() || undefined)
+            .then(() => { toast("Request completed.", "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not complete the request", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
+
+    /* Item 6c: carry the request out - prefilled, and saving completes it. */
+    case "request-setup": {
+      const r = (await api.getServiceRequests()).find((x) => String(x.id) === idAttr);
+      if (!r) return void toast("That request could not be found.", "warn");
+      if (r.requestType === "new_zone" && r.farmId !== null) return openAddZonesWizard(r);
+      return openRegisterFarmWizard(r);
+    }
 
     case "go-onboarding":
       // A new_farm request has no farm yet, so there is no zone to enrol a
@@ -3188,6 +3103,236 @@ function wireKitWizard(farms: Farm[]): void {
   renderReview();
 }
 
+/* The register-farm wizard. Item 6c: given a request, it is prefilled from it
+   (farmer, location, size, crop) and saving it completes the request. */
+let completeRequestOnSave: number | null = null;
+
+async function openRegisterFarmWizard(fromRequest: ServiceRequest | null): Promise<void> {
+  let farmers;
+  try {
+    farmers = await getFarmers();
+  } catch (e) {
+    showErrorModal(
+      "Could not load the farmer list",
+      e instanceof Error ? e.message : "The farmer list could not be retrieved.",
+    );
+    return;
+  }
+
+  if (farmers.length === 0) {
+    showErrorModal(
+      "No farmers yet",
+      "A farm belongs to a farmer, so there is nobody to register this one to. Create a farmer account first.",
+    );
+    return;
+  }
+
+  // Item 6c: launched from a request, saving completes that request.
+  completeRequestOnSave = fromRequest?.id ?? null;
+
+  return openDrawer({
+    title: fromRequest ? `Set up ${fromRequest.farmerName}'s farm` : "Register a new farm",
+    wide: true,
+    bodyHtml: wizard({
+      id: "register-farm",
+      title: "Register a new farm",
+      subtitle: "Four steps. Nothing is saved until the last one.",
+      confirmLabel: "Register the farm",
+      confirmAct: "wizard-register-farm",
+      steps: [
+        {
+          title: "Farmer",
+          hint: "Who this farm belongs to.",
+          bodyHtml: picker({
+            name: "ownerId",
+            label: "Farmer",
+            required: true,
+            requiredMessage: "Choose the farmer this farm belongs to.",
+            placeholder: "Search by name or email…",
+            hint: "Only existing farmer accounts can own a farm.",
+            value: fromRequest?.farmerId,
+            options: farmers.map((f) => ({
+              value: f.id,
+              label: f.name,
+              secondary: f.email,
+            })),
+          }),
+        },
+        {
+          title: "Farm details",
+          hint: "Where it is and how big it is.",
+          bodyHtml: `
+            <div class="fields">
+              <label class="f">
+                Farm name
+                <input
+                  type="text"
+                  data-field="farmName"
+                  data-required
+                  data-required-message="Give the farm a name."
+                  placeholder="Sunrise Valley Farm"
+                />
+              </label>
+              <label class="f">
+                Nearest town or district
+                <input
+                  type="text"
+                  data-field="location"
+                  data-required
+                  data-required-message="Say roughly where the farm is."
+                  placeholder="Ceres, Western Cape"
+                />
+              </label>
+              <label class="f">
+                Farm size (hectares)
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  data-field="farmSize"
+                  data-required
+                  data-required-message="Enter the farm size in hectares."
+                  placeholder="0"
+                />
+              </label>
+            </div>
+            ${locationPickerHtml({})}`,
+        },
+        {
+          title: "Zones",
+          hint: "One per irrigated block. Each one gets its own advice.",
+          bodyHtml: `
+            <label class="f">
+              How many zones?
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value="1"
+                data-register-farm-zone-count
+              />
+            </label>
+            <div id="registerFarmZones"></div>`,
+        },
+        {
+          title: "Review",
+          hint: "Check this, then register.",
+          bodyHtml: `<div id="registerFarmReview" class="review-pane"></div>`,
+        },
+      ],
+    }),
+
+    onOpen: () => {
+      wirePickers();
+      wireRegisterFarmZones();
+      wireWizards();
+      wireRegisterFarmReview();
+
+      /* The map lives on step 2, which is display:none when the drawer
+         opens, so it is mounted now and told to re-measure when the step
+         becomes visible. Mounting it lazily on first reveal would be
+         neater but needs an observer per wizard; this is one call. */
+      const mapHost = document.querySelector<HTMLElement>("[data-map-pick]");
+      if (mapHost) void mountLocationPicker(mapHost);
+
+      if (fromRequest) prefillFromRequest(fromRequest);
+    },
+  });
+}
+
+/* Fill the wizard from what the farmer asked for. Only what the request says;
+   anything it does not say is left for the admin to fill in. */
+function prefillFromRequest(r: ServiceRequest): void {
+  const set = (field: string, value: string | number | null | undefined): void => {
+    const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-field="${field}"]`);
+    if (el && value !== null && value !== undefined && value !== "") el.value = String(value);
+  };
+  set("location", r.location);
+  set("farmSize", r.roughSize);
+  set("zone_name_0", "Zone 1");
+  set("zone_crop_0", r.cropType);
+  set("zone_size_0", r.roughSize);
+}
+
+/* Item 6c: after a wizard launched from a request has saved, the request is
+   done - completed by whoever saved it (the API takes them from the login). */
+async function completeLaunchingRequest(note: string): Promise<void> {
+  const id = completeRequestOnSave;
+  completeRequestOnSave = null;
+  if (id === null) return;
+  try {
+    await api.updateServiceRequestStatus(id, "completed", note);
+    toast("The request is marked complete.", "success");
+  } catch (e) {
+    toast(e instanceof Error ? `The request is still open: ${e.message}` : "The request is still open.", "warn");
+  }
+}
+
+/* Item 6c: Add zones to an existing farm, for a "new zone" request. */
+function openAddZonesWizard(r: ServiceRequest): void {
+  completeRequestOnSave = r.id;
+  openDrawer({
+    title: `Add a zone to ${r.farmName ?? "the farm"}`,
+    subtitle: `For ${r.farmerName}'s request. Saving it completes the request.`,
+    wide: true,
+    bodyHtml: `
+      <label class="f">
+        How many zones?
+        <input type="number" min="1" max="10" value="1" data-add-zones-count />
+      </label>
+      <div id="addZonesContainer"></div>`,
+    confirmLabel: "Add the zone",
+    onOpen: () => {
+      const count = document.querySelector<HTMLInputElement>("[data-add-zones-count]");
+      const box = document.getElementById("addZonesContainer");
+      if (!count || !box) return;
+      const render = (): void => {
+        const existing = collectFields();
+        const n = Math.max(1, Math.min(10, Number(count.value) || 1));
+        box.innerHTML = Array.from({ length: n }, (_, i) => zoneRow(i)).join("");
+        box.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((el) => {
+          const name = el.dataset["field"] ?? "";
+          if (existing[name]) el.value = existing[name];
+        });
+        syncZoneChoices(box);
+      };
+      count.addEventListener("input", render);
+      render();
+      wireZoneChoices(box);
+      const crop = box.querySelector<HTMLSelectElement>('[data-field="zone_crop_0"]');
+      if (crop) crop.value = r.cropType;
+      const size = box.querySelector<HTMLInputElement>('[data-field="zone_size_0"]');
+      if (size && r.roughSize !== null) size.value = String(r.roughSize);
+    },
+    onConfirm: () => {
+      const v = collectFields();
+      const n = document.querySelectorAll("#addZonesContainer [data-zone-row]").length || 1;
+      for (let i = 0; i < n; i++) {
+        const problem =
+          !v[`zone_name_${i}`]?.trim() ? `Give zone ${i + 1} a name.`
+          : !v[`zone_crop_${i}`] ? `Choose a crop for zone ${i + 1}.`
+          : !v[`zone_area_preset_${i}`] ? `Choose how big zone ${i + 1} is.`
+          : zoneSetupProblem(v, i);
+        if (problem) {
+          toast(problem, "warn");
+          return false;
+        }
+      }
+      const zones = Array.from({ length: n }, (_, i) => readZoneSetup(v, i));
+      void addZonesToFarm(r.farmId!, zones)
+        .then(async (res) => {
+          toast(res.message, "success");
+          await completeLaunchingRequest(`Completed by adding ${zones.map((z) => z.name).join(", ")}.`);
+          void refresh();
+        })
+        .catch((e: unknown) => {
+          completeRequestOnSave = r.id;
+          showErrorModal("Could not add the zone", e instanceof Error ? e.message : "Nothing was saved.");
+        });
+    },
+  });
+}
+
 /* The count, clamped to what the API will accept (1-50). Read from the DOM
    rather than passed around, because the repeater and the confirm handler
    both need it and the input is the only thing that knows. */
@@ -3578,36 +3723,6 @@ export function wirePageInteractions(): void {
     t.addEventListener("click", flip);
     t.addEventListener("keydown", (e) => {
       if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); }
-    });
-  });
-
-  document.querySelectorAll<HTMLSelectElement>(".request-status-select").forEach((select) => {
-    if (select.dataset["bound"]) return;
-    select.dataset["bound"] = "1";
-
-    select.addEventListener("change", () => {
-      const id = Number(select.dataset["requestId"]);
-      const status = select.value as "pending" | "scheduled" | "completed";
-
-      if (!id) {
-        toast("Invalid request selected.", "warn");
-        return;
-      }
-
-      void api.updateServiceRequestStatus(id, status)
-        .then(() => {
-          toast("Request status updated.", "success");
-          void refresh();
-        })
-        .catch((error) => {
-          console.error("Failed to update request status:", error);
-          toast(
-            error instanceof Error
-              ? error.message
-              : "Unable to update request status.",
-            "warn",
-          );
-        });
     });
   });
 

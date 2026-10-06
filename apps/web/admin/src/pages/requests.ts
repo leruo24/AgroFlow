@@ -6,12 +6,6 @@ import { badge, pageHeader, panel, resultCount } from "@/ui/components";
 import { esc, fmtDateTimeSast } from "@/lib/format";
 import type { ServiceRequest, ServiceRequestStatus } from "@/types/models";
 
-const statusOptions: ServiceRequestStatus[] = [
-  "pending",
-  "scheduled",
-  "completed",
-];
-
 function formatRequestType(type: ServiceRequest["requestType"]): string {
   return type === "new_farm" ? "New farm" : "New zone";
 }
@@ -68,15 +62,41 @@ export function requestTimeline(r: ServiceRequest): string {
   </ol>`;
 }
 
-function requestRow(request: ServiceRequest): string {
-  const statusSelect = statusOptions
-    .map(
-      (status) =>
-        `<option value="${status}" ${
-          request.status === status ? "selected" : ""
-        }>${status.charAt(0).toUpperCase()}${status.slice(1)}</option>`,
-    )
-    .join("");
+/* Item 6c: what can be done next, in one place - the row and the side panel
+   both use it. [I'll handle this] lives in the Handled by cell; once it is
+   yours, this offers [Mark complete] and the step that carries the request
+   out: the register-farm wizard for a new farm, Add zones for a new zone
+   (each prefilled from the request, and saving it completes the request). */
+export function requestActions(request: ServiceRequest, myId: string | undefined): string {
+  if (request.status === "completed") {
+    return `<span class="muted">Completed${request.completedByName ? ` by ${esc(request.completedByName)}` : ""}${
+      request.completedAt ? `, ${esc(fmtDateTimeSast(request.completedAt))}` : ""}</span>`;
+  }
+  if (!myId || request.handledById !== myId) {
+    return `<span class="muted">${request.handledByName ? "—" : "Take it on first"}</span>`;
+  }
+
+  const setUp = request.requestType === "new_farm"
+    ? `<a href="#" class="row-act" data-act="request-setup" data-id="${request.id}">Set up the farm</a>`
+    : request.farmId !== null
+      ? `<a href="#" class="row-act" data-act="request-setup" data-id="${request.id}">Add the zone</a>`
+      : "";
+
+  // A kit can only be enrolled onto a zone that exists, so only once the
+  // request has a farm.
+  const code = request.farmId !== null
+    ? `<a href="#" class="row-act" data-act="create-enrollment-code" data-id="${request.id}">Create enrollment code</a>`
+    : "";
+
+  return `<div class="row-actions">
+    <button type="button" class="btn ghost" data-act="request-complete" data-id="${request.id}">Mark complete</button>
+    ${setUp}${code}
+  </div>`;
+}
+
+function requestRow(request: ServiceRequest, myId: string | undefined): string {
+  const size = request.roughSize !== null ? `${request.roughSize} ha` : null;
+  const what = [formatCrop(request.cropType), size, request.location].filter(Boolean).join(" · ");
 
   return `
     <tr>
@@ -85,49 +105,20 @@ function requestRow(request: ServiceRequest): string {
           <strong>${esc(request.farmerName)}</strong>
         </a>
         ${
-          request.farmerEmail
+          request.farmerEmail && request.farmerEmail !== request.farmerName
             ? `<div class="muted">${esc(request.farmerEmail)}</div>`
             : ""
         }
       </td>
-      <td>${esc(request.farmName ?? "New farm request")}</td>
-      <td>${esc(formatRequestType(request.requestType))}</td>
-      <td>${esc(formatCrop(request.cropType))}</td>
-      <td>${request.roughSize !== null ? `${request.roughSize} ha` : "—"}</td>
-      <td>${esc(request.location ?? "—")}</td>
-      <td class="cell-clip" title="${esc(request.notes ?? "")}">${esc(request.notes ?? "—")}</td>
+      <td>
+        ${badge(formatRequestType(request.requestType), "neutral")}
+        <div class="muted">${esc(what)}</div>
+      </td>
+      <td>${request.farmName ? esc(request.farmName) : `<span class="muted">—</span>`}</td>
       <td>${esc(formatDate(request.createdAt))}</td>
-      <td>
-        <select
-          class="request-status-select"
-          data-request-id="${request.id}"
-          aria-label="Update request status"
-        >
-          ${statusSelect}
-        </select>
-        <div class="request-status-badge">
-          ${badge(request.status, statusTone(request.status))}
-        </div>
-      </td>
-      <td>${requestTimeline(request)}</td>
-      <td>${handlingCell("requests", request, getAdminProfile()?.id, request.status === "completed")}</td>
-      <td>
-        ${
-          // Only for a SCHEDULED request. Before that there is nothing to
-          // install, and afterwards the kit is already claimed - a second
-          // code would just be a live credential sitting unused.
-          request.status === "scheduled"
-            ? request.farmId !== null
-              ? `<a href="#" class="row-act" data-act="create-enrollment-code"
-                    data-id="${request.id}">Create enrollment code</a>`
-              // A new_farm request has no farm, so it has no zone to enrol a
-              // kit onto. The existing zone setup flow has to run first; this
-              // links there rather than offering an action that cannot work.
-              : `<a href="#" class="row-act" data-act="go-onboarding"
-                    data-id="${request.id}">Set up the farm and zone first</a>`
-            : `<span class="muted">—</span>`
-        }
-      </td>
+      <td>${badge(request.status, statusTone(request.status))}</td>
+      <td>${handlingCell("requests", request, myId, request.status === "completed")}</td>
+      <td>${requestActions(request, myId)}</td>
     </tr>
   `;
 }
@@ -159,30 +150,25 @@ export async function requestsPage(): Promise<string> {
         resultCount(requests.length, requests.length, "requests"),
         `
           <div class="table-wrap">
-            <table>
+            <table class="requests-table">
               <thead>
                 <tr>
                   <th>Farmer</th>
-                  <th>Farm</th>
                   <th>Request</th>
-                  <th>Crop</th>
-                  <th>Size</th>
-                  <th>Location</th>
-                  <th>Notes</th>
-                  <th>Date submitted</th>
+                  <th>Farm</th>
+                  <th>Submitted</th>
                   <th>Status</th>
-                  <th>Who and when</th>
                   <th>Handled by</th>
-                  <th>Hardware</th>
+                  <th>Next</th>
                 </tr>
               </thead>
               <tbody>
                 ${
                   requests.length
-                    ? requests.map(requestRow).join("")
+                    ? requests.map((r) => requestRow(r, getAdminProfile()?.id)).join("")
                     : `
                       <tr>
-                        <td colspan="12" class="muted">
+                        <td colspan="7" class="muted">
                           No farm requests have been submitted yet.
                         </td>
                       </tr>

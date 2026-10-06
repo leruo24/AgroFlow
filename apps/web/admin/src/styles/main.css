@@ -1791,3 +1791,8 @@ html{ scrollbar-gutter: stable; }
 /* Item 6b: "Recommended for you" in the register wizard. */
 .recommend-card{ margin-top:8px; padding:10px 12px; border-radius:8px; background:var(--surface-2); box-shadow:inset 3px 0 0 var(--brand); }
 .recommend-card p{ margin:6px 0 0; }
+
+/* Item 6c: the Requests list fits 1366 px - long text wraps, nothing scrolls sideways. */
+.requests-table{ table-layout:auto; width:100%; }
+.requests-table td{ white-space:normal; overflow-wrap:anywhere; vertical-align:top; }
+.row-actions{ display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }

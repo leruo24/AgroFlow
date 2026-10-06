@@ -7,7 +7,9 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-public record UpdateRequestStatusRequest(string Status);
+// Note: item 6c's "Mark complete" asks for an optional note. Optional on the
+// wire, so older consoles that send only a status keep working.
+public record UpdateRequestStatusRequest(string Status, string? Note = null);
 
 public record AssignRequestBody(Guid? AssignedToProfileId);
 
@@ -233,7 +235,7 @@ public static class AdminRequestEndpoints
                 AuditActions.RequestStatusChanged,
                 "service_request",
                 requestId.ToString(),
-                details: new { from = previousStatus, to = status },
+                details: new { from = previousStatus, to = status, note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim() },
                 cancellationToken: cancellationToken);
 
             await requestNotifier.NotifyAsync(requestId, cancellationToken);

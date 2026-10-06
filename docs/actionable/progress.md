@@ -14,7 +14,8 @@ what is next.
 | 4 | done | 74efb2d | Apply migration 0040 | 5 |
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
 | 6 | done | 77b9533, be80a1a | Apply migration 0042 | 6b |
-| 6b | done | (this commit) | Apply migration 0043 | 6c |
+| 6b | done | f079cde | Apply migration 0043 | 6c |
+| 6c | in progress | part 1 (this commit) | Part 2: public enquiry; part 3: Enquiries tab; part 4: enquiry report | 6c part 2 |
 
 ---
 
@@ -618,3 +619,42 @@ Playwright 22 → 25 (`recommend.spec.ts`).
 - The existing `PUT /settings` route still accepts a crop (baseline
   contract) and does not write the crop-change record; the app's own crop
   screen uses the new route.
+
+
+## 6c — Requests, and the public enquiry flow
+
+### Part 1: requests - simple completion, and a list that reads
+
+What was wrong (found, not assumed):
+- A status dropdown (Pending / Scheduled / Completed) anybody could flip,
+  separate from who was handling it.
+- A farmer with no name showed as "(no name on file)"; a new-farm request put
+  "New farm request" in the Farm column; twelve columns scrolled sideways.
+- A "new zone" request could not be carried out from the console at all:
+  zones could only be created together with a new farm.
+
+What it is now:
+- **[I'll handle this] → [Mark complete]** (optional note, kept in the
+  status change's audit details; who and when from the login, as before).
+  The dropdown and its binder are gone; the status route still accepts a
+  bare status, so older consoles keep working.
+- Once a request is yours, **Set up the farm** opens the register-farm wizard
+  prefilled from the request (farmer, location, size, crop on zone 1), and
+  **Add the zone** opens a new Add-zones drawer (same zone rows and checks as
+  registration, `POST /api/farms/{id}/zones`, audit `farm.zones_added`).
+  Saving either completes the request with a note saying what was done. If
+  the completion fails, the request stays open and the admin is told.
+- The list: Farmer (the email when there is no name) | Request (New farm /
+  New zone, with crop · size · place) | Farm ("—" until there is one) |
+  Submitted | Status | Handled by | Next. It wraps instead of scrolling at
+  1366 px. The side panel holds Handled by, Next, the timeline and the
+  recorded changes.
+- The shared drawer: `onConfirm` may now return `false` to stay open (a check
+  failed - what was typed stays). Every existing caller returns nothing and
+  behaves as before.
+
+Tests: backend 935 → 937 (`RequestCompletionTests`: add-zone checks, the
+optional note, no actor in the body). Admin Playwright 25 → 29
+(`requests.spec.ts`: email for a nameless farmer, request type, no sideways
+scroll at 1366 px, Mark complete sends the note and no actor, both wizards
+prefilled and completing their request).

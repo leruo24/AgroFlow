@@ -320,6 +320,7 @@ public static class AuditLogEndpoints
             AuditActions.UserPasswordReset => $"{actor} reset a farmer's password",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",
+            AuditActions.ZonesAdded => $"{actor} added zones to farm {farmName ?? entityId}",
             AuditActions.ZoneAdviceRun => $"{actor} ran the advice engine on zone {entityId}{where}",
 
             AuditActions.EnrollmentCodeCreated => $"{actor} created an enrollment code{where}",

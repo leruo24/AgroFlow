@@ -39,6 +39,9 @@ public static class AuditActions
     // details: from, to, fromLabel, toLabel, fromPlanting, toPlanting, actorRole.
     public const string ZoneCropChanged = "zone.crop_changed";
 
+    // Item 6c: zones added to an existing farm (a "new zone" request).
+    public const string ZonesAdded = "farm.zones_added";
+
     public const string EnrollmentCodeCreated = "enrollment_code.created";
     public const string MqttPoolAdded = "mqtt_pool.added";
     public const string ReportScheduleChanged = "report_schedule.changed";

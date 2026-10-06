@@ -665,12 +665,22 @@ export function addMqttLogins(pasted: string): Promise<AddMqttLoginsResult> {
 export function updateServiceRequestStatusThroughApi(
   id: number,
   status: "pending" | "scheduled" | "completed",
+  note?: string,
 ): Promise<{ id: number; status: string; message: string | null }> {
   return authorizedJson<{ id: number; status: string; message: string | null }>(
     `/api/admin/requests/${id}/status`,
     "PUT",
-    { status },
+    note ? { status, note } : { status },
   );
+}
+
+/* Item 6c: zones added to an existing farm (a "new zone" request). */
+export function addZonesToFarm(
+  farmId: number,
+  zones: { name: string; sizeHectares: number; cropType: string; soilType?: string; areaM2?: number | null;
+           plantingDate?: string | null; flowRateLpm?: number | null; rootDepthLimitM?: number | null }[],
+): Promise<{ message: string }> {
+  return authorizedJson(`/api/farms/${farmId}/zones`, "POST", { zones });
 }
 
 /* ---------------- Enrollment codes ---------------- */
