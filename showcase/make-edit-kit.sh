@@ -28,10 +28,10 @@ for i, (src, start, vol, _) in enumerate(tags):
 mixin = "".join(f"[a{i}]" for i in range(len(tags)))
 graph = ";".join(chains) + f";{mixin}amix=inputs={len(tags)}:normalize=0,apad,atrim=0:{dur}[out]"
 subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", *args, "-filter_complex", graph,
-                "-map", "[out]", "-ar", "48000", "-c:a", "pcm_s16le", out], check=True)
+                "-map", "[out]", "-ar", "48000", "-c:a", "aac", "-b:a", "256k", out], check=True)
 print(out, len(tags), "files")
 PY
 }
-mix 21 "$OUT/voiceover.wav"
-mix 20 "$OUT/sound-effects.wav"
+mix 21 "$OUT/voiceover.m4a"
+mix 20 "$OUT/sound-effects.m4a"
 echo "Edit kit ready in $OUT"

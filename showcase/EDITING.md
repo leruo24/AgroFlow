@@ -13,15 +13,15 @@ In `renders/edit-kit/`:
 | File | What it is |
 |---|---|
 | `picture-no-audio.mp4` | The finished picture, 1920×1080, 25 fps, no sound |
-| `voiceover.wav` | The narration on its own, full length |
-| `sound-effects.wav` | The small click/tick/chime effects on their own, full length |
+| `voiceover.m4a` | The narration on its own, full length |
+| `sound-effects.m4a` | The small click/tick/chime effects on their own, full length |
 
 There are also per-scene clips with sound in `renders/clips/` (`01-title.mp4` … `10-endplate.mp4`) and the finished video with sound in `renders/INF3003W_Team2_ShowcaseDemo_2026.mp4`.
 
 **How to use the edit kit:**
 1. Make a new project at **1920×1080, 25 fps**.
-2. Put `picture-no-audio.mp4` on video track 1, `voiceover.wav` on audio track 1, and `sound-effects.wav` on audio track 2, **all starting at 0:00**. They are in sync.
-3. Edit as you like. To replace the voice with your own recording, mute `voiceover.wav` and record over `narration.md`, where each line shows the time it starts.
+2. Put `picture-no-audio.mp4` on video track 1, `voiceover.m4a` on audio track 1, and `sound-effects.m4a` on audio track 2, **all starting at 0:00**. They are in sync.
+3. Edit as you like. To replace the voice with your own recording, mute `voiceover.m4a` and record over `narration.md`, where each line shows the time it starts.
 4. Export as **MP4 (H.264 + AAC), 1920×1080, 25 fps**.
 
 Scene times, so you can find things:
