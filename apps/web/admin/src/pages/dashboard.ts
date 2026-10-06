@@ -1,3 +1,4 @@
+import { countExplanation } from "@/lib/why";
 import { api, getFarmsNeedingSetup, getMqttPoolHealth, getFailedReportCount } from "@/data/api";
 import { esc, fmtInt, fmtPct, fmtPct2, fmtDateTimeSast } from "@/lib/format";
 import {
@@ -71,6 +72,7 @@ async function renderDashboard(): Promise<string> {
       act: "go-requests-pending",
       tone: "bad",
       icon: Icon.inbox,
+      why: countExplanation({ label: "New requests waiting", what: "new farm or zone requests have had no reply yet", count: newRequests.length, counted: "service requests", rule: "A request counts here while its status is still pending.", whyHighlighted: "First in the queue: a farmer is waiting on a person.", clears: "Scheduling, completing or closing a request takes it off this count.", query: "service_request where status = pending" }),
     },
     {
       title: "Open critical alerts",
@@ -79,6 +81,7 @@ async function renderDashboard(): Promise<string> {
       act: "go-alerts-critical",
       tone: "bad",
       icon: Icon.triangleAlert,
+      why: countExplanation({ label: "Open critical alerts", what: "open alerts are marked Critical or High", count: criticalAlerts.length, counted: "alerts", rule: "An alert counts here while it is open (not Resolved or Closed) and its priority is Critical or High.", whyHighlighted: "A crop or a piece of equipment may need attention now.", clears: "Resolving the alert removes it.", query: "alert: status not in (Resolved, Closed) and priority in (Critical, High)" }),
     },
     {
       title: "Kits offline or faulty",
@@ -87,14 +90,18 @@ async function renderDashboard(): Promise<string> {
       act: "go-kits-offline",
       tone: "warn",
       icon: Icon.radio,
+      why: countExplanation({ label: "Kits offline or faulty", what: "kits are Offline or Fault", count: kitsNeedingHelp.length, counted: "kits", rule: "The equipment monitor marks a kit Offline when it has sent nothing for its offline window, and Fault when a fault was recorded.", whyHighlighted: "A farm with a quiet kit may be watering blind.", clears: "The kit sending readings again, or a technician clearing the fault.", query: "hardware.status in (Offline, Fault) - set by DeviceStatusMonitorService" }),
     },
     {
       title: "Zones missing setup",
       count: zonesNeedingSetup.length,
-      body: "No planting date, area, flow rate or location - the engine cannot advise.",
+      // Item 2: advice is never blocked by missing setup any more - it is
+      // only less certain - so this no longer says the engine cannot advise.
+      body: "No planting date, area, flow rate or location - advice is less certain until added.",
       act: "go-zones-setup",
       tone: "warn",
       icon: Icon.sprout,
+      why: countExplanation({ label: "Zones missing setup", what: "zones are missing part of their setup", count: zonesNeedingSetup.length, counted: "zones", rule: "A zone counts when it has no crop, planting date, area or flow rate, or its farm has no location.", whyHighlighted: "Advice for these zones is less certain until the missing detail is added.", clears: "Filling in the missing detail on the zone or the farm.", query: "zone: crop_type, planting_date, area_m2 or flow_rate_lpm null; or farm latitude/longitude null" }),
     },
     {
       title: "Farmers without Telegram",
@@ -103,6 +110,7 @@ async function renderDashboard(): Promise<string> {
       act: "go-users-no-telegram",
       tone: "warn",
       icon: Icon.userX,
+      why: countExplanation({ label: "Farmers without Telegram", what: "farmers have not connected Telegram", count: kpis.farmersNotReceivingAlerts, counted: "farmer accounts", rule: "A farmer counts here when no Telegram chat is linked to their account.", whyHighlighted: "They get no frost, heat or equipment alerts at all.", clears: "The farmer connecting Telegram from the app or with a link code.", query: "profile.telegram_chat_id is null (farmers)" }),
     },
     {
       title: "MQTT logins running low",
@@ -114,6 +122,7 @@ async function renderDashboard(): Promise<string> {
       act: "go-mqtt-logins",
       tone: "info",
       icon: Icon.wifi,
+      why: countExplanation({ label: "MQTT logins running low", what: "free MQTT logins are left", count: mqttPool?.runningLow ? Math.max(mqttPool.freeCount, 1) : 0, counted: "MQTT login pool", rule: "Shown when the pool of unassigned broker logins is running low.", whyHighlighted: "New kits fall back to the shared login when none are free.", clears: "Adding logins to the pool on the MQTT logins page.", query: "mqtt_credential_pool: unassigned, not burned" }),
     },
     {
       title: "Failed reports",
@@ -122,6 +131,7 @@ async function renderDashboard(): Promise<string> {
       act: "go-reports-failed",
       tone: "info",
       icon: Icon.barChart,
+      why: countExplanation({ label: "Failed reports", what: "requested reports could not be made", count: failedReports, counted: "report requests", rule: "A report request counts here when its status is failed.", whyHighlighted: "A farmer asked for a report and did not get it.", clears: "Re-running the report from the Reports page.", query: "report_request where status = failed" }),
     },
   ];
 
@@ -140,12 +150,12 @@ async function renderDashboard(): Promise<string> {
   <!-- Every tile is a link to the list it counts. A number you cannot click
        makes the admin go and find the thing it refers to. -->
   <div class="grid kpis">
-    ${kpiCard({ label: "Farms", value: kpis.totalFarms, trend: trends["totalFarms"] ?? undefined, icon: Icon.tractor, act: "go-farms" })}
-    ${kpiCard({ label: "Farmers", value: kpis.totalUsers, trend: trends["totalUsers"] ?? undefined, icon: Icon.users, act: "go-users" })}
-    ${kpiCard({ label: "Kits online", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: Icon.radio, act: "go-kits" })}
-    ${kpiCard({ label: "Open alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: Icon.bell, act: "go-alerts" })}
-    ${kpiCard({ label: "Open maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: Icon.wrench, act: "go-maintenance" })}
-    ${kpiCard({ label: "Requests waiting", value: newRequests.length, icon: Icon.inbox, act: "go-requests-pending" })}
+    ${kpiCard({ label: "Farms", value: kpis.totalFarms, trend: trends["totalFarms"] ?? undefined, icon: Icon.tractor, act: "go-farms", why: { counts: "farms are registered", rule: "Every farm on the platform. Archived farms are left out unless \"Show archived\" is on in Farms.", query: "farm (archived = status Inactive, hidden by default)" } })}
+    ${kpiCard({ label: "Farmers", value: kpis.totalUsers, trend: trends["totalUsers"] ?? undefined, icon: Icon.users, act: "go-users", why: { counts: "farmer accounts exist", rule: "Every farmer account, active or disabled.", query: "profile where role = farmer" } })}
+    ${kpiCard({ label: "Kits online", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: Icon.radio, act: "go-kits", why: { counts: "kits are online", rule: "A kit counts as online while the equipment monitor has heard from it inside its offline window.", query: "hardware.status = Online, out of all hardware" } })}
+    ${kpiCard({ label: "Open alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: Icon.bell, act: "go-alerts", why: { counts: "alerts are open", rule: "Every alert that is not Resolved or Closed, at any priority.", query: "alert.status not in (Resolved, Closed)", clears: "Resolving alerts." } })}
+    ${kpiCard({ label: "Open maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: Icon.wrench, act: "go-maintenance", why: { counts: "maintenance jobs are not completed", rule: "Every maintenance job whose status is anything but Completed.", query: "maintenance.status <> Completed", clears: "Completing the job." } })}
+    ${kpiCard({ label: "Requests waiting", value: newRequests.length, icon: Icon.inbox, act: "go-requests-pending", why: { counts: "requests are waiting for a reply", rule: "Requests whose status is still pending.", query: "service_request.status = pending", clears: "Scheduling, completing or closing the request." } })}
   </div>
 
   <!-- Health, from GET /api/admin/health. Rendered server-truthfully: a

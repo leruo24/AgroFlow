@@ -57,6 +57,7 @@ import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
 import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
 /* ------------------------------- pickers -------------------------------- */
@@ -805,6 +806,13 @@ async function handleAction(el: HTMLElement): Promise<void> {
   const numId = Number(idAttr);
 
   switch (act) {
+    /* item 2c: "Why am I seeing this?" - every link in the console opens here */
+    case "why": {
+      const e = getWhy(idAttr);
+      if (!e) return;
+      return openDrawer({ title: WHY_LINK_TEXT, subtitle: e.summary, wide: true, bodyHtml: whyHtml(e) });
+    }
+
     /* filters */
     case "clear-filters":
       resetFilter(appState.activePage);
@@ -1925,7 +1933,7 @@ case "delete-user": {
               <h6>Advice written for the farmer (${r.insights.length})</h6>
               ${r.insights.length
                 ? `<ul class="drawer-list">${r.insights.map((i) =>
-                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)}</li>`).join("")}</ul>`
+                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)} ${whyLink(asExplanation(i.explanation))}</li>`).join("")}</ul>`
                 : `<p class="muted">Nothing to tell the farmer today.</p>`}
             </div>
 
@@ -2326,7 +2334,13 @@ case "delete-user": {
     case "view-alert": {
       const a = api.findAlert(idAttr);
       if (!a) return;
+      // Item 2c: the alert's own explanation, if it has one (migration 0039).
+      // The panel intent is taken BEFORE the await (item 0b): if another
+      // panel is asked for meanwhile, this one must not open over it.
+      const alertIntent = currentPanelIntent();
+      const alertWhy = await api.getAlertExplanation(a.id).catch(() => null);
       return openDrawer({
+        intent: alertIntent,
         title: a.id,
         subtitle: a.title,
         wide: true,
@@ -2342,6 +2356,7 @@ case "delete-user": {
               <div class="detail-row"><span>Status</span><b>${esc(a.status)}</b></div>
             </div>
           </div>
+          ${alertWhy ? `<div class="drawer-section"><h6>${esc(WHY_LINK_TEXT)}</h6>${whyHtml(alertWhy)}</div>` : ""}
           <div class="drawer-section"><h6>History</h6>
             ${alertTimeline(a)}
           </div>`,
@@ -3343,6 +3358,7 @@ function liveInsight(i: any): string {
   return `<li class="liveInsight liveInsight--${liveEsc(severity)}">
     <span class="liveInsight__text">${liveEsc(i?.text ?? "")}</span>
     ${i?.source ? `<small class="liveInsight__source">Source: ${liveEsc(i.source)}</small>` : ""}
+    ${whyLink(asExplanation(i?.explanation))}
   </li>`;
 }
 

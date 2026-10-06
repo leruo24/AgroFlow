@@ -42,16 +42,16 @@ export async function hardwarePage(): Promise<string> {
      <button class="btn" data-act="register-hardware">+ Register a kit</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Total Hardware", value: total, icon: Icon.radio })}
-    ${kpiCard({ label: "Online", value: online, format: "ratio", total: fmtInt(total), icon: Icon.circleCheck })}
-    ${kpiCard({ label: "Offline / Fault", value: offline, icon: Icon.circleX })}
-    ${kpiCard({ label: "Needs Service", value: needsService, icon: Icon.wrench })}
+    ${kpiCard({ label: "Total Hardware", value: total, icon: Icon.radio, why: { counts: "kits are registered", rule: "Every kit on the platform, whatever its state.", query: "hardware" } })}
+    ${kpiCard({ label: "Online", value: online, format: "ratio", total: fmtInt(total), icon: Icon.circleCheck, why: { counts: "kits are online", rule: "A kit is online while the equipment monitor has heard from it inside its offline window.", query: "hardware.status = Online" } })}
+    ${kpiCard({ label: "Offline / Fault", value: offline, icon: Icon.circleX, why: { counts: "kits are offline or faulty", rule: "Offline: nothing heard inside the offline window. Fault: a fault was recorded.", highlighted: "A quiet kit means its zone is not being watched.", query: "hardware.status in (Offline, Fault)" } })}
+    ${kpiCard({ label: "Needs Service", value: needsService, icon: Icon.wrench, why: { counts: "kits need service", rule: "Kits whose maintenance is Due or Overdue.", query: "hardware.maintenanceState in (Due, Overdue)" } })}
   </div>
 
   ${legacyKey > 0 || revoked > 0 ? `
   <div class="grid kpis two">
-    ${kpiCard({ label: "On the legacy shared key", value: legacyKey, icon: Icon.radio })}
-    ${kpiCard({ label: "Revoked", value: revoked, icon: Icon.circleX })}
+    ${kpiCard({ label: "On the legacy shared key", value: legacyKey, icon: Icon.radio, why: { counts: "kits still use the shared fleet key", rule: "Boards claimed before firmware v1.3.0 have no token of their own and still use the shared key.", highlighted: "Once this is zero the shared key can be switched off.", query: "hardware.tokenStatus = legacy key", clears: "Re-claiming the kit with current firmware." } })}
+    ${kpiCard({ label: "Revoked", value: revoked, icon: Icon.circleX, why: { counts: "kits have been revoked", rule: "Kits whose access was revoked by an administrator.", query: "hardware.tokenStatus = revoked" } })}
   </div>
   ${legacyKey > 0 ? `<div class="muted" style="margin:8px 0 16px">
     ${legacyKey} board${legacyKey === 1 ? " has" : "s have"} no per-device token and
@@ -142,10 +142,10 @@ export async function alertsPage(): Promise<string> {
     `<button class="btn ghost" data-act="export-alerts">Export CSV</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Open Alerts", value: open.length, icon: Icon.bell })}
-    ${kpiCard({ label: "Critical", value: critical, icon: Icon.circleX })}
-    ${kpiCard({ label: "Unassigned", value: unassigned, icon: Icon.inbox })}
-    ${kpiCard({ label: "Escalated", value: escalated, icon: Icon.triangleAlert })}
+    ${kpiCard({ label: "Open Alerts", value: open.length, icon: Icon.bell, why: { counts: "alerts are open", rule: "Every alert not Resolved or Closed.", query: "alert.status not in (Resolved, Closed)", clears: "Resolving alerts." } })}
+    ${kpiCard({ label: "Critical", value: critical, icon: Icon.circleX, why: { counts: "open alerts are Critical", rule: "Open alerts whose priority is Critical.", highlighted: "These need someone now.", query: "open alert with priority = Critical" } })}
+    ${kpiCard({ label: "Unassigned", value: unassigned, icon: Icon.inbox, why: { counts: "open alerts have nobody on them", rule: "Open alerts with no administrator assigned.", highlighted: "Nobody is responsible for these yet.", query: "open alert with assigned_to null", clears: "Assigning the alert." } })}
+    ${kpiCard({ label: "Escalated", value: escalated, icon: Icon.triangleAlert, why: { counts: "open alerts are escalated", rule: "Open alerts whose status is Escalated.", query: "alert.status = Escalated" } })}
   </div>
 
   ${filterBar({
@@ -218,10 +218,10 @@ export async function maintenancePage(): Promise<string> {
     `<button class="btn" data-act="schedule-maint">+ Schedule Maintenance</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Scheduled", value: scheduled, icon: Icon.calendar })}
-    ${kpiCard({ label: "Overdue", value: overdue, icon: Icon.triangleAlert })}
-    ${kpiCard({ label: "Upcoming", value: upcoming, icon: Icon.clock })}
-    ${kpiCard({ label: "Completed", value: completed, icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Scheduled", value: scheduled, icon: Icon.calendar, why: { counts: "maintenance jobs are scheduled", rule: "Jobs whose status is Scheduled.", query: "maintenance.status = Scheduled" } })}
+    ${kpiCard({ label: "Overdue", value: overdue, icon: Icon.triangleAlert, why: { counts: "maintenance jobs are overdue", rule: "Jobs whose status is Overdue.", highlighted: "A promised visit is late.", query: "maintenance.status = Overdue" } })}
+    ${kpiCard({ label: "Upcoming", value: upcoming, icon: Icon.clock, why: { counts: "maintenance jobs are upcoming", rule: "Jobs whose status is Upcoming.", query: "maintenance.status = Upcoming" } })}
+    ${kpiCard({ label: "Completed", value: completed, icon: Icon.circleCheck, why: { counts: "maintenance jobs are completed", rule: "Jobs whose status is Completed.", query: "maintenance.status = Completed" } })}
   </div>
 
   ${filterBar({

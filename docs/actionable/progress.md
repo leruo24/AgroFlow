@@ -9,6 +9,7 @@ what is next.
 | 0b | done | 43a9ce0 | — | 2 |
 | 2 | done | 68ce29d | Confidence badge in the apps' UI → 2c/6 | 2b |
 | 2b | done | 6888586 | — | 2c |
+| 2c | done | 70a1c31, d3040c3, 86ad320, 41d351e, (this commit) | Recommended-settings Why → 6b; alert priority bug → 5; fixed-date KPIs → 4 | 3 |
 
 ---
 
@@ -200,3 +201,75 @@ at the top of `Fao56EngineReference.cs`). No rule reads it. Merging them would
 change the schedule report's FAO-56 notes for maize and potato; that is a
 decision about which planting season to plan against, not a cleanup, so it is
 stated in the rule book rather than done silently.
+
+---
+
+## 2c — "Why am I seeing this?"
+
+Five commits (parts 1-5), each green on its own.
+
+### What carries an explanation now
+
+| Output | Where the explanation comes from | Shown in |
+|---|---|---|
+| Every insight type (19) | `RuleBook/Explanations.For` - from the same engine result, signals and recorded data the rule used; stored in `ai_recommendation.data.explanation` | mobile insights card, Drip, admin "Run advice" drawer, report previews, PDFs, workbooks |
+| Confidence badge | `Explanations.Confidence` - the same setup state `ConfidenceRules` judged | mobile insights card (badge + the one "Improve your advice" step) |
+| Alerts (critical, DHT11 callout) | `Explanations.CriticalAlert` / `DhtCallout`, saved in `explanation` keyed by `alert_id` | mobile Alerts, admin alert drawer |
+| Telegram alerts (zone critical, weather, equipment) | `AlertExplanations` - quoting the configured thresholds | a "Why: ..." line, a "Why am I seeing this?" button, `/why <id>` |
+| Report verdicts | `Explanations.Verdict` over `VerdictRules` | PDF "Why:" line + appendix, workbook "Why" column |
+| Admin KPI tiles (42) and Needs-attention cards (7) | written beside each tile from the same filter that makes its number | admin side panel; admins also see the query/technical line |
+
+`technical` (FAO-56 page and numbers, or the query behind a count) is shown
+only to admins and in report appendices; the farmer endpoints strip it and
+the app never renders it (tested).
+
+### Telegram
+
+Migration **0039** `explanation` (additive, RLS: farm members and admins may
+read; only the API writes). The button carries `why:<id>` and nothing else.
+A tap or `/why <id>` is answered only for a chat linked to someone on that
+farm; an unknown id and someone else's id get the same refusal, so ids cannot
+be probed. Mutation-checked: removing the farm check fails two tests.
+`getUpdates` now asks for `callback_query`; the webhook route runs the same
+handler. **If the deployment uses the webhook,** it was registered with
+Telegram outside this repo - if that registration listed `allowed_updates`,
+it needs `callback_query` added, or taps will not arrive (Telegram's default,
+when none is listed, includes it).
+
+### Found on the way, fixed here
+
+- **A hidden rule in the PDFs:** both water-usage PDFs judged "about right"
+  with their own 15% band, written only in the renderer. They now use
+  `VerdictRules` (20%, documented). A week at 1.15x the need was "a surplus";
+  it is now "about right" - deliberate, tested.
+- **Item 2 leaks:** Telegram's zone-critical message, the critical alert text
+  and the moisture PDF's min/max columns still printed a raw reading with a
+  %. Now "soil sensor reading N".
+- The admin "Zones missing setup" card said "the engine cannot advise" - no
+  longer true after item 2.
+- `CollectInsights` (moisture and legacy usage reports) had never passed
+  explanations into its JSON - caught while wiring the admin preview.
+
+### Found, NOT fixed here (belongs to a later item)
+
+- **Admin alerts never reach "Critical"/"High" priority**: `getAlerts` sets
+  every alert's priority to a hard-coded "Medium" (there is no priority
+  column), so Home's "Open critical alerts" card can never appear and the
+  Operations "Critical" tile is always 0. → item 5 (accountability touches
+  alerts).
+- "New Farms since 1 May" / "New Users since 1 June" count from fixed dates,
+  and "Platform Availability" always shows 0 (nothing measures uptime). Their
+  explanations now say exactly that. → item 4 (Reports page rebuilt).
+
+### Not yet, by design
+
+The "recommended settings" card does not exist until 6b; it gets its Why
+link there.
+
+### Tests
+
+Backend 773 → 813 (`ExplanationTests` - every insight type, facts match
+inputs, jargon scan, mutation-checked; `TelegramWhyTests`; `ReportWhyTests` -
+the appendix page is counted, 4 pages vs 3 without). Mobile 22 → 31
+(`whySheet.test.tsx`; RNTL 14 is async - `render`/`fireEvent` are awaited).
+Admin Playwright 11 → 14 (`why.spec.ts`).

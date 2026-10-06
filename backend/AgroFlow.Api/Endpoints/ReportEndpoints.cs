@@ -1356,6 +1356,10 @@ public static class ReportEndpoints
                         insightType = insight.InsightType,
                         severity = insight.Severity,
                         zoneId = insight.ZoneId,
+
+                        // Item 2c: the report's "Why:" line and appendix entry.
+                        why = insight.Explanation?.Summary,
+                        explanation = insight.Explanation,
                     });
                 }
             }

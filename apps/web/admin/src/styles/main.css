@@ -1748,3 +1748,19 @@ html{ scrollbar-gutter: stable; }
 /* While a page is loading, a second click is the only input that matters;
    the outgoing page's own buttons must not take one. */
 #content[aria-busy="true"]{ pointer-events: none; }
+
+/* ------------------------------------------------------------------ *
+ * Item 2c: "Why am I seeing this?"
+ * The link sits beside a card or tile, never inside it (a button inside a
+ * button is invalid), so the wrappers keep the grid cell a single column.
+ * ------------------------------------------------------------------ */
+.kpi-item, .attn-item{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+.kpi-item > .card, .attn-item > .attn-card{ flex:1; }
+.why-link{
+  align-self:flex-start; background:none; border:0; padding:4px 2px; cursor:pointer;
+  color:var(--accent); font-size:12px; font-weight:600; text-decoration:underline;
+}
+.why-link:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+.why-body .why-summary{ font-size:15px; font-weight:600; margin:0 0 12px; }
+.why-body .detail-row small{ display:block; }
+.why-technical p{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; opacity:.85; }

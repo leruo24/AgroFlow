@@ -39,6 +39,7 @@
 
 import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
+import { asExplanation, type Explanation } from "@/lib/why";
 import {
   getMqttLogins,
   getAdminHardware,
@@ -741,6 +742,22 @@ export const api = {
   findFarmByName(name: string): Farm | undefined { return farms.find((f) => f.name === name); },
   findHardware(id: string): Hardware | undefined { return hardware.find((h) => h.id === id); },
   findAlert(id: string): AdminAlert | undefined { return alerts.find((a) => a.id === id); },
+
+  /* Item 2c: an alert's "Why am I seeing this?" (table explanation, 0039).
+     Null when there is none - including before the migration is applied. */
+  async getAlertExplanation(alertId: string): Promise<Explanation | null> {
+    const numeric = Number(alertId);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    const { data, error } = await supabase
+      .from("explanation")
+      .select("explanation")
+      .eq("alert_id", numeric)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    return asExplanation((data as { explanation: unknown }).explanation);
+  },
   findMaintenance(id: string): MaintenanceJob | undefined { return maintenance.find((m) => m.id === id); },
   findSchedule(id: number): IrrigationSchedule | undefined { return schedules.find((s) => s.id === id); },
 

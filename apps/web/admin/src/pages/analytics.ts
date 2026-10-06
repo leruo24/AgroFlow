@@ -115,9 +115,9 @@ export async function irrigationPage(): Promise<string> {
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Water delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet })}
-    ${kpiCard({ label: "Irrigation events", value: filteredEvents.length, icon: Icon.repeat })}
-    ${kpiCard({ label: "Total pump time", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
+    ${kpiCard({ label: "Water delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet, why: { counts: "kilolitres were delivered in this range (estimated)", rule: "Pump run time times each zone flow rate, summed over the irrigation events in the chosen range. There is no flow meter, so this is an estimate.", query: "sum(runtime_seconds / 60 x zone.flow_rate_lpm) over filtered irrigation_event / 1000" } })}
+    ${kpiCard({ label: "Irrigation events", value: filteredEvents.length, icon: Icon.repeat, why: { counts: "pump runs are in this range", rule: "Every irrigation event in the chosen range and filters.", query: "count(irrigation_event) filtered" } })}
+    ${kpiCard({ label: "Total pump time", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer, why: { counts: "hours of pump time are in this range", rule: "Pump run time of every irrigation event in the chosen range, in hours.", query: "sum(runtime_seconds) / 3600 over filtered irrigation_event" } })}
     ${
       /* This tile used to read "Schedule Compliance" and show a percentage
          computed from a field that was hardcoded true - so it always said
@@ -132,6 +132,7 @@ export async function irrigationPage(): Promise<string> {
           ? { dir: "down", text: `${noEstimate} zone(s) have no flow rate set` }
           : undefined,
         icon: Icon.circleCheck,
+        why: { counts: "per cent of these events can be turned into litres", rule: "An event can be estimated when its zone has a flow rate on file.", highlighted: "Litre totals leave out the rest.", query: "share of filtered irrigation_event whose zone.flow_rate_lpm is set", clears: "Setting a flow rate on the zones that have none." },
       })
     }
   </div>
@@ -294,10 +295,10 @@ export async function reportsPage(): Promise<string> {
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Farms Reporting", value: kpis.totalFarms, icon: Icon.tractor })}
-    ${kpiCard({ label: "Water in Range", value: Math.round(waterInRange / 1000), trend: { dir: "up", text: "kL" }, icon: Icon.droplet })}
-    ${kpiCard({ label: "Maintenance in Range", value: filteredJobs.length, icon: Icon.wrench })}
-    ${kpiCard({ label: "Platform Availability", value: kpis.platformAvailability, format: "pct2", icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Farms Reporting", value: kpis.totalFarms, icon: Icon.tractor, why: { counts: "farms are on the platform", rule: "The same farm count as Home.", query: "farm (archived hidden by default)" } })}
+    ${kpiCard({ label: "Water in Range", value: Math.round(waterInRange / 1000), trend: { dir: "up", text: "kL" }, icon: Icon.droplet, why: { counts: "kilolitres were delivered in this range (estimated)", rule: "Pump run time times flow rate over the chosen range. No flow meter, so an estimate.", query: "sum of estimated litres over filtered events / 1000" } })}
+    ${kpiCard({ label: "Maintenance in Range", value: filteredJobs.length, icon: Icon.wrench, why: { counts: "maintenance jobs fall in this range", rule: "Maintenance jobs dated inside the chosen range and filters.", query: "count(maintenance) filtered" } })}
+    ${kpiCard({ label: "Platform Availability", value: kpis.platformAvailability, format: "pct2", icon: Icon.circleCheck, why: { counts: "is shown for platform availability", rule: "No uptime record exists yet, so this shows 0. It is not a measurement.", highlighted: "Kept honest rather than showing a made-up figure.", query: "none - no monitoring table exists (getSystemHealth)" } })}
   </div>
 
   <div class="grid split-2">

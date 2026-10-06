@@ -4,6 +4,7 @@
    which lib/animate.ts picks up after content is inserted.
    ========================================================================== */
 
+import { whyLink, countExplanation } from "@/lib/why";
 import { esc, fmtInt, badgeTone, trendClass } from "@/lib/format";
 import { PRESET_LABELS, activeFilterCount, rangeLabel } from "@/lib/filters";
 import { Icon } from "@/lib/icons";
@@ -34,7 +35,24 @@ export interface KpiOptions {
      the thing it refers to. */
   act?: string;
   actId?: string;
+  /* Item 2c: "Why am I seeing this?" - what the number counts and why it is
+     highlighted. Written next to the tile, from the same filter that makes
+     the number, so the two cannot drift. */
+  why?: KpiWhy;
 }
+
+export type KpiWhy = {
+  /* "farms whose status is Active" - completes "N ..." */
+  counts: string;
+  /* The rule in plain words. */
+  rule: string;
+  /* Where the number comes from, for admins: table, filter. */
+  query: string;
+  /* Why it is on the page at all. */
+  highlighted?: string;
+  /* What makes it go up or down. */
+  clears?: string;
+};
 
 export function kpiCard(opts: KpiOptions): string {
   const fmt = opts.format ?? "int";
@@ -51,11 +69,27 @@ export function kpiCard(opts: KpiOptions): string {
 
   // A real <button> when it is clickable, so it is keyboard-reachable and
   // announced as actionable - not a div with a click handler bolted on.
-  return opts.act
+  const tile = opts.act
     ? `<button type="button" class="card reveal card-clickable" data-act="${esc(opts.act)}"${
         opts.actId ? ` data-id="${esc(opts.actId)}"` : ""
       }>${inner}</button>`
     : `<div class="card reveal">${inner}</div>`;
+
+  if (!opts.why) return tile;
+
+  // The link sits beside the tile, never inside it: a button inside a
+  // button is invalid and the tile is already a link to its list.
+  const why = whyLink(countExplanation({
+    label: opts.label,
+    what: opts.why.counts,
+    count: opts.value,
+    counted: opts.label,
+    rule: opts.why.rule,
+    whyHighlighted: opts.why.highlighted ?? "",
+    clears: opts.why.clears ?? "The number updates the next time this page loads.",
+    query: opts.why.query,
+  }));
+  return `<div class="kpi-item">${tile}${why}</div>`;
 }
 
 /* -------------------------------- panels --------------------------------- */

@@ -777,7 +777,7 @@ export type RunAdviceResult = {
   /** Named missing fields - the half that makes this useful during setup. */
   setupMissing: string[];
   limitations: string[];
-  insights: { insightType: string; severity: string; message: string }[];
+  insights: { insightType: string; severity: string; message: string; explanation?: unknown }[];
 };
 
 export function runAdviceNow(zoneId: number): Promise<RunAdviceResult> {
