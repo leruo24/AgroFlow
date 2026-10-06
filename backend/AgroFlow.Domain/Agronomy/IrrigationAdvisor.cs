@@ -163,6 +163,14 @@ namespace AgroFlow.Business.Agronomy
 
         // True when the balance ran end to end for today.
         public bool WaterBalanceAvailable { get; internal set; }
+
+        // Item 2. How sure the advice is, and the one step that would improve
+        // it. Null when the water balance was not asked for.
+        public RuleBook.Confidence? Confidence { get; internal set; }
+        public RuleBook.SetupStep? NextStep { get; internal set; }
+        public bool StageAssumed { get; internal set; }
+        public double? RecommendedDepthMm { get; internal set; }
+        public double? RecommendedMinutesPerSquareMetre { get; internal set; }
     }
 
     public static class IrrigationAdvisor
@@ -366,9 +374,16 @@ namespace AgroFlow.Business.Agronomy
             advice.DayOfSeason = result.DayOfSeason;
             advice.SeasonLengthDays = result.Crop?.TotalDays;
             advice.DaysToNextWatering = result.DaysToNextWatering;
-            advice.SeasonStageLabel = result.Stage.HasValue
-                ? Fao56EngineReference.StageLabel(result.Stage.Value)
-                : null;
+            advice.SeasonStageLabel = result.StageAssumed
+                ? RuleBook.CropRules.AssumedStageLabel
+                : result.Stage.HasValue
+                    ? Fao56EngineReference.StageLabel(result.Stage.Value)
+                    : null;
+            advice.StageAssumed = result.StageAssumed;
+            advice.Confidence = result.Confidence;
+            advice.NextStep = result.NextStep;
+            advice.RecommendedDepthMm = result.RecommendedDepthMm;
+            advice.RecommendedMinutesPerSquareMetre = result.RecommendedMinutesPerSquareMetre;
 
             var todayRow = result.Days.FirstOrDefault(d => d.Day == engineInput.Today);
             advice.EtoSource = todayRow?.EtoSource;
@@ -394,6 +409,22 @@ namespace AgroFlow.Business.Agronomy
                 reasoning.Add(result.DepletionMm.Value >= result.RawMm.Value
                     ? "The soil has dried past what this crop can comfortably draw from, so it needs water now."
                     : "The soil still holds enough water for this crop today.");
+            }
+
+            // Item 2: when the balance ran, the action is the balance's verdict
+            // - the same one the farmer reads in FarmerInsights. Before, the
+            // action came only from a calibrated reading against a threshold,
+            // so a zone without one was "InsufficientData" while its own
+            // insights said "water now".
+            if (result.BalanceRan)
+            {
+                advice.Action =
+                    insights.Any(i => i.InsightType == InsightType.SkipRain) ? AdviceAction.HoldRainExpected
+                    : insights.Any(i => i.InsightType == InsightType.WaterNow) ? AdviceAction.IrrigateNow
+                    : AdviceAction.NoActionNeeded;
+
+                // The balance decided, so "cannot decide" is no longer true.
+                reasoning.RemoveAll(r => r.StartsWith("Cannot decide:", StringComparison.Ordinal));
             }
         }
 
@@ -626,7 +657,7 @@ namespace AgroFlow.Business.Agronomy
                     parts.Add("No irrigation needed today");
                     break;
                 case AdviceAction.InsufficientData:
-                    parts.Add("No recommendation possible - see limitations");
+                    parts.Add("No watering call yet - see what to add to this zone below");
                     break;
             }
 

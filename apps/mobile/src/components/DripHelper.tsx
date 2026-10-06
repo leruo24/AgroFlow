@@ -128,13 +128,13 @@ export function decideMessage(
     };
   }
 
-  // 4. Setup still unfinished.
+  // 4. Setup still unfinished. Item 2: advice comes either way, so this is
+  // the server's ONE next step ("Add the planting date for ..."), not a
+  // claim that advice is waiting on it.
   const setupMissing = insights.find((i) => i.insightType === 'setup_missing');
   if (setupMissing) {
     return {
-      message: `Finish setting up ${nameFor(
-        setupMissing.zoneId
-      )} to get watering advice.`,
+      message: `${nameFor(setupMissing.zoneId)}: ${setupMissing.message}`,
       mood: 'alert',
       target: { kind: 'zone', zoneId: setupMissing.zoneId },
     };

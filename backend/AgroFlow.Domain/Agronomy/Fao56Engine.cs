@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Business.Agronomy
 {
@@ -80,6 +81,17 @@ namespace AgroFlow.Business.Agronomy
         // mm from runtime_seconds / 60 * flow_rate_lpm / area_m2 so that this file
         // never has to know about pumps.
         public Dictionary<DateOnly, double> IrrigationMmByDay { get; set; } = new Dictionary<DateOnly, double>();
+
+        // Item 2. The longest single pump run per day (SAST), in seconds. Used only when
+        // the zone has no flow rate or no size, so a watering cannot be turned
+        // into millimetres: a real watering then resets the balance instead
+        // (WaterRules.WateringResetsBalance).
+        public Dictionary<DateOnly, double> LongestRunSecondsByDay { get; set; } = new Dictionary<DateOnly, double>();
+
+        // Item 2. The time "now" for deciding whether the latest reading is
+        // fresh. Null keeps the old behaviour (every reading counts as fresh),
+        // so callers that have not been updated are unaffected.
+        public DateTime? NowUtc { get; set; }
     }
 
     // One row of the water balance, matching zone_water_balance.
@@ -149,6 +161,34 @@ namespace AgroFlow.Business.Agronomy
         public List<string> Limitations { get; } = new List<string>();
         public List<AdviceFact> Facts { get; } = new List<AdviceFact>();
 
+        // ---- Item 2: advice is never blocked -------------------------------
+
+        // True when there was no planting date and the crop was assumed to be
+        // at peak growth (CropRules.KcWhenStageUnknown). Stage is then
+        // PeakGrowth and DayOfSeason is null.
+        public bool StageAssumed { get; set; }
+
+        // True when the latest reading is older than
+        // ConfidenceRules.FreshReadingHours: advice is then from the weather
+        // alone, and the reading is not used to start the balance.
+        public bool ReadingStale { get; set; }
+
+        // How much water to give, as a depth. Always set when the balance ran,
+        // so a zone with no size or flow rate still gets an amount.
+        public double? RecommendedDepthMm { get; set; }
+
+        // Minutes per square metre, when the zone's size is unknown but its
+        // flow rate is (WaterRules.MinutesPerSquareMetre).
+        public double? RecommendedMinutesPerSquareMetre { get; set; }
+
+        // True when a watering whose depth could not be measured reset the
+        // balance (WaterRules.WateringResetsBalance).
+        public bool BalanceResetByWatering { get; set; }
+
+        public ZoneSetupState Setup { get; set; } = new ZoneSetupState();
+        public Confidence Confidence { get; set; } = new Confidence(ConfidenceLevel.Low, "Low: not worked out yet.");
+        public SetupStep? NextStep { get; set; }
+
         public WaterBalanceDay? Today
         {
             get { return Days.FirstOrDefault(d => !d.IsForecast || d.DrEndMm.HasValue); }
@@ -213,7 +253,9 @@ namespace AgroFlow.Business.Agronomy
             if (!input.PlantingDate.HasValue)
             {
                 result.MissingSetup.Add("the planting date");
-                result.Limitations.Add("This zone has no planting date, so its growth stage and water need over the season are unknown.");
+                result.Limitations.Add(crop != null
+                    ? "This zone has no planting date, so its growth stage is unknown. The crop was assumed to be at its highest water use (" + CropRules.AssumedStageLabel + "), so the advice errs toward enough water."
+                    : "This zone has no planting date, so its growth stage and water need over the season are unknown.");
             }
 
             // ---- Soil ---------------------------------------------------------
@@ -268,6 +310,17 @@ namespace AgroFlow.Business.Agronomy
                 .ToList();
 
             var latest = validReadings.LastOrDefault();
+
+            // Item 2: a reading older than a day no longer describes today's
+            // soil. It is still shown, but advice comes from the weather.
+            if (latest != null && input.NowUtc.HasValue
+                && (input.NowUtc.Value - latest.RecordedAtUtc).TotalHours > ConfidenceRules.FreshReadingHours)
+            {
+                result.ReadingStale = true;
+                result.Limitations.Add(
+                    "This advice is based on the weather: " + ConfidenceRules.KitQuiet(latest.RecordedAtUtc) + ".");
+            }
+
             if (latest != null)
             {
                 result.LatestRawReading = latest.RawValue;
@@ -292,12 +345,16 @@ namespace AgroFlow.Business.Agronomy
                 }
             }
 
-            // Without a crop or a planting date there is no Kc curve, so there is
-            // no water balance to run. Say so and stop - do not invent a stage.
-            if (crop == null || !input.PlantingDate.HasValue)
+            // Without a crop there is no crop water use at all, so there is no
+            // water balance to run. Say so and stop - do not invent a crop.
+            // Without a planting date the balance still runs, on the assumed
+            // stage (item 2; CropRules.KcWhenStageUnknown).
+            if (crop == null)
             {
-                return result;
+                return Finish(input, result, calibrated);
             }
+
+            result.StageAssumed = !input.PlantingDate.HasValue;
 
             // ---- Soil water holding ------------------------------------------
             var rootDepth = SoilWaterBalance.EffectiveRootDepthM(crop.RootDepthM, input.RootDepthLimitM);
@@ -343,9 +400,9 @@ namespace AgroFlow.Business.Agronomy
             // Starting depletion. Anchored to the sensor when the zone is
             // calibrated, otherwise starting from a full profile - spec 6.10.
             double dr;
-            if (calibrated && result.RelativeMoisturePercent.HasValue)
+            if (calibrated && result.RelativeMoisturePercent.HasValue && !result.ReadingStale)
             {
-                dr = SoilWaterBalance.DepletionFromRelativeMoistureMm(result.RelativeMoisturePercent.Value, taw);
+                dr =SoilWaterBalance.DepletionFromRelativeMoistureMm(result.RelativeMoisturePercent.Value, taw);
                 result.Limitations.Add(
                     "How dry the soil is was worked out from the sensor reading in proportion to what the soil can hold. The sensor measures relative wetness, not an actual volume of water, so this is an approximation.");
             }
@@ -353,6 +410,9 @@ namespace AgroFlow.Business.Agronomy
             {
                 dr = 0.0;
             }
+
+            var depthMeasurable = input.AreaM2.HasValue && input.AreaM2.Value > 0.0
+                                  && input.FlowRateLpm.HasValue && input.FlowRateLpm.Value > 0.0;
 
             var consecutiveGapDays = 0;
             var balanceStopped = false;
@@ -392,12 +452,28 @@ namespace AgroFlow.Business.Agronomy
                     dr = 0.0;
                     day.DrEndMm = 0.0;
                 }
+
+                // Item 2: a watering that cannot be measured in mm still counts.
+                double runtimeSeconds;
+                if (input.LongestRunSecondsByDay.TryGetValue(w.Date, out runtimeSeconds)
+                    && WaterRules.WateringResetsBalance(runtimeSeconds, depthMeasurable))
+                {
+                    dr = 0.0;
+                    day.DrEndMm = 0.0;
+                    result.BalanceResetByWatering = true;
+                }
+            }
+
+            if (result.BalanceResetByWatering)
+            {
+                result.Limitations.Add(
+                    "This zone has no flow rate or size, so a watering could not be measured. Each watering of at least two minutes was taken as filling the soil.");
             }
 
             if (balanceStopped)
             {
                 result.BalanceRan = false;
-                return result;
+                return Finish(input, result, calibrated);
             }
 
             result.BalanceRan = result.Days.Count > 0;
@@ -419,7 +495,9 @@ namespace AgroFlow.Business.Agronomy
                     result.Facts.Add(new AdviceFact(
                         "Crop water need factor today",
                         todayRow.Kc.Value.ToString("F2", CultureInfo.InvariantCulture),
-                        "FAO-56 Eq. 66 across Table 11 stage lengths, Kc values from Table 12 (Kc start: " + crop.KcIniBasis + ")"));
+                        result.StageAssumed
+                            ? "FAO-56 Table 12, the highest of this crop's values - " + CropRules.AssumedStageLabel + ", as there is no planting date"
+                            : "FAO-56 Eq. 66 across Table 11 stage lengths, Kc values from Table 12 (Kc start: " + crop.KcIniBasis + ")"));
                 }
 
                 if (todayRow.EtoMm.HasValue)
@@ -449,7 +527,7 @@ namespace AgroFlow.Business.Agronomy
                 result.Facts.Add(new AdviceFact(
                     "How dry the soil is now",
                     dr.ToString("F0", CultureInfo.InvariantCulture) + " mm short of full",
-                    "FAO-56 Eq. 85 water balance" + (calibrated ? ", started from the soil sensor reading" : ", started from a full profile")));
+                    "FAO-56 Eq. 85 water balance" + (calibrated && !result.ReadingStale ? ", started from the soil sensor reading" : ", started from a full profile")));
             }
 
             // ---- Amount to apply ---------------------------------------------
@@ -457,6 +535,11 @@ namespace AgroFlow.Business.Agronomy
             // away (spec 6.12).
             result.RecommendedLitres = SoilWaterBalance.IrrigationLitres(dr, input.AreaM2);
             result.RecommendedMinutes = SoilWaterBalance.IrrigationMinutes(result.RecommendedLitres, input.FlowRateLpm);
+            result.RecommendedDepthMm = Math.Round(dr, 1);
+            if (!result.RecommendedLitres.HasValue)
+            {
+                result.RecommendedMinutesPerSquareMetre = WaterRules.MinutesPerSquareMetre(dr, input.FlowRateLpm);
+            }
 
             // ---- Project forward to the next watering ------------------------
             if (forecastDays.Count > 0 && result.RawMm.HasValue)
@@ -491,6 +574,32 @@ namespace AgroFlow.Business.Agronomy
                     "Water amounts in litres are estimates worked out from pump running time and the zone's flow rate. There is no flow meter anywhere in AgroFlow.");
             }
 
+            return Finish(input, result, calibrated);
+        }
+
+        // Item 2: every way out of Run says how sure it is and names one next step.
+        private static ZoneEngineResult Finish(ZoneEngineInput input, ZoneEngineResult result, bool calibrated)
+        {
+            DateTime? newestAny = input.Readings.Count > 0
+                ? input.Readings.Max(r => r.RecordedAtUtc)
+                : (DateTime?)null;
+
+            result.Setup = new ZoneSetupState
+            {
+                CropKnown = result.Crop != null,
+                PlantingDateKnown = input.PlantingDate.HasValue,
+                SoilSet = !result.SoilWasDefaulted,
+                AreaSet = input.AreaM2.HasValue && input.AreaM2.Value > 0.0,
+                FlowRateSet = input.FlowRateLpm.HasValue && input.FlowRateLpm.Value > 0.0,
+                Calibrated = calibrated,
+                ReadingFresh = result.LatestReadingAtUtc.HasValue && !result.ReadingStale,
+                HasKit = input.Readings.Count > 0,
+                WeatherAvailable = result.Crop == null ? input.Weather.Count > 0 : result.BalanceRan,
+                LastReadingAtUtc = result.LatestReadingAtUtc ?? newestAny,
+            };
+
+            result.Confidence = ConfidenceRules.For(result.Setup);
+            result.NextStep = ConfidenceRules.NextStep(result.Setup);
             return result;
         }
 
@@ -530,15 +639,25 @@ namespace AgroFlow.Business.Agronomy
             day.Incomplete = eto.Incomplete;
             day.EtoMm = eto.EtoMm;
 
-            var dayOfSeason = (w.Date.DayNumber - input.PlantingDate!.Value.DayNumber) + 1;
-            day.DayOfSeason = dayOfSeason;
-            day.Stage = SoilWaterBalance.Stage(
-                crop.LIniDays, crop.LDevDays, crop.LMidDays, crop.LLateDays, dayOfSeason);
+            if (input.PlantingDate.HasValue)
+            {
+                var dayOfSeason = (w.Date.DayNumber - input.PlantingDate.Value.DayNumber) + 1;
+                day.DayOfSeason = dayOfSeason;
+                day.Stage = SoilWaterBalance.Stage(
+                    crop.LIniDays, crop.LDevDays, crop.LMidDays, crop.LLateDays, dayOfSeason);
 
-            day.Kc = SoilWaterBalance.Kc(
-                crop.KcIni, crop.KcMid, crop.KcEnd,
-                crop.LIniDays, crop.LDevDays, crop.LMidDays, crop.LLateDays,
-                dayOfSeason);
+                day.Kc = SoilWaterBalance.Kc(
+                    crop.KcIni, crop.KcMid, crop.KcEnd,
+                    crop.LIniDays, crop.LDevDays, crop.LMidDays, crop.LLateDays,
+                    dayOfSeason);
+            }
+            else
+            {
+                // Item 2: no planting date - assume peak growth, never a day number.
+                day.DayOfSeason = null;
+                day.Stage = SeasonStage.PeakGrowth;
+                day.Kc = CropRules.KcWhenStageUnknown(crop);
+            }
 
             day.TawMm = taw;
 

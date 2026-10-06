@@ -431,6 +431,10 @@ export function fetchZoneInsights(zoneId: number) {
     day: string;
     insights: ZoneInsight[];
     growth: ZoneGrowth | null;
+    // Item 2, optional: older APIs do not send them.
+    confidence?: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+    nextStep?: { field: string; ask: string } | null;
+    stageAssumed?: boolean | null;
   }>(`/api/farmer/zones/${zoneId}/insights`);
 }
 

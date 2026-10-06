@@ -193,6 +193,7 @@ public static class Fao56EngineEndpoints
 
         var today = Fao56EngineController.TodayInSast();
         var insights = engine.Data.GetInsights(zoneId, today, includeDismissed: false);
+        var advice = TryRunAdvice(engine, zoneId, today);
 
         return Results.Ok(new
         {
@@ -220,7 +221,29 @@ public static class Fao56EngineEndpoints
             // empty bar - an empty bar reads as "the season has not started",
             // which is a claim the app cannot make.
             growth = BuildGrowthSummary(engine, zoneId, today),
+
+            // ADDITIVE (item 2): how sure today's advice is, and the ONE
+            // step that would improve it. Null if the engine could not run;
+            // older app builds ignore both fields.
+            confidence = advice?.Confidence is { } c ? new { level = c.Key, reason = c.Reason } : null,
+            nextStep = advice?.NextStep is { } s ? new { field = s.Field, ask = s.Ask } : null,
+            stageAssumed = advice?.StageAssumed,
         });
+    }
+
+    // Item 2: a read-only engine run for the confidence badge. Never persists;
+    // a failure leaves the insights themselves untouched.
+    private static ZoneEngineResult? TryRunAdvice(Fao56EngineController engine, long zoneId, DateOnly today)
+    {
+        try
+        {
+            var zone = engine.Data.GetZone(zoneId);
+            return zone is null ? null : engine.RunZone(zone, today, persist: false);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private sealed record GrowthSummary(

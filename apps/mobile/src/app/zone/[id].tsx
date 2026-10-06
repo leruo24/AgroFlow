@@ -53,6 +53,10 @@ import {
   createZoneDetailStyles,
 } from '@/styles/zoneDetailStyles';
 
+import {
+  soilReadingText,
+} from '@/lib/moistureDisplay';
+
 const SCHEDULE_DAY_OPTIONS = [
   'Mon',
   'Tue',
@@ -410,9 +414,11 @@ export default function ZoneControlScreen() {
       label:
         'Soil Moisture',
       value:
-        soil.status === 'Online' ? `${soil.value}${soil.unit}` : 'Unavailable',
+        soilReadingText(soil, 'Unavailable'),
       note:
-        soil.moistureStatus,
+        soil.calibrated
+          ? soil.moistureStatus
+          : 'Do the wet/dry setup to read this as moisture',
     },
     {
       label:

@@ -13,6 +13,7 @@ import { DataState } from '@/components/DataState';
 import { FarmLocationMap } from '@/components/FarmLocationMap';
 import { WeatherSummary } from '@/components/WeatherSummary';
 import { DripHelper } from '@/components/DripHelper';
+import { averageSoilText } from '@/lib/moistureDisplay';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -21,8 +22,8 @@ export default function HomeScreen() {
   // (homeStyles) - kept as separate factories so Home can change without
   // touching what Alerts/History/Irrigation share.
   const styles = useMemo(() => ({ ...createScreenStyles(colors), ...createHomeStyles(colors) }), [colors]);
-  const measured = zones.filter(z => z.sensors.soilMoisture.status === 'Online');
-  const moisture = measured.length ? Math.round(measured.reduce((sum, z) => sum + z.sensors.soilMoisture.value, 0) / measured.length) + '%' : 'No reading';
+  // Item 2: set-up zones only - a sensor number is not a percentage.
+  const moisture = averageSoilText(zones.map(z => z.sensors.soilMoisture));
   const unread = alerts.filter(a => !a.read).length;
   const pendingCommands = zones.filter(z => z.irrigation.override.active).length;
   // null usedTodayLitres means no zone_daily_water_usage row exists for that

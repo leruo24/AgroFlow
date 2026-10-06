@@ -10,6 +10,7 @@ import { useAgroFlow } from '@/context/AgroFlowContext';
 import { useTheme } from '@/context/ThemeContext';
 import { createScreenStyles } from '@/styles/screenStyles';
 import { createIrrigationStyles } from '@/styles/irrigationStyles';
+import { soilReadingText } from '@/lib/moistureDisplay';
 
 export default function IrrigationScreen() {
   const { farm, zones, isZonesLoading, zonesError, refreshZones, isFarmLoading, farmError, refreshFarms } = useAgroFlow();
@@ -40,7 +41,7 @@ export default function IrrigationScreen() {
         <Text style={styles.body}>{zone.irrigation.override.active ? 'Manual command accepted — device confirmation unavailable' : zone.irrigation.mode === 'scheduled' ? (zone.irrigation.schedule.enabled ? 'Schedule enabled' : 'Schedule disabled') : 'Automatic mode'} · Health: {zone.healthStatus}</Text>
         <View style={styles.metrics}>
           {[
-            ['Soil moisture', zone.sensors.soilMoisture.status === 'Online' ? zone.sensors.soilMoisture.value + '%' : 'No reading'],
+            ['Soil moisture', soilReadingText(zone.sensors.soilMoisture, 'No reading')],
             ['Temperature', zone.sensors.temperatureHumidity.status === 'Online' ? zone.sensors.temperatureHumidity.temperature + '°C' : 'No reading'],
             ['Water recorded today', zone.water.usedTodayLitres != null ? zone.water.usedTodayLitres + ' L' : 'No data'],
             ['Last irrigation', zone.irrigation.lastIrrigation.date],

@@ -251,6 +251,42 @@ namespace AgroFlow.Data
             return result;
         }
 
+        // Item 2: the longest single pump run per day, for zones whose waterings
+        // cannot be measured in mm (no flow rate or no size). The engine treats
+        // a long enough run as a full watering (WaterRules.WateringResetsBalance).
+        public Dictionary<DateOnly, double> GetLongestRunSecondsByDay(long zoneId, DateOnly from, DateOnly to)
+        {
+            var result = new Dictionary<DateOnly, double>();
+
+            const string sql =
+                "select (e.started_at at time zone 'Africa/Johannesburg')::date as day, " +
+                "       max(e.runtime_seconds) as runtime_seconds " +
+                "from irrigation_event e " +
+                "where e.zone_id = $1 " +
+                "  and e.runtime_seconds is not null " +
+                "  and e.started_at >= $2::date::timestamp at time zone 'Africa/Johannesburg' " +
+                "  and e.started_at <  ($3::date + 1)::timestamp at time zone 'Africa/Johannesburg' " +
+                "group by 1";
+
+            using (var connection = Open())
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.AddWithValue(zoneId);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, to);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        result[reader.GetFieldValue<DateOnly>(0)] = Convert.ToDouble(reader.GetValue(1));
+                    }
+                }
+            }
+
+            return result;
+        }
+
         // Total irrigation depth over a window, for the overwatering check.
         public double SumIrrigationMm(
             long zoneId, double? flowRateLpm, double? areaM2, DateOnly from, DateOnly to)

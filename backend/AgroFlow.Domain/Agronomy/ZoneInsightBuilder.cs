@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Business.Agronomy
 {
@@ -121,15 +122,25 @@ namespace AgroFlow.Business.Agronomy
 
             // ---------------- act_now ----------------------------------------
 
-            // setup_missing: say what to add, in the farmer's words.
+            // setup_missing: ONE next step, not a list (item 2). Only act_now
+            // when there is no crop - otherwise advice still comes, and finishing
+            // setup only improves it, so it is a heads-up. The full list stays
+            // in data for the setup checklist.
             if (result.MissingSetup.Count > 0)
             {
-                var missing = JoinNaturally(result.MissingSetup);
-                insights.Add(Make(input, InsightType.SetupMissing, InsightSeverity.ActNow,
-                    Trim($"Finish setting up {zone}: add {missing}."),
+                var step = result.NextStep;
+                var message = step != null && step.Field != "kit"
+                    ? step.Ask
+                    : $"Finish setting up {zone}: add {JoinNaturally(result.MissingSetup)}.";
+
+                insights.Add(Make(input, InsightType.SetupMissing,
+                    result.Crop == null ? InsightSeverity.ActNow : InsightSeverity.HeadsUp,
+                    Trim(message),
                     "Zone setup fields that the water figures need",
                     today,
-                    ("missing", result.MissingSetup.ToArray())));
+                    ("missing", result.MissingSetup.ToArray()),
+                    ("next_step", step?.Field),
+                    ("confidence", result.Confidence.Key)));
             }
 
             // zone_offline: no reading for 3 hours.
@@ -197,8 +208,11 @@ namespace AgroFlow.Business.Agronomy
             var dueForWater = result.BalanceRan && result.DepletionMm.HasValue && result.RawMm.HasValue
                               && result.DepletionMm.Value >= result.RawMm.Value;
 
-            // A reading at or below the farmer's own threshold also means water now.
-            if (!dueForWater && result.RelativeMoisturePercent.HasValue && input.MoistureThreshold.HasValue
+            // A reading at or below the farmer's own threshold also means water now
+            // - but only a fresh one (item 2): yesterday's dry reading says
+            // nothing about today.
+            if (!dueForWater && !result.ReadingStale
+                && result.RelativeMoisturePercent.HasValue && input.MoistureThreshold.HasValue
                 && result.RelativeMoisturePercent.Value <= input.MoistureThreshold.Value)
             {
                 dueForWater = true;
@@ -230,26 +244,51 @@ namespace AgroFlow.Business.Agronomy
                 var minutes = result.RecommendedMinutes;
                 var litres = result.RecommendedLitres;
 
-                string message;
+                var perM2 = result.RecommendedMinutesPerSquareMetre;
+                var depth = result.RecommendedDepthMm;
+
+                // Item 2: always an amount. Whole-zone minutes and litres when
+                // the zone is set up; otherwise per square metre, or as a depth.
+                string amount;
                 if (minutes.HasValue && litres.HasValue)
                 {
-                    message = $"Water {zone} now: about {minutes.Value} min (~{Math.Round(litres.Value):F0} L).";
+                    amount = $"about {minutes.Value} min (~{Math.Round(litres.Value):F0} L)";
                 }
                 else if (litres.HasValue)
                 {
-                    message = $"Water {zone} now: about {Math.Round(litres.Value):F0} L.";
+                    amount = $"about {Math.Round(litres.Value):F0} L";
+                }
+                else if (perM2.HasValue && depth.HasValue)
+                {
+                    amount = $"about {perM2.Value.ToString("0.#", CultureInfo.InvariantCulture)} min per m² ({depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} mm)";
+                }
+                else if (depth.HasValue && depth.Value > 0.0)
+                {
+                    amount = $"about {depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} mm ({depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} L per m²)";
                 }
                 else
                 {
-                    message = $"Water {zone} now.";
+                    amount = "";
+                }
+
+                var message = amount.Length > 0 ? $"Water {zone} now: {amount}." : $"Water {zone} now.";
+                if (result.ReadingStale)
+                {
+                    message = $"Based on the weather ({ConfidenceRules.KitQuiet(result.LatestReadingAtUtc)}): " +
+                              (amount.Length > 0 ? $"water {zone} now, {amount}." : $"water {zone} now.");
                 }
 
                 insights.Add(Make(input, InsightType.WaterNow, InsightSeverity.ActNow,
                     Trim(message),
-                    "FAO-56 Table 22 + soil sensor: the soil has dried past what this crop can stand",
+                    result.ReadingStale || !result.Setup.Calibrated
+                        ? "FAO-56 Table 22 + weather water balance: the soil has dried past what this crop can stand"
+                        : "FAO-56 Table 22 + soil sensor: the soil has dried past what this crop can stand",
                     today,
                     ("minutes", minutes),
                     ("litres", litres.HasValue ? Math.Round(litres.Value, 1) : (double?)null),
+                    ("minutes_per_m2", perM2),
+                    ("depth_mm", depth),
+                    ("confidence", result.Confidence.Key),
                     ("source", todayRow?.EtoSource)));
             }
 
@@ -301,6 +340,18 @@ namespace AgroFlow.Business.Agronomy
                             ("trailing_mean_mm", Math.Round(signals.TrailingSevenDayMeanEto.Value, 2))));
                     }
                 }
+            }
+
+            // Item 2: the stage is assumed, so say so - and say nothing about
+            // stage changes or harvest, which would need a real date.
+            if (result.Crop != null && result.StageAssumed)
+            {
+                insights.Add(Make(input, InsightType.GrowthStatus, InsightSeverity.Info,
+                    Trim($"{result.Crop.Label}: {CropRules.AssumedStageLabel} (no planting date yet)."),
+                    "FAO-56 Table 12: the highest crop factor, used when the planting date is unknown",
+                    today,
+                    ("stage", CropRules.AssumedStageLabel),
+                    ("stage_assumed", true)));
             }
 
             // Crop and stage insights need the season.

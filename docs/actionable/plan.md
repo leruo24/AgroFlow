@@ -175,10 +175,13 @@ report path), `Endpoints/ReportEndpoints.cs` (the 24 h reading gate),
 `confidence`, `nextStep`).
 
 **Design:**
-- No planting date → run the balance with **Kc mid from Table 12 (p.110)**
-  and stage "assumed peak growth". *DATA RULE:* mid-season Kc is the highest
-  value for every crop in Table 12, so it errs toward enough water rather than
-  too little. Labelled every time it is used.
+- No planting date → run the balance with **the highest of the crop's three
+  Table 12 Kc values (pp.110–114)** and stage "assumed peak growth".
+  *DATA RULE:* it errs toward enough water rather than too little. That is
+  Kc mid for every crop we hold **except citrus**, whose Kc mid (0.65) is
+  below its Kc ini (0.70) — found while implementing; the plan originally
+  said "Kc mid" and would have been wrong for citrus. Labelled every time it
+  is used.
 - No area → water need as **minutes per m²** and mm: 1 mm over 1 m² is 1 L,
   so minutes/m² = depletion_mm ÷ flow_Lpm.
 - No calibration → weather-and-crop balance (Eq. 85, p.170); the reading is

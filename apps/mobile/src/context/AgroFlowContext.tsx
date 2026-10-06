@@ -27,6 +27,10 @@ import {
 import {
   markAlertReadInDatabase,
 } from '@/services/alertHistoryService';
+
+import {
+  relativeMoisturePercent,
+} from '@/lib/moistureDisplay';
 //status stypes - restricts irrigation to these statuses
 export type IrrigationStatus =
   | 'Active'
@@ -105,6 +109,9 @@ export type Zone = {
       unit: string;
       status: SensorStatus;
       moistureStatus: MoistureStatus;
+      // Item 2: true once the wet/dry setup is done. Until then `value` is
+      // the sensor's own number and must never be shown with a %.
+      calibrated: boolean;
     };
 
     temperatureHumidity: {
@@ -233,6 +240,14 @@ type ZoneRow = {
   schedule_days?: string[] | null;
   schedule_start_time?: string | null;
   schedule_duration_minutes?:
+    | number
+    | string
+    | null;
+  calibration_wet?:
+    | number
+    | string
+    | null;
+  calibration_dry?:
     | number
     | string
     | null;
@@ -383,10 +398,23 @@ function mapZoneRow(
   const desiredMoisture =
     Number(row.desired_moisture ?? 60);
 
-  const moistureValue =
+  const rawMoisture =
     reading?.moisture != null
       ? Number(reading.moisture)
       : null;
+  // Item 2: a percentage only after the wet/dry setup; before it, the
+  // sensor's own number, with no Dry/Wet verdict drawn from it.
+  const calibrationWet =
+    row.calibration_wet != null ? Number(row.calibration_wet) : null;
+  const calibrationDry =
+    row.calibration_dry != null ? Number(row.calibration_dry) : null;
+  const relativeMoisture =
+    relativeMoisturePercent(rawMoisture, calibrationWet, calibrationDry);
+  const calibrated = relativeMoisture != null;
+  const moistureValue =
+    calibrated
+      ? Math.round(relativeMoisture * 10) / 10
+      : rawMoisture;
   const temperatureValue =
     reading?.temperature != null
       ? Number(reading.temperature)
@@ -459,11 +487,12 @@ function mapZoneRow(
     sensors: {
       soilMoisture: {
         value: moistureValue ?? 0,
-        unit: '%',
+        unit: calibrated ? '%' : '',
         status: moistureValue == null ? 'Offline' : sensorStatus,
         moistureStatus: deriveMoistureStatus(
-          moistureValue, moistureThreshold, desiredMoisture
+          calibrated ? moistureValue : null, moistureThreshold, desiredMoisture
         ),
+        calibrated,
       },
       temperatureHumidity: {
         temperature: temperatureValue ?? 0,

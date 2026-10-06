@@ -187,7 +187,11 @@ public static class ReportEndpoints
 
         // 1. Ownership gate on the zone's farm.
         const string zoneSql = """
-            select z.name, z.moisture_threshold, z.desired_moisture, z.flow_rate_lpm
+            select z.name, z.moisture_threshold, z.desired_moisture, z.flow_rate_lpm,
+                   -- Read through jsonb so a database without the engine's
+                   -- columns (migration 0027) reads them as null, not an error.
+                   (to_jsonb(z) ->> 'calibration_wet')::double precision,
+                   (to_jsonb(z) ->> 'calibration_dry')::double precision
             from zone z
             where z.id = $1
               and (exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $2)
@@ -195,6 +199,7 @@ public static class ReportEndpoints
                 or exists (select 1 from profile p where p.id = $2 and p.role = 'admin'));
             """;
         string zoneName; double? dryThreshold, targetMoisture; float? flowRate;
+        double? calibrationWet, calibrationDry;
         await using (var zoneCmd = new NpgsqlCommand(zoneSql, connection))
         {
             zoneCmd.Parameters.AddWithValue(zoneId.Value);
@@ -205,7 +210,19 @@ public static class ReportEndpoints
             dryThreshold = zr.IsDBNull(1) ? null : Convert.ToDouble(zr.GetValue(1));
             targetMoisture = zr.IsDBNull(2) ? null : Convert.ToDouble(zr.GetValue(2));
             flowRate = zr.IsDBNull(3) ? null : zr.GetFloat(3);
+            calibrationWet = zr.IsDBNull(4) ? null : zr.GetDouble(4);
+            calibrationDry = zr.IsDBNull(5) ? null : zr.GetDouble(5);
         }
+
+        // Item 2: readings are a percentage only after the wet/dry setup.
+        // Calibrated: every figure is converted, the same way the engine does.
+        // Not calibrated: figures stay sensor numbers and are never shown with
+        // a %, and no comparison with the % threshold is made.
+        var calibrated = AgroFlow.Business.Agronomy.SoilWaterBalance
+            .RelativeMoisturePercent(0, calibrationWet, calibrationDry) is not null;
+        double Shown(double raw) => calibrated
+            ? AgroFlow.Business.Agronomy.SoilWaterBalance.RelativeMoisturePercent(raw, calibrationWet, calibrationDry)!.Value
+            : raw;
 
         // 2. Hourly moisture buckets (local SAST wall-clock time).
         const string moistureSql = """
@@ -228,13 +245,17 @@ public static class ReportEndpoints
             await using var r = await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
             {
-                var avg = Convert.ToDouble(r.GetValue(1));
-                var min = Convert.ToDouble(r.GetValue(2));
-                var max = Convert.ToDouble(r.GetValue(3));
+                // The conversion is linear, so the average converts directly;
+                // a probe that reads LOWER when wet swaps min and max.
+                var avg = Shown(Convert.ToDouble(r.GetValue(1)));
+                var a = Shown(Convert.ToDouble(r.GetValue(2)));
+                var b = Shown(Convert.ToDouble(r.GetValue(3)));
+                var min = Math.Min(a, b);
+                var max = Math.Max(a, b);
                 var count = Convert.ToInt64(r.GetValue(4));
                 weightedSum += avg * count; readingCount += count;
                 lowest = Math.Min(lowest, min); highest = Math.Max(highest, max);
-                if (dryThreshold is not null && avg < dryThreshold) hoursBelow++;
+                if (calibrated && dryThreshold is not null && avg < dryThreshold) hoursBelow++;
                 series.Add(new
                 {
                     time = r.GetDateTime(0).ToString("yyyy-MM-dd'T'HH:mm"),
@@ -277,6 +298,7 @@ public static class ReportEndpoints
 
         var hasData = series.Count > 0;
         string? action = !hasData ? null
+            : !calibrated ? "The soil sensor is not yet set up, so its readings are sensor numbers, not moisture. Do the wet/dry setup to compare them with the dry threshold."
             : dryThreshold is null ? "No moisture threshold is set for this zone, so no dry-period check was made."
             : hoursBelow == 0 ? $"Moisture stayed at or above the {dryThreshold:0.#}% threshold in every hour with readings."
             : $"Moisture averaged below the {dryThreshold:0.#}% threshold in {hoursBelow} of {series.Count} hours with readings.";
@@ -292,6 +314,11 @@ public static class ReportEndpoints
             status = hasData ? "ok" : "no_data",
             message = hasData ? null : "Not enough data yet: no soil moisture readings in this period.",
             thresholds = new { dryPct = dryThreshold, targetPct = targetMoisture },
+
+            // Item 2, additive: false means every "...Pct" figure below is a
+            // raw sensor number and must be shown without a %.
+            calibrated,
+            readingUnit = calibrated ? "%" : "sensor reading (not yet set up)",
             summary = hasData ? new
             {
                 readingCount,
@@ -315,7 +342,25 @@ public static class ReportEndpoints
         });
     }
 
-    private const int MaxReadingAgeHours = 24;
+    // The same figure as RuleBook.ConfidenceRules.FreshReadingHours: past it a
+    // reading lowers confidence and the advice comes from the weather.
+    private const int MaxReadingAgeHours = (int)AgroFlow.Business.Agronomy.RuleBook.ConfidenceRules.FreshReadingHours;
+
+    // Item 2: how the latest reading is described. Never a % before the
+    // wet/dry setup; a stale reading says when the kit last reported.
+    internal static string ReadingLabel(double? raw, DateTime? readAtUtc, double? relativePct, bool fresh)
+    {
+        if (raw is null || readAtUtc is null) return "No soil reading yet.";
+
+        var at = readAtUtc.Value.AddHours(2).ToString("HH:mm 'on' d MMM", CultureInfo.InvariantCulture);
+        var reading = relativePct is { } pct
+            ? $"Soil moisture {Math.Round(pct).ToString("F0", CultureInfo.InvariantCulture)}% at {at}"
+            : $"Sensor reading {Math.Round(raw.Value).ToString("F0", CultureInfo.InvariantCulture)} (not yet set up) at {at}";
+
+        return fresh
+            ? reading + "."
+            : reading + ". Based on the weather: " + AgroFlow.Business.Agronomy.RuleBook.ConfidenceRules.KitQuiet(readAtUtc) + ".";
+    }
 
     private static async Task<IResult> GetScheduleAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId,
@@ -442,6 +487,21 @@ public static class ReportEndpoints
                 faultSignals = null;
             }
 
+            // Item 2: a reading is a percentage only after the wet/dry setup.
+            // Before it, it is a sensor number and is never shown with a %.
+            var calibrated = balanceInput is { CalibrationWet: not null, CalibrationDry: not null };
+            var relativePct = calibrated && z.Moisture is { } rawReading
+                ? AgroFlow.Business.Agronomy.SoilWaterBalance.RelativeMoisturePercent(
+                    rawReading, balanceInput!.CalibrationWet, balanceInput.CalibrationDry)
+                : null;
+
+            // The threshold check needs a real percentage. With the engine
+            // available, only a calibrated reading is one; without it (engine
+            // columns missing) the old behaviour stands.
+            var moistureForAdvice = !readingFresh ? null
+                : balanceInput is null ? z.Moisture
+                : relativePct;
+
             for (var i = 0; i < 7; i++)
             {
                 var asOf = today.AddDays(i);
@@ -453,7 +513,7 @@ public static class ReportEndpoints
                     PlantingDate = z.Planted,
                     AsOf = asOf,
                     // Moisture is only known for today. Future days get null, never a guess.
-                    SoilMoisturePercent = i == 0 && readingFresh ? z.Moisture : null,
+                    SoilMoisturePercent = i == 0 ? moistureForAdvice : null,
                     MoistureThresholdPercent = z.Threshold,
                     FarmLatitudeDegrees = latitude,
                     LatestWeather = w,
@@ -490,14 +550,27 @@ public static class ReportEndpoints
                 cropType = z.Crop,
                 latestMoisture = new
                 {
-                    pct = z.Moisture,
+                    // A percentage only after the wet/dry setup (item 2).
+                    pct = relativePct is { } rp ? Math.Round(rp, 1) : (double?)null,
+                    reading = z.Moisture,
+                    calibrated,
+                    label = ReadingLabel(z.Moisture, z.ReadAt, relativePct, readingFresh),
                     recordedAt = z.ReadAt,
                     usedForToday = readingFresh,
                     note = z.ReadAt is null ? "No moisture reading recorded for this zone."
                         : readingFresh ? null
-                        : $"Latest reading is older than {MaxReadingAgeHours} hours, so it was not used.",
+                        : "Based on the weather: " + AgroFlow.Business.Agronomy.RuleBook.ConfidenceRules.KitQuiet(z.ReadAt) + ".",
                 },
                 summary = todayAdvice!.Summary,
+
+                // Item 2: how sure, and the one thing that would improve it.
+                // Optional - null when the engine's inputs were unavailable.
+                confidence = todayAdvice.Confidence is { } conf
+                    ? new { level = conf.Key, reason = conf.Reason }
+                    : null,
+                nextStep = todayAdvice.NextStep is { } step
+                    ? new { field = step.Field, ask = step.Ask }
+                    : null,
 
                 // The one plain sentence for a farmer, from the water balance.
                 // Null when the balance could not run.
@@ -841,6 +914,10 @@ public static class ReportEndpoints
         var hasData = root.GetProperty("status").GetString() == "ok";
         var thresholds = root.GetProperty("thresholds");
 
+        // Item 2: no % on a reading taken before the wet/dry setup.
+        var calibratedReport = !root.TryGetProperty("calibrated", out var cal) || cal.ValueKind != JsonValueKind.False;
+        var pctSuffix = calibratedReport ? "%" : "";
+
         // The designed shell (item 3): the same green band, logo and footer as
         // the water usage report, so the three farmer-facing reports look
         // like one product rather than three. The CONTENT below is unchanged -
@@ -857,7 +934,9 @@ public static class ReportEndpoints
                 ReportShell.GeneratedLine(generated)));
 
             page.Footer().Element(c => ReportShell.Footer(
-                c, "Soil moisture is relative to this zone's setup: 100% = soaked and drained, 0% = dry."));
+                c, calibratedReport
+                    ? "Soil moisture is relative to this zone's setup: 100% = soaked and drained, 0% = dry."
+                    : "The soil sensor is not yet set up, so readings are the sensor's own numbers, not moisture."));
 
             page.Content().PaddingHorizontal(34).PaddingTop(18).PaddingBottom(12).Column(col =>
             {
@@ -875,9 +954,10 @@ public static class ReportEndpoints
                     $"Target moisture: {Num(thresholds.GetProperty("targetPct"), "%")}");
                 col.Item().Text(
                     $"{s.GetProperty("readingCount").GetInt64()} readings. " +
-                    $"Average {Num(s.GetProperty("averagePct"), "%")}, " +
-                    $"lowest {Num(s.GetProperty("lowestPct"), "%")}, " +
-                    $"highest {Num(s.GetProperty("highestPct"), "%")}.");
+                    (calibratedReport ? "" : "Sensor readings (not yet set up): ") +
+                    $"average {Num(s.GetProperty("averagePct"), pctSuffix)}, " +
+                    $"lowest {Num(s.GetProperty("lowestPct"), pctSuffix)}, " +
+                    $"highest {Num(s.GetProperty("highestPct"), pctSuffix)}.");
                 col.Item().Text(s.GetProperty("action").GetString()).SemiBold();
 
                 WriteInsightsBlock(col, root);
@@ -943,7 +1023,7 @@ public static class ReportEndpoints
                     foreach (var p in root.GetProperty("series").EnumerateArray())
                     {
                         table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("time").GetString());
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("avgMoisturePct"), "%"));
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("avgMoisturePct"), pctSuffix));
                         table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("minMoisturePct"), "%"));
                         table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("maxMoisturePct"), "%"));
                         table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("readings").GetInt64().ToString());
@@ -977,7 +1057,8 @@ public static class ReportEndpoints
         {
             "IrrigateNow" => "Irrigate today",
             "NoActionNeeded" => "No irrigation needed",
-            "InsufficientData" => "No recommendation possible",
+            "HoldRainExpected" => "Rain expected: skip watering",
+            "InsufficientData" => "Finish setup for a watering call",
             "RainExpectedCheckMoisture" => "Rain expected: check moisture",
             "CheckMoisture" => "Check moisture",
             _ => a ?? "-",
@@ -1021,11 +1102,16 @@ public static class ReportEndpoints
                     col.Item().Text(Str(z.GetProperty("summary"))).SemiBold();
 
                     var lm = z.GetProperty("latestMoisture");
-                    col.Item().Text(
-                        lm.GetProperty("pct").ValueKind == JsonValueKind.Number
-                            ? $"Latest soil moisture reading: {Num(lm.GetProperty("pct"), "%")} at {Str(lm.GetProperty("recordedAt"))} (UTC)." +
-                              (lm.GetProperty("usedForToday").GetBoolean() ? "" : " " + Str(lm.GetProperty("note")))
-                            : "No soil moisture reading recorded for this zone.");
+                    col.Item().Text(Str(lm.GetProperty("label")));
+
+                    if (z.TryGetProperty("confidence", out var confidence) && confidence.ValueKind == JsonValueKind.Object)
+                    {
+                        col.Item().Text("How sure: " + Str(confidence.GetProperty("reason"))).FontSize(9);
+                    }
+                    if (z.TryGetProperty("nextStep", out var nextStep) && nextStep.ValueKind == JsonValueKind.Object)
+                    {
+                        col.Item().Text("Next step: " + Str(nextStep.GetProperty("ask"))).FontSize(9);
+                    }
 
                     var reasoning = z.GetProperty("reasoning");
                     if (reasoning.GetArrayLength() > 0)

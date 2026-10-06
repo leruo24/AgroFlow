@@ -3394,8 +3394,11 @@ function liveRender(kind: string, d: any): string {
   if (kind === "moisture") {
     if (d.status !== "ok") return `<p>${liveEsc(d.message)}</p>`;
     const s = d.summary;
-    return `<p><strong>${liveEsc(d.zoneName)}</strong>: ${liveEsc(s.readingCount)} readings, average ${liveEsc(s.averagePct)}%,
-      lowest ${liveEsc(s.lowestPct)}%, highest ${liveEsc(s.highestPct)}%.</p>
+    // Item 2: no % on readings taken before the wet/dry setup.
+    const pct = d.calibrated === false ? "" : "%";
+    const kind = d.calibrated === false ? " (sensor readings, not yet set up)" : "";
+    return `<p><strong>${liveEsc(d.zoneName)}</strong>: ${liveEsc(s.readingCount)} readings${kind}, average ${liveEsc(s.averagePct)}${pct},
+      lowest ${liveEsc(s.lowestPct)}${pct}, highest ${liveEsc(s.highestPct)}${pct}.</p>
       <p>${liveEsc(s.action)}</p>
       ${liveInsights(d.insights)}
       ${d.calibrationNote ? `<p><small>${liveEsc(d.calibrationNote)}</small></p>` : ""}
