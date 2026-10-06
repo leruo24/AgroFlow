@@ -96,6 +96,21 @@ public static class AdminRequestEndpoints
         AuditLog audit,
         CancellationToken cancellationToken)
     {
+        // Item 5: nobody can put work in somebody else's name. This route
+        // stays for older consoles, but it only accepts the caller's own id
+        // (or null, to let go). The caller comes from the login, never the body.
+        if (!Guid.TryParse(user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier), out var caller))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!HandlingRules.AssignAllowed(body.AssignedToProfileId, caller))
+        {
+            return Results.Json(
+                new { error = "You can only put your own name on a request. Use \"I'll handle this\"." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         await using var cmd = new NpgsqlCommand(

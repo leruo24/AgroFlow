@@ -27,7 +27,12 @@ import {
   archiveFarm,
   restoreFarm,
   runAdviceNow,
-  assignRequest,
+  claimItem,
+  releaseItem,
+  takeOverItem,
+  itemAction,
+  createMaintenance,
+  type HandlingKind,
   getActivityLog,
   getEntityTimeline,
   KIT_TYPES,
@@ -52,8 +57,8 @@ import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
-import { TECHNICIANS, ZONE_CROPS } from "@/data/referenceData";
-import type { AdminAlert, DateRangePreset, Farm, FilterState, AlertPriority, ServiceRequest } from "@/types/models";
+import { ZONE_CROPS } from "@/data/referenceData";
+import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
 import { zoneRow } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
@@ -750,38 +755,6 @@ async function openFarmDetail(id: number): Promise<void> {
  *
  * Steps that have not happened are still shown, greyed, so an admin can see
  * what is outstanding rather than only what is done. */
-function alertTimeline(a: AdminAlert): string {
-  const step = (label: string, when: string | null, done: boolean): string => `
-    <li class="timeline-item${done ? "" : " is-pending"}">
-      <span class="timeline-dot" aria-hidden="true"></span>
-      <div>
-        <b>${esc(label)}</b>
-        <span class="timeline-when">${when ? esc(when) : "not yet"}</span>
-      </div>
-    </li>`;
-
-  const resolved = ["Resolved", "Closed"].includes(a.status);
-
-  // Notes sit in the middle of the chain in the order they were written.
-  // api.addAlertNote unshifts, so the newest is first - reversed here because
-  // a timeline reads downwards through time.
-  const notes = [...a.notes].reverse().map((n) => `
-    <li class="timeline-item">
-      <span class="timeline-dot" aria-hidden="true"></span>
-      <div>
-        <b>Note by ${esc(n.author)}</b>
-        <span class="timeline-when">${esc(n.when)}</span>
-        <p class="muted">${esc(n.note)}</p>
-      </div>
-    </li>`).join("");
-
-  return `<ol class="timeline">
-    ${step("Raised", a.raised, true)}
-    ${a.assignedTo ? step(`Assigned to ${a.assignedTo}`, null, true) : step("Assigned", null, false)}
-    ${notes}
-    ${step(a.status === "Closed" ? "Closed" : "Resolved", null, resolved)}
-  </ol>`;
-}
 
 /* Today as yyyy-mm-dd in SAST (UTC+2, no DST).
    Shifting before slicing the ISO string is what makes this right: at 01:30
@@ -2117,63 +2090,6 @@ case "delete-user": {
     /* Who is dealing with a request.
        A picker over real admin profiles, not a text field - the whole point
        of recording an owner is that the name means a specific person. */
-    case "assign-request": {
-      const requestId = Number(idAttr);
-      if (!requestId) return;
-
-      const [requests, candidates] = await Promise.all([
-        api.getServiceRequests(),
-        api.getAdministrators().catch(() => []),
-      ]);
-
-      const request = requests.find((r) => r.id === requestId);
-      if (!request) return void toast("That request could not be found.", "warn");
-
-      if (candidates.length === 0) {
-        return void toast("No administrator accounts to assign to.", "warn");
-      }
-
-      return openDrawer({
-        title: "Assign this request",
-        subtitle: `${request.farmerName} · ${request.requestType === "new_farm" ? "New farm" : "New zone"}`,
-        bodyHtml: `
-          ${picker({
-            name: "assignee",
-            label: "Assign to",
-            value: request.assignedToProfileId ?? "",
-            placeholder: "Search administrators…",
-            options: candidates.map((u) => ({
-              value: u.id,
-              label: u.name || u.email,
-              secondary: u.email,
-            })),
-          })}
-          <p class="muted">
-            Assigning does not change the status. Somebody usually picks a request up before it
-            is scheduled, and "booked, nobody owns it yet" is a real state worth being able to see.
-          </p>`,
-        confirmLabel: "Save",
-        onConfirm: (values) => {
-          const assignee = values["assignee"] ?? "";
-
-          void assignRequest(requestId, assignee || null)
-            .then((r) => {
-              toast(r.message, "success");
-              void refresh();
-            })
-            .catch((error: unknown) => {
-              showErrorModal(
-                "Could not assign the request",
-                error instanceof Error ? error.message : "The request could not be assigned.",
-              );
-            });
-        },
-      });
-    }
-
-    /* The activity log, as a file. CSV for anything, XLSX for the one people
-       actually open in Excel - see item 7 for why the plain CSV was useless
-       in a South African locale. */
     case "export-activity-csv": {
       const log = await getActivityLog();
 
@@ -2355,33 +2271,21 @@ case "delete-user": {
         },
       });
     }
+    // Item 5: a real maintenance job for this kit, booked by - and handled
+    // by - the caller. There is no technician picker: the list it offered
+    // was four invented names.
     case "schedule-device-maint":
       return openDrawer({
         title: `Schedule service — ${idAttr}`,
-        bodyHtml: picker({
-          name: "tech",
-          label: "Technician",
-          required: true,
-          requiredMessage: "Choose a technician.",
-          placeholder: "Search technicians…",
-          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
-        }),
         fields: [
-          // Today, not a date hardcoded during development - that one is now
-          // in the past, so every scheduled visit defaulted to overdue.
-          { label: "Date", value: todayIso(), editable: true, name: "date" },
+          { label: "What needs doing", value: "", editable: true, name: "issue" },
+          { label: "Visit date (yyyy-mm-dd)", value: todayIso(), editable: true, name: "date" },
         ],
-        confirmLabel: "Schedule",
-        /* The maintenance list is a session working copy - there is no
-           writer for it (see data/api.ts's header). scheduleVisit at least
-           puts the date and status on the row in front of the admin, which
-           is honest optimistic feedback; the old toast claimed a booking
-           that existed nowhere, not even on screen. */
+        confirmLabel: "Book visit",
         onConfirm: (v) => {
-          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
-            toast("Visit put on the job for this session.", "info");
-            void refresh();
-          });
+          void createMaintenance({ hardwareId: Number(idAttr) || null, description: v["issue"] ?? "", date: v["date"] ?? "" })
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not book the visit", e instanceof Error ? e.message : "Not saved."));
         },
       });
     // The old free-text version of this wrote nothing at all - it toasted
@@ -2389,6 +2293,43 @@ case "delete-user": {
     // older bookmark or button still reaches the real wizard.
     case "add-device":
       return handleAction(withAct(el, "register-hardware"));
+
+    /* item 5: handling - always the caller's own name */
+    case "claim-item": {
+      const kind = (el.dataset["kind"] ?? "") as HandlingKind;
+      try {
+        const r = await claimItem(kind, idAttr);
+        toast(r.message, "success");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Could not claim this.", "warn");
+      }
+      return void refresh();
+    }
+    case "release-item": {
+      const kind = (el.dataset["kind"] ?? "") as HandlingKind;
+      try {
+        const r = await releaseItem(kind, idAttr);
+        toast(r.message, "info");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Could not let this go.", "warn");
+      }
+      return void refresh();
+    }
+    case "take-over-item": {
+      const kind = (el.dataset["kind"] ?? "") as HandlingKind;
+      const who = el.dataset["handler"] ?? "another admin";
+      return openDrawer({
+        title: "Take over",
+        subtitle: `${who} is handling this. Your name and theirs, and your reason, go on the record.`,
+        fields: [{ label: "Why are you taking this over?", value: "", editable: true, name: "reason" }],
+        confirmLabel: "Take over",
+        onConfirm: (v) => {
+          void takeOverItem(kind, idAttr, v["reason"] ?? "")
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not take this over", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
 
     /* alerts */
     case "view-alert": {
@@ -2398,7 +2339,10 @@ case "delete-user": {
       // The panel intent is taken BEFORE the await (item 0b): if another
       // panel is asked for meanwhile, this one must not open over it.
       const alertIntent = currentPanelIntent();
-      const alertWhy = await api.getAlertExplanation(a.id).catch(() => null);
+      const [alertWhy, history] = await Promise.all([
+        api.getAlertExplanation(a.id).catch(() => null),
+        getEntityTimeline("alert", a.id).catch(() => null),
+      ]);
       return openDrawer({
         intent: alertIntent,
         title: a.id,
@@ -2407,59 +2351,24 @@ case "delete-user": {
         bodyHtml: `
           <div class="drawer-section"><h6>Details</h6>
             <div class="detail-list">
-              <div class="detail-row"><span>Raised</span><b>${esc(a.raised)}</b></div>
+              <div class="detail-row"><span>Raised</span><b>${esc(fmtDateTimeSast(a.raised))}</b></div>
               <div class="detail-row"><span>Category</span><b>${esc(a.category)}</b></div>
               <div class="detail-row"><span>Farm</span><b>${esc(a.farm ?? "Platform")}</b></div>
-              <div class="detail-row"><span>User</span><b>${esc(a.user ?? "—")}</b></div>
-              <div class="detail-row"><span>Assigned to</span><b>${esc(a.assignedTo ?? "Unassigned")}</b></div>
+              <div class="detail-row"><span>Farmer</span><b>${esc(a.user ?? "—")}</b></div>
+              <div class="detail-row"><span>Handled by</span><b>${handledLine(a)}</b></div>
+              ${a.resolvedByName ? `<div class="detail-row"><span>Resolved</span><b>Resolved by ${esc(a.resolvedByName)} on ${esc(fmtDateTimeSast(a.resolvedAt ?? ""))}</b></div>` : ""}
               <div class="detail-row"><span>Priority</span><b>${esc(a.priority)}</b></div>
               <div class="detail-row"><span>Status</span><b>${esc(a.status)}</b></div>
             </div>
           </div>
           ${alertWhy ? `<div class="drawer-section"><h6>${esc(WHY_LINK_TEXT)}</h6>${whyHtml(alertWhy)}</div>` : ""}
-          <div class="drawer-section"><h6>History</h6>
-            ${alertTimeline(a)}
+          <div class="drawer-section"><h6>Timeline</h6>
+            ${history === null
+              ? `<p class="muted">The timeline could not be read.</p>`
+              : timelineHtml(history, "Nothing has been done on this alert yet.")}
           </div>`,
-        confirmLabel: "Resolve alert",
-        onConfirm: () => {
-          void api.setAlertStatus(a.id, "Resolved").then(() => {
-            toast(`${a.id} resolved.`, "success"); void refresh();
-          });
-        },
-      });
-    }
-    /* A picker over real administrator accounts. Typing a name into a text
-       field meant "Leruo", "leruo" and "L. Mosiane" were three different
-       assignees as far as the Assigned-to filter was concerned. */
-    case "assign-alert": {
-      const admins = await api.getAdministrators().catch(() => []);
-
-      if (admins.length === 0) {
-        return void toast("No administrator accounts to assign to.", "warn");
-      }
-
-      const current = api.findAlert(idAttr);
-
-      return openDrawer({
-        title: `Assign ${idAttr}`,
-        subtitle: current?.title,
-        bodyHtml: picker({
-          name: "admin",
-          label: "Assign to",
-          value: current?.assignedTo ?? "",
-          placeholder: "Search administrators…",
-          options: admins.map((u) => ({
-            value: u.name || u.email,
-            label: u.name || u.email,
-            secondary: u.email,
-          })),
-        }),
-        confirmLabel: "Assign",
-        onConfirm: (v) => {
-          void api.assignAlert(idAttr, v["admin"] ?? "").then(() => {
-            toast("Alert assigned.", "success"); void refresh();
-          });
-        },
+        confirmLabel: a.status === "Resolved" ? undefined : "Resolve alert",
+        onConfirm: a.status === "Resolved" ? undefined : () => { void runItemAction("alerts", a.id, "resolve"); },
       });
     }
     case "note-alert":
@@ -2467,130 +2376,64 @@ case "delete-user": {
         title: `Add note — ${idAttr}`,
         fields: [{ label: "Note", value: "", editable: true, name: "note" }],
         confirmLabel: "Add note",
-        onConfirm: (v) => {
-          void api.addAlertNote(idAttr, v["note"] ?? "").then(() => {
-            toast("Note added.", "success"); void refresh();
-          });
-        },
+        onConfirm: (v) => { void runItemAction("alerts", idAttr, "note", v["note"] ?? ""); },
       });
-    case "priority-alert":
-      return openDrawer({
-        title: `Change priority — ${idAttr}`,
-        fields: [{ label: "Priority (Critical / High / Medium / Low)", value: "High", editable: true, name: "p" }],
-        confirmLabel: "Update",
-        onConfirm: (v) => {
-          const p = (v["p"] ?? "Medium") as AlertPriority;
-          void api.setAlertPriority(idAttr, p).then(() => {
-            toast(`Priority set to ${p}.`, "success"); void refresh();
-          });
-        },
-      });
-    case "escalate-alert":
-      await api.setAlertStatus(idAttr, "Escalated");
-      toast(`${idAttr} escalated.`, "warn");
-      return void refresh();
-    case "resolve-alert":
-      await api.setAlertStatus(idAttr, "Resolved");
-      toast(`${idAttr} resolved.`, "success");
-      return void refresh();
-    case "close-alert":
-      await api.setAlertStatus(idAttr, "Closed");
-      toast(`${idAttr} closed.`, "success");
-      return void refresh();
-    case "reopen-alert":
-      await api.setAlertStatus(idAttr, "In Progress");
-      toast(`${idAttr} reopened.`, "info");
-      return void refresh();
+    case "escalate-alert": return runItemAction("alerts", idAttr, "escalate");
+    case "resolve-alert": return runItemAction("alerts", idAttr, "resolve");
+    case "close-alert": return runItemAction("alerts", idAttr, "close");
+    case "reopen-alert": return runItemAction("alerts", idAttr, "reopen");
 
     /* maintenance */
-    case "assign-tech":
-      return openDrawer({
-        title: `Assign technician — ${idAttr}`,
-        // A name typed by hand meant the same person appeared as three
-        // different technicians in the Assigned-to filter.
-        bodyHtml: picker({
-          name: "tech",
-          label: "Technician",
-          required: true,
-          requiredMessage: "Choose a technician.",
-          placeholder: "Search technicians…",
-          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
-        }),
-        confirmLabel: "Assign",
-        onConfirm: (v) => {
-          void api.assignTechnician(idAttr, v["tech"] ?? "").then(() => {
-            toast("Technician assigned.", "success"); void refresh();
-          });
-        },
-      });
     case "schedule-visit":
       return openDrawer({
         title: `Schedule visit — ${idAttr}`,
-        fields: [{ label: "Visit date", value: "2026-07-29", editable: true, name: "date" }],
+        fields: [{ label: "Visit date (yyyy-mm-dd)", value: todayIso(), editable: true, name: "date" }],
         confirmLabel: "Schedule",
-        onConfirm: (v) => {
-          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
-            toast("Visit scheduled.", "success"); void refresh();
-          });
-        },
+        onConfirm: (v) => { void runItemAction("maintenance", idAttr, "schedule", undefined, v["date"] ?? ""); },
       });
-    case "complete-maint":
-      await api.completeMaintenance(idAttr);
-      toast("Maintenance marked complete.", "success");
-      return void refresh();
-    case "upload-report":
-      await api.uploadMaintenanceReport(idAttr);
-      toast("Maintenance report uploaded.", "success");
-      return void refresh();
-    case "replace-hw": {
-      const m = api.findMaintenance(idAttr);
+    case "complete-maint": return runItemAction("maintenance", idAttr, "complete");
+    case "note-maint":
       return openDrawer({
-        title: `Replace hardware — ${m?.device ?? idAttr}`,
-        fields: [{ label: "Replacement device ID", value: "", editable: true, name: "newId" }],
-        confirmLabel: "Record replacement",
-        onConfirm: () => toast("Hardware replacement recorded.", "success"),
+        title: `Add note — job ${idAttr}`,
+        fields: [{ label: "Note", value: "", editable: true, name: "note" }],
+        confirmLabel: "Add note",
+        onConfirm: (v) => { void runItemAction("maintenance", idAttr, "note", v["note"] ?? ""); },
       });
-    }
     case "maint-history": {
       const m = api.findMaintenance(idAttr);
       if (!m) return;
-      const all = await api.getMaintenance();
-      const history = all.filter((x) => x.device === m.device);
+      const intent = currentPanelIntent();
+      const history = await getEntityTimeline("maintenance", m.id).catch(() => null);
       return openDrawer({
-        title: `History — ${m.device}`,
-        subtitle: m.farm,
-        bodyHtml: `<ul class="drawer-list">${history.map((h) =>
-          `<li><span class="mono">${esc(h.id)}</span> ${esc(h.issue)} — <b>${esc(h.status)}</b>
-           <span class="muted">${esc(fmtDate(h.scheduledFor))}</span></li>`).join("")}</ul>`,
+        intent,
+        title: `Job ${m.id}`,
+        subtitle: `${m.issue} · ${m.farm}`,
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section"><div class="detail-list">
+            <div class="detail-row"><span>Handled by</span><b>${handledLine(m)}</b></div>
+            ${m.resolvedByName ? `<div class="detail-row"><span>Completed</span><b>Completed by ${esc(m.resolvedByName)} on ${esc(fmtDateTimeSast(m.resolvedAt ?? ""))}</b></div>` : ""}
+          </div></div>
+          <div class="drawer-section"><h6>Timeline</h6>
+            ${history === null
+              ? `<p class="muted">The timeline could not be read.</p>`
+              : timelineHtml(history, "Nothing has been done on this job yet.")}
+          </div>`,
       });
     }
     case "schedule-maint":
       return openDrawer({
         title: "Schedule maintenance",
-        bodyHtml: picker({
-          name: "tech",
-          label: "Technician",
-          required: true,
-          requiredMessage: "Choose a technician.",
-          placeholder: "Search technicians…",
-          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
-        }),
         fields: [
-          { label: "Device ID", value: "", editable: true, name: "device" },
-          { label: "Issue", value: "", editable: true, name: "issue" },
-          { label: "Date", value: todayIso(), editable: true, name: "date" },
+          { label: "Kit (device) number", value: "", editable: true, name: "device" },
+          { label: "What needs doing", value: "", editable: true, name: "issue" },
+          { label: "Visit date (yyyy-mm-dd)", value: todayIso(), editable: true, name: "date" },
         ],
-        confirmLabel: "Schedule",
-        /* The maintenance list is a session working copy - there is no
-           writer for it (see data/api.ts's header). scheduleVisit at least
-           puts the date and status on the row in front of the admin, which
-           is honest optimistic feedback; the old toast claimed a booking
-           that existed nowhere, not even on screen. */
+        confirmLabel: "Book visit",
         onConfirm: (v) => {
-          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
-            toast("Visit put on the job for this session.", "info");
-            void refresh();
-          });
+          void createMaintenance({ hardwareId: Number(v["device"]) || null, description: v["issue"] ?? "", date: v["date"] ?? "" })
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not book the visit", e instanceof Error ? e.message : "Not saved."));
         },
       });
 
@@ -3734,3 +3577,23 @@ export function updateHeaderIdentity(): void {
   btn.title = profile.name || profile.email;
   nameEl.textContent = profile.name || profile.email;
 }
+
+/* Item 5: one action on an alert, a job or a request, sent to the API. The
+   actor is never sent - the API takes it from the login. */
+async function runItemAction(kind: HandlingKind, id: string, action: string, note?: string, date?: string): Promise<void> {
+  try {
+    const r = await itemAction(kind, id, action, note, date);
+    toast(r.message, action === "escalate" ? "warn" : "success");
+  } catch (e) {
+    showErrorModal("Could not save that", e instanceof Error ? e.message : "Nothing was changed.");
+  }
+  void refresh();
+}
+
+/* "You, since 09:49 on 6 Oct" / "Name, since ..." / "Nobody yet". */
+function handledLine(item: Handling): string {
+  if (!item.handledByName) return `<span class="muted">Nobody yet</span>`;
+  const me = getAdminProfile()?.id === item.handledById;
+  return `${esc(me ? "You" : item.handledByName)}${item.claimedAt ? `, since ${esc(fmtDateTimeSast(item.claimedAt))}` : ""}`;
+}
+

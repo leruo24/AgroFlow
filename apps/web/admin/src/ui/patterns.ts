@@ -18,7 +18,8 @@
  */
 
 import { whyLink, type Explanation } from "@/lib/why";
-import { esc } from "@/lib/format";
+import { esc, fmtDateTimeSast } from "@/lib/format";
+import type { Handling } from "@/types/models";
 import { Icon } from "@/lib/icons";
 import { isAbort } from "@/lib/navigation";
 
@@ -464,4 +465,36 @@ export function confirmBody(opts: {
         ? `<p class="confirm-alt">${esc(opts.alternative)}</p>`
         : ""}
     </div>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Item 5: who is handling an item
+ * ------------------------------------------------------------------ */
+
+/* The "Handled by" cell. Nobody can put work in somebody else's name, so
+   there is no picker: "I'll handle this" puts the caller's own; somebody
+   else's can only be taken over (with a reason); only the handler can let
+   it go. */
+export function handlingCell(
+  kind: "requests" | "alerts" | "maintenance",
+  item: Handling & { id: string | number },
+  myId: string | undefined,
+  done = false,
+): string {
+  const id = esc(String(item.id));
+  const since = item.claimedAt ? `<small class="muted">since ${esc(fmtDateTimeSast(item.claimedAt))}</small>` : "";
+
+  if (!item.handledByName) {
+    return done
+      ? `<span class="muted">Nobody</span>`
+      : `<a href="#" data-act="claim-item" data-kind="${kind}" data-id="${id}">I'll handle this</a>`;
+  }
+
+  if (myId && item.handledById === myId) {
+    return `<b>You</b> ${since}
+      ${done ? "" : `<a href="#" data-act="release-item" data-kind="${kind}" data-id="${id}">Let go</a>`}`;
+  }
+
+  return `${esc(item.handledByName)} ${since}
+    ${done ? "" : `<a href="#" data-act="take-over-item" data-kind="${kind}" data-id="${id}" data-handler="${esc(item.handledByName)}">Take over</a>`}`;
 }

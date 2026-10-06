@@ -252,6 +252,13 @@ public static class AuditLogEndpoints
     /// Built here rather than in the console so that the page, the CSV export
     /// and anything added later all describe an action the same way - the
     /// alternative is three slightly different vocabularies for one log.
+    private static string Thing(string entityType) => entityType switch
+    {
+        "service_request" => "request",
+        "maintenance" => "maintenance job",
+        _ => entityType,
+    };
+
     private static string Summarise(
         string actor, string action, string entityType, string? entityId, string? farmName)
     {
@@ -289,6 +296,18 @@ public static class AuditLogEndpoints
             AuditActions.MqttPoolAdded => $"{actor} added MQTT logins to the pool",
             AuditActions.ReportScheduleChanged => $"{actor} changed automatic reports{where}",
             AuditActions.TelegramCodeIssued => $"{actor} issued a Telegram link code",
+
+            // Item 5: handling and the actions that close an item.
+            "handling.claimed" => $"{actor} took on {Thing(entityType)} {entityId}{where}",
+            "handling.taken_over" => $"{actor} took over {Thing(entityType)} {entityId}{where}",
+            "handling.released" => $"{actor} let go of {Thing(entityType)} {entityId}{where}",
+            "alert.closed" => $"{actor} closed alert {entityId}{where}",
+            "alert.reopened" => $"{actor} reopened alert {entityId}{where}",
+            "maintenance.created" => $"{actor} booked maintenance job {entityId}{where}",
+            "maintenance.scheduled" => $"{actor} scheduled maintenance job {entityId}{where}",
+            "maintenance.completed" => $"{actor} completed maintenance job {entityId}{where}",
+            "maintenance.note_added" => $"{actor} added a note to maintenance job {entityId}{where}",
+            "service_request.note_added" => $"{actor} added a note to request {entityId}{where}",
 
             // An action added later still reads as a sentence rather than
             // vanishing from the page.

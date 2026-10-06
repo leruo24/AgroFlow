@@ -1,4 +1,6 @@
 import { api } from "@/data/api";
+import { getAdminProfile } from "@/app/auth";
+import { handlingCell } from "@/ui/patterns";
 import { esc, fmtInt, fmtDate, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
 import { HARDWARE_TYPES, PROVINCES } from "@/data/referenceData";
@@ -120,6 +122,7 @@ export async function hardwarePage(): Promise<string> {
 
 export async function alertsPage(): Promise<string> {
   const alerts = await api.getAlerts();
+  const me = getAdminProfile()?.id;
   const f = getFilter("alerts");
 
   const filtered = applyFilters(alerts, f, {
@@ -156,15 +159,15 @@ export async function alertsPage(): Promise<string> {
     selects: [
       { key: "eventType", label: "Category", options: ["Account", "Farm Approval", "Hardware", "Connectivity", "Maintenance", "Platform", "Security", "Support"] },
       { key: "priority", label: "Priority", options: ["Critical", "High", "Medium", "Low"] },
-      { key: "status", label: "Status", options: ["New", "Assigned", "In Progress", "Escalated", "Waiting for User", "Resolved", "Closed"] },
-      { key: "administrator", label: "Assigned to", options: [...new Set(alerts.map((a) => a.assignedTo).filter((x): x is string => !!x))] },
+      { key: "status", label: "Status", options: ["New", "In Progress", "Escalated", "Resolved"] },
+      { key: "administrator", label: "Handled by", options: [...new Set(alerts.map((a) => a.assignedTo).filter((x): x is string => !!x))] },
       { key: "farm", label: "Farm", options: [...new Set(alerts.map((a) => a.farm).filter((x): x is string => !!x))] },
     ],
   })}
 
-  ${panel("Alert Queue", "Workflow: New → Assigned → In Progress → Escalated → Waiting → Resolved → Closed",
+  ${panel("Alert Queue", "New → In progress (somebody is handling it) → Resolved. Every step is recorded with who did it.",
     resultCount(filtered.length, alerts.length, "alerts"),
-    table(["ID", "Raised (SAST)", "Category", "Alert", "Farm", "Farmer", "Assigned To", "Priority", "Status", "Actions"],
+    table(["ID", "Raised (SAST)", "Category", "Alert", "Farm", "Farmer", "Handled by", "Priority", "Status", "Actions"],
       filtered, (a) => [
         `<span class="mono">${esc(a.id)}</span>`,
         // fmtDateTimeSast, not the raw column: this cell used to render
@@ -174,15 +177,13 @@ export async function alertsPage(): Promise<string> {
         esc(a.title),
         esc(a.farm ?? "Platform"),
         a.user ? esc(a.user) : `<span class="muted">No farmer on file</span>`,
-        a.assignedTo ? esc(a.assignedTo) : `<span class="muted">Unassigned</span>`,
+        handlingCell("alerts", a, me, a.status === "Resolved"),
         badge(a.priority),
         badge(a.status),
         `<span class="row-act">
           <a href="#" data-act="view-alert" data-id="${esc(a.id)}">View</a>
-          <a href="#" data-act="assign-alert" data-id="${esc(a.id)}">Assign</a>
           <a href="#" data-act="note-alert" data-id="${esc(a.id)}">Note</a>
           <a href="#" data-act="escalate-alert" data-id="${esc(a.id)}">Escalate</a>
-          <a href="#" data-act="priority-alert" data-id="${esc(a.id)}">Priority</a>
           ${["Resolved", "Closed"].includes(a.status)
             ? `<a href="#" data-act="reopen-alert" data-id="${esc(a.id)}">Reopen</a>`
             : `<a href="#" data-act="resolve-alert" data-id="${esc(a.id)}">Resolve</a>
@@ -196,6 +197,7 @@ export async function alertsPage(): Promise<string> {
 
 export async function maintenancePage(): Promise<string> {
   const jobs = await api.getMaintenance();
+  const me = getAdminProfile()?.id;
   const f = getFilter("maintenance");
 
   const filtered = applyFilters(jobs, f, {
@@ -239,26 +241,24 @@ export async function maintenancePage(): Promise<string> {
     rightHtml: `<button class="btn ghost sm" data-act="export-maintenance">Export CSV</button>`,
   })}
 
-  ${panel("Maintenance Jobs", "Assign technicians, schedule visits and record completion",
+  ${panel("Maintenance Jobs", "Schedule visits and record completion - whoever does it is on the record",
     resultCount(filtered.length, jobs.length, "jobs"),
-    table(["Job", "Device", "Farm", "Issue", "Priority", "Technician", "Scheduled", "Status", "Report", "Actions"],
+    table(["Job", "Device", "Farm", "Issue", "Handled by", "Scheduled", "Status", "Actions"],
       filtered, (m) => [
         `<span class="mono">${esc(m.id)}</span>`,
         `<span class="mono">${esc(m.device)}</span>`,
         esc(m.farm),
         esc(m.issue),
-        badge(m.priority),
-        m.technician ? esc(m.technician) : `<span class="muted">Unassigned</span>`,
+        handlingCell("maintenance", m, me, m.status === "Completed"),
         fmtDate(m.scheduledFor),
         badge(m.status),
-        m.reportUploaded ? `<span class="tone-good">✓ Uploaded</span>` : `<span class="muted">—</span>`,
         `<span class="row-act">
-          <a href="#" data-act="assign-tech" data-id="${esc(m.id)}">Assign</a>
-          <a href="#" data-act="schedule-visit" data-id="${esc(m.id)}">Schedule</a>
-          ${m.status !== "Completed" ? `<a href="#" data-act="complete-maint" data-id="${esc(m.id)}">Complete</a>` : ""}
-          <a href="#" data-act="upload-report" data-id="${esc(m.id)}">Report</a>
-          <a href="#" data-act="replace-hw" data-id="${esc(m.id)}">Replace HW</a>
-          <a href="#" data-act="maint-history" data-id="${esc(m.id)}">History</a>
+          <a href="#" data-act="maint-history" data-id="${esc(m.id)}">Timeline</a>
+          <a href="#" data-act="note-maint" data-id="${esc(m.id)}">Note</a>
+          ${m.status !== "Completed"
+            ? `<a href="#" data-act="schedule-visit" data-id="${esc(m.id)}">Schedule</a>
+               <a href="#" data-act="complete-maint" data-id="${esc(m.id)}">Complete</a>`
+            : `<span class="muted">Completed${m.resolvedByName ? ` by ${esc(m.resolvedByName)}` : ""}</span>`}
         </span>`,
       ], "No maintenance jobs match the current filters."))}
   `;

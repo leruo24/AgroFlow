@@ -149,7 +149,7 @@ export type ServiceRequestCrop =
   | "maize"
   | "dry_beans";
 
-export interface ServiceRequest {
+export interface ServiceRequest extends Handling {
   id: number;
   farmerId: string;
   farmerName: string;
@@ -267,7 +267,18 @@ export type AlertPriority = "Critical" | "High" | "Medium" | "Low";
 export type AlertStatus =
   | "New" | "Assigned" | "In Progress" | "Escalated" | "Waiting for User" | "Resolved" | "Closed";
 
-export interface AdminAlert {
+/* Item 5: who is handling an item, and who closed it - from the API
+   (GET /api/admin/handling/{kind}). Optional: older APIs send nothing. */
+export interface Handling {
+  handledById?: string | null;
+  handledByName?: string | null;
+  claimedAt?: string | null;
+  resolvedByName?: string | null;
+  resolvedAt?: string | null;
+  escalatedAt?: string | null;
+}
+
+export interface AdminAlert extends Handling {
   id: string;
   raised: string;
   category: string;
@@ -284,7 +295,7 @@ export interface AdminAlert {
 
 export type MaintenanceStatus = "Scheduled" | "Overdue" | "In Progress" | "Upcoming" | "Completed";
 
-export interface MaintenanceJob {
+export interface MaintenanceJob extends Handling {
   id: string;
   device: string;
   deviceType: string;

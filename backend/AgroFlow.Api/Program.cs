@@ -424,6 +424,7 @@ app.MapUserEndpoints();
 app.MapTelegramEndpoints();
 app.MapTelegramWebhookEndpoints();
 app.MapAdminRequestEndpoints();
+app.MapHandlingEndpoints();
 app.MapMqttPoolEndpoints();
 app.MapPasswordResetEndpoints();
 

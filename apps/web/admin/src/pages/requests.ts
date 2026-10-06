@@ -1,3 +1,6 @@
+import { getAdminProfile } from "@/app/auth";
+import { handlingCell } from "@/ui/patterns";
+import { getHandling } from "@/services/agroFlowApi";
 import { api } from "@/data/api";
 import { badge, pageHeader, panel, resultCount } from "@/ui/components";
 import { esc, fmtDateTimeSast } from "@/lib/format";
@@ -107,11 +110,7 @@ function requestRow(request: ServiceRequest): string {
         </div>
       </td>
       <td>${requestTimeline(request)}</td>
-      <td>
-        <button class="btn ghost sm" data-act="assign-request" data-id="${request.id}">
-          ${request.assignedToName ? `Assigned: ${esc(request.assignedToName)}` : "Assign"}
-        </button>
-      </td>
+      <td>${handlingCell("requests", request, getAdminProfile()?.id, request.status === "completed")}</td>
       <td>
         ${
           // Only for a SCHEDULED request. Before that there is nothing to
@@ -136,6 +135,17 @@ function requestRow(request: ServiceRequest): string {
 export async function requestsPage(): Promise<string> {
   try {
     const requests = await api.getServiceRequests();
+
+    // Item 5: who is handling each request (from the API; nothing if 0041
+    // is not applied, which is true - nobody can have claimed one).
+    const handling = await getHandling("requests").catch(() => []);
+    for (const h of handling) {
+      const r = requests.find((x) => String(x.id) === h.id);
+      if (!r) continue;
+      r.handledById = h.handledBy;
+      r.handledByName = h.handledByName;
+      r.claimedAt = h.claimedAt;
+    }
 
     return `
       ${pageHeader(
@@ -162,7 +172,7 @@ export async function requestsPage(): Promise<string> {
                   <th>Date submitted</th>
                   <th>Status</th>
                   <th>Who and when</th>
-                  <th>Assigned to</th>
+                  <th>Handled by</th>
                   <th>Hardware</th>
                 </tr>
               </thead>

@@ -11,7 +11,8 @@ what is next.
 | 2b | done | 6888586 | — | 2c |
 | 2c | done | 70a1c31, d3040c3, 86ad320, 41d351e, 4342ef4 | Recommended-settings Why → 6b; alert priority bug → 5; fixed-date KPIs → 4 | 3 |
 | 3 | done | 154025b | — | 4 |
-| 4 | done | (this commit) | Apply migration 0040 | 5 |
+| 4 | done | 74efb2d | Apply migration 0040 | 5 |
+| 5 | done | (this commit) | Apply migration 0041 | 6 |
 
 ---
 
@@ -403,3 +404,67 @@ the daily brief is one page). Admin Playwright 14 → 17 (`reports.spec.ts`).
 "The handling admin" is read as the admin who set the schedule up
 (`report_schedule.created_by`): nothing else ties an admin to a farm yet.
 Item 5 adds who handles requests and alerts, not farms.
+
+---
+
+## 5 — Accountability
+
+### What was wrong (found, not assumed)
+
+- Requests, alerts and maintenance each had an "Assign to {someone}" picker:
+  the name on an item was whoever somebody else chose.
+- **The console's alert and maintenance actions never reached the
+  database.** Resolve, close, reopen, escalate, note, priority, assign
+  technician, complete, schedule, "upload report", "replace hardware" - all
+  changed an in-memory copy and showed a success message. A resolved alert
+  was open again on reload.
+- The technician pickers offered **four invented names** from
+  `referenceData.TECHNICIANS`. "Schedule maintenance" created nothing.
+- Every alert's priority was a hard-coded "Medium", so Home's "Open critical
+  alerts" card could never appear (noted in 2c).
+
+### What it is now
+
+Migration **0041**: `handled_by_profile_id`, `claimed_at` on
+`service_request`, `alert`, `maintenance`; `resolved_by_profile_id`,
+`resolved_at`, `escalated_at` on `alert`; `completed_by_profile_id`,
+`completed_at` on `maintenance`. Additive; `assigned_to_profile_id` stays
+readable for history.
+
+`/api/admin/handling/{requests|alerts|maintenance}/{id}/...`:
+- **claim** ("I'll handle this") - the caller, atomically (two admins
+  pressing at once cannot both win); **take-over** - needs a reason, records
+  who had it and why; **release** - only by the handler.
+- **action** - alerts: note, resolve, close, reopen, escalate; maintenance:
+  note, schedule, complete; requests: note (status keeps its own route, which
+  messages the farmer and already stamps who). Plus **create** a maintenance
+  job, handled by whoever booked it.
+- The actor is always the login's subject. No body has an actor field, and
+  one sent is ignored (tested).
+- Every step goes to `admin_audit_log` under the item's entity, which is the
+  item's timeline; the timeline now shows a take-over's reason and who had it
+  before, and notes. "Resolved by {name} on {date}" / "Completed by ...".
+- The old `PUT /api/admin/requests/{id}/assign` stays (nothing 404s) but only
+  accepts the caller's own id or null; anyone else's → **403** (tested,
+  without touching a database).
+
+Console: one "Handled by" cell everywhere - **I'll handle this**, **Let go**,
+or **Take over** (reason required). Priority comes from the alert's severity.
+The fake actions and the invented technician list are removed, not hidden.
+
+### Tests
+
+Backend 869 → 894 (`AccountabilityTests`: claim / take over / release rules,
+reasons, fixed action lists with no "assign", `/assign` 403 for another id,
+bodies cannot carry an actor). Admin Playwright 17 → 20
+(`accountability.spec.ts`: no Assign anywhere; claim and resolve send no
+actor; take-over sends the reason). One existing check updated: the alert
+drawer's section is now "Timeline" (it reads the real audit trail) rather
+than "History".
+
+### Not changed here
+
+The maintenance "Overdue / Upcoming / In progress" statuses and "Waiting for
+user" have no column behind them (the table allows Pending / Scheduled /
+Completed). Left for Part 2's admin coherence review rather than widened
+silently.

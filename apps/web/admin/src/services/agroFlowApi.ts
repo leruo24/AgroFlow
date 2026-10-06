@@ -752,6 +752,52 @@ export function saveReportSchedule(
   );
 }
 
+/* ---------------- Handling (item 5) ----------------
+   Who is handling an item is always the caller: these send what was done,
+   never who did it - the API takes the actor from the login. */
+
+export type HandlingKind = "requests" | "alerts" | "maintenance";
+
+export type HandlingState = {
+  id: string;
+  handledBy: string | null;
+  handledByName: string | null;
+  claimedAt: string | null;
+  resolvedBy: string | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  escalatedAt: string | null;
+};
+
+export function getHandling(kind: HandlingKind): Promise<HandlingState[]> {
+  return authorizedJson<HandlingState[]>(`/api/admin/handling/${kind}`, "GET");
+}
+
+export function claimItem(kind: HandlingKind, id: string | number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/claim`, "POST", {});
+}
+
+export function takeOverItem(kind: HandlingKind, id: string | number, reason: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/take-over`, "POST", { reason });
+}
+
+export function releaseItem(kind: HandlingKind, id: string | number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/release`, "POST", {});
+}
+
+export function itemAction(
+  kind: HandlingKind, id: string | number, action: string, note?: string, date?: string,
+): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/action`, "POST", { action, note, date });
+}
+
+/* A new maintenance job, booked by - and handled by - the caller. */
+export function createMaintenance(input: {
+  hardwareId?: number | null; farmId?: number | null; description: string; date: string;
+}): Promise<{ id: number; message: string }> {
+  return authorizedJson("/api/admin/handling/maintenance", "POST", input);
+}
+
 /* Item 4: "Send test now" - to the calling admin's own Telegram only. */
 export function sendReportScheduleTest(
   farmId: number,

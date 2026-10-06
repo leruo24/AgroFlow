@@ -40,6 +40,7 @@
 import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import { asExplanation, type Explanation } from "@/lib/why";
+import { getHandling, type HandlingKind, type HandlingState } from "@/services/agroFlowApi";
 import {
   getMqttLogins,
   getAdminHardware,
@@ -51,7 +52,7 @@ import type {
   Kpis, Trends, GrowthSeries, SeriesPoint, SystemHealth, StatusDistribution,
   User, Farm, Hardware, AdminAlert, MaintenanceJob,
   IrrigationSchedule, IrrigationEvent, ActivityEntry,
-  AlertStatus, AlertPriority, UserStatus,
+  Handling, AlertPriority, UserStatus,
   ServiceRequest, ServiceRequestStatus,
 } from "@/types/models";
 
@@ -199,6 +200,37 @@ export function monthlyCounts(dates: (string | null | undefined)[], now = new Da
     if (counts.has(key)) { counts.set(key, (counts.get(key) ?? 0) + 1); any = true; }
   }
   return any ? months.map((m) => ({ label: m.label, value: counts.get(m.key) ?? 0 })) : [];
+}
+
+/* Item 5: alert severity -> priority. The alert table has no priority
+   column; its severity is the honest source. */
+function priorityOf(severity: string | null | undefined): AlertPriority {
+  switch ((severity ?? "").toLowerCase()) {
+    case "critical": return "Critical";
+    case "warning": return "High";
+    case "info": return "Low";
+    default: return "Medium";
+  }
+}
+
+/* Item 5: who is handling what, from the API. An older API or a missing
+   migration answers nothing - every item then reads as unclaimed, which is
+   true: nobody can have claimed it. */
+async function handlingMap(kind: HandlingKind): Promise<Map<string, HandlingState>> {
+  try {
+    return new Map((await getHandling(kind)).map((h) => [h.id, h]));
+  } catch {
+    return new Map();
+  }
+}
+
+function applyHandling(item: Handling, h: HandlingState): void {
+  item.handledById = h.handledBy;
+  item.handledByName = h.handledByName;
+  item.claimedAt = h.claimedAt;
+  item.resolvedByName = h.resolvedByName;
+  item.resolvedAt = h.resolvedAt;
+  item.escalatedAt = h.escalatedAt;
 }
 
 export const api = {
@@ -621,17 +653,27 @@ export const api = {
           farm: farm?.name ?? null,
           user: owner?.name || owner?.email || null,
 
-          // Nothing writes either of these: alert has no assignee or
-          // priority column. Left null and Medium rather than invented, and
-          // the Assign action writes to the session's working copy only -
-          // see the file header.
+          // Item 5: who is handling it comes from the API (merged below).
+          // Priority is the alert's own severity - it used to be a
+          // hard-coded "Medium", so no alert could ever count as critical.
           assignedTo: null,
-          priority: "Medium" as AlertPriority,
+          priority: priorityOf(a.severity),
 
-          status: (a.status as AdminAlert["status"]) ?? "New",
+          status: a.status === "Resolved" ? "Resolved" as const : "New" as const,
           notes: [],
         };
       });
+
+    const handling = await handlingMap("alerts");
+    for (const a of alerts) {
+      const h = handling.get(a.id);
+      if (!h) continue;
+      applyHandling(a, h);
+      a.assignedTo = h.handledByName;
+      if (a.status !== "Resolved") {
+        a.status = h.escalatedAt ? "Escalated" : h.handledBy ? "In Progress" : "New";
+      }
+    }
 
     return alerts;
   },
@@ -656,6 +698,16 @@ export const api = {
       completedOn: null,
       reportUploaded: false,
     }));
+
+    // Item 5: who is handling each job, and who completed it.
+    const handling = await handlingMap("maintenance");
+    for (const m of maintenance) {
+      const h = handling.get(m.id);
+      if (!h) continue;
+      applyHandling(m, h);
+      m.technician = h.handledByName;
+      m.completedOn = h.resolvedAt ? h.resolvedAt.slice(0, 10) : null;
+    }
     return maintenance;
   },
   getSchedules(): Promise<IrrigationSchedule[]> {
@@ -859,59 +911,8 @@ export const api = {
   // write is possible here. Left as working-copy-only in this pass
   // anyway, matching every other mutation, since alert has no writer
   // populating real rows yet either (Phase 7); revisit once it does.
-  async setAlertStatus(id: string, status: AlertStatus): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a) a.status = status;
-    return alerts;
-  },
-  async assignAlert(id: string, administrator: string): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a && administrator.trim()) {
-      a.assignedTo = administrator.trim();
-      if (a.status === "New") a.status = "Assigned";
-    }
-    return alerts;
-  },
-  async setAlertPriority(id: string, priority: AlertPriority): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a) a.priority = priority;
-    return alerts;
-  },
-  async addAlertNote(id: string, note: string): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a && note.trim()) {
-      a.notes.unshift({
-        id: Date.now(), author: "Admin", note: note.trim(),
-        when: new Date().toISOString().slice(0, 16).replace("T", " "),
-      });
-    }
-    return alerts;
-  },
 
   /* --------------------------- maintenance actions ---------------------- */
-  async assignTechnician(id: string, technician: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m && technician.trim()) {
-      m.technician = technician.trim();
-      if (m.status === "Overdue" || m.status === "Upcoming") m.status = "Scheduled";
-    }
-    return maintenance;
-  },
-  async completeMaintenance(id: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m) { m.status = "Completed"; m.completedOn = new Date().toISOString().slice(0, 10); }
-    return maintenance;
-  },
-  async uploadMaintenanceReport(id: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m) m.reportUploaded = true;
-    return maintenance;
-  },
-  async scheduleVisit(id: string, date: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m && date) { m.scheduledFor = date; m.status = "Scheduled"; }
-    return maintenance;
-  },
 
   /* ---------------------------- schedule actions ------------------------ */
   // Untouched - see getSchedules().

@@ -119,6 +119,10 @@ public sealed class SchemaCheck
             "select 1 from information_schema.columns where table_name = 'report_schedule' and column_name = 'per_zone_pdf'",
             "Automatic reports cannot be daily, on a chosen weekday or per zone; extra recipients are ignored."),
 
+        new("0041", "column", "alert.handled_by_profile_id",
+            "select 1 from information_schema.columns where table_name = 'alert' and column_name = 'handled_by_profile_id'",
+            "Nobody can claim, take over, resolve or complete alerts, requests or maintenance on the record."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

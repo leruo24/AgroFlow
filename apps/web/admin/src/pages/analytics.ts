@@ -415,6 +415,18 @@ export async function activityPage(): Promise<string> {
 
 /* A timeline for one item, oldest first - the shape a person reads a history
    in, which is the opposite of the activity list above. */
+/* Item 5: what the person said - a take-over's reason and who had it
+   before, or a note - under the line, so the chain explains itself. */
+function timelineDetail(r: AuditRow): string {
+  let d: { note?: unknown; reason?: unknown; from?: unknown } = {};
+  try { d = JSON.parse(r.details ?? "{}") ?? {}; } catch { d = {}; }
+  const parts: string[] = [];
+  if (typeof d.from === "string" && d.from) parts.push(`Before: ${esc(d.from)}.`);
+  if (typeof d.reason === "string" && d.reason) parts.push(`Reason: “${esc(d.reason)}”`);
+  if (typeof d.note === "string" && d.note) parts.push(`“${esc(d.note)}”`);
+  return parts.length ? `<p class="timeline-note">${parts.join(" ")}</p>` : "";
+}
+
 export function timelineHtml(rows: AuditRow[], emptyText: string): string {
   if (rows.length === 0) return `<p class="muted">${esc(emptyText)}</p>`;
 
@@ -426,6 +438,7 @@ export function timelineHtml(rows: AuditRow[], emptyText: string): string {
         <div>
           <b>${esc(r.summary)}</b>
           <span class="timeline-when">${esc(fmtDateTimeSast(r.createdAt))}</span>
+          ${timelineDetail(r)}
         </div>
       </li>`,
     )

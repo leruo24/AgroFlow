@@ -106,6 +106,6 @@ test("an alert with no stored explanation shows no Why section - never a generic
   await page.locator('[data-act="view-alert"][data-id="42"]').first().click({ timeout: 15000 });
 
   const drawer = page.locator(".drawer, [role=dialog]").filter({ hasText: "Zone entered Critical" }).first();
-  await expect(drawer).toContainText("History");
+  await expect(drawer).toContainText("Timeline");
   await expect(drawer).not.toContainText(WHY);
 });
