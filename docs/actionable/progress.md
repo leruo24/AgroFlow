@@ -12,7 +12,8 @@ what is next.
 | 2c | done | 70a1c31, d3040c3, 86ad320, 41d351e, 4342ef4 | Recommended-settings Why → 6b; alert priority bug → 5; fixed-date KPIs → 4 | 3 |
 | 3 | done | 154025b | — | 4 |
 | 4 | done | 74efb2d | Apply migration 0040 | 5 |
-| 5 | done | (this commit) | Apply migration 0041 | 6 |
+| 5 | done | 5e067d0 | Apply migration 0041 | 6 |
+| 6 | done | (this commit) | Apply migration 0042 | 6b |
 
 ---
 
@@ -468,3 +469,79 @@ The maintenance "Overdue / Upcoming / In progress" statuses and "Waiting for
 user" have no column behind them (the table allows Pending / Scheduled /
 Completed). Left for Part 2's admin coherence review rather than widened
 silently.
+
+
+## 6 — Onboarding that leads to good advice, and farms without a kit
+
+### What was wrong (found, not assumed)
+
+- Registering a farm asked for a zone's size in hectares and its crop - and
+  nothing else. Soil, watered area and planting date were left empty, so every
+  new zone started on assumed loam, no litres, and "peak growth assumed".
+- A farm with no kit, or a kit that was offline, had no way to tell the app
+  anything: no "I watered", no "the soil is dry". Advice was weather-only and
+  said so.
+- Home showed farm-wide tiles ("Avg soil moisture", "Irrigating: Unknown");
+  the one thing a farmer opens the app for - what to do today, per zone - was
+  three taps away on each zone page.
+
+### What it is now
+
+- **Register a farm / Onboard a farmer**: each zone row has soil as three
+  cards with Loam already chosen ("Not sure? Pick Loam." - the engine assumes
+  loam anyway, so the default is honest), a size preset (Small tub ~0.2 m²,
+  Bed 1×2 m, Custom m²), hectares only for bigger plots, and an optional
+  "planted about how many weeks ago?". The review step shows soil and
+  planting. Both register routes write `soil_type`, `area_m2`,
+  `planting_date` (and take `root_depth_limit_m`, `flow_rate_lpm`); all
+  optional on the wire so older admin builds still work, checked by
+  `ZoneSetupFields.Check` (400 with the zone's name).
+- **Home (mobile)**: one card per zone from `GET /api/farmer/farms/{id}/today`
+  - the one action (`TodayRules`, order in the rule book §8), a confidence
+  badge with its Why, **I watered**, **How does the soil feel?**, and
+  **Finish setup** when something is missing.
+- **Finish setup (mobile, `/zone-setup`)**: planting (weeks ago), soil (the
+  existing soil screen), size presets or m², flow rate with the 500 mL bottle
+  helper (L/min = 0.5 ÷ seconds × 60), and the wet/dry sensor setup when there
+  is a kit. Each saves on its own (`PUT /api/farmer/zones/{id}/setup`) and the
+  confidence at the top is re-read, so the farmer sees it change.
+- **I watered / soil feel**: `POST /api/farmer/zones/{id}/manual-watering`
+  (minutes or litres, up to 7 days back) and `/soil-feel` (dry/moist/wet).
+  Migration 0042 adds `irrigation_event.logged_by_profile_id` and
+  `soil_feel_check`. The person is the login; no body carries an actor.
+  Both writes go through the app's single-flight path, so a double tap logs
+  once.
+- **Engine**: a hand-logged watering counts in the balance (litres as given,
+  else minutes × flow rate) and as a full watering; a soil check corrects the
+  day's dryness - wet = field capacity, Dr 0 (FAO-56 p. 167), dry = at least
+  RAW (p. 171), moist held at 25-75% of RAW (DATA RULE, listed under "Needs
+  another source"). A check within 24 h is named in the confidence ("based on
+  the weather and your own soil check") and never makes it High.
+- **Reports and history** label hand entries: report day notes start
+  "Watered by hand (logged)", and the app's History says "Watering logged by
+  hand · Entered by hand", never a pump run.
+- **Admin farm drawer**: the Zones table shows each zone's action, confidence
+  (with Why) and next step - the same text the farmer sees.
+
+Reads of 0042's columns go through `to_jsonb`, and the writes answer 409
+"needs migration 0042" until it is applied - nothing breaks before then.
+
+### Tests
+
+Backend 894 → 922 (`ManualLoggingTests`: soil-feel boundaries, a dry check
+means water and a wet one does not, latest check of the day wins, fresh check
+named in confidence and never High, rain beats watering, plain one-sentence
+text, entry checks, registration field checks, report labels). Removing the
+engine's soil-check step fails three of them. Mobile jest 31 → 39 (bottle
+and weeks arithmetic, history lines, Today card actions). Admin Playwright
+20 → 22 (`setup.spec.ts`: farm drawer columns; the wizard's soil cards,
+required size, custom m² box, review and the POSTed zone). The custom-size
+box was found always visible (`.drawer-field` overrode `hidden`) by that
+spec and fixed.
+
+### Not changed here
+
+- The older "Onboard a Farmer" page uses the same zone row and checks, but
+  only the Register-a-farm wizard has a browser test.
+- Root depth limit is accepted by the API but not asked in the wizard: no
+  source gives a tub's usable depth, and guessing one would change advice.

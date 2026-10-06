@@ -221,9 +221,15 @@ namespace AgroFlow.Data
             if (!flowRateLpm.HasValue || flowRateLpm.Value <= 0.0) return result;
             if (!areaM2.HasValue || areaM2.Value <= 0.0) return result;
 
+            // Item 6: a watering logged by hand with litres and no pump time
+            // counts its litres; everything else is pump time x flow rate.
+            // Read through jsonb so a database without 0042 counts as before.
             const string sql =
                 "select (e.started_at at time zone 'Africa/Johannesburg')::date as day, " +
-                "       sum(e.runtime_seconds) as runtime_seconds " +
+                "       sum(e.runtime_seconds) as runtime_seconds, " +
+                "       coalesce(sum(case when (to_jsonb(e) ->> 'logged_by_profile_id') is not null " +
+                "                          and coalesce(e.runtime_seconds, 0) = 0 " +
+                "                     then e.estimated_litres end), 0) as hand_litres " +
                 "from irrigation_event e " +
                 "where e.zone_id = $1 " +
                 "  and e.started_at >= $2::date::timestamp at time zone 'Africa/Johannesburg' " +
@@ -242,8 +248,9 @@ namespace AgroFlow.Data
                     while (reader.Read())
                     {
                         var day = reader.GetFieldValue<DateOnly>(0);
-                        var runtimeSeconds = Convert.ToDouble(reader.GetValue(1));
-                        var litres = runtimeSeconds / 60.0 * flowRateLpm.Value;
+                        var runtimeSeconds = reader.IsDBNull(1) ? 0.0 : Convert.ToDouble(reader.GetValue(1));
+                        var handLitres = Convert.ToDouble(reader.GetValue(2));
+                        var litres = runtimeSeconds / 60.0 * flowRateLpm.Value + handLitres;
                         result[day] = litres / areaM2.Value;
                     }
                 }
@@ -259,12 +266,18 @@ namespace AgroFlow.Data
         {
             var result = new Dictionary<DateOnly, double>();
 
-            const string sql =
+            var sql =
+                // Item 6: a watering the farmer logged by hand is a real
+                // watering however briefly they timed it (or if they gave
+                // litres instead of minutes) - it counts as at least the
+                // two-minute minimum.
                 "select (e.started_at at time zone 'Africa/Johannesburg')::date as day, " +
-                "       max(e.runtime_seconds) as runtime_seconds " +
+                "       max(case when (to_jsonb(e) ->> 'logged_by_profile_id') is not null " +
+                "                then greatest(coalesce(e.runtime_seconds, 0), " + WaterRules.FullWateringMinimumSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + ") " +
+                "                else e.runtime_seconds end) as runtime_seconds " +
                 "from irrigation_event e " +
                 "where e.zone_id = $1 " +
-                "  and e.runtime_seconds is not null " +
+                "  and (e.runtime_seconds is not null or (to_jsonb(e) ->> 'logged_by_profile_id') is not null) " +
                 "  and e.started_at >= $2::date::timestamp at time zone 'Africa/Johannesburg' " +
                 "  and e.started_at <  ($3::date + 1)::timestamp at time zone 'Africa/Johannesburg' " +
                 "group by 1";
@@ -286,6 +299,37 @@ namespace AgroFlow.Data
             }
 
             return result;
+        }
+
+        // Item 6: the farmer's own "How does the soil feel?" checks. Empty if
+        // migration 0042 is not applied - the advice then simply has none.
+        public List<ZoneSoilFeelCheck> GetSoilFeelChecks(long zoneId, DateOnly from)
+        {
+            var checks = new List<ZoneSoilFeelCheck>();
+            try
+            {
+                using (var connection = Open())
+                using (var cmd = new NpgsqlCommand(
+                    "select checked_at, feel from soil_feel_check " +
+                    "where zone_id = $1 and checked_at >= $2::date::timestamp at time zone 'Africa/Johannesburg' " +
+                    "order by checked_at", connection))
+                {
+                    cmd.Parameters.AddWithValue(zoneId);
+                    cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            checks.Add(new ZoneSoilFeelCheck { CheckedAtUtc = reader.GetDateTime(0), Feel = reader.GetString(1) });
+                        }
+                    }
+                }
+            }
+            catch (PostgresException)
+            {
+                // Table not there yet.
+            }
+            return checks;
         }
 
         // Total irrigation depth over a window, for the overwatering check.

@@ -59,11 +59,11 @@ import {
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { ZONE_CROPS } from "@/data/referenceData";
 import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
-import { zoneRow } from "@/pages/onboarding";
+import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getFarmToday, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -568,7 +568,7 @@ async function openFarmDetail(id: number): Promise<void> {
   const intent = currentPanelIntent();
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones, today] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
     // Read-only, and allowed to fail: the rest of the drawer must still open
     // if 0033 has not been applied or the query is refused.
@@ -591,7 +591,14 @@ async function openFarmDetail(id: number): Promise<void> {
       console.warn("Could not load zones for farm", id, e);
       return [];
     }),
+    // Item 6: what the farmer is told today, per zone. Allowed to fail too.
+    getFarmToday(id).catch((e: unknown) => {
+      console.warn("Could not load today's advice for farm", id, e);
+      return null;
+    }),
   ]);
+  const todayByZone = new Map((today?.zones ?? []).map((z) => [z.zoneId, z]));
+  const levelLabel = { high: "High", medium: "Medium", low: "Low" } as const;
 
   const farmUsers = users.filter((u) => u.farm === f.name);
   const farmHw = hardware.filter((h) => h.farm === f.name);
@@ -675,17 +682,25 @@ async function openFarmDetail(id: number): Promise<void> {
       section(`Zones (${farmZones.length})`,
         farmZones.length
           ? `<div class="table-wrap"><table>
-               <thead><tr><th>Zone</th><th>Crop</th><th>Advice</th></tr></thead>
-               <tbody>${farmZones.map((z) => `
-                 <tr>
+               <thead><tr><th>Zone</th><th>Crop</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
+               <tbody>${farmZones.map((z) => {
+                 const t = todayByZone.get(z.zoneId);
+                 return `
+                 <tr data-today-zone="${z.zoneId}">
                    <td>${esc(z.name)}</td>
                    <td>${esc(z.cropType ?? "Not set")}</td>
+                   <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
+                   <td>${t?.confidence
+                     ? `<b>${levelLabel[t.confidence.level]}</b> ${whyLink(asExplanation(t.confidenceExplanation))}`
+                     : `<span class="muted">—</span>`}</td>
+                   <td>${t?.nextStep ? esc(t.nextStep.ask) : `<span class="muted">Nothing missing</span>`}</td>
                    <td>
                      <a href="#" class="row-act" data-act="run-advice" data-id="${z.zoneId}">
                        Run advice now
                      </a>
                    </td>
-                 </tr>`).join("")}
+                 </tr>`;
+               }).join("")}
                </tbody></table>
              <p class="muted">
                Runs the FAO-56 engine for that zone today and shows what it worked out, including
@@ -1338,17 +1353,25 @@ case "delete-user": {
        so what is missing here can only be something the steps do not mark
        required - the zone arithmetic the API also enforces. Checked here too
        so the admin is told in the drawer rather than by a 400. */
+    /* Item 6: a soil card sets its zone's hidden soil field. */
+    case "zone-soil": {
+      const row = el.closest<HTMLElement>("[data-zone-row]");
+      const hidden = row?.querySelector<HTMLInputElement>(`[data-field="zone_soil_${el.dataset["zone"]}"]`);
+      if (!row || !hidden) return;
+      hidden.value = el.dataset["soil"] ?? "loam";
+      syncZoneChoices(row);
+      return;
+    }
+
     case "wizard-register-farm": {
       const v = collectFields();
 
       const zoneCount = registerFarmZoneCount();
-      const zones = Array.from({ length: zoneCount }, (_, i) => ({
-        name: (v[`zone_name_${i}`] ?? "").trim(),
-        sizeHectares: Number(v[`zone_size_${i}`]) || 0,
-        cropType: v[`zone_crop_${i}`] ?? "",
-      }));
+      const zones = Array.from({ length: zoneCount }, (_, i) => readZoneSetup(v, i));
 
-      const problem = validateRegisterFarmZones(zones, Number(v["farmSize"]) || 0);
+      const problem =
+        Array.from({ length: zoneCount }, (_, i) => zoneSetupProblem(v, i)).find((p) => p) ??
+        validateRegisterFarmZones(zones, Number(v["farmSize"]) || 0);
       if (problem) return void toast(problem, "warn");
 
       const latitude = v["latitude"] ? Number(v["latitude"]) : null;
@@ -1405,14 +1428,7 @@ case "delete-user": {
 
   clearOnboardingError();
 
- const zones = Array.from(
-  { length: zoneCount },
-  (_, i) => ({
-    name: v[`zone_name_${i}`] ?? "",
-    sizeHectares: Number(v[`zone_size_${i}`]) || 0,
-    cropType: v[`zone_crop_${i}`] ?? "",
-  }),
-);
+ const zones = Array.from({ length: zoneCount }, (_, i) => readZoneSetup(v, i));
 
   try {
     const result = await onboardFarmer({
@@ -2880,13 +2896,16 @@ function validateOnboardingStep2(v: Record<string, string>, zoneCount: number): 
       return `Zone ${i + 1} needs a name.`;
     }
 
-    if (!v[`zone_size_${i}`] || Number(v[`zone_size_${i}`]) <= 0) {
-      return `Zone ${i + 1} needs a valid size.`;
+    if (!v[`zone_area_preset_${i}`]) {
+      return `Choose how big zone ${i + 1} is.`;
     }
 
     if (!v[`zone_crop_${i}`]?.trim()) {
       return `Zone ${i + 1} needs a crop type.`;
     }
+
+    const setup = zoneSetupProblem(v, i);
+    if (setup) return setup;
   }
 
   return null;
@@ -2903,10 +2922,22 @@ function wireOnboardingZones(): void {
     const count = Math.max(0, Math.min(50, Number(countInput.value) || 0));
     const existing = collectFields();
     container.innerHTML = Array.from({ length: count }, (_, i) => zoneRow(i)).join("");
-    container.querySelectorAll<HTMLInputElement>("[data-field]").forEach((el) => {
+    container.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((el) => {
       const name = el.dataset["field"] ?? "";
       if (existing[name]) el.value = existing[name];
     });
+    syncZoneChoices(container);
+  });
+  wireZoneChoices(container);
+}
+
+/* Item 6: a custom size shows its m² box. Soil cards go through the
+   delegated "zone-soil" action. Bound once per container. */
+function wireZoneChoices(container: HTMLElement): void {
+  if (container.dataset["choicesBound"]) return;
+  container.dataset["choicesBound"] = "1";
+  container.addEventListener("change", (e) => {
+    if ((e.target as HTMLElement).matches("[data-area-preset]")) syncZoneChoices(container);
   });
 }
 
@@ -2942,9 +2973,11 @@ function wireRegisterFarmZones(): void {
         const name = el.dataset["field"] ?? "";
         if (existing[name]) el.value = existing[name];
       });
+    syncZoneChoices(container);
   };
 
   countInput.addEventListener("input", renderZones);
+  wireZoneChoices(container);
 
   renderZones();
 }
@@ -3090,7 +3123,7 @@ function registerFarmZoneCount(): number {
    Both are enforced by the API as well; checked here so the answer arrives
    in the drawer the admin is looking at rather than as a 400. */
 function validateRegisterFarmZones(
-  zones: { name: string; sizeHectares: number; cropType: string }[],
+  zones: { name: string; sizeHectares: number; cropType: string; areaM2?: number | null }[],
   farmSize: number,
 ): string | null {
   const total = zones.reduce((sum, z) => sum + z.sizeHectares, 0);
@@ -3127,11 +3160,21 @@ function wireRegisterFarmReview(): void {
       .querySelector<HTMLElement>('[data-picker="ownerId"] .picker-option.is-selected .picker-option-main b')
       ?.textContent?.trim();
 
-    const zones = Array.from({ length: registerFarmZoneCount() }, (_, i) => ({
-      name: v[`zone_name_${i}`] ?? "",
-      size: v[`zone_size_${i}`] ?? "",
-      crop: v[`zone_crop_${i}`] ?? "",
-    }));
+    const zones = Array.from({ length: registerFarmZoneCount() }, (_, i) => {
+      const z = readZoneSetup(v, i);
+      const preset = AREA_PRESETS.find((a) => a.value === v[`zone_area_preset_${i}`]);
+      return {
+        name: z.name,
+        size: v[`zone_size_${i}`]
+          ? `${v[`zone_size_${i}`]} ha`
+          : z.areaM2 != null
+            ? preset && preset.m2 != null ? preset.label : `${z.areaM2} m²`
+            : "",
+        crop: z.cropType,
+        soil: SOILS.find((s) => s.value === z.soilType)?.label ?? z.soilType,
+        planted: z.plantingDate ? `about ${v[`zone_weeks_${i}`]} weeks ago` : "Not given",
+      };
+    });
 
     const coords =
       v["latitude"] && v["longitude"]
@@ -3148,14 +3191,16 @@ function wireRegisterFarmReview(): void {
         ["Zones", String(zones.length)],
       ])}
       <table class="table review-zones">
-        <thead><tr><th>Zone</th><th>Size</th><th>Crop</th></tr></thead>
+        <thead><tr><th>Zone</th><th>Size</th><th>Crop</th><th>Soil</th><th>Planted</th></tr></thead>
         <tbody>
           ${zones
             .map(
               (z) => `<tr>
                 <td>${esc(z.name || "(no name)")}</td>
-                <td>${z.size ? `${esc(z.size)} ha` : "—"}</td>
+                <td>${z.size ? esc(z.size) : "—"}</td>
                 <td>${z.crop ? esc(cropLabel(z.crop)) : "—"}</td>
+                <td>${esc(z.soil)}</td>
+                <td>${esc(z.planted)}</td>
               </tr>`,
             )
             .join("")}

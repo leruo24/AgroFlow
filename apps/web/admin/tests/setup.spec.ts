@@ -1,0 +1,111 @@
+import { test, expect, type Page } from "@playwright/test";
+import { mockBackend, captureErrors } from "./mockBackend";
+
+/* Item 6: the farm page shows each zone's one action, how sure, and what is
+   missing; registering a farm asks for soil, size and planting. Mocked
+   backend only. */
+
+const FARMS = [
+  { farm_id: 1, name: "Alpha Farm", owner_id: "f1", owner_name: "Owner A", location: "Ceres, Western Cape",
+    total_area: 1, status: "Active", updated_at: "2026-10-01T08:00:00Z" },
+];
+
+const TODAY = {
+  farmId: 1,
+  day: "2026-10-06",
+  zones: [
+    {
+      zoneId: 11, name: "Tub 1",
+      action: { kind: "water", text: "Water about 8 min this morning (about 12 L)" },
+      why: { summary: "Your soil has dried to the watering point.", facts: [], rule: "r", confidence: "Medium" },
+      confidence: { level: "medium", reason: "Medium: based on the weather; the planting date is missing." },
+      confidenceExplanation: { summary: "Medium: the planting date is missing.", facts: [], rule: "r", confidence: "Medium" },
+      nextStep: { field: "planting_date", ask: "Add the planting date for advice that follows your crop's growth." },
+    },
+  ],
+};
+
+async function open(page: Page, extra?: (method: string, path: string) => unknown) {
+  await mockBackend(page, {
+    minDelayMs: 10, maxDelayMs: 40,
+    respond: (method, path) => {
+      const custom = extra?.(method, path);
+      if (custom !== undefined) return custom;
+      if (method === "GET" && path === "/api/farms") return FARMS;
+      if (method === "GET" && path === "/api/farmer/reports/zones") return [{ zoneId: 11, name: "Tub 1", farmId: 1, cropType: "tomato" }];
+      if (method === "GET" && path === "/api/farmer/farms/1/today") return TODAY;
+      if (method === "GET" && path === "/api/users/farmers") return [{ id: "f1", name: "Owner A", email: "a@example.com", phone: null }];
+      return undefined;
+    },
+  });
+  await page.goto("/#farms");
+  await expect(page.locator('[data-act="view-farm"][data-id="1"]')).toBeVisible({ timeout: 15000 });
+}
+
+test("the farm drawer shows each zone's action, confidence and next step", async ({ page }) => {
+  const errors = captureErrors(page);
+  await open(page);
+
+  await page.locator('[data-act="view-farm"][data-id="1"]').click();
+  const row = page.locator('[data-today-zone="11"]');
+  await expect(row).toContainText("Water about 8 min this morning (about 12 L)", { timeout: 15000 });
+  await expect(row).toContainText("Medium");
+  await expect(row).toContainText("Add the planting date");
+  await expect(row.locator(".why-link")).toHaveCount(2);
+
+  expect(errors).toEqual([]);
+});
+
+test("registering a farm asks for soil (Loam by default), a size preset and weeks since planting", async ({ page }) => {
+  const posts: unknown[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().endsWith("/api/farms/register")) posts.push(JSON.parse(r.postData() ?? "{}"));
+  });
+  await open(page, (method, path) => (method === "POST" && path === "/api/farms/register" ? {} : undefined));
+
+  await page.locator('[data-act="add-farm"]').click();
+  const wiz = page.locator('[data-wizard="register-farm"]');
+  await expect(wiz).toBeVisible({ timeout: 15000 });
+
+  await wiz.locator(".picker-option", { hasText: "Owner A" }).click();
+  await wiz.locator("[data-wizard-next]").click();
+
+  await wiz.locator('[data-field="farmName"]').fill("Beta Farm");
+  await wiz.locator('[data-field="location"]').fill("Ceres, Western Cape");
+  await wiz.locator('[data-field="farmSize"]').fill("1");
+  await wiz.locator("[data-wizard-next]").click();
+
+  // Soil: three cards, Loam chosen, and the "Not sure?" line.
+  await expect(wiz.locator('[data-act="zone-soil"]')).toHaveCount(3);
+  await expect(wiz.locator('[data-act="zone-soil"].is-selected')).toHaveText(/Loam/);
+  await expect(wiz).toContainText("Not sure? Pick Loam.");
+
+  await wiz.locator('[data-field="zone_name_0"]').fill("Tub 1");
+  await wiz.locator('[data-field="zone_crop_0"]').selectOption({ index: 1 });
+
+  // Size is required before Next.
+  await wiz.locator("[data-wizard-next]").click();
+  await expect(page.locator("body")).toContainText("Choose how big zone 1 is.");
+
+  await wiz.locator('[data-act="zone-soil"][data-soil="clay"]').click();
+  await expect(wiz.locator('[data-act="zone-soil"].is-selected')).toHaveText(/Clay/);
+
+  // Custom shows the m² box; a preset hides it again.
+  await expect(wiz.locator('[data-area-custom="0"]')).toBeHidden();
+  await wiz.locator('[data-field="zone_area_preset_0"]').selectOption("custom");
+  await expect(wiz.locator('[data-area-custom="0"]')).toBeVisible();
+  await wiz.locator('[data-field="zone_area_preset_0"]').selectOption("tub");
+  await expect(wiz.locator('[data-area-custom="0"]')).toBeHidden();
+
+  await wiz.locator('[data-field="zone_weeks_0"]').fill("3");
+  await wiz.locator("[data-wizard-next]").click();
+
+  await expect(page.locator("#registerFarmReview")).toContainText("Clay");
+  await expect(page.locator("#registerFarmReview")).toContainText("about 3 weeks ago");
+  await wiz.locator("[data-wizard-confirm]").click();
+
+  await expect.poll(() => posts.length).toBe(1);
+  const zone = (posts[0] as { farm: { zones: Record<string, unknown>[] } }).farm.zones[0];
+  expect(zone).toMatchObject({ name: "Tub 1", soilType: "clay", areaM2: 0.2, sizeHectares: 0.00002 });
+  expect(zone.plantingDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+});

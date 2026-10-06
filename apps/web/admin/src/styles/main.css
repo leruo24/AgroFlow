@@ -1770,3 +1770,20 @@ html{ scrollbar-gutter: stable; }
 .attn-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
 .link-btn{ background:none; border:0; padding:4px 0; cursor:pointer; text-align:left; color:inherit; font:inherit; }
 .link-btn:hover b, .link-btn:focus-visible b{ text-decoration:underline; }
+
+/* Item 6: soil cards in the zone rows. Selected = bar + tint + bold, never colour alone. */
+.zone-setup{ border-top:1px solid var(--divider); padding-top:12px; margin-top:12px; }
+/* .drawer-field sets display, which would otherwise beat the hidden attribute. */
+.zone-setup [hidden]{ display:none; }
+.soil-cards{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
+.soil-card{
+  display:flex; flex-direction:column; gap:2px; text-align:left;
+  padding:10px 12px; border:1px solid var(--divider); border-radius:8px;
+  background:var(--surface); color:inherit; font:inherit; cursor:pointer;
+}
+.soil-card small{ color:var(--muted, inherit); opacity:.85; }
+.soil-card:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.soil-card.is-selected{ background:var(--surface-2); box-shadow:inset 3px 0 0 var(--brand); }
+.soil-card.is-selected b{ color:var(--brand); }
+.field-note{ display:block; margin-top:4px; opacity:.8; }
+@media (max-width: 600px){ .soil-cards{ grid-template-columns:1fr; } }

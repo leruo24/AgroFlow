@@ -27,6 +27,13 @@ namespace AgroFlow.Business.Agronomy
         public bool IsValid { get; set; } = true;
     }
 
+    // Item 6: a farmer's own "How does the soil feel?" check.
+    public sealed class ZoneSoilFeelCheck
+    {
+        public DateTime CheckedAtUtc { get; set; }
+        public string Feel { get; set; } = "moist"; // dry | moist | wet
+    }
+
     // One day of weather for a farm, as weather_daily holds it plus the dht_daily
     // view's values for the same day.
     public sealed class ZoneWeatherDay
@@ -92,6 +99,10 @@ namespace AgroFlow.Business.Agronomy
         // fresh. Null keeps the old behaviour (every reading counts as fresh),
         // so callers that have not been updated are unaffected.
         public DateTime? NowUtc { get; set; }
+
+        // Item 6: the farmer's own soil checks, newest last. Each corrects the
+        // balance on its day (WaterRules.SoilFeelDepletion).
+        public List<ZoneSoilFeelCheck> SoilFeelChecks { get; set; } = new List<ZoneSoilFeelCheck>();
     }
 
     // One row of the water balance, matching zone_water_balance.
@@ -184,6 +195,9 @@ namespace AgroFlow.Business.Agronomy
         // True when a watering whose depth could not be measured reset the
         // balance (WaterRules.WateringResetsBalance).
         public bool BalanceResetByWatering { get; set; }
+
+        // Item 6: the latest soil check the balance used, if any.
+        public ZoneSoilFeelCheck? LatestSoilFeel { get; set; }
 
         public ZoneSetupState Setup { get; set; } = new ZoneSetupState();
         public Confidence Confidence { get; set; } = new Confidence(ConfidenceLevel.Low, "Low: not worked out yet.");
@@ -453,6 +467,19 @@ namespace AgroFlow.Business.Agronomy
                     day.DrEndMm = 0.0;
                 }
 
+                // Item 6: the farmer's own soil check on this day corrects the
+                // estimate - the latest one that day wins.
+                var feel = input.SoilFeelChecks
+                    .Where(c => DateOnly.FromDateTime(c.CheckedAtUtc.AddHours(2)) == w.Date)
+                    .OrderBy(c => c.CheckedAtUtc)
+                    .LastOrDefault();
+                if (feel != null && day.RawMm.HasValue)
+                {
+                    dr = WaterRules.SoilFeelDepletion(feel.Feel, dr, day.RawMm.Value);
+                    day.DrEndMm = dr;
+                    result.LatestSoilFeel = feel;
+                }
+
                 // Item 2: a watering that cannot be measured in mm still counts.
                 double runtimeSeconds;
                 if (input.LongestRunSecondsByDay.TryGetValue(w.Date, out runtimeSeconds)
@@ -596,6 +623,11 @@ namespace AgroFlow.Business.Agronomy
                 HasKit = input.Readings.Count > 0,
                 WeatherAvailable = result.Crop == null ? input.Weather.Count > 0 : result.BalanceRan,
                 LastReadingAtUtc = result.LatestReadingAtUtc ?? newestAny,
+
+                // Item 6: a soil check by hand in the last day stands in for a
+                // reading - at lower confidence than a set-up sensor.
+                ManualCheckFresh = input.NowUtc.HasValue && result.LatestSoilFeel != null
+                    && (input.NowUtc.Value - result.LatestSoilFeel.CheckedAtUtc).TotalHours <= ConfidenceRules.FreshReadingHours,
             };
 
             result.Confidence = ConfidenceRules.For(result.Setup);

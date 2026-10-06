@@ -96,6 +96,9 @@ namespace AgroFlow.Business
                 input.IrrigationMmByDay[pair.Key] = pair.Value;
             }
 
+            // Item 6: the farmer's own soil checks.
+            input.SoilFeelChecks.AddRange(db.GetSoilFeelChecks(zone.ZoneId, from));
+
             // Only needed when a watering cannot be measured in mm.
             if (input.IrrigationMmByDay.Count == 0
                 && (!(zone.FlowRateLpm > 0.0) || !(zone.AreaM2 > 0.0)))

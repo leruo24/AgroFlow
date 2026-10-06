@@ -123,6 +123,10 @@ public sealed class SchemaCheck
             "select 1 from information_schema.columns where table_name = 'alert' and column_name = 'handled_by_profile_id'",
             "Nobody can claim, take over, resolve or complete alerts, requests or maintenance on the record."),
 
+        new("0042", "table", "soil_feel_check",
+            "select to_regclass('public.soil_feel_check')",
+            "Farmers cannot log \"I watered\" or \"How does the soil feel?\" - farms without a kit get weather-only advice."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

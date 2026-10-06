@@ -172,6 +172,9 @@ select
     (select count(*) from information_schema.columns
       where table_name = 'alert' and column_name = 'handled_by_profile_id')               as m0041_accountability,
 
+    -- 0042: manual logging - "I watered" and "How does the soil feel?".
+    (select count(*) from pg_class where relname = 'soil_feel_check' and relkind = 'r')   as m0042_manual_logging,
+
     -- Not a migration, but applied by hand the same way and just as invisible
     -- when missed: the private bucket generated report PDFs are stored in.
     (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;

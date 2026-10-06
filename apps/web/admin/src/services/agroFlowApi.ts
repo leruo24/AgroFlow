@@ -109,6 +109,10 @@ export async function onboardFarmer(input: {
       name: string;
       sizeHectares: number;
       cropType: string;
+      /* Item 6: optional so the API still takes older payloads. */
+      soilType?: string;
+      areaM2?: number | null;
+      plantingDate?: string | null;
     }[];
   };
 }): Promise<FarmerOnboardedResult> {
@@ -191,6 +195,10 @@ export async function registerFarm(input: {
       name: string;
       sizeHectares: number;
       cropType: string;
+      /* Item 6: optional so the API still takes older payloads. */
+      soilType?: string;
+      areaM2?: number | null;
+      plantingDate?: string | null;
     }[];
   };
 }): Promise<void> {
@@ -768,6 +776,21 @@ export type HandlingState = {
   resolvedAt: string | null;
   escalatedAt: string | null;
 };
+
+/* Item 6: the same per-zone "today" the farmer's Home screen shows. */
+export type FarmTodayZone = {
+  zoneId: number;
+  name: string;
+  action: { kind: string; text: string };
+  why: unknown;
+  confidence: { level: "high" | "medium" | "low"; reason: string } | null;
+  confidenceExplanation: unknown;
+  nextStep: { field: string; ask: string } | null;
+};
+
+export function getFarmToday(farmId: number): Promise<{ farmId: number; day: string; zones: FarmTodayZone[] }> {
+  return authorizedJson(`/api/farmer/farms/${farmId}/today`, "GET");
+}
 
 export function getHandling(kind: HandlingKind): Promise<HandlingState[]> {
   return authorizedJson<HandlingState[]>(`/api/admin/handling/${kind}`, "GET");

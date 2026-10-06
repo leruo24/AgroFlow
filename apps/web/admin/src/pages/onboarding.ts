@@ -13,38 +13,44 @@ page never needs to re-fetch or re-render itself to move between steps or add
 a zone row.
 ============================================================================ */
 
+/* Item 6: what the advice needs, asked for here instead of later.
+   Soil is three cards with Loam already chosen ("Not sure? Pick Loam" -
+   the engine assumes loam anyway, so the default is honest). Size is a
+   preset; hectares are only asked for bigger plots. Planting is "about how
+   many weeks ago?", which a farmer can answer when a date is a guess. */
+export const SOILS: { value: string; label: string; hint: string }[] = [
+  { value: "sandy", label: "Sandy", hint: "Gritty, water runs straight through" },
+  { value: "loam", label: "Loam", hint: "Crumbly, holds together a little" },
+  { value: "clay", label: "Clay", hint: "Sticky when wet, cracks when dry" },
+];
+
+export const AREA_PRESETS: { value: string; label: string; m2: number | null }[] = [
+  { value: "tub", label: "Small tub (about 0.2 m²)", m2: 0.2 },
+  { value: "bed", label: "Bed, 1 × 2 m (2 m²)", m2: 2 },
+  { value: "custom", label: "Custom size", m2: null },
+];
+
 export function zoneRow(index: number): string {
-  return `<div class="grid split-2 zone-row" data-zone-row>
+  const n = index + 1;
+  return `<div class="zone-row zone-setup" data-zone-row data-zone-index="${index}">
+  <div class="grid split-2">
     <label class="drawer-field">
-      <span>Zone ${index + 1} name</span>
+      <span>Zone ${n} name</span>
       <input
         type="text"
         data-field="zone_name_${index}"
         data-required
-        data-required-message="Give zone ${index + 1} a name."
+        data-required-message="Give zone ${n} a name."
         placeholder="e.g. North Block"
       />
     </label>
 
     <label class="drawer-field">
-      <span>Zone ${index + 1} size (hectares)</span>
-      <input
-        type="number"
-        min="0.1"
-        step="0.1"
-        data-field="zone_size_${index}"
-        data-required
-        data-required-message="Enter a size in hectares for zone ${index + 1}."
-        placeholder="0"
-      />
-    </label>
-
-    <label class="drawer-field">
-      <span>Zone ${index + 1} crop</span>
+      <span>Zone ${n} crop</span>
       <select
         data-field="zone_crop_${index}"
         data-required
-        data-required-message="Choose a crop for zone ${index + 1}."
+        data-required-message="Choose a crop for zone ${n}."
       >
         <option value="">Choose a crop…</option>
         ${ZONE_CROPS.map(
@@ -52,7 +58,131 @@ export function zoneRow(index: number): string {
         ).join("")}
       </select>
     </label>
-  </div>`;
+  </div>
+
+  <div class="drawer-field">
+    <span>Zone ${n} soil</span>
+    <input type="hidden" data-field="zone_soil_${index}" value="loam" data-required
+      data-required-message="Choose the soil for zone ${n}." />
+    <div class="soil-cards" role="radiogroup" aria-label="Zone ${n} soil">
+      ${SOILS.map(
+        (s) => `<button type="button" class="soil-card${s.value === "loam" ? " is-selected" : ""}"
+          role="radio" aria-checked="${s.value === "loam"}"
+          data-act="zone-soil" data-zone="${index}" data-soil="${s.value}">
+          <b>${s.label}</b><small>${s.hint}</small>
+        </button>`,
+      ).join("")}
+    </div>
+    <small class="field-note">Not sure? Pick Loam.</small>
+  </div>
+
+  <div class="grid split-2">
+    <label class="drawer-field">
+      <span>Zone ${n} size</span>
+      <select
+        data-field="zone_area_preset_${index}"
+        data-area-preset="${index}"
+        data-required
+        data-required-message="Choose how big zone ${n} is."
+      >
+        <option value="">Choose a size…</option>
+        ${AREA_PRESETS.map((a) => `<option value="${a.value}">${a.label}</option>`).join("")}
+      </select>
+    </label>
+
+    <label class="drawer-field" data-area-custom="${index}" hidden>
+      <span>Zone ${n} watered area (m²)</span>
+      <input type="number" min="0.01" step="0.01" data-field="zone_area_m2_${index}" placeholder="e.g. 12" />
+    </label>
+
+    <label class="drawer-field">
+      <span>Zone ${n} size in hectares (bigger plots only)</span>
+      <input
+        type="number"
+        min="0.0001"
+        step="0.01"
+        data-field="zone_size_${index}"
+        placeholder="Leave empty for a tub or bed"
+      />
+    </label>
+
+    <label class="drawer-field">
+      <span>Zone ${n}: planted about how many weeks ago? (optional)</span>
+      <input type="number" min="0" max="104" step="1" data-field="zone_weeks_${index}" placeholder="e.g. 3" />
+    </label>
+  </div>
+</div>`;
+}
+
+/* The zone as the API takes it, read from the row's fields. */
+export type ZoneSetupInput = {
+  name: string;
+  sizeHectares: number;
+  cropType: string;
+  soilType: string;
+  areaM2: number | null;
+  plantingDate: string | null;
+};
+
+export function readZoneSetup(v: Record<string, string>, i: number, today: Date = new Date()): ZoneSetupInput {
+  const preset = AREA_PRESETS.find((a) => a.value === v[`zone_area_preset_${i}`]);
+  const custom = Number(v[`zone_area_m2_${i}`]);
+  const areaM2 = preset?.m2 ?? (preset?.value === "custom" && custom > 0 ? custom : null);
+
+  // Hectares stay the farmer-facing size (0010). A tub or bed has none
+  // typed in, so it is the watered area in hectares (1 ha = 10 000 m²).
+  const ha = Number(v[`zone_size_${i}`]);
+  const sizeHectares = ha > 0 ? ha : areaM2 != null ? areaM2 / 10000 : 0;
+
+  const weeksText = (v[`zone_weeks_${i}`] ?? "").trim();
+  let plantingDate: string | null = null;
+  if (weeksText !== "" && Number(weeksText) >= 0) {
+    const d = new Date(today.getTime() - Math.round(Number(weeksText)) * 7 * 86400000);
+    plantingDate = d.toISOString().slice(0, 10);
+  }
+
+  return {
+    name: (v[`zone_name_${i}`] ?? "").trim(),
+    sizeHectares,
+    cropType: v[`zone_crop_${i}`] ?? "",
+    soilType: v[`zone_soil_${i}`] || "loam",
+    areaM2,
+    plantingDate,
+  };
+}
+
+/* What the per-field required checks cannot say. Null = fine. */
+export function zoneSetupProblem(v: Record<string, string>, i: number): string | null {
+  const n = i + 1;
+  if (v[`zone_area_preset_${i}`] === "custom" && !(Number(v[`zone_area_m2_${i}`]) > 0)) {
+    return `Enter the watered area of zone ${n} in m².`;
+  }
+  const weeks = (v[`zone_weeks_${i}`] ?? "").trim();
+  if (weeks !== "" && !(Number(weeks) >= 0 && Number(weeks) <= 104)) {
+    return `Zone ${n}: weeks since planting must be between 0 and 104.`;
+  }
+  const z = readZoneSetup(v, i);
+  if (z.areaM2 != null && z.areaM2 > z.sizeHectares * 10000 * 1.001) {
+    return `Zone ${n}: the watered area is bigger than its size in hectares.`;
+  }
+  return null;
+}
+
+/* After rows are rebuilt and values put back: highlight the chosen soil
+   card and show the m² box for a custom size. */
+export function syncZoneChoices(root: ParentNode): void {
+  root.querySelectorAll<HTMLInputElement>('[data-field^="zone_soil_"]').forEach((hidden) => {
+    const i = hidden.dataset["field"]!.slice("zone_soil_".length);
+    root.querySelectorAll<HTMLElement>(`[data-act="zone-soil"][data-zone="${i}"]`).forEach((card) => {
+      const on = card.dataset["soil"] === hidden.value;
+      card.classList.toggle("is-selected", on);
+      card.setAttribute("aria-checked", String(on));
+    });
+  });
+  root.querySelectorAll<HTMLSelectElement>("[data-area-preset]").forEach((sel) => {
+    const box = root.querySelector<HTMLElement>(`[data-area-custom="${sel.dataset["areaPreset"]}"]`);
+    if (box) box.hidden = sel.value !== "custom";
+  });
 }
 
 export async function onboardingPage(): Promise<string> {

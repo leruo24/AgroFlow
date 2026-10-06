@@ -130,6 +130,7 @@ public static class RuleBookDocument
         VerdictTable(L);
         ConfidenceTable(L);
         KitTable(L);
+        TodayTable(L);
         NeedsAnotherSource(L);
 
         return sb.ToString();
@@ -294,6 +295,13 @@ public static class RuleBookDocument
         L($"| `WateringResetsBalance` | 2 min run, no size or flow | {YesNo(WaterRules.WateringResetsBalance(WaterRules.FullWateringMinimumSeconds, false))} | DATA RULE: \"the last full watering as the reset\" |");
         L($"| `WateringResetsBalance` | 1 min 59 s run | {YesNo(WaterRules.WateringResetsBalance(WaterRules.FullWateringMinimumSeconds - 1, false))} | a pump test is not a watering |");
         L($"| `RecommendedThreshold` | maize p 0.55, loam, wet 1200, dry 3000 | {N(WaterRules.RecommendedThreshold(0.55, 1.0, 1200, 3000))} | Table 22 p, p. 167, clamp 0.1-0.8 p. 162 |");
+        L($"| `SoilFeelDepletion` | farmer says \"wet\", dryness 12 mm, RAW 20 mm | {N(WaterRules.SoilFeelDepletion("wet", 12, 20))} mm | field capacity, Dr = 0 (p. 167) |");
+        L($"| `SoilFeelDepletion` | farmer says \"dry\", dryness 6 mm, RAW 20 mm | {N(WaterRules.SoilFeelDepletion("dry", 6, 20))} mm | at least RAW - the watering point (p. 171) |");
+        L($"| `SoilFeelDepletion` | farmer says \"moist\", dryness 18 mm, RAW 20 mm | {N(WaterRules.SoilFeelDepletion("moist", 18, 20))} mm | DATA RULE: held between {N(WaterRules.MoistLowFractionOfRaw * 100)}% and {N(WaterRules.MoistHighFractionOfRaw * 100)}% of RAW |");
+        L("");
+        L("A soil check by hand counts for the day it was made (the latest one that day wins) and,");
+        L($"within {ConfidenceRules.FreshReadingHours} h, is named in the confidence (\"based on the weather and your own soil check\").");
+        L("It never makes the advice High - only a set-up sensor does.");
         L("");
     }
 
@@ -391,7 +399,26 @@ public static class RuleBookDocument
         L("");
     }
 
-    // ---- 8. Needs another source ----------------------------------------
+    // ---- 8. Today's one action -------------------------------------------
+
+    private static void TodayTable(Action<string> L)
+    {
+        L("## 8. Today's one action (`TodayRules`)");
+        L("");
+        L("The Home card and the admin farm page show ONE sentence per zone, picked from the insights");
+        L("above in this order (DATA RULE - the order a farmer would want them):");
+        L("");
+        L("1. Rain will cover it → \"No watering today: rain is expected to cover it.\"");
+        L("2. Water now → \"Water about N min this morning (about N L)\" - the amount from `MinutesToRun`.");
+        L("3. Kit problem: pump ran with no effect, kit offline, sensor stuck → \"Check the …\"");
+        L("4. No crop set → \"Finish setup: …\" with the one next step.");
+        L("5. Water soon → \"No watering today; next on <day>\".");
+        L("6. The balance ran and nothing is due → \"No watering needed today\".");
+        L("7. Otherwise → \"Finish setup: …\" or, with no weather, \"No advice yet\".");
+        L("");
+    }
+
+    // ---- 9. Needs another source ----------------------------------------
 
     private static void NeedsAnotherSource(Action<string> L)
     {
@@ -410,6 +437,7 @@ public static class RuleBookDocument
         L("| Which pests or diseases follow from wet leaves or over-watering? | Out of scope for FAO-56. | ARC Plant Health; Department of Agriculture pest advisories. |");
         L("| How much light rain actually reaches the roots in a small tub? | FAO-56 Eq. 85 uses effective rain but gives no method for containers; our cut-off (rain under 0.2 × ETo ignored) is a DATA RULE. | Measurement in our own tubs; FAO Irrigation and Drainage Paper 25 (*Effective rainfall*). |");
         L("| How often should a resistive soil probe be re-set-up as it corrodes? | Not about crop water; our 15% drift trigger is a DATA RULE. | Probe manufacturer data; our own drift logs over a season. |");
+        L("| How well can a farmer judge soil water by hand? | FAO-56 has no feel method; our \"moist\" band (25-75% of RAW) is a DATA RULE. | USDA NRCS *Estimating Soil Moisture by Feel and Appearance* (1998), checked against our own tubs. |");
         L("| Does salty water or soil change the advice? | FAO-56 Eqs. 89-92 need soil salinity (ECe), which AgroFlow does not measure. | A soil and water salinity test from an accredited lab. |");
     }
 

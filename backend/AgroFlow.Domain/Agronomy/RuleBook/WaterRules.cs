@@ -22,6 +22,38 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         // a heatwave's worth on the Western Cape's summer figures.
         public const double HotDaysEtoMultiple = 1.3;
 
+        // DATA RULE (item 6): where "moist" sits between full and the watering
+        // point. A farmer's hand cannot tell a quarter-dry soil from a
+        // three-quarter-dry one, so a "moist" check only pulls the estimate
+        // into the middle band; it never moves it past either end.
+        public const double MoistLowFractionOfRaw = 0.25;
+        public const double MoistHighFractionOfRaw = 0.75;
+
+        /// <summary>
+        /// How dry the soil is after the farmer's own "How does the soil feel?" check.
+        /// </summary>
+        /// <remarks>
+        /// DATA RULE, anchored on FAO-56's own two marks: "wet" is field
+        /// capacity, a depletion of 0 (p. 167: "At field capacity, the root
+        /// zone depletion is zero");
+        /// "dry" is the watering point, depletion at least RAW (p. 171). A
+        /// manual check is never more precise than that, so "moist" is held
+        /// between <see cref="MoistLowFractionOfRaw"/> and
+        /// <see cref="MoistHighFractionOfRaw"/> of RAW. Labelled manual, and it
+        /// lowers confidence compared with a set-up sensor.
+        /// </remarks>
+        public static double SoilFeelDepletion(string feel, double depletionMm, double rawMm)
+        {
+            switch (feel)
+            {
+                case "wet": return 0.0;
+                case "dry": return Math.Max(depletionMm, rawMm);
+                case "moist":
+                    return Math.Min(Math.Max(depletionMm, MoistLowFractionOfRaw * rawMm), MoistHighFractionOfRaw * rawMm);
+                default: return depletionMm;
+            }
+        }
+
         /// <summary>Whether the crop needs water today: the soil has dried to RAW or past it.</summary>
         /// <remarks>
         /// FAO-56 Chapter 8 (p. 171): "To avoid crop water stress, irrigations

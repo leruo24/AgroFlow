@@ -234,14 +234,20 @@ internal static class WaterUsageReportBuilder
         const string eventSql = """
             select (started_at at time zone 'Africa/Johannesburg')::date as day,
                    count(*),
-                   coalesce(sum(runtime_seconds), 0)
+                   coalesce(sum(runtime_seconds), 0),
+                   -- Item 6: waterings the farmer logged by hand (read
+                   -- through jsonb so a database without 0042 still works).
+                   count(*) filter (where (to_jsonb(irrigation_event) ->> 'logged_by_profile_id') is not null),
+                   coalesce(sum(estimated_litres) filter (
+                       where (to_jsonb(irrigation_event) ->> 'logged_by_profile_id') is not null
+                         and coalesce(runtime_seconds, 0) = 0), 0)
               from irrigation_event
              where zone_id = $1
                and (started_at at time zone 'Africa/Johannesburg')::date between $2 and $3
              group by 1
             """;
 
-        var runsByDay = new Dictionary<DateOnly, (int Runs, long Seconds)>();
+        var runsByDay = new Dictionary<DateOnly, (int Runs, long Seconds, int ByHand, double HandLitres)>();
 
         await using (var cmd = new NpgsqlCommand(eventSql, connection))
         {
@@ -253,7 +259,7 @@ internal static class WaterUsageReportBuilder
             while (await reader.ReadAsync(ct))
             {
                 runsByDay[reader.GetFieldValue<DateOnly>(0)] =
-                    ((int)reader.GetInt64(1), reader.GetInt64(2));
+                    ((int)reader.GetInt64(1), reader.GetInt64(2), (int)reader.GetInt64(3), Convert.ToDouble(reader.GetValue(4)));
             }
         }
 
@@ -379,6 +385,10 @@ internal static class WaterUsageReportBuilder
             // ever derived. Null when the zone has no flow rate, never 0.
             double? litres = flowRate.HasValue ? minutes * flowRate.Value : null;
 
+            // A hand-logged watering given in litres, not minutes, adds its
+            // litres as the farmer gave them.
+            if (runs.HandLitres > 0) litres = (litres ?? 0) + runs.HandLitres;
+
             balanceByDay.TryGetValue(date, out var balance);
 
             // ETc is a depth in mm. Litres need an area: 1 mm over 1 m^2 is
@@ -412,7 +422,7 @@ internal static class WaterUsageReportBuilder
                 weather?.RhMeanPct,
                 tub.Humidity ?? weather?.DhtRhMeanPct,
                 balance?.RainMm ?? weather?.RainMm,
-                DayNote(runs.Runs, litres, needLitres, balance?.RainMm ?? weather?.RainMm, avgMoisture)));
+                HandPrefix(runs.ByHand) + DayNote(runs.Runs, litres, needLitres, balance?.RainMm ?? weather?.RainMm, avgMoisture)));
         }
 
         /* ---- 8. The moisture series, positioned by actual time --------- */
@@ -479,6 +489,14 @@ internal static class WaterUsageReportBuilder
     /// The one-line note in the daily table. Deliberately plain, and never a
     /// judgement the data does not support: with no need figure to compare
     /// against, it reports what happened rather than whether it was right.
+    // Item 6: entries typed in by the farmer are labelled as such.
+    internal static string HandPrefix(int byHand) => byHand switch
+    {
+        0 => string.Empty,
+        1 => "Watered by hand (logged); ",
+        _ => $"{byHand} waterings logged by hand; ",
+    };
+
     private static string DayNote(
         int runs, double? litres, double? need, double? rain, double? moisture)
     {

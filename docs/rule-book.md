@@ -133,6 +133,13 @@ formation, which fall in mid-season (p. 95-96) - farmers' "Peak growth".
 | `WateringResetsBalance` | 2 min run, no size or flow | **yes** | DATA RULE: "the last full watering as the reset" |
 | `WateringResetsBalance` | 1 min 59 s run | no | a pump test is not a watering |
 | `RecommendedThreshold` | maize p 0.55, loam, wet 1200, dry 3000 | 2190 | Table 22 p, p. 167, clamp 0.1-0.8 p. 162 |
+| `SoilFeelDepletion` | farmer says "wet", dryness 12 mm, RAW 20 mm | 0 mm | field capacity, Dr = 0 (p. 167) |
+| `SoilFeelDepletion` | farmer says "dry", dryness 6 mm, RAW 20 mm | 20 mm | at least RAW - the watering point (p. 171) |
+| `SoilFeelDepletion` | farmer says "moist", dryness 18 mm, RAW 20 mm | 15 mm | DATA RULE: held between 25% and 75% of RAW |
+
+A soil check by hand counts for the day it was made (the latest one that day wins) and,
+within 24 h, is named in the confidence ("based on the weather and your own soil check").
+It never makes the advice High - only a set-up sensor does.
 
 ## 5. Verdict rules (`VerdictRules`)
 
@@ -180,6 +187,19 @@ All DATA RULES - FAO-56 knows nothing about sensors. A kit reports every 30 seco
 | Temperature sensor offline | soil readings arriving, no valid temperature/humidity for 2 h; back after 3 good readings in a row | "Tub 1's temperature sensor isn't working. We're using weather app data for now, and our team has been notified." |
 | Sensor drift | wettest reading this week more than 15% of the wet/dry span from the saved wet point | "Tub 1 sensor readings are drifting. Re-do the wet/dry setup." |
 
+## 8. Today's one action (`TodayRules`)
+
+The Home card and the admin farm page show ONE sentence per zone, picked from the insights
+above in this order (DATA RULE - the order a farmer would want them):
+
+1. Rain will cover it → "No watering today: rain is expected to cover it."
+2. Water now → "Water about N min this morning (about N L)" - the amount from `MinutesToRun`.
+3. Kit problem: pump ran with no effect, kit offline, sensor stuck → "Check the …"
+4. No crop set → "Finish setup: …" with the one next step.
+5. Water soon → "No watering today; next on <day>".
+6. The balance ran and nothing is due → "No watering needed today".
+7. Otherwise → "Finish setup: …" or, with no weather, "No advice yet".
+
 ## Needs another source
 
 Rules a farmer would find useful that FAO-56 does **not** support. They are not in the app;
@@ -195,4 +215,5 @@ each says what would have to be found first.
 | Which pests or diseases follow from wet leaves or over-watering? | Out of scope for FAO-56. | ARC Plant Health; Department of Agriculture pest advisories. |
 | How much light rain actually reaches the roots in a small tub? | FAO-56 Eq. 85 uses effective rain but gives no method for containers; our cut-off (rain under 0.2 × ETo ignored) is a DATA RULE. | Measurement in our own tubs; FAO Irrigation and Drainage Paper 25 (*Effective rainfall*). |
 | How often should a resistive soil probe be re-set-up as it corrodes? | Not about crop water; our 15% drift trigger is a DATA RULE. | Probe manufacturer data; our own drift logs over a season. |
+| How well can a farmer judge soil water by hand? | FAO-56 has no feel method; our "moist" band (25-75% of RAW) is a DATA RULE. | USDA NRCS *Estimating Soil Moisture by Feel and Appearance* (1998), checked against our own tubs. |
 | Does salty water or soil change the advice? | FAO-56 Eqs. 89-92 need soil salinity (ECe), which AgroFlow does not measure. | A soil and water salinity test from an accredited lab. |

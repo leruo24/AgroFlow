@@ -453,6 +453,66 @@ export function fetchZoneInsights(zoneId: number) {
   }>(`/api/farmer/zones/${zoneId}/insights`);
 }
 
+// ---------------------------------------------------------------------------
+// Item 6: one card per zone, logging by hand, and finishing setup.
+// ---------------------------------------------------------------------------
+
+export type TodayActionKind = 'water' | 'skip' | 'kit' | 'setup' | 'soon' | 'none';
+
+export type ZoneSetupFacts = {
+  crop: boolean;
+  plantingDate: boolean;
+  soil: boolean;
+  area: boolean;
+  flowRate: boolean;
+  calibrated: boolean;
+  hasKit: boolean;
+};
+
+export type TodayZone = {
+  zoneId: number;
+  name: string;
+  action: { kind: TodayActionKind; text: string };
+  why: Explanation | null;
+  confidence: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+  confidenceExplanation: Explanation | null;
+  nextStep: { field: string; ask: string } | null;
+  setup?: ZoneSetupFacts | null;
+};
+
+export function fetchFarmToday(farmId: string | number) {
+  return authorizedRequest<{ farmId: number; day: string; zones: TodayZone[] }>(
+    `/api/farmer/farms/${encodeURIComponent(String(farmId))}/today`
+  );
+}
+
+// Writes go through authorizedRequest, so a double tap sends one entry.
+export function logManualWatering(zoneId: number, entry: { minutes?: number; litres?: number }) {
+  return authorizedRequest<{ id: number; message: string }>(
+    `/api/farmer/zones/${zoneId}/manual-watering`,
+    { method: 'POST', body: JSON.stringify(entry) }
+  );
+}
+
+export type SoilFeel = 'dry' | 'moist' | 'wet';
+
+export function logSoilFeel(zoneId: number, feel: SoilFeel) {
+  return authorizedRequest<{ id: number; message: string }>(
+    `/api/farmer/zones/${zoneId}/soil-feel`,
+    { method: 'POST', body: JSON.stringify({ feel }) }
+  );
+}
+
+export function saveZoneSetup(
+  zoneId: number,
+  setup: { plantingDate?: string; areaM2?: number; flowRateLpm?: number }
+) {
+  return authorizedRequest<{ message: string }>(
+    `/api/farmer/zones/${zoneId}/setup`,
+    { method: 'PUT', body: JSON.stringify(setup) }
+  );
+}
+
 export function dismissZoneInsight(
   zoneId: number,
   insightType: string

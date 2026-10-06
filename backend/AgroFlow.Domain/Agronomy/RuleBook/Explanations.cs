@@ -520,6 +520,12 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
         private static void AddReadingFact(Explanation e, ZoneEngineInput i, ZoneEngineResult r)
         {
+            // Item 6: the farmer's own soil check, when the balance used one.
+            if (r.LatestSoilFeel is { } feel)
+            {
+                e.Fact("Your soil check", $"felt {feel.Feel} at {Sast(feel.CheckedAtUtc)}", "you, by hand");
+            }
+
             if (!r.LatestRawReading.HasValue) return;
 
             if (r.ReadingStale)

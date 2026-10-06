@@ -50,6 +50,9 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
         /// <summary>When the kit last reported, for "your kit hasn't sent data since 17 Sep".</summary>
         public DateTime? LastReadingAtUtc { get; set; }
+
+        /// <summary>Item 6: the farmer felt the soil by hand within <see cref="ConfidenceRules.FreshReadingHours"/>.</summary>
+        public bool ManualCheckFresh { get; set; }
     }
 
     public sealed class Confidence
@@ -185,10 +188,18 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             var level = missing.Count <= MaxMissingForMedium ? ConfidenceLevel.Medium : ConfidenceLevel.Low;
             var label = level == ConfidenceLevel.Medium ? "Medium" : "Low";
 
+            // Item 6: the farmer's own check - better than the weather alone,
+            // never as good as a set-up sensor, so it is said, and stays Medium.
+            var basis = s.ManualCheckFresh ? "based on the weather and your own soil check" : "based on the weather";
+
             string because;
-            if (missing.Count == 0 && staleKit)
+            if (missing.Count == 0 && s.ManualCheckFresh)
             {
-                because = "based on the weather; " + KitQuiet(s.LastReadingAtUtc);
+                because = basis;
+            }
+            else if (missing.Count == 0 && staleKit)
+            {
+                because = basis + "; " + KitQuiet(s.LastReadingAtUtc);
             }
             else if (missing.Count == 0)
             {
@@ -197,7 +208,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             }
             else
             {
-                because = "based on the weather; " + missing[0].Because;
+                because = basis + "; " + missing[0].Because;
             }
 
             return new Confidence(level, label + ": " + because + ".");

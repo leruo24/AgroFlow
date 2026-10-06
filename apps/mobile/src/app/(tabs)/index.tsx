@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { router } from '@/lib/router';
 import { Bell, ChevronRight, Clock3, CloudSun, Droplets, FileText, Settings2 } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -14,6 +14,8 @@ import { FarmLocationMap } from '@/components/FarmLocationMap';
 import { WeatherSummary } from '@/components/WeatherSummary';
 import { DripHelper } from '@/components/DripHelper';
 import { averageSoilText } from '@/lib/moistureDisplay';
+import { TodayCard } from '@/components/TodayCard';
+import { fetchFarmToday, type TodayZone } from '@/services/agroFlowApi';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -25,6 +27,16 @@ export default function HomeScreen() {
   // Item 2: set-up zones only - a sensor number is not a percentage.
   const moisture = averageSoilText(zones.map(z => z.sensors.soilMoisture));
   const unread = alerts.filter(a => !a.read).length;
+  // Item 6: one card per zone - today's action, how sure, "I watered".
+  const [today, setToday] = useState<TodayZone[] | null>(null);
+  const [todayFailed, setTodayFailed] = useState(false);
+  const loadToday = useCallback(() => {
+    if (!farm) return;
+    fetchFarmToday(farm.id)
+      .then(r => { setToday(r.zones); setTodayFailed(false); })
+      .catch(() => setTodayFailed(true));
+  }, [farm]);
+  useEffect(() => { setToday(null); loadToday(); }, [loadToday]);
   const pendingCommands = zones.filter(z => z.irrigation.override.active).length;
   // null usedTodayLitres means no zone_daily_water_usage row exists for that
   // zone today - only sum zones that actually have one, and say so plainly
@@ -51,6 +63,11 @@ export default function HomeScreen() {
         : <>
           <FarmLocationMap key={farm.id} farm={farm} />
           <WeatherSummary key={farm.id + '-' + farm.latitude + '-' + farm.longitude} farm={farm} />
+          <Text accessibilityRole="header" style={styles.sectionTitle}>Today</Text>
+          {todayFailed ? <DataState kind="error" title="Today's advice is unavailable" onRetry={loadToday} />
+            : today === null ? <DataState kind="loading" title="Working out today's advice" />
+            : today.length === 0 ? <DataState kind="empty" title="No zones set up yet" description="Each zone will get its own card here." />
+            : today.map(z => <TodayCard key={z.zoneId} zone={z} onLogged={loadToday} />)}
           <Text accessibilityRole="header" style={styles.sectionTitle}>Farm status</Text>
           {isZonesLoading ? <DataState kind="loading" title="Loading farm status" />
             : zonesError ? <DataState kind="error" title="Farm status unavailable" onRetry={refreshZones} />
