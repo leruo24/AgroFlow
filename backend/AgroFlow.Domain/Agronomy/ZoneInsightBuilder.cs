@@ -86,6 +86,11 @@ namespace AgroFlow.Business.Agronomy
         public Dictionary<string, object?> Data { get; } = new Dictionary<string, object?>();
 
         public DateOnly ValidFor { get; set; }
+
+        // Item 2c: "Why am I seeing this?", built from the same rule and
+        // inputs as the message. Stored in ai_recommendation.data.explanation
+        // so it can be shown later exactly as it was.
+        public Explanation? Explanation { get; set; }
     }
 
     // Extra signals the engine itself cannot see, because they come from pump
@@ -492,6 +497,12 @@ namespace AgroFlow.Business.Agronomy
                     ("seven_day_minimum", signals.SevenDayMinimumReading),
                     ("calibration_wet", input.CalibrationWet),
                     ("drift", Math.Round(drift, 1))));
+            }
+
+            // Item 2c: every insight carries its own explanation.
+            foreach (var insight in insights)
+            {
+                insight.Explanation = Explanations.For(insight, input, result, signals);
             }
 
             return insights;

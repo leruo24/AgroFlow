@@ -232,6 +232,9 @@ namespace AgroFlow.Business
                 ["provenance"] = insight.Source,
             };
 
+            // Item 2c: stored with the insight so "Why?" shows what was true then.
+            if (insight.Explanation != null) payload["explanation"] = insight.Explanation;
+
             return JsonSerializer.Serialize(payload);
         }
 

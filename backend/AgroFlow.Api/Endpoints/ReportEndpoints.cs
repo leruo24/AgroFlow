@@ -587,6 +587,11 @@ public static class ReportEndpoints
                     source = i.Source,
                     insightType = i.InsightType,
                     severity = i.Severity,
+
+                    // Item 2c: the one-line "Why:" and the full explanation
+                    // for the report's appendix.
+                    why = i.Explanation?.Summary,
+                    explanation = i.Explanation,
                 }),
 
                 // The FAO-56 narrative notes that `insights` used to carry. Kept

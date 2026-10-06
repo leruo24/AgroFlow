@@ -8,7 +8,7 @@ what is next.
 | pre-flight | done | 116f773 | — | 0b |
 | 0b | done | 43a9ce0 | — | 2 |
 | 2 | done | 68ce29d | Confidence badge in the apps' UI → 2c/6 | 2b |
-| 2b | done | (this commit) | — | 2c |
+| 2b | done | 6888586 | — | 2c |
 
 ---
 
