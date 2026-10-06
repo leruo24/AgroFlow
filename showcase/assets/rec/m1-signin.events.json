@@ -1,0 +1,28 @@
+{
+  "duration": 7.843,
+  "width": 780,
+  "height": 1688,
+  "events": [
+    {
+      "type": "tap",
+      "t": 0.745,
+      "x": 195,
+      "y": 255,
+      "label": "email"
+    },
+    {
+      "type": "tap",
+      "t": 2.06,
+      "x": 165,
+      "y": 348,
+      "label": "password"
+    },
+    {
+      "type": "tap",
+      "t": 2.997,
+      "x": 195,
+      "y": 428,
+      "label": "sign in"
+    }
+  ]
+}

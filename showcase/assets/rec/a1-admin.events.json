@@ -1,0 +1,73 @@
+{
+  "duration": 37.575,
+  "width": 2880,
+  "height": 1620,
+  "events": [
+    {
+      "type": "click",
+      "t": 4.257,
+      "x": 124,
+      "y": 206,
+      "label": "farms"
+    },
+    {
+      "type": "click",
+      "t": 7.679,
+      "x": 468,
+      "y": 637,
+      "label": "view farm"
+    },
+    {
+      "type": "key",
+      "t": 12.392,
+      "label": "close"
+    },
+    {
+      "type": "click",
+      "t": 13.648,
+      "x": 124,
+      "y": 242,
+      "label": "kits"
+    },
+    {
+      "type": "point",
+      "t": 17.113,
+      "x": 887,
+      "y": 736,
+      "label": "zone 2 kit connection"
+    },
+    {
+      "type": "click",
+      "t": 20.032,
+      "x": 124,
+      "y": 278,
+      "label": "alerts"
+    },
+    {
+      "type": "click",
+      "t": 23.596,
+      "x": 1352,
+      "y": 601,
+      "label": "view alert"
+    },
+    {
+      "type": "key",
+      "t": 28.539,
+      "label": "close"
+    },
+    {
+      "type": "click",
+      "t": 29.763,
+      "x": 124,
+      "y": 314,
+      "label": "maintenance"
+    },
+    {
+      "type": "click",
+      "t": 33.61,
+      "x": 124,
+      "y": 386,
+      "label": "activity"
+    }
+  ]
+}

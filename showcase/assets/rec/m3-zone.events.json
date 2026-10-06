@@ -1,0 +1,21 @@
+{
+  "duration": 11.403,
+  "width": 780,
+  "height": 1688,
+  "events": [
+    {
+      "type": "tap",
+      "t": 6.103,
+      "x": 195,
+      "y": 437,
+      "label": "the week ahead"
+    },
+    {
+      "type": "tap",
+      "t": 9.731,
+      "x": 28,
+      "y": 28,
+      "label": "back"
+    }
+  ]
+}

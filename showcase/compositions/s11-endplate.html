@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  /* Editor space: deliberately empty. Showcase editors add links and cards here. */
+  #s11-mark { position: absolute; left: 64px; bottom: 54px; display: flex; align-items: center; gap: 14px; }
+  #s11-mark img { width: 44px; height: 44px; }
+  #s11-mark b { font-weight: 700; font-size: 20px; letter-spacing: .08em; color: #184d35; }
+  #s11-mark span { font-weight: 500; font-size: 17px; color: #4b5a4d; }
+</style>
+<div id="root" data-composition-id="s11" data-width="1920" data-height="1080">
+  <div id="s11-in" class="layer">
+    <svg class="layer" viewBox="0 0 1920 1080">
+      <g id="s11-net" stroke="#c4d6c6" stroke-width="2" fill="none" opacity=".7">
+        <path d="M1580 900 L1700 840 L1820 900 L1760 1010 L1640 1000 Z"/>
+        <path d="M1700 840 L1760 1010"/>
+      </g>
+      <g id="s11-dots" fill="#b5ccb8">
+        <circle cx="1580" cy="900" r="6"/><circle cx="1700" cy="840" r="6"/><circle cx="1820" cy="900" r="6"/><circle cx="1760" cy="1010" r="6"/><circle cx="1640" cy="1000" r="6"/>
+      </g>
+    </svg>
+    <div id="s11-mark"><img src="assets/brand/agroflow-icon-512.png" alt="" /><b>AGROFLOW</b><span>INF3003W · Team 2</span></div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  tl.fromTo("#s11-in", { opacity: 0 }, { opacity: 1, duration: 1.0, ease: "power1.out" }, 0.2);
+  // Very slow drift only.
+  tl.fromTo(["#s11-net", "#s11-dots"], { x: 0, y: 0 }, { x: -24, y: -12, duration: 29.5, ease: "none" }, 0.2);
+  window.__timelines["s11"] = tl;
+})();
+</script>
+</template>
+</body></html>

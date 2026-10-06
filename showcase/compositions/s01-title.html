@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  #s01-icon { position: absolute; left: 885px; top: 196px; width: 150px; height: 150px; }
+  #s01-word { position: absolute; left: 0; right: 0; top: 372px; text-align: center; font-weight: 700; font-size: 112px; letter-spacing: .14em; color: #184d35; }
+  #s01-sub { position: absolute; left: 0; right: 0; top: 516px; text-align: center; font-weight: 500; font-size: 36px; color: #253126; }
+  #s01-rule { position: absolute; left: 860px; top: 600px; width: 200px; height: 3px; background: #42c3c7; border-radius: 2px; }
+  #s01-show { position: absolute; left: 0; right: 0; top: 636px; text-align: center; font-weight: 600; font-size: 28px; color: #184d35; }
+  #s01-team { position: absolute; left: 0; right: 0; top: 684px; text-align: center; font-weight: 500; font-size: 24px; letter-spacing: .06em; color: #4b5a4d; }
+</style>
+<div id="root" data-composition-id="s01" data-width="1920" data-height="1080">
+  <div id="s01-in" class="layer">
+    <svg class="layer" viewBox="0 0 1920 1080">
+      <g stroke="#4f8f62" stroke-width="2.5" fill="none" opacity=".55">
+        <path class="s01-e" pathLength="1" d="M120 860 L330 780 L520 860 L700 800"/>
+        <path class="s01-e" pathLength="1" d="M1220 800 L1400 860 L1590 780 L1800 860"/>
+        <path class="s01-e" pathLength="1" d="M180 230 L360 170 L540 240"/>
+        <path class="s01-e" pathLength="1" d="M1380 240 L1560 170 L1740 230"/>
+        <path class="s01-e" pathLength="1" d="M330 780 L360 170" opacity=".4"/>
+        <path class="s01-e" pathLength="1" d="M1590 780 L1560 170" opacity=".4"/>
+      </g>
+      <g fill="#4f8f62" opacity=".7">
+        <circle class="s01-n" cx="120" cy="860" r="8"/><circle class="s01-n" cx="330" cy="780" r="8"/><circle class="s01-n" cx="520" cy="860" r="8"/><circle class="s01-n" cx="700" cy="800" r="8"/>
+        <circle class="s01-n" cx="1220" cy="800" r="8"/><circle class="s01-n" cx="1400" cy="860" r="8"/><circle class="s01-n" cx="1590" cy="780" r="8"/><circle class="s01-n" cx="1800" cy="860" r="8"/>
+        <circle class="s01-n" cx="180" cy="230" r="8"/><circle class="s01-n" cx="360" cy="170" r="8"/><circle class="s01-n" cx="540" cy="240" r="8"/>
+        <circle class="s01-n" cx="1380" cy="240" r="8"/><circle class="s01-n" cx="1560" cy="170" r="8"/><circle class="s01-n" cx="1740" cy="230" r="8"/>
+      </g>
+      <path id="s01-water" pathLength="1" d="M60 960 C 400 900, 700 1000, 960 940 S 1500 890, 1860 950" stroke="#168f99" stroke-width="6" fill="none" stroke-linecap="round" opacity=".8"/>
+      <path id="s01-flow" pathLength="1" d="M60 960 C 400 900, 700 1000, 960 940 S 1500 890, 1860 950" stroke="#c8eef0" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-dasharray="0.02 0.04"/>
+    </svg>
+    <img id="s01-icon" src="assets/brand/agroflow-icon-512.png" alt="" />
+    <div id="s01-word">AGROFLOW</div>
+    <div id="s01-sub">Smart Irrigation Management System</div>
+    <div id="s01-rule"></div>
+    <div id="s01-show">UCT School of IT Showcase 2026</div>
+    <div id="s01-team">INF3003W · Team 2</div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out";
+  tl.fromTo(".s01-e", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 1.4, ease: "power2.inOut", stagger: 0.12 }, 0.1);
+  tl.fromTo(".s01-n", { scale: 0, transformOrigin: "50% 50%" }, { scale: 1, duration: 0.4, ease: E3, stagger: 0.05 }, 0.2);
+  tl.fromTo("#s01-water", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 1.6, ease: "power2.inOut" }, 0.6);
+  tl.fromTo("#s01-flow", { opacity: 0, strokeDashoffset: 0 }, { opacity: 1, strokeDashoffset: -0.6, duration: 8.6, ease: "none" }, 1.2);
+  tl.fromTo("#s01-icon", { opacity: 0, scale: 0.88, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.8, ease: E3 }, 0.7);
+  tl.fromTo("#s01-word", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.8, ease: E3 }, 1.2);
+  tl.fromTo("#s01-sub", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, ease: E3 }, 1.8);
+  tl.fromTo("#s01-rule", { scaleX: 0, transformOrigin: "50% 50%" }, { scaleX: 1, duration: 0.6, ease: E3 }, 2.6);
+  tl.fromTo("#s01-show", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 2.9);
+  tl.fromTo("#s01-team", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 3.3);
+  tl.to("#s01-in", { opacity: 0, duration: 0.5, ease: "power2.in" }, 9.45);
+  window.__timelines["s01"] = tl;
+})();
+</script>
+</template>
+</body></html>

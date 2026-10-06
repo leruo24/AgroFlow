@@ -1,0 +1,104 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  #s04-ph { position: absolute; left: 1236px; top: 91px; }
+  .s04-list { position: absolute; left: 96px; top: 330px; width: 900px; }
+  .s04-row { display: flex; align-items: baseline; gap: 20px; padding: 18px 0; border-bottom: 1px solid #e4e7e4; }
+  .s04-row .l { width: 300px; font-weight: 600; font-size: 22px; letter-spacing: .1em; text-transform: uppercase; color: #637064; }
+  .s04-row .v { font-weight: 700; font-size: 44px; color: #253126; }
+  .s04-row .n { font-weight: 600; font-size: 24px; color: #9a6214; }
+  #s04-dia { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  .s04-node { top: 455px; width: 186px; height: 168px; }
+  #s04-src { position: absolute; left: 96px; top: 700px; width: 1080px; font-weight: 500; font-size: 26px; line-height: 1.4; color: #4b5a4d; }
+  .s04-list2 { position: absolute; left: 96px; top: 360px; width: 900px; }
+</style>
+<div id="root" data-composition-id="s04" data-width="1920" data-height="1080">
+  <div id="s04-in" class="layer">
+    <div class="cap" id="s04-cap1"><div class="k">Zone 2 · Spinach</div><div class="t">What is happening in this zone?</div></div>
+    <div class="s04-list" id="s04-list">
+      <div class="s04-row" id="s04-r1"><div class="l">Soil moisture</div><div class="v">19%</div><div class="n">Dry</div></div>
+      <div class="s04-row" id="s04-r2"><div class="l">Temperature</div><div class="v">30°C</div></div>
+      <div class="s04-row" id="s04-r3"><div class="l">Humidity</div><div class="v">36%</div></div>
+    </div>
+
+    <div id="s04-dia">
+      <div class="cap" id="s04-cap2"><div class="k">Where the readings come from</div><div class="t">Connected field hardware, not typed-in values.</div></div>
+      <svg class="layer" viewBox="0 0 1920 1080">
+        <g stroke="#9fb799" stroke-width="3" fill="none">
+          <path class="s04-c" pathLength="1" d="M282 539 H312"/><path class="s04-c" pathLength="1" d="M498 539 H528"/>
+          <path class="s04-c" pathLength="1" d="M714 539 H744"/><path class="s04-c" pathLength="1" d="M930 539 H960"/>
+          <path class="s04-c" pathLength="1" d="M1146 539 H1228"/>
+        </g>
+        <circle class="pkt s04-p" cx="282" cy="539" r="9" opacity="0"/><circle class="pkt s04-p" cx="282" cy="539" r="9" opacity="0"/><circle class="pkt s04-p" cx="282" cy="539" r="9" opacity="0"/>
+      </svg>
+      <div class="node card s04-node" id="s04-n1" style="left:96px;"><div class="h">Field sensors</div><div class="m" style="font-size:20px">Soil probe</div><div class="sm">+ DHT11 temp. &amp; humidity</div></div>
+      <div class="node card s04-node" id="s04-n2" style="left:312px;"><div class="h">Controller</div><div class="m">ESP32</div><div class="sm">one per zone</div></div>
+      <div class="node card s04-node" id="s04-n3" style="left:528px;"><div class="h">Connection</div><div class="m">MQTT</div><div class="sm">over TLS (HiveMQ Cloud)</div></div>
+      <div class="node card s04-node" id="s04-n4" style="left:744px;"><div class="h">Service</div><div class="m" style="font-size:21px">AgroFlow.Api</div><div class="sm">stores each reading</div></div>
+      <div class="node card s04-node" id="s04-n5" style="left:960px;"><div class="h">Database</div><div class="m">Supabase</div><div class="sm">Postgres, per-farm access</div></div>
+      <div id="s04-src">Readings arrive about every 30 seconds per sensor, so the app shows the latest field conditions.</div>
+    </div>
+
+    <div class="cap" id="s04-cap3"><div class="k">Zone 2 · Spinach</div><div class="t">The crop, and where it is in its season.</div></div>
+    <div class="s04-list2" id="s04-list2">
+      <div class="s04-row" id="s04-q1"><div class="l">Crop</div><div class="v">Spinach</div></div>
+      <div class="s04-row" id="s04-q2"><div class="l">Growth stage</div><div class="v" style="font-size:38px">Development · day 26 of 70</div></div>
+    </div>
+
+    <div id="s04-ph" class="phone"><div class="pscreen"><div class="pcam" id="s04-pcam">
+      <img class="clip" src="assets/screens/m-zone2.png" alt="" data-start="0" data-duration="22.5" />
+      <video id="s04-v1" class="clip" src="assets/rec/m3-zone.mp4" muted playsinline data-start="22.4" data-duration="5.9"></video>
+      <img class="clip" src="assets/screens/m-zone2-advice.png" alt="" data-start="28.25" data-duration="6.75" />
+      <div class="spot" id="s04-spotS" style="left:22px;top:118px;width:120px;height:100px;"></div>
+      <div class="spot" id="s04-spotR" style="left:142px;top:118px;width:246px;height:100px;"></div>
+      <div class="spot" id="s04-spotD" style="left:12px;top:52px;width:380px;height:58px;"></div>
+    </div></div></div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out", IO = "power2.inOut";
+  const row = (sel, at) => tl.fromTo(sel, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, at);
+  tl.set(["#s04-dia", "#s04-cap3", "#s04-list2"], { opacity: 0 }, 0);
+  tl.set("#s04-pcam", { transformOrigin: "0 0" }, 0);
+  // 1. Push into the live overview.
+  tl.fromTo("#s04-cap1", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 0.3);
+  tl.to("#s04-pcam", { scale: 1.6, x: -40, y: 0, duration: 1.4, ease: IO }, 0.8);
+  tl.to("#s04-spotS", { opacity: 1, duration: 0.4 }, 2.4);
+  row("#s04-r1", 2.6);
+  tl.to("#s04-spotS", { opacity: 0, duration: 0.3 }, 6.2);
+  tl.to("#s04-spotR", { opacity: 1, duration: 0.4 }, 6.4);
+  row("#s04-r2", 6.6); row("#s04-r3", 7.4);
+  tl.to("#s04-spotR", { opacity: 0, duration: 0.3 }, 10.6);
+  tl.to("#s04-pcam", { scale: 1, x: 0, y: 0, duration: 1.0, ease: IO }, 10.8);
+  tl.to(["#s04-cap1", "#s04-list"], { opacity: 0, x: -20, duration: 0.5, ease: "power2.in" }, 11.2);
+  // 2. Where the values come from.
+  tl.to("#s04-dia", { opacity: 1, duration: 0.01 }, 11.8);
+  tl.fromTo("#s04-cap2", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 11.9);
+  tl.fromTo(["#s04-n1", "#s04-n2", "#s04-n3", "#s04-n4", "#s04-n5"], { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.5, ease: E3, stagger: 0.28 }, 12.3);
+  tl.fromTo(".s04-c", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.4, ease: IO, stagger: 0.28 }, 12.6);
+  gsap.utils.toArray(".s04-p").forEach((p, i) => {
+    const at = 14.4 + i * 1.1;
+    tl.set(p, { attr: { cx: 282 }, opacity: 1 }, at);
+    tl.to(p, { attr: { cx: 1228 }, duration: 2.4, ease: "none" }, at);
+    tl.set(p, { opacity: 0 }, at + 2.41);
+  });
+  tl.fromTo("#s04-src", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 15.6);
+  tl.to("#s04-dia", { opacity: 0, duration: 0.5, ease: "power2.in" }, 21.6);
+  // 3. Back in the app: crop and growth stage.
+  tl.to("#s04-cap3", { opacity: 1, duration: 0.01 }, 22.3);
+  tl.fromTo("#s04-cap3", { x: -20 }, { x: 0, duration: 0.6, ease: E3 }, 22.3);
+  tl.to("#s04-list2", { opacity: 1, duration: 0.01 }, 26.0);
+  row("#s04-q1", 26.0); row("#s04-q2", 26.8);
+  tl.to("#s04-spotD", { opacity: 1, duration: 0.4 }, 28.6);
+  tl.to("#s04-spotD", { opacity: 0, duration: 0.3 }, 33.6);
+  tl.to(["#s04-cap3", "#s04-list2"], { opacity: 0, x: -20, duration: 0.5, ease: "power2.in" }, 34.3);
+  window.__timelines["s04"] = tl;
+})();
+</script>
+</template>
+</body></html>

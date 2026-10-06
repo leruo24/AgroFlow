@@ -1,0 +1,180 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  #s06-ph { position: absolute; left: 1236px; top: 91px; }
+  .s06-steps { position: absolute; left: 96px; top: 320px; width: 980px; }
+  .s06-step { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; font-weight: 600; font-size: 30px; color: #253126; }
+  .s06-step .n { width: 40px; height: 40px; border-radius: 50%; background: #e3f1ea; color: #184d35; font-weight: 700; font-size: 20px; display: flex; align-items: center; justify-content: center; flex: none; }
+  #s06-val { position: absolute; left: 154px; top: 476px; width: 760px; padding: 18px 22px; border-left: 4px solid #9a6214; background: #fff; border-radius: 0 14px 14px 0; box-shadow: 0 10px 26px rgba(24,77,53,.08); }
+  #s06-val .k { font-weight: 700; font-size: 16px; letter-spacing: .14em; color: #6f4510; }
+  #s06-val .m { font-weight: 600; font-size: 22px; margin-top: 8px; color: #253126; line-height: 1.35; }
+  #s06-dnote { left: 1236px; top: 52px; width: 428px; text-align: center; }
+  #s06-sent { position: absolute; left: 96px; top: 780px; }
+  /* command path */
+  .s06-node { top: 236px; width: 250px; height: 132px; }
+  .s06-node .m { font-size: 22px; }
+  #s06-field { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+  #s06-pump { position: absolute; left: 236px; top: 820px; }
+  #s06-pumpOn { position: absolute; left: 236px; top: 820px; }
+  #s06-done { position: absolute; left: 1080px; top: 470px; width: 720px; }
+  #s06-hist { position: absolute; left: 96px; top: 560px; width: 960px; font-weight: 500; font-size: 26px; line-height: 1.45; color: #4b5a4d; }
+</style>
+<div id="root" data-composition-id="s06" data-width="1920" data-height="1080">
+  <div id="s06-in" class="layer">
+    <!-- A. the farmer acts -->
+    <div id="s06-a" class="layer">
+      <div class="cap" id="s06-cap1"><div class="k">The farmer acts</div><div class="t">Water Zone 2 now — in a few taps.</div></div>
+      <div class="s06-steps">
+        <div class="s06-step" id="s06-st1"><div class="n">1</div>Switch Zone 2 to Manual</div>
+        <div class="s06-step" id="s06-st2"><div class="n">2</div>Enter a duration</div>
+        <div style="height:150px"></div>
+        <div class="s06-step" id="s06-st3"><div class="n">3</div>Correct it to 5 minutes</div>
+        <div class="s06-step" id="s06-st4"><div class="n">4</div>Confirm, and the command is sent</div>
+      </div>
+      <div id="s06-val"><div class="k">INPUT VALIDATED</div><div class="m">90 minutes is rejected: a manual run must be between 1 and 60 minutes.</div></div>
+      <div id="s06-sent" class="chip forest">Manual command sent</div>
+      <div id="s06-dnote" class="dlgnote">App dialog · text captured from the running app</div>
+    </div>
+
+    <div id="s06-ph" class="phone"><div class="pscreen"><div class="pcam" id="s06-pcam">
+      <video id="s06-v1" class="clip" src="assets/rec/m4-manual.mp4" muted playsinline data-start="0" data-duration="19.86"></video>
+      <img class="clip" src="assets/screens/m-zone2-sent.png" alt="" data-start="19.84" data-duration="5.16" />
+      <video id="s06-v2" class="clip" src="assets/rec/m5-history.mp4" muted playsinline data-start="40.2" data-duration="3.25"></video>
+      <img class="clip" src="assets/screens/m-history.png" alt="" data-start="43.4" data-duration="9.6" />
+      <div class="tap" id="s06-t1" style="left:314px;top:271px"></div>
+      <div class="tap" id="s06-t2" style="left:202px;top:355px"></div>
+      <div class="tap" id="s06-t3" style="left:202px;top:422px"></div>
+      <div class="tap" id="s06-t4" style="left:202px;top:355px"></div>
+      <div class="tap" id="s06-t5" style="left:202px;top:422px"></div>
+      <div class="spot" id="s06-spotS" style="left:236px;top:68px;width:162px;height:48px;"></div>
+      <div class="spot" id="s06-spotH" style="left:12px;top:330px;width:380px;height:130px;"></div>
+      <div class="dlg" id="s06-d1"><div class="box"><h4>Invalid Duration</h4><p>Enter a duration between 1 and 60 minutes.</p><div class="btns"><span>OK</span></div></div></div>
+      <div class="dlg" id="s06-d2"><div class="box"><h4>Start Manual Irrigation?</h4><p>Run irrigation for 5 minutes?</p><div class="btns"><span style="color:#637064">CANCEL</span><span id="s06-ok">START</span></div></div></div>
+    </div></div></div>
+
+    <!-- C. the command reaches the field (conceptual) -->
+    <div id="s06-c" class="layer">
+      <div class="cap" id="s06-cap3"><div class="k">From the app to the pump</div><div class="t">The command travels back to the field.</div></div>
+      <svg class="layer" viewBox="0 0 1920 1080">
+        <defs><linearGradient id="s06-soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a6c51"/><stop offset="1" stop-color="#664c39"/></linearGradient></defs>
+        <g stroke="#9fb799" stroke-width="3" fill="none">
+          <path class="s06-cl" pathLength="1" d="M346 302 H406"/><path class="s06-cl" pathLength="1" d="M656 302 H716"/>
+          <path class="s06-cl" pathLength="1" d="M966 302 H1026"/><path class="s06-cl" pathLength="1" d="M1276 302 H1336"/>
+          <path class="s06-cl" pathLength="1" d="M1461 368 C 1461 470, 330 450, 330 560"/>
+        </g>
+        <circle id="s06-pk" cx="221" cy="302" r="11" fill="#168f99" stroke="#fff" stroke-width="3" opacity="0"/>
+        <!-- field close-up -->
+        <rect x="80" y="760" width="1760" height="230" rx="18" fill="url(#s06-soil)"/>
+        <rect id="s06-wet" x="560" y="760" width="1240" height="230" rx="18" fill="#2d6f8a" opacity="0"/>
+        <rect x="80" y="752" width="1760" height="14" rx="7" fill="#86b77a"/>
+        <rect x="270" y="560" width="120" height="86" rx="12" fill="#16241c"/>
+        <rect x="286" y="574" width="62" height="44" rx="5" fill="#2f6b4b"/>
+        <text x="330" y="636" font-size="14" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1.5">ESP32</text>
+        <rect x="270" y="666" width="120" height="44" rx="8" fill="#fff" stroke="#16241c" stroke-width="2.5"/>
+        <text x="314" y="694" font-size="14" font-weight="700" fill="#253126" text-anchor="middle" letter-spacing="1.5">RELAY</text>
+        <circle id="s06-led" cx="368" cy="688" r="7" fill="#c9d3cb"/>
+        <rect x="140" y="700" width="96" height="52" rx="10" fill="#fff" stroke="#16241c" stroke-width="2.5"/>
+        <circle cx="166" cy="726" r="14" fill="#e4e7e4" stroke="#16241c" stroke-width="2"/>
+        <text x="188" y="690" font-size="14" font-weight="700" fill="#253126" text-anchor="middle" letter-spacing="1.5">PUMP</text>
+        <path d="M270 688 H252 V700" stroke="#4b5a4d" stroke-width="3" fill="none"/>
+        <path d="M236 726 H520 V748 H1780" stroke="#0f6b73" stroke-width="9" fill="none"/>
+        <path id="s06-flow" pathLength="1" d="M236 726 H520 V748 H1780" stroke="#9fe3e6" stroke-width="4" fill="none" stroke-dasharray="0.012 0.018" opacity="0"/>
+        <g id="s06-crops" fill="#4f8f62">
+          <g transform="translate(640 750)"><path d="M0 0 V-46" stroke="#2f6b4b" stroke-width="4"/><ellipse cx="-14" cy="-22" rx="16" ry="8"/><ellipse cx="14" cy="-34" rx="16" ry="8"/><ellipse cx="-8" cy="-46" rx="12" ry="7"/></g>
+          <g transform="translate(820 750)"><path d="M0 0 V-46" stroke="#2f6b4b" stroke-width="4"/><ellipse cx="-14" cy="-22" rx="16" ry="8"/><ellipse cx="14" cy="-34" rx="16" ry="8"/><ellipse cx="-8" cy="-46" rx="12" ry="7"/></g>
+          <g transform="translate(1000 750)"><path d="M0 0 V-46" stroke="#2f6b4b" stroke-width="4"/><ellipse cx="-14" cy="-22" rx="16" ry="8"/><ellipse cx="14" cy="-34" rx="16" ry="8"/><ellipse cx="-8" cy="-46" rx="12" ry="7"/></g>
+          <g transform="translate(1180 750)"><path d="M0 0 V-46" stroke="#2f6b4b" stroke-width="4"/><ellipse cx="-14" cy="-22" rx="16" ry="8"/><ellipse cx="14" cy="-34" rx="16" ry="8"/><ellipse cx="-8" cy="-46" rx="12" ry="7"/></g>
+          <g transform="translate(1360 750)"><path d="M0 0 V-46" stroke="#2f6b4b" stroke-width="4"/><ellipse cx="-14" cy="-22" rx="16" ry="8"/><ellipse cx="14" cy="-34" rx="16" ry="8"/><ellipse cx="-8" cy="-46" rx="12" ry="7"/></g>
+          <g transform="translate(1540 750)"><path d="M0 0 V-46" stroke="#2f6b4b" stroke-width="4"/><ellipse cx="-14" cy="-22" rx="16" ry="8"/><ellipse cx="14" cy="-34" rx="16" ry="8"/><ellipse cx="-8" cy="-46" rx="12" ry="7"/></g>
+          <g transform="translate(1720 750)"><path d="M0 0 V-46" stroke="#2f6b4b" stroke-width="4"/><ellipse cx="-14" cy="-22" rx="16" ry="8"/><ellipse cx="14" cy="-34" rx="16" ry="8"/><ellipse cx="-8" cy="-46" rx="12" ry="7"/></g>
+        </g>
+        <text x="960" y="900" font-size="16" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="2">ZONE 2 · SPINACH</text>
+      </svg>
+      <div class="node card s06-node" id="s06-n1" style="left:96px;"><div class="h">Farmer app</div><div class="m">Start · 5 min</div><div class="sm">sent to the API</div></div>
+      <div class="node card s06-node" id="s06-n2" style="left:406px;"><div class="h">AgroFlow.Api</div><div class="m">Checks &amp; saves</div><div class="sm mono" style="font-size:14px">irrigation_commands</div></div>
+      <div class="node card s06-node" id="s06-n3" style="left:716px;"><div class="h">Supabase</div><div class="m">New command</div><div class="sm">notifies the service</div></div>
+      <div class="node card s06-node" id="s06-n4" style="left:1026px;"><div class="h">MQTT broker</div><div class="m">Publishes</div><div class="sm mono" style="font-size:14px">…/device/{id}/commands</div></div>
+      <div class="node card s06-node" id="s06-n5" style="left:1336px;"><div class="h">ESP32</div><div class="m">Switches the relay</div><div class="sm">runs the pump</div></div>
+      <div id="s06-pump" class="chip" style="background:#e4e7e4;color:#253126;">Pump off</div>
+      <div id="s06-pumpOn" class="chip teal" data-layout-allow-overlap>Pump on · 5 min</div>
+      <div id="s06-done" class="card" style="padding:20px 24px;">
+        <div style="font-weight:700;font-size:16px;letter-spacing:.14em;color:#184d35">IRRIGATION EVENT RECORDED</div>
+        <div style="font-weight:600;font-size:22px;margin-top:8px;line-height:1.35">When the run ends, the ESP32 reports it to AgroFlow.</div>
+        <div class="mono" style="font-size:15px;color:#637064;margin-top:6px">POST /api/irrigation-events · runtime 300 s</div>
+      </div>
+    </div>
+
+    <!-- D. later, in history -->
+    <div class="cap" id="s06-cap4"><div class="k">Later the same day</div><div class="t">The run is on the record.</div></div>
+    <div id="s06-hist">History shows the watering AgroFlow recorded for Zone 2 — five minutes, started manually — next to the command the farmer sent.</div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out", IO = "power2.inOut";
+  const tap = (sel, at) => tl.fromTo(sel, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, at);
+  const step = (sel, at) => tl.fromTo(sel, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, at);
+  tl.set(["#s06-c", "#s06-cap4", "#s06-hist"], { opacity: 0 }, 0);
+  // A. the real interaction (video events: manual 3.03, field 4.927, start 6.394,
+  // alert 6.851-9.452, field 12.693, start 14.028, confirm 14.484-17.084).
+  tl.fromTo("#s06-cap1", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 0.2);
+  tap("#s06-t1", 3.483); step("#s06-st1", 3.5);
+  tap("#s06-t2", 5.399); step("#s06-st2", 5.4);
+  tap("#s06-t3", 6.863);
+  tl.to("#s06-d1", { opacity: 1, duration: 0.15 }, 6.872);
+  tl.fromTo("#s06-d1 .box", { scale: 0.94, transformOrigin: "50% 50%" }, { scale: 1, duration: 0.2, ease: E3 }, 6.872);
+  tl.to("#s06-dnote", { opacity: 1, duration: 0.3 }, 6.9);
+  tl.fromTo("#s06-val", { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, 7.2);
+  tl.to("#s06-d1", { opacity: 0, duration: 0.15 }, 9.472);
+  tl.to("#s06-dnote", { opacity: 0, duration: 0.3 }, 9.5);
+  tap("#s06-t4", 13.165); step("#s06-st3", 13.2);
+  tap("#s06-t5", 14.495);
+  tl.to("#s06-d2", { opacity: 1, duration: 0.15 }, 14.502);
+  tl.fromTo("#s06-d2 .box", { scale: 0.94, transformOrigin: "50% 50%" }, { scale: 1, duration: 0.2, ease: E3 }, 14.502);
+  tl.to("#s06-dnote", { opacity: 1, duration: 0.3 }, 14.5);
+  step("#s06-st4", 15.2);
+  tl.fromTo("#s06-ok", { color: "#168f99" }, { color: "#0b4f55", duration: 0.2 }, 16.7);
+  tl.to("#s06-d2", { opacity: 0, duration: 0.15 }, 17.103);
+  tl.to("#s06-dnote", { opacity: 0, duration: 0.3 }, 17.1);
+  tl.fromTo("#s06-sent", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 17.6);
+  tl.to("#s06-spotS", { opacity: 1, duration: 0.4 }, 20.2);
+  tl.to("#s06-spotS", { opacity: 0, duration: 0.3 }, 24.2);
+  tl.to("#s06-a", { opacity: 0, x: -20, duration: 0.5, ease: "power2.in" }, 24.4);
+  tl.to("#s06-ph", { opacity: 0, x: 80, duration: 0.6, ease: "power2.in" }, 24.5);
+  // C. command path and the field.
+  tl.to("#s06-c", { opacity: 1, duration: 0.01 }, 25.0);
+  tl.fromTo("#s06-cap3", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 25.0);
+  tl.fromTo(["#s06-n1", "#s06-n2", "#s06-n3", "#s06-n4", "#s06-n5"], { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E3, stagger: 0.18 }, 25.3);
+  tl.fromTo(".s06-cl", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.35, ease: IO, stagger: 0.18 }, 25.6);
+  tl.fromTo("#s06-pump", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 26.4);
+  tl.set("#s06-pk", { attr: { cx: 221, cy: 302 }, opacity: 1 }, 27.0);
+  tl.to("#s06-pk", { keyframes: [
+    { attr: { cx: 1461, cy: 302 }, duration: 3.4, ease: "none" },
+    { attr: { cx: 1461, cy: 420 }, duration: 0.5, ease: "none" },
+    { attr: { cx: 330, cy: 520 }, duration: 0.9, ease: "none" },
+    { attr: { cx: 330, cy: 560 }, duration: 0.3, ease: "none" } ] }, 27.0);
+  tl.set("#s06-pk", { opacity: 0 }, 32.15);
+  tl.to("#s06-led", { attr: { fill: "#42c3c7" }, duration: 0.12 }, 32.3);
+  tl.to("#s06-pump", { opacity: 0, duration: 0.15 }, 32.9);
+  tl.fromTo("#s06-pumpOn", { opacity: 0, scale: 0.9, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.35, ease: E3 }, 32.9);
+  tl.fromTo("#s06-flow", { opacity: 1, strokeDashoffset: 0 }, { strokeDashoffset: -0.3, duration: 6.5, ease: "none" }, 33.0);
+  tl.fromTo("#s06-wet", { opacity: 0 }, { opacity: 0.32, duration: 4.5, ease: "power1.inOut" }, 34.0);
+  tl.fromTo("#s06-done", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 37.0);
+  tl.to("#s06-c", { opacity: 0, duration: 0.5, ease: "power2.in" }, 39.5);
+  // D. history.
+  tl.fromTo("#s06-ph", { opacity: 0, x: 80 }, { opacity: 1, x: 0, duration: 0.6, ease: E3, immediateRender: false }, 40.0);
+  tl.to(["#s06-cap4", "#s06-hist"], { opacity: 1, duration: 0.01 }, 40.4);
+  tl.fromTo("#s06-cap4", { x: -20 }, { x: 0, duration: 0.6, ease: E3 }, 40.4);
+  tl.fromTo("#s06-hist", { y: 14 }, { y: 0, duration: 0.6, ease: E3 }, 44.0);
+  tl.to("#s06-spotH", { opacity: 1, duration: 0.4 }, 44.2);
+  tl.to("#s06-spotH", { opacity: 0, duration: 0.3 }, 52.0);
+  tl.to(["#s06-cap4", "#s06-hist"], { opacity: 0, x: -20, duration: 0.5, ease: "power2.in" }, 52.3);
+  window.__timelines["s06"] = tl;
+})();
+</script>
+</template>
+</body></html>

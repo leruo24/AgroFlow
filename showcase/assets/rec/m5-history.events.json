@@ -1,0 +1,14 @@
+{
+  "duration": 6.895,
+  "width": 780,
+  "height": 1688,
+  "events": [
+    {
+      "type": "tap",
+      "t": 3.343,
+      "x": 189,
+      "y": 135,
+      "label": "alerts & advice"
+    }
+  ]
+}

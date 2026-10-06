@@ -1,0 +1,18 @@
+{
+  "dialogs": [
+    {
+      "type": "alert",
+      "message": "Invalid Duration\n\nEnter a duration between 1 and 60 minutes."
+    },
+    {
+      "type": "confirm",
+      "message": "Start Manual Irrigation?\n\nRun irrigation for 5 minutes?"
+    }
+  ],
+  "commands": [
+    {
+      "command": "start",
+      "durationSeconds": 300
+    }
+  ]
+}

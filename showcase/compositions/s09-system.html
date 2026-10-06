@@ -1,0 +1,80 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  .s09-col { position: absolute; padding: 24px 26px; }
+  .s09-col .h { font-weight: 700; font-size: 16px; letter-spacing: .16em; color: #184d35; }
+  .s09-it { display: flex; align-items: center; gap: 12px; margin-top: 18px; font-weight: 600; font-size: 23px; color: #253126; }
+  .s09-it i { width: 12px; height: 12px; border-radius: 4px; background: #4f8f62; display: block; flex: none; }
+  .s09-it small { font-weight: 500; font-size: 17px; color: #4b5a4d; margin-left: auto; }
+  #s09-words { position: absolute; left: 0; right: 0; top: 470px; display: flex; justify-content: center; gap: 70px; }
+  .s09-w { font-weight: 700; font-size: 76px; letter-spacing: .05em; }
+</style>
+<div id="root" data-composition-id="s09" data-width="1920" data-height="1080">
+  <div id="s09-in" class="layer">
+    <div id="s09-dia" class="layer">
+      <div class="cap" id="s09-cap"><div class="k">The complete system</div><div class="t">From the soil to the people who depend on it.</div></div>
+      <svg class="layer" viewBox="0 0 1920 1080">
+        <g stroke="#9fb799" stroke-width="3" fill="none">
+          <path class="s09-c" pathLength="1" d="M500 500 H700"/><path class="s09-c" pathLength="1" d="M700 640 H500"/>
+          <path class="s09-c" pathLength="1" d="M1220 450 H1400"/><path class="s09-c" pathLength="1" d="M1400 500 H1220"/>
+          <path class="s09-c" pathLength="1" d="M1220 700 H1400"/>
+        </g>
+        <g fill="#637064" font-size="15" font-weight="600" letter-spacing="1">
+          <text x="600" y="486" text-anchor="middle">READINGS</text><text x="600" y="672" text-anchor="middle">COMMANDS</text>
+        </g>
+        <circle class="pkt s09-g" cx="500" cy="500" r="9" opacity="0"/><circle class="pkt s09-g" cx="500" cy="500" r="9" opacity="0"/><circle class="pkt s09-g" cx="500" cy="500" r="9" opacity="0"/>
+        <circle class="pkt w s09-b" cx="700" cy="640" r="9" opacity="0"/><circle class="pkt w s09-b" cx="700" cy="640" r="9" opacity="0"/>
+        <circle class="pkt s09-u" cx="1220" cy="450" r="9" opacity="0"/><circle class="pkt w s09-a" cx="1400" cy="500" r="9" opacity="0"/><circle class="pkt s09-v" cx="1220" cy="700" r="9" opacity="0"/>
+      </svg>
+      <div class="s09-col card" id="s09-c1" style="left:140px;top:330px;width:360px;height:420px;">
+        <div class="h">FIELD</div>
+        <div class="s09-it"><i></i>Sensors<small>soil · temp/humidity</small></div>
+        <div class="s09-it"><i></i>ESP32<small>one per zone</small></div>
+        <div class="s09-it"><i style="background:#168f99"></i>Relay &amp; pump<small>runs the water</small></div>
+      </div>
+      <div class="s09-col card" id="s09-c2" style="left:700px;top:290px;width:520px;height:500px;border:2px solid #184d35;">
+        <div class="h">CONNECTED AGROFLOW PLATFORM</div>
+        <div class="s09-it"><i style="background:#168f99"></i>Connectivity<small>MQTT over TLS</small></div>
+        <div class="s09-it"><i></i>Services<small>AgroFlow.Api</small></div>
+        <div class="s09-it"><i></i>Data<small>Supabase · Postgres</small></div>
+        <div class="s09-it"><i></i>Decision support<small>FAO-56 water balance</small></div>
+        <div class="s09-it"><i style="background:#168f99"></i>Weather<small>Open-Meteo forecast</small></div>
+      </div>
+      <div class="s09-col card" id="s09-c3" style="left:1400px;top:330px;width:380px;height:220px;">
+        <div class="h">FARMER</div><div class="s09-it" style="font-size:26px">Mobile app</div><div class="s09-it" style="font-size:18px;font-weight:500;color:#4b5a4d;margin-top:8px">Conditions, advice, action</div></div>
+      <div class="s09-col card" id="s09-c4" style="left:1400px;top:590px;width:380px;height:200px;">
+        <div class="h">ADMINISTRATOR</div><div class="s09-it" style="font-size:26px">Admin console</div><div class="s09-it" style="font-size:18px;font-weight:500;color:#4b5a4d;margin-top:8px">Farms, kits, alerts, upkeep</div></div>
+    </div>
+    <div id="s09-words">
+      <div class="s09-w" id="s09-w1" style="color:#2f6b4b">SENSE</div>
+      <div class="s09-w" id="s09-w2" style="color:#184d35">UNDERSTAND</div>
+      <div class="s09-w" id="s09-w3" style="color:#0f6b73">ACT</div>
+      <div class="s09-w" id="s09-w4" style="color:#253126">MONITOR</div>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out", IO = "power2.inOut";
+  const run = (el, x0, y0, x1, y1, at, d) => { tl.set(el, { attr: { cx: x0, cy: y0 }, opacity: 1 }, at); tl.to(el, { attr: { cx: x1, cy: y1 }, duration: d, ease: "none" }, at); tl.set(el, { opacity: 0 }, at + d + 0.01); };
+  tl.fromTo("#s09-cap", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 0.2);
+  tl.fromTo(["#s09-c1", "#s09-c2", "#s09-c3", "#s09-c4"], { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E3, stagger: 0.2 }, 0.3);
+  tl.fromTo(".s09-c", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.5, ease: IO, stagger: 0.1 }, 1.0);
+  gsap.utils.toArray(".s09-g").forEach((p, i) => { run(p, 500, 500, 700, 500, 1.8 + i * 1.6, 0.8); });
+  gsap.utils.toArray(".s09-b").forEach((p, i) => { run(p, 700, 640, 500, 640, 2.6 + i * 2.2, 0.8); });
+  run(document.querySelector(".s09-u"), 1220, 450, 1400, 450, 2.2, 0.7);
+  run(document.querySelector(".s09-a"), 1400, 500, 1220, 500, 3.6, 0.7);
+  run(document.querySelector(".s09-v"), 1220, 700, 1400, 700, 4.4, 0.7);
+  run(document.querySelectorAll(".s09-u")[0], 1220, 450, 1400, 450, 5.6, 0.7);
+  tl.to("#s09-dia", { opacity: 0, y: -30, duration: 0.6, ease: "power2.in" }, 8.2);
+  ["#s09-w1", "#s09-w2", "#s09-w3", "#s09-w4"].forEach((w, i) => tl.fromTo(w, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 9.0 + i * 0.9));
+  tl.to("#s09-in", { opacity: 0, duration: 0.45 }, 15.5);
+  window.__timelines["s09"] = tl;
+})();
+</script>
+</template>
+</body></html>
