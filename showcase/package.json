@@ -8,6 +8,7 @@
     "preview:render": "npx --yes hyperframes@0.8.137 render -f 25 -q draft -o renders/agroflow-showcase-preview.mp4",
     "render": "npx --yes hyperframes@0.8.137 render -f 25 -q delivery --crf 12 -o renders/INF3003W_Team2_ShowcaseDemo_2026.mp4",
     "record:mobile": "node capture/mobile-record.mjs",
-    "record:admin": "node capture/admin-record.mjs"
+    "record:admin": "node capture/admin-record.mjs",
+    "render:4k": "npx --yes hyperframes@0.8.137 render -f 25 -q delivery --crf 14 --resolution 4k -o renders/INF3003W_Team2_ShowcaseDemo_2026_4K.mp4"
   }
 }

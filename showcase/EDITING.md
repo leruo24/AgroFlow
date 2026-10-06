@@ -16,7 +16,7 @@ In `renders/edit-kit/`:
 | `voiceover.m4a` | The narration on its own, full length |
 | `sound-effects.m4a` | The small click/tick/chime effects on their own, full length |
 
-There are also per-scene clips with sound in `renders/clips/` (`01-title.mp4` … `10-endplate.mp4`) and the finished video with sound in `renders/INF3003W_Team2_ShowcaseDemo_2026.mp4`.
+There are also per-scene clips with sound in `renders/clips/` (`01-title.mp4` … `10-endplate.mp4`) and the finished video with sound in `renders/INF3003W_Team2_ShowcaseDemo_2026.mp4` (1080p, what the brief asks for) and `renders/INF3003W_Team2_ShowcaseDemo_2026_4K.mp4` (3840×2160, same content).
 
 **How to use the edit kit:**
 1. Make a new project at **1920×1080, 25 fps**.
@@ -68,7 +68,8 @@ Or install the HyperFrames desktop app and open the `showcase` folder.
 **After editing:**
 ```bash
 npx hyperframes check     # catches mistakes
-npm run render            # writes renders/INF3003W_Team2_ShowcaseDemo_2026.mp4
+npm run render            # writes renders/INF3003W_Team2_ShowcaseDemo_2026.mp4 (1080p)
+npm run render:4k         # writes the 4K version (about 30 min)
 ./split-clips.sh          # re-cuts the per-scene clips
 ./make-edit-kit.sh        # rebuilds the Option A files
 ```
