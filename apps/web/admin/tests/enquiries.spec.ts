@@ -153,3 +153,31 @@ test("Start onboarding fills the onboarding form from the enquiry, and finishing
   const linked = writes.find((w) => w.path === "/api/admin/enquiries/3/onboarded")!;
   expect(linked.body).toEqual({ farmerProfileId: "00000000-0000-4000-8000-0000000000f9" });
 });
+
+test("the Enquiries & sales follow-up report downloads with its period, province and handler", async ({ page }) => {
+  const asked: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/api/admin/reports/enquiries.")) asked.push(r.url());
+  });
+  await open(page, "/#reports");
+  const panel = page.locator(".panel", { hasText: "Enquiries & sales follow-up" });
+  await expect(panel).toBeVisible({ timeout: 15000 });
+
+  await panel.locator("[data-enq-from]").fill("2026-09-01");
+  await panel.locator("[data-enq-to]").fill("2026-09-30");
+  await panel.locator("[data-enq-province]").selectOption("North West");
+  // The handler list is the admins who have handled an enquiry.
+  await panel.locator("[data-enq-handler]").selectOption({ label: "Test Admin" });
+  await panel.getByRole("button", { name: "Download PDF" }).click();
+  await expect.poll(() => asked.length).toBe(1);
+
+  const url = new URL(asked[0]);
+  expect(url.pathname).toBe("/api/admin/reports/enquiries.pdf");
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    from: "2026-09-01", to: "2026-09-30", province: "North West", handler: ADMIN_ID,
+  });
+
+  await panel.getByRole("button", { name: "Download Excel" }).click();
+  await expect.poll(() => asked.length).toBe(2);
+  expect(new URL(asked[1]).pathname).toBe("/api/admin/reports/enquiries.xlsx");
+});

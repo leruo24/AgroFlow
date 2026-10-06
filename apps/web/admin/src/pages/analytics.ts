@@ -13,7 +13,7 @@ import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
 import { emptyState, withErrorState } from "@/ui/patterns";
 import { getActivityLog, type AuditRow } from "@/services/agroFlowApi";
-import { getReportFarms, type ReportFarm } from "@/services/agroFlowApi";
+import { getReportFarms, getEnquiries, type ReportFarm } from "@/services/agroFlowApi";
 import { getAttentionThisWeek, type AttentionGroup } from "@/data/api";
 
 /* ============================ IRRIGATION DATA ============================ */
@@ -318,12 +318,51 @@ function comparisonPanel(): string {
     <div id="cmpResult" class="cmp-result"></div>`);
 }
 
+/* Item 6c: "Enquiries & sales follow-up" - for the team that phones people
+   back. Period, province and handler; PDF or Excel, the same content. */
+const ENQUIRY_PROVINCES = [
+  "Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo",
+  "Mpumalanga", "North West", "Northern Cape", "Western Cape",
+];
+
+function enquiriesReportPanel(handlers: { id: string; name: string }[]): string {
+  const today = new Date();
+  const iso = (d: Date): string => d.toISOString().slice(0, 10);
+  const monthAgo = new Date(today.getTime() - 29 * 86400000);
+  return panel("Enquiries & sales follow-up",
+    "Who asked about AgroFlow, how the calls went, why people said no, and what to do next.", "", `
+    <div class="fields enquiry-report">
+      <label class="f">From<input type="date" data-enq-from value="${iso(monthAgo)}" /></label>
+      <label class="f">To<input type="date" data-enq-to value="${iso(today)}" /></label>
+      <label class="f">Province
+        <select data-enq-province>
+          <option value="">All provinces</option>
+          ${ENQUIRY_PROVINCES.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="f">Handled by
+        <select data-enq-handler>
+          <option value="">Everyone</option>
+          ${handlers.map((h) => `<option value="${esc(h.id)}">${esc(h.name)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div class="form-foot">
+      <button type="button" class="btn ghost" data-act="enquiry-report" data-format="xlsx">Download Excel</button>
+      <button type="button" class="btn" data-act="enquiry-report" data-format="pdf">Download PDF</button>
+    </div>`);
+}
+
 export async function reportsPage(): Promise<string> {
-  const [growth, farms, attention] = await Promise.all([
+  const [growth, farms, attention, enquiries] = await Promise.all([
     api.getGrowth(),
     getReportFarms().catch(() => null),
     getAttentionThisWeek().catch(() => null),
+    getEnquiries().catch(() => []),
   ]);
+  const handlers = [...new Map(enquiries
+    .filter((e) => e.handledBy && e.handledByName)
+    .map((e) => [e.handledBy!, { id: e.handledBy!, name: e.handledByName! }])).values()];
   const chosen = farms ? preferredFarm(farms) : null;
 
   return `
@@ -337,6 +376,8 @@ export async function reportsPage(): Promise<string> {
   </div>
 
   ${comparisonPanel()}
+
+  ${enquiriesReportPanel(handlers)}
 
   <div class="grid split-2">
     ${panel("New farmers and farms", "Per month, last 12 months", "", `

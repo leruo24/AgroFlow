@@ -2085,6 +2085,28 @@ case "delete-user": {
     case "go-mqtt-logins":
       return void navigate("mqttLogins");
 
+    /* Item 6c: the Enquiries & sales follow-up report. */
+    case "enquiry-report": {
+      const val = (sel: string): string =>
+        (document.querySelector<HTMLInputElement | HTMLSelectElement>(sel)?.value ?? "").trim();
+      const from = val("[data-enq-from]");
+      const to = val("[data-enq-to]");
+      if (from && to && from > to) return void toast("The start date is after the end date.", "warn");
+      const qs = new URLSearchParams();
+      if (from) qs.set("from", from);
+      if (to) qs.set("to", to);
+      if (val("[data-enq-province]")) qs.set("province", val("[data-enq-province]"));
+      if (val("[data-enq-handler]")) qs.set("handler", val("[data-enq-handler]"));
+      const format = el.dataset["format"] === "xlsx" ? "xlsx" : "pdf";
+      try {
+        await downloadReportFile(`/api/admin/reports/enquiries.${format}?${qs.toString()}`,
+          `agroflow-enquiries-${from || "last-30-days"}_${to || "today"}.${format}`);
+        return void toast("Report downloaded.", "success");
+      } catch (e) {
+        return void showErrorModal("Could not build the report", e instanceof Error ? e.message : "Try again.");
+      }
+    }
+
     /* Item 6c: the two tabs on Requests. */
     case "requests-tab":
       setRequestsTab(el.dataset["tab"] ?? "requests");

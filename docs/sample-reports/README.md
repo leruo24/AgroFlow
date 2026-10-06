@@ -24,3 +24,15 @@ bars past 14 days; no soil chart without the wet/dry setup; the weather
 comparison only on days the tub sensor reported; one "Improve your advice"
 line per step, naming every zone it applies to; all FAO-56 symbols and page
 numbers only in the technical appendix.
+
+## Enquiries & sales follow-up (item 6c)
+
+`enquiries-follow-up.pdf` and `.xlsx`, from `EnquiryReportTests`' fixed set of
+seven made-up enquiries (one outside the period), written by
+`AGROFLOW_WRITE_SAMPLES=1 dotnet test --filter EnquiryReport`. No real
+person's details: the report never reads names, phone numbers or emails.
+
+What to look for: "Do this next" first (call-backs due today, enquiries past
+the promised 2 working days, three unanswered calls, the top reason for
+"no"); then the five figures, and one chart per question, each heading kept
+on the page with its chart.

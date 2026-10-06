@@ -15,7 +15,7 @@ what is next.
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
 | 6 | done | 77b9533, be80a1a | Apply migration 0042 | 6b |
 | 6b | done | f079cde | Apply migration 0043 | 6c |
-| 6c | in progress | b8cf3a2, 6c4982b, part 3 (this commit) | Apply migration 0044; part 4: enquiry report | 6c part 4 |
+| 6c | done | b8cf3a2, 6c4982b, 2d7a988, part 4 (this commit) | Apply migration 0044 | Land Part 1, then Part 2 |
 
 ---
 
@@ -725,3 +725,30 @@ answer; when anonymising is allowed; no actor in any body). Admin Playwright
 Not interested needs a reason and words for Other, and sends no actor;
 call-back needs a time; Close after three; Delete personal details;
 onboarding prefilled and completing the enquiry).
+
+
+### Part 4: the Enquiries & sales follow-up report
+
+- Reports page → **Enquiries & sales follow-up**: period (last 30 days by
+  default), province, handled by; **Download PDF** or **Download Excel**
+  (`GET /api/admin/reports/enquiries.pdf|.xlsx`, admin only). Same designed
+  shell as the farm reports.
+- Action-led: **Do this next** first - call-backs due today, enquiries older
+  than 2 working days with no call (what the form promised), enquiries with
+  three unanswered calls, and the top reason for "no" (with "consider the
+  offline kit option" when it is WiFi, as the brief suggests). Then: received,
+  called, became farmers (conversion %), average time to first call,
+  call-backs due; charts for outcomes, why people said no (with the "Other"
+  texts), by province, time to first call by week, calls per admin.
+- Built once (`EnquiryReport.Compose`), so the PDF and the workbook cannot
+  disagree. It reads no names, phone numbers or emails.
+- Sample: `docs/sample-reports/enquiries-follow-up.pdf|.xlsx`, from made-up
+  test data. Viewing it found headings stranded at a page foot with their
+  chart overleaf, and "WiFi" lowercased; both fixed.
+
+Tests: backend 962 → 972 (`EnquiryReportTests`: every count against a
+hand-worked set of seven enquiries - my own first expectation for the weekly
+chart was wrong and the code right, corrected in the test; "Do this next";
+filters; working days skip weekends; the PDF and workbook render; filter
+parsing). Admin Playwright 37 → 38 (the download carries period, province
+and handler).
