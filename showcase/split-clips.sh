@@ -7,7 +7,7 @@ SRC=renders/INF3003W_Team2_ShowcaseDemo_2026.mp4
 OUT=renders/clips
 mkdir -p "$OUT"
 while read -r name start end; do
-  ffmpeg -v error -y -ss "$start" -to "$end" -i "$SRC" \
+  ffmpeg -nostdin -v error -y -ss "$start" -to "$end" -i "$SRC" \
     -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -r 25 \
     -c:a aac -b:a 192k -ar 48000 -movflags +faststart "$OUT/$name.mp4"
   echo "$name  $start–$end s"
