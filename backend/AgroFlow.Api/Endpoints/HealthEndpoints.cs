@@ -233,17 +233,27 @@ public static class HealthEndpoints
         }
     }
 
-    private static HealthCheck CheckMqtt(MqttConnectionService mqtt)
+    private static HealthCheck CheckMqtt(MqttConnectionService mqtt) =>
+        MqttCheck(mqtt.IsConnected, mqtt.DisconnectedSinceUtc, DateTimeOffset.UtcNow);
+
+    /// DATA RULE: how long a broker may be out of reach before it is "down".
+    public static readonly TimeSpan MqttDownAfter = TimeSpan.FromMinutes(2);
+
+    // A short drop is amber: the loop retries every 10 s and usually
+    // recovers. Out of reach for longer than MqttDownAfter is red (Part 2:
+    // an unreachable broker must show as down, not as a blip).
+    public static HealthCheck MqttCheck(bool connected, DateTimeOffset? disconnectedSinceUtc, DateTimeOffset nowUtc)
     {
-        // Not an error: the connection loop retries every 10 s, so a
-        // disconnected broker is usually a blip being recovered from. It is
-        // amber because readings and commands are not flowing while it
-        // lasts.
-        return mqtt.IsConnected
-            ? new HealthCheck("mqtt", "MQTT broker", Ok,
-                "Connected. Readings and commands are flowing.")
-            : new HealthCheck("mqtt", "MQTT broker", Warning,
-                "Not connected. Retrying every 10 seconds. Kits cannot send readings or receive commands.");
+        if (connected)
+            return new HealthCheck("mqtt", "MQTT broker", Ok, "Connected. Readings and commands are flowing.");
+
+        var gone = disconnectedSinceUtc is { } since ? nowUtc - since : TimeSpan.Zero;
+        if (gone >= MqttDownAfter)
+            return new HealthCheck("mqtt", "MQTT broker", Down,
+                $"Could not be reached for {(int)gone.TotalMinutes} minutes. Kits cannot send readings or receive commands; retrying every 10 seconds.");
+
+        return new HealthCheck("mqtt", "MQTT broker", Warning,
+            "Not connected. Retrying every 10 seconds. Kits cannot send readings or receive commands.");
     }
 
     private static HealthCheck CheckTelegram(TelegramOptions options, TelegramPollingService poller)

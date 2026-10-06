@@ -332,6 +332,26 @@ StartupConfigurationDiagnostics.Log(
     app.Services.GetRequiredService<IOptions<TelegramOptions>>(),
     app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("AgroFlow.Api.Startup"));
 
+// Part 2 (DependencyFailureTests): an unhandled exception used to reach the
+// person as a bare 500 with no body. Now it is a sentence: 503 when the
+// database or the network is out of reach (try again), 500 otherwise. The
+// exception itself goes to the log, never to the caller.
+app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
+{
+    var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    var unreachable = error is Npgsql.NpgsqlException or System.Net.Sockets.SocketException or TimeoutException;
+    context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("AgroFlow.Api.Errors")
+        .LogError(error, "Unhandled error on {Method} {Path}.", context.Request.Method, context.Request.Path);
+
+    context.Response.StatusCode = unreachable ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status500InternalServerError;
+    await context.Response.WriteAsJsonAsync(new
+    {
+        error = unreachable
+            ? "AgroFlow cannot reach its database right now. Please try again in a few minutes."
+            : "Something went wrong on our side. Please try again.",
+    });
+}));
+
 app.UseCors("AdminFrontend");
 
 app.UseCors();

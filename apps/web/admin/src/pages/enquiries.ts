@@ -8,6 +8,7 @@
    (POPIA), keeping what the statistics need. Every step is on the record. */
 
 import { badge } from "@/ui/components";
+import { ZONE_CROPS } from "@/data/referenceData";
 import { esc, fmtDateTimeSast } from "@/lib/format";
 import type { Enquiry, EnquiryCall } from "@/services/agroFlowApi";
 
@@ -29,10 +30,7 @@ export const OUTCOMES: { value: string; label: string }[] = [
   { value: "not_interested", label: "Not interested" },
 ];
 
-const CROP_LABELS: Record<string, string> = {
-  potato: "Potato", tomato: "Tomato", citrus: "Citrus", leafy_veg: "Leafy vegetables",
-  maize: "Maize", dry_beans: "Dry beans",
-};
+const CROP_LABELS: Record<string, string> = Object.fromEntries(ZONE_CROPS.map((c) => [c.value, c.label]));
 
 export function reasonLabel(e: { reason: string | null; reasonOther: string | null }): string {
   if (!e.reason) return "";

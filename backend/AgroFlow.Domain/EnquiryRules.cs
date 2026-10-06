@@ -36,7 +36,7 @@ namespace AgroFlow.Business
         };
 
         /// <summary>The crops the engine has figures for, plus "other".</summary>
-        public static readonly string[] Crops = { "potato", "tomato", "citrus", "leafy_veg", "maize", "dry_beans", "other" };
+        public static readonly string[] Crops = { "maize", "potato", "tomato", "dry_beans", "citrus", "leafy_veg", "cucumber", "spinach", "other" };
 
         public static readonly string[] BestTimes = { "morning", "afternoon", "evening" };
 
@@ -117,6 +117,7 @@ namespace AgroFlow.Business
         {
             ["potato"] = "potato", ["tomato"] = "tomato", ["citrus"] = "citrus",
             ["leafy_veg"] = "leafy vegetables", ["maize"] = "maize", ["dry_beans"] = "dry beans",
+            ["cucumber"] = "cucumber", ["spinach"] = "spinach",
         };
 
         public static string CropsText(IEnumerable<string> crops, string? other) =>

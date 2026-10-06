@@ -25,14 +25,18 @@ export const AREA_PRESETS: { key: 'tub' | 'bed'; label: string; m2: number }[] =
 /** Quick choices for "I watered". */
 export const WATERED_MINUTES = [5, 10, 15, 20, 30];
 
-/** The crops the engine has figures for - the same list the admin console offers. */
+/** The crops the engine has figures for - the same list, in the same order,
+    as the admin console's ZONE_CROPS (apps/web/admin/src/data/referenceData.ts).
+    A test keeps the two equal. */
 export const ZONE_CROPS: { value: string; label: string }[] = [
+  { value: 'maize', label: 'Maize' },
   { value: 'potato', label: 'Potato' },
   { value: 'tomato', label: 'Tomato' },
+  { value: 'dry_beans', label: 'Dry beans' },
   { value: 'citrus', label: 'Citrus' },
   { value: 'leafy_veg', label: 'Leafy vegetables' },
-  { value: 'maize', label: 'Maize' },
-  { value: 'dry_beans', label: 'Dry beans' },
+  { value: 'cucumber', label: 'Cucumber' },
+  { value: 'spinach', label: 'Spinach' },
 ];
 
 /** YYYY-MM-DD moved by whole days; never past `latest` (today). */
