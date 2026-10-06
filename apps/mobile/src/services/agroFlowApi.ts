@@ -513,6 +513,37 @@ export function saveZoneSetup(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Item 6b: "Recommended for you", and changing the crop.
+// ---------------------------------------------------------------------------
+
+export type RecommendedSettings = {
+  available: boolean;
+  text: string;
+  crop?: string;
+  cropLabel?: string;
+  thresholdPercent?: number;
+  stopPercent?: number;
+  intervalDaysLow?: number | null;
+  intervalDaysHigh?: number | null;
+  minutes?: number | null;
+  confidence?: { level: 'high' | 'medium' | 'low'; reason: string };
+  // "Use these settings" needs the wet/dry setup; applyNote says so.
+  canApply?: boolean;
+  applyNote?: string | null;
+};
+
+export function fetchRecommendedSettings(zoneId: number) {
+  return authorizedRequest<RecommendedSettings>(`/api/farmer/zones/${zoneId}/recommended-settings`);
+}
+
+export function changeZoneCrop(zoneId: number, change: { cropType: string; plantingDate: string | null }) {
+  return authorizedRequest<{ message: string; recommendation: RecommendedSettings }>(
+    `/api/farmer/zones/${zoneId}/crop`,
+    { method: 'PUT', body: JSON.stringify(change) }
+  );
+}
+
 export function dismissZoneInsight(
   zoneId: number,
   insightType: string

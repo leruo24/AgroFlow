@@ -131,6 +131,7 @@ public static class RuleBookDocument
         ConfidenceTable(L);
         KitTable(L);
         TodayTable(L);
+        RecommendationTable(L);
         NeedsAnotherSource(L);
 
         return sb.ToString();
@@ -418,7 +419,33 @@ public static class RuleBookDocument
         L("");
     }
 
-    // ---- 9. Needs another source ----------------------------------------
+    // ---- 9. Recommended for you -------------------------------------------
+
+    private static void RecommendationTable(Action<string> L)
+    {
+        L("## 9. Recommended for you (`RecommendationRules`)");
+        L("");
+        L("| Number | Rule | Source |");
+        L("|---|---|---|");
+        L("| Water at (relative %) | (1 − p × soil factor) × 100, p clamped 0.1-0.8 - exactly what Reset to recommended saves | Table 22 (pp. 163-165), p. 167, p. 162 |");
+        L("| Stop at | 100% (field capacity) | p. 167 |");
+        L("| How often | RAW ÷ ETc days, shown as a whole-day range; ETc = Kc × mean ETo | Eq. 83 p. 162, Eq. 58 p. 103 |");
+        L("| How long | RAW × area ÷ flow, whole minutes, rounded up | Ch. 1 p. 3, p. 171 |");
+        L($"| Climate | the last 30 days of measured ETo if at least {RecommendationRules.MinHistoryDays}; else the forecast; else what history there is | DATA RULE |");
+        L($"| No weather yet | RAW from Table 22's own basis, ETc ≈ {N(RecommendationRules.Table22EtcMm)} mm/day; no \"how often\" | Table 22 footnote, p. 163 |");
+        L("| Stage unknown / soil unknown | peak Kc / loam, as in the daily advice, and the confidence says so | item 2 |");
+        L("");
+
+        var r = RecommendationRules.For("potato", "loam", null, 5.0, "the last 30 days", 0.2, 1.5, null, "Mafikeng", Today)!;
+        L("Worked example - potato, loam, 0.2 m², 1.5 L/min, ETo 5 mm/day, stage unknown:");
+        L("");
+        L("> " + r.Text);
+        L("");
+        L($"Confidence: {r.Confidence.Reason}");
+        L("");
+    }
+
+    // ---- 10. Needs another source ---------------------------------------
 
     private static void NeedsAnotherSource(Action<string> L)
     {

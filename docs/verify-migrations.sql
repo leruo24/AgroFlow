@@ -175,6 +175,9 @@ select
     -- 0042: manual logging - "I watered" and "How does the soil feel?".
     (select count(*) from pg_class where relname = 'soil_feel_check' and relkind = 'r')   as m0042_manual_logging,
 
+    -- 0043: a farmer may change only crop, planting date, soil and size of a zone.
+    (select count(*) from pg_trigger where tgname = 'zone_farmer_edit_guard')              as m0043_zone_farmer_edit_guard,
+
     -- Not a migration, but applied by hand the same way and just as invisible
     -- when missed: the private bucket generated report PDFs are stored in.
     (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;

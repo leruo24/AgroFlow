@@ -702,6 +702,36 @@ namespace AgroFlow.Data
             return true;
         }
 
+        // Item 6b: the climate behind "Recommended for you". The last 30 days
+        // of measured ETo when there are at least RecommendationRules
+        // .MinHistoryDays of them; otherwise the forecast; otherwise whatever
+        // history there is; otherwise nothing.
+        public (double? MeanEto, string? Basis) GetRecommendationEto(long farmId, DateOnly today)
+        {
+            const string sql =
+                "select count(*) filter (where not is_forecast and date between $2 and $3), " +
+                "       avg(eto_mm) filter (where not is_forecast and date between $2 and $3), " +
+                "       avg(eto_mm) filter (where is_forecast and date >= $4) " +
+                "from weather_daily where farm_id = $1 and eto_mm is not null";
+
+            using (var connection = Open())
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.AddWithValue(farmId);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, today.AddDays(-30));
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, today.AddDays(-1));
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, today);
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (!reader.Read()) return (null, null);
+                    var days = reader.GetInt64(0);
+                    double? history = reader.IsDBNull(1) ? (double?)null : Convert.ToDouble(reader.GetValue(1));
+                    double? forecast = reader.IsDBNull(2) ? (double?)null : Convert.ToDouble(reader.GetValue(2));
+                    return RecommendationRules.PickEto(days, history, forecast);
+                }
+            }
+        }
+
         // Trailing mean ETo over the days before today, for the hot_days check.
         public double? GetTrailingMeanEto(long farmId, DateOnly from, DateOnly to)
         {

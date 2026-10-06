@@ -200,6 +200,24 @@ above in this order (DATA RULE - the order a farmer would want them):
 6. The balance ran and nothing is due → "No watering needed today".
 7. Otherwise → "Finish setup: …" or, with no weather, "No advice yet".
 
+## 9. Recommended for you (`RecommendationRules`)
+
+| Number | Rule | Source |
+|---|---|---|
+| Water at (relative %) | (1 − p × soil factor) × 100, p clamped 0.1-0.8 - exactly what Reset to recommended saves | Table 22 (pp. 163-165), p. 167, p. 162 |
+| Stop at | 100% (field capacity) | p. 167 |
+| How often | RAW ÷ ETc days, shown as a whole-day range; ETc = Kc × mean ETo | Eq. 83 p. 162, Eq. 58 p. 103 |
+| How long | RAW × area ÷ flow, whole minutes, rounded up | Ch. 1 p. 3, p. 171 |
+| Climate | the last 30 days of measured ETo if at least 14; else the forecast; else what history there is | DATA RULE |
+| No weather yet | RAW from Table 22's own basis, ETc ≈ 5 mm/day; no "how often" | Table 22 footnote, p. 163 |
+| Stage unknown / soil unknown | peak Kc / loam, as in the daily advice, and the confidence says so | item 2 |
+
+Worked example - potato, loam, 0.2 m², 1.5 L/min, ETo 5 mm/day, stage unknown:
+
+> Based on your climate in Mafikeng and since you want to grow potato on loam soil, we recommend: water when the soil reaches about 65% (relative), stop at 100%; expect to water about every 2–3 days in October, about 3 minutes each time for a 0.2 m² tub.
+
+Confidence: Medium: the planting date is missing, so peak growth is assumed.
+
 ## Needs another source
 
 Rules a farmer would find useful that FAO-56 does **not** support. They are not in the app;

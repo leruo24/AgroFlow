@@ -428,6 +428,7 @@ app.MapHandlingEndpoints();
 app.MapManualLogEndpoints();
 app.MapTodayEndpoints();
 app.MapZoneSetupEndpoints();
+app.MapRecommendationEndpoints();
 app.MapMqttPoolEndpoints();
 app.MapPasswordResetEndpoints();
 

@@ -59,11 +59,11 @@ import {
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { ZONE_CROPS } from "@/data/referenceData";
 import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
-import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, SOILS, AREA_PRESETS } from "@/pages/onboarding";
+import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getFarmToday, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -697,6 +697,9 @@ async function openFarmDetail(id: number): Promise<void> {
                    <td>
                      <a href="#" class="row-act" data-act="run-advice" data-id="${z.zoneId}">
                        Run advice now
+                     </a>
+                     <a href="#" class="row-act" data-act="zone-recommend" data-id="${z.zoneId}">
+                       Recommended settings
                      </a>
                    </td>
                  </tr>`;
@@ -1909,6 +1912,45 @@ case "delete-user": {
        laid out as the numbers somebody checking it reads in order - and,
        when it cannot answer, the named missing fields rather than a blank
        panel. */
+    /* Item 6b: the zone's "Recommended for you", with Use these settings
+       (the existing Reset to recommended) or Keep my own. */
+    case "zone-recommend": {
+      const zoneId = Number(idAttr);
+      if (!zoneId) return void toast("No zone selected.", "warn");
+      try {
+        const r = await getRecommendedSettings(zoneId);
+        const level = r.confidence ? r.confidence.level.charAt(0).toUpperCase() + r.confidence.level.slice(1) : null;
+        return openDrawer({
+          title: "Recommended for you",
+          subtitle: r.cropLabel ?? "",
+          bodyHtml: r.available
+            ? `<div class="drawer-section" data-recommend-zone="${zoneId}">
+                 <p>${esc(r.text)}</p>
+                 ${level ? `<p class="muted"><span class="pill">${esc(level)} confidence</span> ${esc(r.confidence!.reason)}</p>` : ""}
+                 ${r.canApply === false && r.applyNote ? `<p class="muted">${esc(r.applyNote)}</p>` : ""}
+                 <div class="form-foot">
+                   <button class="btn ghost" data-drawer-close>Keep my own</button>
+                   <button class="btn" data-act="zone-recommend-apply" data-id="${zoneId}"${r.canApply === false ? " disabled" : ""}>Use these settings</button>
+                 </div>
+               </div>`
+            : `<p class="muted">${esc(r.text)}</p>`,
+        });
+      } catch (e) {
+        return void showErrorModal("Could not work out recommended settings", e instanceof Error ? e.message : "Try again.");
+      }
+    }
+
+    case "zone-recommend-apply": {
+      const zoneId = Number(idAttr);
+      try {
+        const r = await useRecommendedSettings(zoneId);
+        closeDrawer();
+        return void toast(r.message, "success");
+      } catch (e) {
+        return void showErrorModal("Could not save these settings", e instanceof Error ? e.message : "Try again.");
+      }
+    }
+
     case "run-advice": {
       const zoneId = Number(idAttr);
       if (!zoneId) return void toast("No zone selected.", "warn");
@@ -2937,8 +2979,43 @@ function wireZoneChoices(container: HTMLElement): void {
   if (container.dataset["choicesBound"]) return;
   container.dataset["choicesBound"] = "1";
   container.addEventListener("change", (e) => {
-    if ((e.target as HTMLElement).matches("[data-area-preset]")) syncZoneChoices(container);
+    const target = e.target as HTMLElement;
+    if (target.matches("[data-area-preset]")) syncZoneChoices(container);
+    const row = target.closest<HTMLElement>("[data-zone-row]");
+    if (row) void refreshRecommendation(row);
   });
+  // The soil cards are buttons, not inputs, so they raise no change event.
+  container.addEventListener("click", (e) => {
+    const card = (e.target as HTMLElement).closest<HTMLElement>('[data-act="zone-soil"]');
+    const row = card?.closest<HTMLElement>("[data-zone-row]");
+    if (row) window.setTimeout(() => void refreshRecommendation(row), 0);
+  });
+}
+
+/* Item 6b: the wizard's card for one zone, once a crop is chosen. The latest
+   request wins - an answer for an older crop choice is dropped. */
+async function refreshRecommendation(row: HTMLElement): Promise<void> {
+  const i = Number(row.dataset["zoneIndex"]);
+  const box = row.querySelector<HTMLElement>(`[data-recommend="${i}"]`);
+  if (!box) return;
+  const v = collectFields();
+  const z = readZoneSetup(v, i);
+  if (!z.cropType) {
+    box.innerHTML = "";
+    return;
+  }
+  const ticket = String(Date.now() + Math.random());
+  box.dataset["ticket"] = ticket;
+  try {
+    const r = await previewRecommendedSettings({
+      cropType: z.cropType, soilType: z.soilType, areaM2: z.areaM2, flowRateLpm: z.flowRateLpm,
+      rootDepthLimitM: z.rootDepthLimitM, plantingDate: z.plantingDate,
+      location: (v["location"] ?? "").split(",")[0].trim(),
+    });
+    if (box.dataset["ticket"] === ticket) box.innerHTML = recommendHtml(r);
+  } catch {
+    if (box.dataset["ticket"] === ticket) box.innerHTML = "";
+  }
 }
 
 /* --------------------------- binding after render ------------------------ */

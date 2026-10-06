@@ -127,6 +127,10 @@ public sealed class SchemaCheck
             "select to_regclass('public.soil_feel_check')",
             "Farmers cannot log \"I watered\" or \"How does the soil feel?\" - farms without a kit get weather-only advice."),
 
+        new("0043", "function", "zone_farmer_edit_guard",
+            "select to_regprocedure('public.zone_farmer_edit_guard()')",
+            "A farmer's own login could change any zone column directly, including the watering thresholds."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

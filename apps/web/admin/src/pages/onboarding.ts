@@ -122,6 +122,8 @@ export function zoneRow(index: number): string {
       <input type="number" min="1" max="300" step="1" data-field="zone_depth_cm_${index}" placeholder="e.g. 30" />
     </label>
   </div>
+
+  <div class="recommend-box" data-recommend="${index}" aria-live="polite"></div>
 </div>`;
 }
 
@@ -195,6 +197,24 @@ export function zoneSetupProblem(v: Record<string, string>, i: number): string |
 
 /* After rows are rebuilt and values put back: highlight the chosen soil
    card and show the m² box for a custom size. */
+/* Item 6b: the zone's "Recommended for you" card in the wizard. There is no
+   sensor yet, so nothing can be saved from here - the card says where to
+   apply it later rather than offering a button that does nothing. */
+export function recommendHtml(r: { available: boolean; text: string; confidence?: { level: string; reason: string } }): string {
+  if (!r.available) return "";
+  const level = r.confidence ? r.confidence.level.charAt(0).toUpperCase() + r.confidence.level.slice(1) : null;
+  return `<div class="recommend-card">
+    <b>Recommended for you</b>
+    <p>${escapeText(r.text)}</p>
+    ${level ? `<p class="muted"><span class="pill">${escapeText(level)} confidence</span> ${escapeText(r.confidence!.reason)}</p>` : ""}
+    <p class="muted">Apply it from the farm's zone list ("Recommended settings") once the sensor's wet/dry setup is done.</p>
+  </div>`;
+}
+
+function escapeText(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
 export function syncZoneChoices(root: ParentNode): void {
   root.querySelectorAll<HTMLInputElement>('[data-field^="zone_soil_"]').forEach((hidden) => {
     const i = hidden.dataset["field"]!.slice("zone_soil_".length);

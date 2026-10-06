@@ -1787,3 +1787,7 @@ html{ scrollbar-gutter: stable; }
 .soil-card.is-selected b{ color:var(--brand); }
 .field-note{ display:block; margin-top:4px; opacity:.8; }
 @media (max-width: 600px){ .soil-cards{ grid-template-columns:1fr; } }
+
+/* Item 6b: "Recommended for you" in the register wizard. */
+.recommend-card{ margin-top:8px; padding:10px 12px; border-radius:8px; background:var(--surface-2); box-shadow:inset 3px 0 0 var(--brand); }
+.recommend-card p{ margin:6px 0 0; }

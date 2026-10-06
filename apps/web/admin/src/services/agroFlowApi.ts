@@ -796,6 +796,33 @@ export function getFarmToday(farmId: number): Promise<{ farmId: number; day: str
   return authorizedJson(`/api/farmer/farms/${farmId}/today`, "GET");
 }
 
+/* Item 6b: "Recommended for you". */
+export type RecommendedSettings = {
+  available: boolean;
+  text: string;
+  cropLabel?: string;
+  thresholdPercent?: number;
+  confidence?: { level: "high" | "medium" | "low"; reason: string };
+  canApply?: boolean;
+  applyNote?: string | null;
+};
+
+export function getRecommendedSettings(zoneId: number): Promise<RecommendedSettings> {
+  return authorizedJson(`/api/farmer/zones/${zoneId}/recommended-settings`, "GET");
+}
+
+export function previewRecommendedSettings(input: {
+  cropType: string; soilType: string; areaM2: number | null; flowRateLpm: number | null;
+  rootDepthLimitM: number | null; plantingDate: string | null; location: string;
+}): Promise<RecommendedSettings> {
+  return authorizedJson("/api/admin/recommended-settings/preview", "POST", input);
+}
+
+/* "Use these settings": the existing Reset to recommended, which saves the same level. */
+export function useRecommendedSettings(zoneId: number): Promise<{ message: string }> {
+  return authorizedJson(`/api/farmer/zones/${zoneId}/reset-recommended`, "POST", {});
+}
+
 export function getHandling(kind: HandlingKind): Promise<HandlingState[]> {
   return authorizedJson<HandlingState[]>(`/api/admin/handling/${kind}`, "GET");
 }

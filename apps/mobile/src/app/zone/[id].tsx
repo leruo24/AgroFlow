@@ -1406,6 +1406,30 @@ export default function ZoneControlScreen() {
             />
           </TouchableOpacity>
 
+          {/* Item 6b: the farmer changes the crop and planting date. */}
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={() =>
+              router.push({
+                pathname: '/zone-crop',
+                params: {
+                  zoneId: String(selectedZone.id),
+                  cropType: selectedZone.crop,
+                  plantingDate: selectedZone.plantingDate ?? '',
+                },
+              })
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Crop and planting date"
+          >
+            <View style={styles.linkRowCopy}>
+              <Text style={styles.linkRowTitle}>Crop and planting date</Text>
+              <Text style={styles.linkRowHint}>What is growing, and since when</Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
+          </TouchableOpacity>
+
           {/* Item 6: the checklist of what this zone's advice is missing. */}
           <TouchableOpacity
             style={styles.linkRow}

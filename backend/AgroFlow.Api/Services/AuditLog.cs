@@ -35,6 +35,10 @@ public static class AuditActions
     public const string ZoneUpdated = "zone.updated";
     public const string ZoneAdviceRun = "zone.advice_run";
 
+    // Item 6b: a farmer (or admin) changed a zone's crop or planting date.
+    // details: from, to, fromLabel, toLabel, fromPlanting, toPlanting, actorRole.
+    public const string ZoneCropChanged = "zone.crop_changed";
+
     public const string EnrollmentCodeCreated = "enrollment_code.created";
     public const string MqttPoolAdded = "mqtt_pool.added";
     public const string ReportScheduleChanged = "report_schedule.changed";

@@ -13,7 +13,8 @@ what is next.
 | 3 | done | 154025b | — | 4 |
 | 4 | done | 74efb2d | Apply migration 0040 | 5 |
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
-| 6 | done | 77b9533 + follow-up (this commit) | Apply migration 0042 | 6b |
+| 6 | done | 77b9533, be80a1a | Apply migration 0042 | 6b |
+| 6b | done | (this commit) | Apply migration 0043 | 6c |
 
 ---
 
@@ -546,6 +547,74 @@ spec and fixed.
 - Root depth is never guessed: the wizard asks for the soil depth in cm as an
   optional field (tubs and raised beds) and leaves it empty otherwise, since
   no source gives a tub's usable depth. Flow rate is optional there too - the
-  app's bottle helper measures it on site. (Follow-up commit: both fields
+  app's bottle helper measures it on site. (Follow-up be80a1a: both fields
   were missing from the first item 6 commit; the zone page also gained a
   "Finish setup" row.)
+
+
+## 6b — Recommended settings, and the farmer changes the crop
+
+### What it is now
+
+- **"Recommended for you"** (`RecommendationRules`, rule book §9): one
+  sentence from the farm's climate, the crop and the soil - "Based on your
+  climate in Mafikeng and since you want to grow potato on loam soil, we
+  recommend: water when the soil reaches about 65% (relative), stop at 100%;
+  expect to water about every 2–3 days in October, about 3 minutes each time
+  for a 0.2 m² tub." With a confidence badge.
+  - Water at = (1 − p × soil factor) × 100 - the same number "Reset to
+    recommended" saves (tested equal for all three soils), so **Use these
+    settings** is that existing route and the card can never disagree with
+    what is saved. It needs the wet/dry setup (thresholds are in the
+    sensor's units); without it the button is off and says so.
+  - How often = RAW ÷ ETc; how long = RAW × area ÷ flow; RAW is the daily
+    balance's own, root depth capped by the tub depth.
+  - Climate: the last 30 days of measured ETo when there are at least 14,
+    else the forecast, else what history there is. With no weather (a farm
+    being registered) RAW uses Table 22's own basis, ETc ≈ 5 mm/day
+    (footnote, p. 163), and the card says how often will follow.
+- **Where**: mobile Finish setup and the new Crop screen; admin farm drawer
+  → zone → **Recommended settings** (Use these settings / Keep my own);
+  the register wizard shows it per zone once a crop is chosen
+  (`POST /api/admin/recommended-settings/preview`). The wizard's card is
+  information only - there is no sensor to save to yet - and says where to
+  apply it later.
+- **The farmer changes the crop**: mobile Zone → **Crop and planting date**
+  (crop list as in admin; a built-in day/week stepper for the date - no
+  date-picker package, as no production dependency may be added).
+  `PUT /api/farmer/zones/{id}/crop` updates the shared zone row, so the admin
+  sees it at once; writes `zone.crop_changed` to `admin_audit_log` with
+  `actorRole` in the details, read on the Activity page and timelines as
+  "Crop changed from Citrus to Potato by {name}"; returns the new card.
+  Another farmer's zone → **403**, a missing zone → 404.
+- **Past reports keep the old crop**: a report reads the zone's crop changes
+  and uses the crop (and planting date) in effect on its last day.
+- **Migration 0043** adds a trigger so a farmer's own login can change only
+  crop, planting date, soil and size on a zone directly; the API (no JWT) and
+  admins are unaffected, and neither app writes zones directly. Thresholds
+  therefore only change through the API.
+
+### Decision
+
+The crop-change record went into `admin_audit_log` (with `actorRole`), not a
+new `zone_change_log`: it is already append-only, already read by the
+Activity page and the per-item timelines, and a second log would split one
+history in two.
+
+### Tests
+
+Backend 922 → 935 (`RecommendationTests`: the card's numbers equal the rule
+calculation for potato/loam/0.2 m²/1.5 L/min/ETo 5; threshold equals what
+Reset saves; tub depth cap; known stage; missing inputs and confidence;
+climate source; crop-change checks; crop history for past reports; the
+Activity sentence; 403 for another farmer's zone). The 403 is tested on the
+route's decision function: the ownership lookup itself needs a database.
+The trigger cannot be tested without a database - it is probed in
+`verify-migrations.sql` and `SchemaCheck`. Mobile jest 39 → 44, admin
+Playwright 22 → 25 (`recommend.spec.ts`).
+
+### Not changed here
+
+- The existing `PUT /settings` route still accepts a crop (baseline
+  contract) and does not write the crop-change record; the app's own crop
+  screen uses the new route.

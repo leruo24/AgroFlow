@@ -102,7 +102,8 @@ probe in `docs/verify-migrations.sql` **and** in `Services/SchemaCheck.cs`.
 | 0040 | 4 | `report_schedule`: `daily` frequency, `day_of_week`, `per_zone_pdf`, `send_to_handler`, `admin_chat_enabled`, `turned_off_by`/`turned_off_at` *(written before 5 and 6, so it took the next number)* |
 | 0041 | 5 | `handled_by_profile_id`, `claimed_at`, `resolved_by_profile_id`, `resolved_at` on `service_request`, `alert`, `maintenance`; `actor_role` on `admin_audit_log` |
 | 0042 | 6 | `soil_feel_check` table (zone, feel, actor, at); `irrigation_event.logged_by_profile_id` |
-| 0043 | 6c | `enquiry`, `enquiry_call` tables |
+| 0043 | 6b | `zone_farmer_edit_guard` trigger: a farmer edits only crop, planting date, soil, size |
+| 0044 | 6c | `enquiry`, `enquiry_call` tables |
 
 `ai_recommendation.data` (jsonb, 0027) already exists — explanations are stored
 inside it under `explanation`, no migration for those. `irrigation_event.trigger_source`

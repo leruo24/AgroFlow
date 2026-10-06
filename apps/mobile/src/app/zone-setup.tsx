@@ -15,6 +15,7 @@ import { useAgroFlow } from '@/context/AgroFlowContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { WhyLink } from '@/components/WhySheet';
 import { CalibrateSoilSheet } from '@/components/CalibrateSoilSheet';
+import { RecommendedCard } from '@/components/RecommendedCard';
 import { createTodayStyles } from '@/styles/todayStyles';
 import { fetchFarmToday, saveZoneSetup, type TodayZone } from '@/services/agroFlowApi';
 import { AREA_PRESETS, BOTTLE_LITRES, flowRateFromBottle, plantedWeeksAgo } from '@/lib/setupHelpers';
@@ -168,6 +169,9 @@ export default function ZoneSetupScreen() {
 
         {message ? <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text> : null}
         {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+
+        {/* Item 6b: re-read after every save, so it follows the setup. */}
+        {zone && <RecommendedCard key={JSON.stringify(zone.setup ?? null)} zoneId={zoneId} />}
       </ScrollView>
 
       {Number.isFinite(zoneId) && (

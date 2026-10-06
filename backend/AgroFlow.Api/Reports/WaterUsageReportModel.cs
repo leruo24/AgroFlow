@@ -227,6 +227,11 @@ internal static class WaterUsageReportBuilder
             farmName = reader.IsDBNull(7) ? "Farm" : reader.GetString(7);
         }
 
+        // Item 6b: a past period keeps the crop that was growing then.
+        var cropChanges = await CropHistory.ReadAsync(connection, zoneId, ct);
+        var (cropThen, _) = CropHistory.AsOf(cropType, null, cropChanges, to);
+        cropType = cropThen;
+
         /* ---- 2. Pump runs per day ------------------------------------- */
         // Grouped in SAST, not UTC. A run at 01:30 local belongs to that
         // morning; grouped in UTC it lands on the previous day and the chart
@@ -354,6 +359,13 @@ internal static class WaterUsageReportBuilder
         {
             var today = Fao56EngineController.TodayInSast();
             var anchor = to > today ? today : to;
+
+            // The crop and planting date as they were on the anchor day.
+            if (cropChanges.Count > 0)
+            {
+                (engineZone.CropType, engineZone.PlantingDate) =
+                    CropHistory.AsOf(engineZone.CropType, engineZone.PlantingDate, cropChanges, anchor);
+            }
 
             var input = engine.BuildInput(engineZone, anchor);
             engineInput = input;

@@ -187,7 +187,7 @@ public static class AuditLogEndpoints
                 reader.GetFieldValue<DateTimeOffset>(1).ToString("o"),
                 actorName,
                 action,
-                Summarise(actorName, action, entityType, entityId, farmName),
+                Summarise(actorName, action, entityType, entityId, farmName, details),
                 entityType,
                 entityId,
                 reader.IsDBNull(6) ? null : reader.GetInt64(6),
@@ -252,6 +252,34 @@ public static class AuditLogEndpoints
     /// Built here rather than in the console so that the page, the CSV export
     /// and anything added later all describe an action the same way - the
     /// alternative is three slightly different vocabularies for one log.
+    // Item 6b: "Crop changed from Citrus to Potato by Thandi" - the farmer's
+    // own words for it, so an officer reading the farm's activity knows why
+    // the advice changed.
+    private static string CropChanged(string actor, string? details, string? farmName)
+    {
+        string? from = null, to = null, planted = null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(details) ? "{}" : details);
+            var root = doc.RootElement;
+            string? Get(string name) =>
+                root.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+            from = Get("fromLabel") ?? Get("from");
+            to = Get("toLabel") ?? Get("to");
+            planted = Get("toPlanting");
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Unreadable details still give a sentence.
+        }
+
+        var where = farmName is null ? "" : $" at {farmName}";
+        if (from != null && to != null && from != to) return $"Crop changed from {from} to {to} by {actor}{where}";
+        if (to != null && from == null) return $"Crop set to {to} by {actor}{where}";
+        if (planted != null) return $"Planting date changed to {planted} by {actor}{where}";
+        return $"Crop or planting date changed by {actor}{where}";
+    }
+
     private static string Thing(string entityType) => entityType switch
     {
         "service_request" => "request",
@@ -259,9 +287,11 @@ public static class AuditLogEndpoints
         _ => entityType,
     };
 
-    private static string Summarise(
-        string actor, string action, string entityType, string? entityId, string? farmName)
+    internal static string Summarise(
+        string actor, string action, string entityType, string? entityId, string? farmName, string? details = null)
     {
+        if (action == AuditActions.ZoneCropChanged) return CropChanged(actor, details, farmName);
+
         var where = farmName is null ? "" : $" at {farmName}";
         var what = entityId is null ? entityType : $"{entityType} {entityId}";
 
