@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { X } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { router } from '@/lib/router';
 
 import Drip, { MASCOT_NAME, type DripMood } from '@/components/mascot/Drip';
 import { useTheme } from '@/context/ThemeContext';

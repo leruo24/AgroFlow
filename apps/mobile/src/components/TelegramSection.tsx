@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -230,9 +231,20 @@ export function TelegramSection() {
     );
   }
 
+  const [alertsSaving, setAlertsSaving] = useState(false);
+  const alertsSavingRef = useRef(false);
+
   async function handleToggleAlerts(
     next: boolean
   ) {
+    // One save at a time (item 0b). Two quick flips sent `false` then `true`
+    // as two DIFFERENT writes, and if they reached the server out of order it
+    // kept the wrong one while the switch showed the other. A ref, not state:
+    // the second flip can arrive before the re-render that would disable it.
+    if (alertsSavingRef.current) return;
+    alertsSavingRef.current = true;
+    setAlertsSaving(true);
+
     //Flip immediately so the switch feels responsive, then put it back if
     //the server disagrees.
     setAlertsEnabled(
@@ -255,6 +267,9 @@ export function TelegramSection() {
           ? caughtError.message
           : 'Could not change your alert setting.'
       );
+    } finally {
+      alertsSavingRef.current = false;
+      setAlertsSaving(false);
     }
   }
 
@@ -329,6 +344,7 @@ export function TelegramSection() {
                   value={
                     alertsEnabled
                   }
+                  disabled={alertsSaving}
                   onValueChange={(
                     next
                   ) => {

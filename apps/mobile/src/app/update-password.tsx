@@ -1,8 +1,8 @@
 //allows a user who opened a valid Supabase password-recovery link to choose a new password. The recovery link creates a temporary authenticated session before Supabase permits the password change.
 import {
-  router,
   useLocalSearchParams,
 } from 'expo-router';
+import { router } from '@/lib/router';
 
 import * as Linking from 'expo-linking';
 

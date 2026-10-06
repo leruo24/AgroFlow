@@ -1,3 +1,4 @@
+import { singleFlight, writeKey } from '@/lib/singleFlight';
 import {
   supabase,
 } from '@/lib/supabase';
@@ -74,7 +75,23 @@ export type CurrentWeatherResponse = {
   };
 };
 
-async function authorizedRequest<T>(
+/* Every authorised call. READS go straight through; an identical WRITE that
+   is already in flight is shared rather than sent twice - see
+   lib/singleFlight.ts, and "Water now" for why it matters. */
+function authorizedRequest<T>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+
+  if (method === 'GET') return sendAuthorizedRequest<T>(path, init);
+
+  return singleFlight(writeKey(method, path, init?.body), () =>
+    sendAuthorizedRequest<T>(path, init)
+  );
+}
+
+async function sendAuthorizedRequest<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
@@ -288,7 +305,16 @@ export function confirmPasswordChanged() {
    Telegram connected, or was rate limited. The screen must not try to be more
    helpful than that: telling the farmer "no such account" would tell anyone
    else the same thing about any address they cared to try. */
-export async function requestPasswordReset(
+export function requestPasswordReset(email: string): Promise<string> {
+  // Keyed on the address as typed-and-trimmed: two taps of Send for the same
+  // email are one reset, and one Telegram message, not two.
+  return singleFlight(
+    writeKey('POST', '/api/auth/forgot-password', email.trim().toLowerCase()),
+    () => sendPasswordReset(email)
+  );
+}
+
+async function sendPasswordReset(
   email: string
 ): Promise<string> {
   const apiBase =
@@ -532,7 +558,16 @@ export class KitOfflineError extends Error {
 // things the offline screen needs. The auth header work is duplicated
 // deliberately rather than widening the shared helper, which every other
 // call in this file depends on.
-export async function requestZoneWifiChange(
+export function requestZoneWifiChange(zoneId: number): Promise<ChangeWifiResult> {
+  // One command to the kit per intention. Two would put it into setup mode
+  // and then, a moment later, try to put it there again.
+  return singleFlight(
+    writeKey('POST', `/api/farmer/zones/${zoneId}/hardware/change-wifi`),
+    () => sendZoneWifiChange(zoneId)
+  );
+}
+
+async function sendZoneWifiChange(
   zoneId: number
 ): Promise<ChangeWifiResult> {
   const apiBase = resolveApiBase();

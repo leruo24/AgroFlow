@@ -1,7 +1,5 @@
 //authentication controller that manages user login, logout, and profile updates. It uses React's context API to provide authentication state and functions to the rest of the application. The AuthProvider component wraps the app and maintains the current user's authentication state, including their access token and profile information. It also provides functions for signing in, signing out, and updating the user's profile. The authentication state is persisted using AsyncStorage or SecureStore, depending on the platform, allowing the app to retain user session data across sessions.
-import {
-  router,
-} from 'expo-router';
+import { router } from '@/lib/router';
 
 import {
   useMemo,

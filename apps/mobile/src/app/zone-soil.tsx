@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Check } from 'lucide-react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '@/lib/router';
 
 import { useTheme } from '@/context/ThemeContext';
 import { ScreenHeader } from '@/components/ScreenHeader';

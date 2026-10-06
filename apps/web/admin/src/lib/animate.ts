@@ -108,16 +108,23 @@ export function revealStagger(root: ParentNode = document, stepMs = 45): void {
 }
 
 /** Fades the content container out, swaps HTML, fades back in. */
+/* `stillCurrent` is asked after the leave animation and before anything is
+   written. The 140 ms pause is itself a window in which the admin can click
+   again; without the check, an older navigation would wake up and paint its
+   page over the newer one - and toggle the transition classes underneath it,
+   which is part of what made the page look like it was vibrating. */
 export async function swapContent(
   container: HTMLElement,
   html: string,
+  stillCurrent: () => boolean = () => true,
 ): Promise<void> {
   if (prefersReducedMotion()) {
-    container.innerHTML = html;
+    if (stillCurrent()) container.innerHTML = html;
     return;
   }
   container.classList.add("page-leave");
   await wait(140);
+  if (!stillCurrent()) return;
   container.innerHTML = html;
   container.classList.remove("page-leave");
   container.classList.add("page-enter");

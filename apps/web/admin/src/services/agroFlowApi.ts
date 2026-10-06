@@ -7,6 +7,7 @@
  * check below stays as a defensive fallback rather than assuming that.
  */
 
+import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 
 const API_BASE = import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "";
@@ -19,7 +20,7 @@ async function postAuthorized<T = void>(path: string, body: unknown): Promise<T>
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -210,7 +211,7 @@ export async function getFarmers(): Promise<FarmerOption[]> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(
+  const response = await navigationAwareFetch(
     `${API_BASE}/api/users/farmers`,
     {
       method: "GET",
@@ -253,7 +254,7 @@ export async function deleteFarmerUser(id: string): Promise<void> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(
+  const response = await navigationAwareFetch(
     `${API_BASE}/api/users/${id}`,
     {
       method: "DELETE",
@@ -295,7 +296,7 @@ export async function deleteFarm(id: number): Promise<void> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(
+  const response = await navigationAwareFetch(
     `${API_BASE}/api/farms/${id}`,
     {
       method: "DELETE",
@@ -349,7 +350,7 @@ async function reportFetch(path: string): Promise<Response> {
   const token = data.session?.access_token;
   if (!token) throw new Error("Not signed in.");
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw await reportError(response);
@@ -509,7 +510,7 @@ async function authorizedJson<T>(
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",

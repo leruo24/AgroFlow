@@ -3,3 +3,8 @@ dist
 .env
 *.local
 .DS_Store
+
+# Playwright's per-run scratch (traces, screenshots of failures). The HTML
+# report that is evidence lives in docs/test-evidence/admin-playwright.
+test-results/
+playwright-report/

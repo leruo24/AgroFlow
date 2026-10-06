@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { navigationAwareFetch } from "@/lib/navigation";
 
 const supabaseUrl = import.meta.env["VITE_SUPABASE_URL"];
 const supabaseAnonKey = import.meta.env["VITE_SUPABASE_ANON_KEY"];
@@ -20,4 +21,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
   },
+  // Every table read a page makes while it is rendering is tied to that
+  // navigation, and cancelled if the admin clicks somewhere else first -
+  // one wrapper here instead of an abort signal at every query. Writes and
+  // auth traffic are never cancelled. See lib/navigation.ts.
+  global: { fetch: navigationAwareFetch },
 });

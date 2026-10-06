@@ -19,6 +19,7 @@
 
 import { esc } from "@/lib/format";
 import { Icon } from "@/lib/icons";
+import { isAbort } from "@/lib/navigation";
 
 /* ------------------------------------------------------------------ *
  * Empty states
@@ -84,6 +85,11 @@ export async function withErrorState(
   try {
     return await render();
   } catch (error) {
+    // A cancelled navigation is not a failure, and nobody is looking at the
+    // page it belonged to. lib/navigation.ts already keeps aborts from
+    // surfacing; this is the belt to that brace.
+    if (isAbort(error)) return "";
+
     console.error(`[admin] ${title} failed to load:`, error);
 
     return errorState({

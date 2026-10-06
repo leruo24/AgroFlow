@@ -2,7 +2,7 @@
 
 import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms } from "@/data/api";
 import { toast } from "@/lib/toast";
-import { openDrawer, closeDrawer } from "@/lib/drawer";
+import { openDrawer, closeDrawer, beginPanelIntent, currentPanelIntent } from "@/lib/drawer";
 import {
   createFarmer,
   deleteFarm,
@@ -44,7 +44,7 @@ import { exportActivityWorkbook, exportSummaryWorkbook, exportRowsWorkbook, down
 import { timelineHtml } from "@/pages/analytics";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
-import { go, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
+import { navigate, showPage, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
 import { refreshHealthPanel } from "@/app/health";
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
@@ -510,6 +510,7 @@ async function exportSummaryPdf(): Promise<void> {
 /* ------------------------------ detail views ----------------------------- */
 
 async function openUserProfile(id: string): Promise<void> {
+  const intent = currentPanelIntent();
   const u = api.findUser(id);
   if (!u) return;
   const schedules = await api.getSchedules();
@@ -524,6 +525,7 @@ async function openUserProfile(id: string): Promise<void> {
       : `<p class="muted">None recorded.</p>`;
 
   openDrawer({
+    intent,
     title: u.name,
     subtitle: `${u.email} · ${u.farm}`,
     wide: true,
@@ -555,6 +557,7 @@ async function openUserProfile(id: string): Promise<void> {
 }
 
 async function openFarmDetail(id: number): Promise<void> {
+  const intent = currentPanelIntent();
   const f = api.findFarm(id);
   if (!f) return;
   const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones] = await Promise.all([
@@ -595,6 +598,7 @@ async function openFarmDetail(id: number): Promise<void> {
                  : `<p class="muted">None recorded.</p>`;
 
   openDrawer({
+    intent,
     // Not healthDot(f.health) here - openDrawer's title is HTML-escaped by
     // design (see lib/drawer.ts's escapeText), so it can't safely carry the
     // dot's markup. Health status is already shown explicitly in the
@@ -726,7 +730,7 @@ async function openFarmDetail(id: number): Promise<void> {
         // live report section of the Reports page, against the API, so this
         // takes the admin there instead of claiming work it did not do.
         toast(`Choose ${f.name} under Reports to produce a report for it.`, "info");
-        void go("reports");
+        void navigate("reports");
       }
     },
   });
@@ -1511,7 +1515,7 @@ case "delete-user": {
     }
     case "handover-done":
       handoverProfileId = null;
-      return void go("farms");
+      return void navigate("farms");
     /* hardware */
     case "view-device": {
       const h = api.findHardware(idAttr);
@@ -1944,38 +1948,38 @@ case "delete-user": {
        never arrives at a page and has to find the thing again. */
     case "go-requests-pending":
       setFilter("requests", { status: "pending" });
-      return void go("requests");
+      return void showPage("requests");
 
     case "go-alerts-critical":
       setFilter("alerts", { priority: "Critical" });
-      return void go("alerts");
+      return void showPage("alerts");
 
     case "go-kits-offline":
       setFilter("hardware", { status: "Offline" });
-      return void go("hardware");
+      return void showPage("hardware");
 
     case "go-zones-setup":
       // Farms and zones, where the list itself highlights which field each
       // zone is missing.
-      return void go("farms");
+      return void navigate("farms");
 
     case "go-users-no-telegram":
       setFilter("users", { search: "" });
-      return void go("users");
+      return void showPage("users");
 
     case "go-reports-failed":
-      return void go("reports");
+      return void navigate("reports");
 
     case "go-farms":
-      return void go("farms");
+      return void navigate("farms");
     case "go-users":
-      return void go("users");
+      return void navigate("users");
     case "go-kits":
-      return void go("hardware");
+      return void navigate("hardware");
     case "go-alerts":
-      return void go("alerts");
+      return void navigate("alerts");
     case "go-maintenance":
-      return void go("maintenance");
+      return void navigate("maintenance");
 
     /* ---- Health ------------------------------------------------------ */
     case "open-health":
@@ -1985,7 +1989,7 @@ case "delete-user": {
         document.getElementById("systemHealth")?.scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
-      return void go("dashboard");
+      return void navigate("dashboard");
 
     case "refresh-health":
       await refreshHealthPanel();
@@ -2004,6 +2008,7 @@ case "delete-user": {
     case "view-request": {
       const requestId = Number(idAttr);
       if (!requestId) return;
+      const intent = currentPanelIntent();
 
       const requests = await api.getServiceRequests();
       const request = requests.find((r) => r.id === requestId);
@@ -2015,6 +2020,7 @@ case "delete-user": {
         .catch(() => [] as AuditRow[]);
 
       return openDrawer({
+        intent,
         title: `${request.farmerName}`,
         subtitle: request.requestType === "new_farm" ? "New farm request" : "New zone request",
         wide: true,
@@ -2133,14 +2139,14 @@ case "delete-user": {
     }
 
     case "go-mqtt-logins":
-      return void go("mqttLogins");
+      return void navigate("mqttLogins");
 
     case "go-onboarding":
       // A new_farm request has no farm yet, so there is no zone to enrol a
       // kit onto. Send the admin through the existing zone setup flow first
       // rather than offering an action that cannot work.
       toast("Set up the farm and its zones first, then create the enrollment code.", "warn");
-      return void go("onboarding");
+      return void navigate("onboarding");
 
     /* The code the installer types into the kit's setup page.
        Uses the EXISTING generator (POST /api/devices/enroll) unchanged -
@@ -2153,7 +2159,7 @@ case "delete-user": {
 
       if (request.farmId === null) {
         toast("This request has no farm yet. Set up the farm and its zones first.", "warn");
-        return void go("onboarding");
+        return void navigate("onboarding");
       }
 
       let zones;
@@ -2172,7 +2178,7 @@ case "delete-user": {
         // request: the zone has to exist before a kit can be enrolled onto
         // it, because hardware.zone_id is what the claim resolves.
         toast("This farm has no zones yet. Add one first, then create the code.", "warn");
-        return void go("onboarding");
+        return void navigate("onboarding");
       }
 
       return openDrawer({
@@ -3475,6 +3481,71 @@ async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
   }
 }
 
+/* ---------------------- delegated clicks (item 0b) ----------------------- */
+
+let delegatedBound = false;
+
+/* Elements whose action is still running. A second click on one of them is
+ * dropped, so a double-click on Save, Confirm or Create sends ONE request.
+ * Keyed on the element rather than the action, so two different rows' Save
+ * buttons are still independent. A WeakSet, so a re-rendered page's old
+ * buttons are simply forgotten. */
+const busy = new WeakSet<HTMLElement>();
+
+/* One listener for every action in the console, registered once.
+ *
+ * The innermost [data-act] under the pointer wins, which is what lets an
+ * action link inside a clickable card do its own thing instead of opening the
+ * card. preventDefault matters: most actions are `<a href="#">`, and letting
+ * that through would set the hash to "#" - which is a navigation to Home. */
+function bindDelegatedClicks(): void {
+  if (delegatedBound) return;
+  delegatedBound = true;
+
+  document.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    const go = target.closest<HTMLElement>("[data-go]");
+    if (go) {
+      e.preventDefault();
+      navigate(go.dataset["go"] ?? "dashboard");
+      return;
+    }
+
+    const tab = target.closest<HTMLElement>(".tab[data-tab]");
+    if (tab) {
+      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+      tab.classList.add("active");
+      positionTabUnderline();
+      // Synchronous, so the last tab clicked is the one shown. Its network
+      // panels guard themselves against late answers (see the settings
+      // loaders), so a slow tab cannot paint over a fast one.
+      renderSettingsTab(tab.dataset["tab"] ?? "My account");
+      return;
+    }
+
+    const el = target.closest<HTMLElement>("[data-act]");
+    if (!el) return;
+
+    e.preventDefault();
+
+    if (busy.has(el)) return;
+
+    // A newer click supersedes any detail panel still loading from an older
+    // one - see beginPanelIntent().
+    if ((el.dataset["act"] ?? "").startsWith("view-")) beginPanelIntent();
+
+    busy.add(el);
+    el.setAttribute("aria-busy", "true");
+
+    void handleAction(el).finally(() => {
+      busy.delete(el);
+      el.removeAttribute("aria-busy");
+    });
+  });
+}
+
 export function wirePageInteractions(): void {
   // The drawer calls this after it writes its HTML - see lib/drawer.ts.
   window.agroflowBindDrawerPickers = wirePickers;
@@ -3491,38 +3562,12 @@ export function wirePageInteractions(): void {
   wirePickers();
   wireWizards();
 
-  document.querySelectorAll<HTMLElement>("[data-go]").forEach((a) => {
-    if (a.dataset["bound"]) return;
-    a.dataset["bound"] = "1";
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      void go(a.dataset["go"] ?? "dashboard");
-    });
-  });
-
-  document.querySelectorAll<HTMLElement>("[data-act]").forEach((el) => {
-    if (el.dataset["bound"]) return;
-    el.dataset["bound"] = "1";
-    el.addEventListener("click", (e) => {
-      // Let inner action links win over a clickable card wrapper.
-      const inner = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
-      if (inner && inner !== el) return;
-      e.preventDefault();
-      e.stopPropagation();
-      void handleAction(el);
-    });
-  });
-
-  document.querySelectorAll<HTMLElement>(".tab").forEach((t) => {
-    if (t.dataset["bound"]) return;
-    t.dataset["bound"] = "1";
-    t.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
-      t.classList.add("active");
-      positionTabUnderline();
-      renderSettingsTab(t.dataset["tab"] ?? "General");
-    });
-  });
+  // [data-go], [data-act] and .tab clicks are handled by ONE delegated
+  // listener on the document - see bindDelegatedClicks() below. They used to
+  // be bound element by element after every render, which never double-bound
+  // (each element was flagged) but missed anything rendered later: a drawer's
+  // buttons, a picker rebuilt in place, a timeline loaded after the page.
+  bindDelegatedClicks();
 
   document.querySelectorAll<HTMLElement>("[data-toggle]").forEach((t) => {
     if (t.dataset["bound"]) return;

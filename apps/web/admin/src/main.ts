@@ -70,7 +70,12 @@ function currentState(): ViewState {
   return loginRequestedFromHash() ? "signed-out" : "welcome";
 }
 
+/* The state #root is currently showing. render() records it, so an auth event
+   that does not change it can be told apart from one that does. */
+let shownState: ViewState | null = null;
+
 function render(state: ViewState): void {
+  shownState = state;
   const root = getRoot();
   root.innerHTML = ""; // unconditional clear - the only way any state's markup ends up in #root
 
@@ -144,7 +149,25 @@ async function boot(): Promise<void> {
     if (!isAdminAuthenticated() && window.location.hash === LOGIN_HASH) {
       window.location.hash = "";
     }
-    render(currentState());
+
+    const next = currentState();
+
+    /* STILL SIGNED IN: refresh the name in the header, rebuild nothing.
+     *
+     * This used to re-render on every auth event, and supabase-js emits a lot
+     * of them while you are signed in - TOKEN_REFRESHED on a timer, and
+     * SIGNED_IN again whenever the tab regains focus. Each one tore down the
+     * entire shell and re-ran the router, so switching back to the console's
+     * tab, or saving your own name in Settings, rebuilt every page from
+     * nothing - and if it landed during a navigation, it raced it. That was
+     * one of the three causes of item 0b. The shell is now rebuilt only when
+     * the state actually changes: signing in, or signing out. */
+    if (next === "signed-in" && shownState === "signed-in") {
+      updateHeaderIdentity();
+      return;
+    }
+
+    render(next);
   });
 
   // Tells index.html's loading animation that the app has finished starting:

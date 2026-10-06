@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { router } from 'expo-router';
+import { router } from '@/lib/router';
 import { Bell, ChevronRight, Clock3, CloudSun, Droplets, FileText, Settings2 } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

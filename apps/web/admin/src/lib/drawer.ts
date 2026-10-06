@@ -30,6 +30,27 @@ export interface DrawerOptions {
   confirmLabel?: string;
   onConfirm?: (values: Record<string, string>) => void;
   onOpen?: () => void;
+  /** From currentPanelIntent(), taken BEFORE the opener's first await. If a
+      newer panel was asked for in the meantime, this one is not opened. */
+  intent?: number;
+}
+
+/* Which detail panel the admin asked for LAST.
+ *
+ * Opening a farm or a farmer reads from the network first. Click two rows
+ * quickly and both reads are in flight; without this, whichever answered
+ * last would open - not the one clicked last. Every "view-" click and every
+ * page navigation takes a new intent; an opener that finds a newer one when
+ * its data arrives quietly does nothing. */
+let panelIntent = 0;
+
+export function beginPanelIntent(): number {
+  panelIntent += 1;
+  return panelIntent;
+}
+
+export function currentPanelIntent(): number {
+  return panelIntent;
 }
 
 function escapeText(value: string): string {
@@ -59,6 +80,8 @@ export function closeDrawer(): void {
 }
 
 export function openDrawer(opts: DrawerOptions): void {
+  if (opts.intent !== undefined && opts.intent !== panelIntent) return;
+
   const { overlay, panel } = ensureHost();
   panel.classList.toggle("wide", Boolean(opts.wide));
 
@@ -107,7 +130,13 @@ export function openDrawer(opts: DrawerOptions): void {
   panel.querySelectorAll("[data-drawer-close]").forEach((b) =>
     b.addEventListener("click", () => closeDrawer()));
 
-  panel.querySelector("[data-drawer-confirm]")?.addEventListener("click", () => {
+  panel.querySelector<HTMLButtonElement>("[data-drawer-confirm]")?.addEventListener("click", (e) => {
+    // Once. A double-click used to call onConfirm twice before closeDrawer
+    // had taken effect - two farms, two codes, two of whatever it creates.
+    const button = e.currentTarget as HTMLButtonElement;
+    if (button.disabled) return;
+    button.disabled = true;
+
     const values: Record<string, string> = {};
     panel.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((input) => {
   values[input.dataset["field"] ?? ""] = input.value;

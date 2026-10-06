@@ -18,9 +18,9 @@ import {
 } from 'lucide-react-native';
 
 import {
-  router,
   useLocalSearchParams,
 } from 'expo-router';
+import { router } from '@/lib/router';
 
 import {
   useEffect,

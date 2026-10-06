@@ -37,6 +37,7 @@
      real, itemised gap, not a cop-out; see the Phase 6 summary.
    ========================================================================== */
 
+import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import {
   getMqttLogins,
@@ -111,7 +112,7 @@ async function getAuthorized<T>(path: string): Promise<T> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,

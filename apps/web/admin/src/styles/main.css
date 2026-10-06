@@ -1726,3 +1726,25 @@ tbody tr:last-child td{border-bottom:none}
 }
 .settings-block .form-foot{ margin-top:14px; }
 .muted.sm{ font-size:12.5px; line-height:1.5; margin:2px 0; }
+
+/* ===================================================================
+   NO LAYOUT JUMP BETWEEN PAGES (item 0b)
+
+   The document is the scroll container. A short skeleton has no scrollbar;
+   the long page that replaces it does. On Windows a classic scrollbar takes
+   ~15 px, so every swap slid the whole console sideways and back - visible as
+   the page "vibrating" when somebody clicked through a few items quickly.
+   Reserving the gutter permanently means the scrollbar can come and go
+   without moving anything.
+   =================================================================== */
+html{ scrollbar-gutter: stable; }
+.sidebar{ scrollbar-gutter: stable; }
+
+/* The skeleton holds the page's height while it loads, so the footer and
+   everything under the content area do not collapse up and then drop back
+   down when the real page arrives. */
+.skeleton-wrap{ min-height: calc(100vh - 140px); }
+
+/* While a page is loading, a second click is the only input that matters;
+   the outgoing page's own buttons must not take one. */
+#content[aria-busy="true"]{ pointer-events: none; }

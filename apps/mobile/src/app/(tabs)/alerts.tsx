@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '@/lib/router';
 import { AlertCircle, Bell, ChevronRight } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router } from '@/lib/router';
 import { HelpButton } from '@/components/HelpButton';
 import { useEffect, useMemo, useState } from 'react';
 import {
