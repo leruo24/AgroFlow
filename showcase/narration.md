@@ -4,6 +4,13 @@ Read at a calm, confident pace (about 125–135 words a minute). Time codes are 
 each paragraph starts. Nothing is spoken during the editor end plate (4:20–4:50).
 Word count: about 510.
 
+**Voiceover in the render:** generated locally with Kokoro TTS, voice `am_michael` (US male),
+normalised to −16 LUFS, one file per paragraph in `assets/vo/` (text and start times:
+`assets/vo/vo-lines.json`). The spoken text is this script; a few terms are spelled for the
+voice (I N F three-oh-oh-three W, E S P thirty-two, M Q T T, P D F). The administrator
+paragraph is split into three lines so each part lands on its screen. To use a human
+narrator instead, record this script and replace the files in `assets/vo/`, keeping the names.
+
 Every claim below is implemented on branch `dev` (see `system-audit.md`). Lines from the
 team's description that are *not* in the code are listed in `CLIP-REVIEW.md` and are
 deliberately not narrated.

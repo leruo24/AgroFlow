@@ -2,7 +2,7 @@
 
 **Final video:** `renders/INF3003W_Team2_ShowcaseDemo_2026.mp4`. It runs 4:50: 4:20 of demo plus 30 s of editor end space.
 **Per-clip files:** `renders/clips/01-title.mp4` … `renders/clips/10-endplate.mp4`, one file per row below. Each can be watched and changed on its own.
-**Narration to record:** `narration.md`, which uses the same time codes.
+**Voiceover:** included. It is a generated voice (local Kokoro TTS, "Michael", US male) reading `narration.md`, with one file per paragraph in `assets/vo/`. To swap in a human narrator, replace those files and keep the names.
 
 What the columns mean:
 - **Matches your description?** compares the clip with the "How AgroFlow works" text you sent.

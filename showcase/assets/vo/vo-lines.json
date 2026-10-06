@@ -1,0 +1,80 @@
+[
+ {
+  "id": "vo01",
+  "at": 0.8,
+  "until": 10,
+  "text": "This is AgroFlow, a smart irrigation system, built by Team 2 for I N F, three-oh-oh-three W."
+ },
+ {
+  "id": "vo02",
+  "at": 10.6,
+  "until": 30,
+  "text": "Meet our farmer: a smallholder growing tomatoes, spinach and maize in separate zones. Most small farms water by habit: the same amount, on the same days. But each crop, and each patch of soil, dries out at its own pace. Today, Zone 2 needs attention."
+ },
+ {
+  "id": "vo03",
+  "at": 30.6,
+  "until": 60,
+  "text": "Our farmer opens the app. Drip, the app's helper, points straight at the one thing that matters today: water Zone 2 now, about five minutes. Below it, today's weather and a summary of the farm, with one unread alert. One tap shows every zone side by side, and Zone 2, the spinach, stands out: its health is critical."
+ },
+ {
+  "id": "vo04",
+  "at": 60.6,
+  "until": 71.8,
+  "text": "Zone 2's soil moisture is nineteen percent, below the start level set for this zone, so the app marks it dry. Temperature and humidity sit alongside it."
+ },
+ {
+  "id": "vo05",
+  "at": 72.2,
+  "until": 95,
+  "text": "These readings come from a kit in the field: a soil probe and a temperature and humidity sensor on an E S P thirty-two. About every thirty seconds it publishes them over a secure M Q T T connection. The AgroFlow service, hosted on Railway, stores them in Supabase and updates the zone's health."
+ },
+ {
+  "id": "vo06",
+  "at": 95.6,
+  "until": 133,
+  "text": "The advice comes from the FAO fifty-six method, in four steps: how thirsty the weather is, the crop's growth stage, how much water the soil and roots can hold, and a daily tally, like a bank balance. When the deficit reaches the safe limit, it is time to water. The sensor keeps the tally honest, and forecast rain can skip a watering. A deterministic calculation, not AI. In the app: water now, about five minutes, roughly eight litres."
+ },
+ {
+  "id": "vo07",
+  "at": 133.6,
+  "until": 157.8,
+  "text": "Zone 2 normally waters on a schedule, but its next run is days away. So the farmer switches it to manual. They type ninety minutes by mistake, and AgroFlow stops them: a manual run must be between one and sixty minutes. They correct it to five, confirm, and the command is sent."
+ },
+ {
+  "id": "vo08",
+  "at": 158.2,
+  "until": 186,
+  "text": "It travels back the way the data came: through the AgroFlow service and the M Q T T broker to the E S P thirty-two, which switches the relay and runs the pump. When the run ends, the kit reports it, and the event is recorded. Later, the farmer sees it in their history: five minutes, Zone 2, started manually."
+ },
+ {
+  "id": "vo09a",
+  "at": 186.2,
+  "until": 206.3,
+  "text": "Our second persona is the platform administrator. Their console opens on what needs attention across every farm. They review farmers' requests for new farms and zones, check every kit's connection and last check-in, and can change a kit's Wi-Fi, reopen its setup page or revoke it remotely."
+ },
+ {
+  "id": "vo09b",
+  "at": 206.7,
+  "until": 213.3,
+  "text": "They follow up Zone 2's critical alert."
+ },
+ {
+  "id": "vo09c",
+  "at": 213.6,
+  "until": 230,
+  "text": "They produce farm reports as P D F or Excel, and every administrator action is recorded. The console also works at phone size. Farmers manage their farms; administrators oversee the platform."
+ },
+ {
+  "id": "vo10",
+  "at": 230.6,
+  "until": 252,
+  "text": "Put together: kits in the field, a connected platform, Telegram alerts and reports, an app and a console. And each kit is safe on its own: no pump run lasts over five minutes, and offline, it waters itself in short bursts. Sense, understand, act, monitor."
+ },
+ {
+  "id": "vo11",
+  "at": 252.8,
+  "until": 260,
+  "text": "AgroFlow: from field conditions to informed irrigation."
+ }
+]

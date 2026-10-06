@@ -47,3 +47,4 @@ Evidence is the time code in the video.
 - [x] The two app dialogs are labelled "App dialog · text captured from the running app".
 - [x] No secrets on screen: demo `.invalid` e-mails, password masked, placeholder hosts only.
 - [x] Only features found in the `dev` code are shown; items from the team description not in the code are listed in `CLIP-REVIEW.md`, not shown.
+- [x] Voiceover: synthesised locally with the open-weight Kokoro-82M model (no recorded or copyrighted audio used; confirm the model licence on its Hugging Face card before publishing); text identical to `narration.md`.
