@@ -12,6 +12,7 @@ Repository state: branch `dev` at `bb1c0a1` ("merge: final finish before the pre
 | M3 | `Milestone_3__Team_2.docx` (dated 28 Sep 2026 on its cover) | Latest milestone: business case, technology platform, network/deployment diagram, expanded class diagram, persona, wireframes |
 | REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/final-finish-report.md`, `docs/presentation-runbook.md`, `docs/release-notes-v2.md`) |
 | RUN | Apps run locally on 6 Oct 2026 | See "What was run" below |
+| SHOWCASE | `showcase/` and `walkthrough-video/` on `dev` (pushed 6 Oct 2026 while this deck was being built) | The team's system-demo video: narration, system audit and captured screens. Used for slide 10. |
 | OLD DECK | Original AgroFlow presentation | **Not supplied.** It could not be audited, and none of its images could be reused. |
 
 Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the deck follows the **code**, because the code is what will be demonstrated. Each disagreement is listed under "Contradictions".
@@ -131,9 +132,9 @@ The admin audit log ("Activity") is built (commit `47cf5b0`), but the final repo
 ### Slide 10: The journey we will demonstrate
 | Content | Type | Source | Notes |
 |---|---|---|---|
-| Seven steps | Text | `docs/presentation-runbook.md` §"The demo" steps 1–7 | This is the team's actual demo plan. It is admin-led, **not** the farmer-only irrigation journey in the brief. Change the slide if the demo changes. |
-| Validation example | Text | `apps/web/admin/src/app/interactions.ts` (`findFirstProblem`: "Jump back to the step that is actually wrong"); runbook step 2 "If you have time" | |
-| Screens: register-farm wizard, Kits page, farmer reports | Real app screenshots | RUN | Wizard step 1 shows the documented demo farmer from `docs/demo-account.md`. |
+| Seven steps (farmer opens app → Zone 2 critical → advice → manual run → command to kit → run recorded → admin follows up) | Text | `showcase/narration.md` and `showcase/storyboard.md` (the team's system-demo video, added to `dev` on 6 Oct 2026) | Matches the demo that follows the introduction. The admin-led `docs/presentation-runbook.md` is an older live-demo plan. **If you present the runbook demo live instead, change this slide.** |
+| Validation: 90 min → "Enter a duration between 1 and 60 minutes." → 5 min | Text | `apps/mobile/src/app/zone/[id].tsx` `handleStartManualRun`; demo narration 2:14 | The message is quoted exactly from the code. Five minutes fits the firmware's 5-minute cap. |
+| Three phone screens + admin Kits | **Real app screenshots with illustrative demo data** | `showcase/assets/screens/m-zone2.png`, `m-zone2-sent.png`, `m-history.png`, `a-kits.png` → copied to `ui/demo-*.png` | Captured by the team's showcase work from the unmodified apps, answering with labelled demo data (`showcase/capture/demo-data.mjs`, every farm marked "(demo)"). `showcase/system-audit.md` records that the team approved this approach. **The slide says so on screen:** "real app, illustrative demo data". The values shown (e.g. 19% moisture) are **not** measurements. |
 | "Now, let's see AgroFlow in action." | Text | Brief | |
 
 ---
@@ -149,7 +150,7 @@ The admin audit log ("Activity") is built (commit `47cf5b0`), but the final repo
 | 5 | M3 DCD: `Admin` extends `FarmUser`; classes `RelaySwitch`, `WeatherService`, `DashboardService`, `NotificationService` | `Admin : User`; no such domain classes (the work is done by API services) | Code |
 | 6 | M2 Terms of Reference: "12V water pump" | M3 and firmware: 3–5 V DC pump on AAA batteries switched by relay | M3 / code (the slide says "pump") |
 | 7 | M2 To-Be: the farmer initiates every cycle; system irrigates "until conditions met" | Automatic mode starts and stops on thresholds; manual runs are duration-limited; firmware caps runs at 5 min | Redrawn diagram (slide 6) |
-| 8 | **App vs firmware:** the app accepts manual runs of **1–60 min** (`zone/[id].tsx` line 619); the API accepts up to **3600 s** (`FarmerEndpoints.cs`) | Firmware stops **every** run after **5 min** (`SAFETY_MAX_RUN_MS`) | Not on a slide. **Demo risk:** a 20-minute manual run will stop at 5 minutes. |
+| 8 | **App vs firmware:** the app accepts manual runs of **1–60 min** (`zone/[id].tsx` line 619); the API accepts up to **3600 s** (`FarmerEndpoints.cs`) | Firmware stops **every** run after **5 min** (`SAFETY_MAX_RUN_MS`) | Not stated as a contradiction on a slide. The demo uses 5 min, which is safe. **A live run longer than 5 minutes will stop early.** |
 | 9 | `README.md` "What each app can do today" says manual history is local-only (no insert policy) | `FarmerEndpoints.CreateManualCommandAsync` now inserts `irrigation_commands` through the API | Code. The README section is out of date. |
 | 10 | Spelling of names: M1 Table 14 "Masuku", "Mathlatsi" | Repo and covers: "Msuku", "Matlhatsi" | Repo spelling. **Confirm.** |
 | 11 | M2 project definition sponsor "Mafikeng Digital Innovation Hub"; M3 "Mafikeng Cisco Edge Centre" | Both appear on the M2 cover (MDiHub logo + Cisco Edge Centre) | "Mafikeng Cisco Edge Centre (MDiHub)" |

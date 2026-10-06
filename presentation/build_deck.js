@@ -526,45 +526,43 @@ const shadow = () => ({ type: "outer", color: "0F2A36", blur: 8, offset: 2, angl
   s.addText("The journey we will demonstrate", { placeholder: "title" });
   speaker(s, "Olwethu");
   const steps = [
-    ["Admin signs in", "Home shows what needs attention", BLUE],
-    ["Registers a farm", "Farmer, map pin, crop from the engine's list", TEAL],
-    ["Registers a kit", "One-time enrolment code", TEAL],
-    ["Kit is enrolled on site", "Setup Wi-Fi + code, board joins", GREEN],
-    ["Kit comes online", "Run FAO-56 advice for the zone", GREEN],
-    ["Farmer's view", "Forecast, water report, Telegram", BLUE],
-    ["Every action recorded", "Activity log", FOREST],
+    ["Farmer opens AgroFlow", "Drip points to today's one action", BLUE],
+    ["Zone 2 is critical", "Soil moisture below its start level", AMBER],
+    ["Reads the advice", "FAO-56: water now, about 5 min", TEAL],
+    ["Starts a manual run", "Switches the zone to Manual", BLUE],
+    ["Command reaches the kit", "API → MQTT → ESP32 → pump", GREEN],
+    ["Run is recorded", "History: 5 min, Zone 2, manual", TEAL],
+    ["Admin follows up", "Alert, kits, reports, activity", FOREST],
   ];
   for (let i = 0; i < steps.length; i++) {
     const x = 0.55 + i * 1.76;
     s.addText(String(i + 1), { shape: pres.shapes.OVAL, x: x + 0.6, y: 1.35, w: 0.42, h: 0.42, fill: { color: steps[i][2] }, line: { color: steps[i][2] }, fontSize: 14, bold: true, color: WHITE, align: "center", valign: "middle", margin: 0, isTextBox: true, objectName: "Step " + (i + 1) });
     if (i < steps.length - 1) arrow(s, x + 1.08, 1.56, x + 2.3, 1.56, LINE);
     txt(s, steps[i][0], { x: x, y: 1.88, w: 1.62, h: 0.5, fontSize: 13, bold: true, align: "center" });
-    txt(s, steps[i][1], { x: x, y: 2.36, w: 1.62, h: 0.7, fontSize: 11, color: GREY, align: "center" });
+    txt(s, steps[i][1], { x: x, y: 2.36, w: 1.62, h: 0.6, fontSize: 11, color: GREY, align: "center" });
   }
-  // screenshots under steps 2, 3/4 and 6
-  s.addImage({ path: A("ui/admin-register-farm-wizard.png"), x: 0.75, y: 3.2, w: 3.85, h: 3.85 / 1.6, objectName: "Admin — register farm wizard" });
-  s.addImage({ path: A("ui/admin-kits.png"), x: 4.8, y: 3.2, w: 3.85, h: 3.85 / 1.6, objectName: "Admin — kits" });
-  phone(s, "mobile-reports.png", 9.0, 3.1, 2.55, "Farmer app — reports");
-  // validation example
-  card(s, 10.4, 3.15, 2.35, 2.5, AMBER_T, AMBER_T, "Validation example");
+  // Screens from the team's system-demo capture (showcase/assets/screens): real app, illustrative demo data.
+  const DPH = 1756 / 848, dh = 3.25, dw = dh / DPH;
+  [["demo-m-zone2.png", "Zone 2 readings and advice"], ["demo-m-zone2-sent.png", "Manual run sent"], ["demo-m-history.png", "Run recorded in History"]].forEach(([f, n], i) =>
+    s.addImage({ path: A("ui/" + f), x: 0.75 + i * 1.85, y: 3.2, w: dw, h: dh, objectName: "Demo screen — " + n }));
+  caption(s, "Screens from our system demo: real app, illustrative demo data", 0.75, 6.55, 5.4);
+  card(s, 6.45, 3.25, 3.0, 2.05, AMBER_T, AMBER_T, "Validation example");
   txt(s, [
-    { text: "VALIDATION WE'LL SHOW", options: { bold: true, color: "7A5300", fontSize: 11, breakLine: true } },
-    { text: "Farm name cleared on Review", options: { breakLine: true } },
+    { text: "VALIDATION IN THE DEMO", options: { bold: true, color: "7A5300", fontSize: 11, breakLine: true } },
+    { text: "Farmer types 90 minutes", options: { breakLine: true } },
     { text: "↓", options: { breakLine: true, color: "7A5300" } },
-    { text: "Wizard jumps back to the step that is wrong", options: { breakLine: true } },
+    { text: "“Enter a duration between 1 and 60 minutes.”", options: { italic: true, breakLine: true } },
     { text: "↓", options: { breakLine: true, color: "7A5300" } },
-    { text: "Corrected → farm registered" },
-  ], { x: 10.55, y: 3.25, w: 2.1, h: 2.3, fontSize: 12, align: "center" });
-  txt(s, "Now, let's see AgroFlow in action.", { x: 0.55, y: 5.95, w: 9.6, h: 0.65, fontSize: 24, bold: true, color: TEAL, valign: "middle" });
+    { text: "Corrected to 5 → confirmed → sent" },
+  ], { x: 6.6, y: 3.35, w: 2.7, h: 1.85, fontSize: 12, align: "center" });
+  s.addImage({ path: A("ui/demo-a-kits.png"), x: 9.7, y: 3.25, w: 3.05, h: 3.05 * 1620 / 2880, objectName: "Demo screen — admin kits" });
+  caption(s, "Admin console · Kits (demo data)", 9.7, 3.3 + 3.05 * 1620 / 2880, 3.05, { align: "center" });
+  txt(s, "Now, let's see AgroFlow in action.", { x: 6.45, y: 5.85, w: 6.3, h: 0.65, fontSize: 24, bold: true, color: TEAL, valign: "middle" });
   s.addNotes(
     "SPEAKER 4 — Olwethu. ~45 s.\n" +
-    "This is the journey our demo will follow, end to end. An administrator signs in and registers a new farm — the farmer, a pin on the map, and a crop chosen from the list our advice engine actually supports. " +
-    "Then they register a kit and get a one-time enrolment code. On site, the board is enrolled with that code and the Wi-Fi details, and it comes online. " +
-    "We'll run the FAO-56 advice for the zone, switch to the farmer's view to see the forecast, a water-usage report and the Telegram message, and finish on the activity log that records every step. " +
-    "Along the way we'll show one validation: if the farm name is cleared on the review step, the wizard takes you back to the step that's wrong instead of saving a nameless farm. " +
-    "Now, let's see AgroFlow in action.\n\n" +
-    "Source: docs/presentation-runbook.md (the team's demo script, steps 1–7); validation: apps/web/admin/src/app/interactions.ts findFirstProblem (jumps back to the failing step). " +
-    "If the demo instead shows the farmer starting a manual run: the app rejects durations outside 1–60 minutes ('Enter a duration between 1 and 60 minutes.') — but the firmware stops every run at 5 minutes, so choose 5 minutes or less."
+    "x\n\n" +
+    "Source: the team's system demo (showcase/narration.md, showcase/system-audit.md, showcase/assets/screens/*). Screens are the real, unmodified app answering with clearly labelled illustrative demo data (showcase/capture/demo-data.mjs), approved by the team per showcase/system-audit.md. " +
+    "Validation: apps/mobile/src/app/zone/[id].tsx handleStartManualRun ('Enter a duration between 1 and 60 minutes.'). The demo uses 5 minutes, which fits the firmware's 5-minute safety cap."
   );
 
   await pres.writeFile({ fileName: OUT });

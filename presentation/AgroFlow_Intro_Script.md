@@ -4,14 +4,14 @@ INF3003W Systems Development Project I · Team 2 · University of Cape Town · 2
 Deck: `AgroFlow_Showcase_Intro_2026.pptx` (10 slides)
 
 **Target:** 5:30–6:30 · **Hard limit:** 7:00
-**Spoken length:** 766 words (counted). At 140 words per minute that is 5:28, plus about 20–30 s for handovers and slide changes, so roughly **5:50–6:00**.
+**Spoken length:** 777 words (counted). At 140 words per minute that is 5:33, plus about 20–30 s for handovers and slide changes, so roughly **5:50–6:00**.
 
 | Speaker | Role (Milestone 1, Table 14) | Slides | Words | Time at 140 wpm |
 |---|---|---|---|---|
 | 1 · Lubaelihle Msuku | Project Manager | 1–3 | 180 | ~1:17 |
 | 2 · Leruo Matlhatsi | Software Developer | 4–5 | 199 | ~1:25 |
 | 3 · Philisile Tyobeka | Business Analyst | 6–7 | 174 | ~1:15 |
-| 4 · Olwethu Nkabinde | Soft Skills Specialist | 8–10 | 213 | ~1:31 |
+| 4 · Olwethu Nkabinde | Soft Skills Specialist | 8–10 | 224 | ~1:36 |
 
 The split follows your suggested structure and matches each person's documented role. The developer explains the architecture, and the business analyst explains the process and the domain model.
 
@@ -88,10 +88,8 @@ The platform, farmer app and admin console are all working, as listed.
 Some things aren't finished. Maintenance and alert assignment don't persist yet, uptime isn't measured, and the ESP-NOW gateway from our design wasn't built.
 
 ### Slide 10 · The journey we will demonstrate (~45 s)
-Our demo follows one end-to-end journey.
-An administrator registers a farm, choosing the farmer, a map pin and a supported crop. They register a kit and receive a one-time code. The board is enrolled with that code and comes online, and we run the zone's advice.
-Then we switch to the farmer's app for the forecast, a water report and the Telegram message, and finish on the activity log.
-We'll also show a validation check: if the farm name is cleared before saving, the wizard returns to the step that is wrong.
+Our system demo follows one farmer's day. They open AgroFlow, and Drip, the app's helper, points them to Zone 2. Its soil moisture has dropped below its start level, so the zone is critical, and the FAO-56 advice says to water now for about five minutes.
+The farmer switches the zone to manual and starts a run. When they type ninety minutes, the app stops them, because a run must be between one and sixty minutes. They correct it to five. The command reaches the kit, the pump runs, and the run appears in their history. Finally, an administrator follows up the alert.
 Now, let's see AgroFlow in action.
 
 ---
@@ -111,7 +109,7 @@ Word counts below are counted from this script. Times assume 140 words per minut
 | 7 | 69 | 0:30 | 3:57 |
 | 8 | 54 | 0:23 | 4:20 |
 | 9 | 61 | 0:26 | 4:46 |
-| 10 | 98 | 0:42 | 5:28 |
-| Handovers and transitions | — | ~0:25 | **~5:53** |
+| 10 | 109 | 0:47 | 5:33 |
+| Handovers and transitions | — | ~0:25 | **~5:58** |
 
 These are estimates, not measurements. Time a full rehearsal. If it falls **under 5:30**, slow down on slides 5 and 6 rather than adding words. If it runs **past 6:30**, shorten slide 5 to the command-path sentence and drop the HTTPS clause.
