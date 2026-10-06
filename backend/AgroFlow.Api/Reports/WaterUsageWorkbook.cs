@@ -50,7 +50,8 @@ internal static class WaterUsageWorkbook
         var sheet = new Sheet
         {
             Name = "Summary",
-            ColumnWidths = new[] { 40.0, 14.0, 10.0 },
+            // Column B is wide for the Advice section's "Why" text (item 2c).
+            ColumnWidths = new[] { 40.0, 60.0, 10.0 },
         };
 
         sheet.Add(Cell.Of("AgroFlow — Water Usage Data", XlsxStyle.Title));
@@ -110,6 +111,8 @@ internal static class WaterUsageWorkbook
 
         sheet.AddBlank();
 
+        AddAdvice(sheet, m);
+
         sheet.Add(Cell.Of("Notes", XlsxStyle.SectionHeader),
                   Cell.Of("", XlsxStyle.SectionHeader),
                   Cell.Of("", XlsxStyle.SectionHeader));
@@ -140,6 +143,34 @@ internal static class WaterUsageWorkbook
         }
 
         return sheet;
+    }
+
+    // Item 2c: the period's verdict and each piece of advice, with a "Why"
+    // column beside it - the same summary the PDF prints under each line.
+    internal static void AddAdvice(Sheet sheet, WaterUsageReportModel m)
+    {
+        var rows = new List<(string Advice, string Why)>();
+        if (m.Verdict is { } verdict && m.VerdictWhy is { } verdictWhy)
+        {
+            rows.Add(("Water this period: " + AgroFlow.Business.Agronomy.RuleBook.VerdictRules.Label(verdict), verdictWhy.Summary));
+        }
+        foreach (var line in m.Advice)
+        {
+            rows.Add((line.Message, line.Why?.Summary ?? ""));
+        }
+
+        if (rows.Count == 0) return;
+
+        sheet.Add(Cell.Of("Advice", XlsxStyle.SectionHeader),
+                  Cell.Of("", XlsxStyle.SectionHeader),
+                  Cell.Of("", XlsxStyle.SectionHeader));
+        sheet.Add(Cell.Of("Advice", XlsxStyle.TableHeader),
+                  Cell.Of("Why", XlsxStyle.TableHeader));
+        foreach (var (advice, why) in rows)
+        {
+            sheet.Add(Cell.Of(advice), Cell.Of(why, XlsxStyle.Note));
+        }
+        sheet.AddBlank();
     }
 
     /* ------------------------------------------------------------------ *

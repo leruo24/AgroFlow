@@ -126,7 +126,34 @@ internal sealed class WaterUsageReportModel
             Date.ToDateTime(TimeOnly.MinValue).ToString("ddd d MMM", CultureInfo.InvariantCulture);
     }
 
-    public sealed record AdviceLine(string Message, string Source);
+    // Item 2c: the insight's own explanation, for the "Why:" line.
+    public sealed record AdviceLine(string Message, string Source, AgroFlow.Business.Agronomy.RuleBook.Explanation? Why = null);
+
+    // Item 2b/2c: the period's verdict comes from VerdictRules - not from a
+    // band hidden in the PDF - and carries its own explanation. Cached, so
+    // the PDF's "Why:" line and its appendix entry are the same object.
+    private AgroFlow.Business.Agronomy.RuleBook.Explanation? _verdictWhy;
+    private bool _verdictBuilt;
+
+    public AgroFlow.Business.Agronomy.RuleBook.WateringVerdict? Verdict =>
+        TotalLitres.HasValue && TotalNeedLitres.HasValue
+            ? AgroFlow.Business.Agronomy.RuleBook.VerdictRules.For(TotalLitres.Value, TotalNeedLitres.Value)
+            : null;
+
+    public AgroFlow.Business.Agronomy.RuleBook.Explanation? VerdictWhy
+    {
+        get
+        {
+            if (!_verdictBuilt)
+            {
+                _verdictBuilt = true;
+                _verdictWhy = TotalLitres.HasValue && TotalNeedLitres.HasValue
+                    ? AgroFlow.Business.Agronomy.RuleBook.Explanations.Verdict(TotalLitres.Value, TotalNeedLitres.Value, CropLabel, "this period")
+                    : null;
+            }
+            return _verdictWhy;
+        }
+    }
 }
 
 /// Builds the model. All reads; nothing here writes.
@@ -396,7 +423,7 @@ internal static class WaterUsageReportBuilder
         var advice = insights
             .OrderBy(i => i.Severity == InsightSeverity.ActNow ? 0 : 1)
             .Take(4)
-            .Select(i => new WaterUsageReportModel.AdviceLine(i.Message, i.Source))
+            .Select(i => new WaterUsageReportModel.AdviceLine(i.Message, i.Source, i.Explanation))
             .ToList();
 
         /* ---- 10. The crop and its stage -------------------------------- */

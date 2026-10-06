@@ -26,15 +26,22 @@ internal static class DesignedWaterUsagePdf
 {
     public static byte[] Render(WaterUsageReportModel m)
     {
+        // Item 2c: every verdict and advice line gets a numbered "Why:", in
+        // page order - the verdict on page 2 first, then the advice.
+        var why = new ReportWhy();
+        why.Add(m.VerdictWhy);
+        foreach (var line in m.Advice) why.Add(line.Why);
+
         return Document.Create(doc =>
         {
-            doc.Page(page => BuildPage(page, m, 1));
-            doc.Page(page => BuildPage(page, m, 2));
-            doc.Page(page => BuildPage(page, m, 3));
+            doc.Page(page => BuildPage(page, m, 1, why));
+            doc.Page(page => BuildPage(page, m, 2, why));
+            doc.Page(page => BuildPage(page, m, 3, why));
+            if (why.Notes.Count > 0) doc.Page(page => BuildPage(page, m, 4, why));
         }).GeneratePdf();
     }
 
-    private static void BuildPage(PageDescriptor page, WaterUsageReportModel m, int pageNumber)
+    private static void BuildPage(PageDescriptor page, WaterUsageReportModel m, int pageNumber, ReportWhy why)
     {
         ReportShell.ApplyPageDefaults(page);
 
@@ -46,8 +53,9 @@ internal static class DesignedWaterUsagePdf
             switch (pageNumber)
             {
                 case 1: PageOne(col, m); break;
-                case 2: PageTwo(col, m); break;
-                default: PageThree(col, m); break;
+                case 2: PageTwo(col, m, why); break;
+                case 3: PageThree(col, m); break;
+                default: why.Appendix(col); break;
             }
         });
 
@@ -196,7 +204,9 @@ internal static class DesignedWaterUsagePdf
      * Page 2
      * ------------------------------------------------------------------ */
 
-    internal static void PageTwo(ColumnDescriptor col, WaterUsageReportModel m)
+    internal static void PageTwo(ColumnDescriptor col, WaterUsageReportModel m) => PageTwo(col, m, new ReportWhy());
+
+    internal static void PageTwo(ColumnDescriptor col, WaterUsageReportModel m, ReportWhy why)
     {
         ReportShell.Heading(col, "What the crop needed vs what it got");
 
@@ -209,6 +219,7 @@ internal static class DesignedWaterUsagePdf
             "Litres"));
 
         ReportShell.ChartNote(col, NeededVsGotNote(m));
+        why.Line(col, m.VerdictWhy);
 
         ReportShell.Heading(col, "Soil moisture over the week");
 
@@ -253,6 +264,8 @@ internal static class DesignedWaterUsagePdf
                     // it does not have to be.
                     c.Item().PaddingTop(2).Text($"Source: {line.Source}")
                         .FontSize(7.5f).FontColor(ReportTheme.Muted);
+
+                    why.Line(c, line.Why);
                 });
             });
         }
@@ -277,11 +290,14 @@ internal static class DesignedWaterUsagePdf
         var crop = string.IsNullOrWhiteSpace(m.CropLabel) ? "The crop" : $"Your {m.CropLabel.ToLowerInvariant()}";
         var difference = m.Difference ?? 0;
 
-        var verdict = Math.Abs(difference) < m.TotalNeedLitres.Value * 0.15
-            ? "That's about right."
-            : difference > 0
-                ? "That's a surplus - worth easing off if it continues."
-                : "That's less than needed - worth watering a little longer.";
+        // The verdict is VerdictRules' (item 2b) - this used to be its own
+        // 15% band, written only here.
+        var verdict = m.Verdict switch
+        {
+            AgroFlow.Business.Agronomy.RuleBook.WateringVerdict.TooMuch => "That's a surplus - worth easing off if it continues.",
+            AgroFlow.Business.Agronomy.RuleBook.WateringVerdict.TooLittle => "That's less than needed - worth watering a little longer.",
+            _ => "That's about right.",
+        };
 
         var direction = difference >= 0 ? "more than" : "less than";
 

@@ -403,6 +403,39 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             }, i, r);
         }
 
+        // ---- verdicts (reports) ---------------------------------------------------
+
+        /// <summary>Why a period's water was Too little / About right / Too much.</summary>
+        public static Explanation Verdict(double appliedL, double neededL, string? cropLabel, string periodWords)
+        {
+            var verdict = VerdictRules.For(appliedL, neededL);
+            var crop = string.IsNullOrWhiteSpace(cropLabel) ? "the crop" : cropLabel!.ToLowerInvariant();
+            var ratio = neededL > 0 ? appliedL / neededL : 0;
+
+            return new Explanation
+            {
+                Summary = verdict switch
+                {
+                    WateringVerdict.TooMuch => $"The zone got about {N(Math.Round(ratio, 1))} times what {crop} needed {periodWords}.",
+                    WateringVerdict.TooLittle => $"The zone got about {N(Math.Round(ratio * 100))}% of what {crop} needed {periodWords}.",
+                    WateringVerdict.AboutRight => $"The water given {periodWords} was close to what {crop} needed.",
+                    _ => $"There was no water need to compare against {periodWords}.",
+                },
+                Rule = $"More than {N(VerdictRules.OverwaterRatio)} times the need is too much and less than {N(VerdictRules.UnderwaterRatio)} times is too little. Pump amounts are estimates from run time and flow rate, so smaller differences are not flagged.",
+                Confidence = "Medium: water given is estimated from pump run time and the zone's flow rate - there is no flow meter.",
+                WhatWouldChangeIt = verdict switch
+                {
+                    WateringVerdict.TooMuch => "Shorter or fewer waterings.",
+                    WateringVerdict.TooLittle => "Longer waterings, or watering when the app suggests it.",
+                    _ => "A big change in the weather or in how long the pump runs.",
+                },
+                Technical = $"VerdictRules.For({N(appliedL)} L, {N(neededL)} L) = {verdict}; need = sum of ETc x area (FAO-56 Eq. 58, p. 103).",
+            }
+            .Fact("Water given", $"about {N(Math.Round(appliedL))} L", FromPump)
+            .Fact("Water needed", $"about {N(Math.Round(neededL))} L", FromWeather + " and " + FromGuide)
+            .Fact("Verdict", VerdictRules.Label(verdict), "the rule below");
+        }
+
         // ---- shared facts -------------------------------------------------------
 
         private static Explanation AddCropFacts(Explanation e, ZoneEngineInput i, ZoneEngineResult r)

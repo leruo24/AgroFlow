@@ -828,6 +828,8 @@ public static class ReportEndpoints
             else zonesExcluded++;
         }
 
+        var why = new AgroFlow.Api.Reports.ReportWhy();
+        var insightWhy = why.AddInsights(root);
         var bytes = Document.Create(container => container.Page(page =>
         {
             ReportShell.ApplyPageDefaults(page);
@@ -849,7 +851,7 @@ public static class ReportEndpoints
                     (zonesExcluded > 0 ? $" {zonesExcluded} zone(s) had no usable data and are not included." : ""))
                     .SemiBold();
 
-                WriteInsightsBlock(col, root);
+                WriteInsightsBlock(col, root, why, insightWhy);
 
                 foreach (var z in root.GetProperty("zones").EnumerateArray())
                 {
@@ -889,6 +891,7 @@ public static class ReportEndpoints
                         }
                     });
                 }
+                why.Appendix(col);
             });
 
         })).GeneratePdf();
@@ -928,6 +931,8 @@ public static class ReportEndpoints
         // like one product rather than three. The CONTENT below is unchanged -
         // this report's figures were already right, and rewriting working
         // report logic to match a template was not what was asked for.
+        var why = new AgroFlow.Api.Reports.ReportWhy();
+        var insightWhy = why.AddInsights(root);
         var bytes = Document.Create(container => container.Page(page =>
         {
             ReportShell.ApplyPageDefaults(page);
@@ -965,7 +970,7 @@ public static class ReportEndpoints
                     $"highest {Num(s.GetProperty("highestPct"), pctSuffix)}.");
                 col.Item().Text(s.GetProperty("action").GetString()).SemiBold();
 
-                WriteInsightsBlock(col, root);
+                WriteInsightsBlock(col, root, why, insightWhy);
 
                 // Spec 3b: say in the report that a resistive probe drifts.
                 if (root.TryGetProperty("calibrationNote", out var calibrationNote)
@@ -1029,11 +1034,12 @@ public static class ReportEndpoints
                     {
                         table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("time").GetString());
                         table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("avgMoisturePct"), pctSuffix));
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("minMoisturePct"), "%"));
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("maxMoisturePct"), "%"));
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("minMoisturePct"), pctSuffix));
+                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("maxMoisturePct"), pctSuffix));
                         table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("readings").GetInt64().ToString());
                     }
                 });
+                why.Appendix(col);
             });
 
         })).GeneratePdf();
@@ -1074,6 +1080,11 @@ public static class ReportEndpoints
         var today = root.GetProperty("today").GetString();
         var hasZones = root.GetProperty("status").GetString() == "ok";
 
+        // Item 2c: one numbered "Why:" per insight, in page order.
+        var why = new AgroFlow.Api.Reports.ReportWhy();
+        var zoneWhy = root.TryGetProperty("zones", out var whyZones) && whyZones.ValueKind == JsonValueKind.Array
+            ? whyZones.EnumerateArray().Select(zone => why.AddInsights(zone)).ToList()
+            : new List<List<AgroFlow.Business.Agronomy.RuleBook.Explanation?>>();
         var bytes = Document.Create(container => container.Page(page =>
         {
             ReportShell.ApplyPageDefaults(page);
@@ -1101,8 +1112,10 @@ public static class ReportEndpoints
                     return;
                 }
 
+                var zoneIndex = -1;
                 foreach (var z in root.GetProperty("zones").EnumerateArray())
                 {
+                    zoneIndex++;
                     col.Item().PaddingTop(8).Text($"{Str(z.GetProperty("name"))} ({Str(z.GetProperty("cropType"))})").FontSize(13).SemiBold();
                     col.Item().Text(Str(z.GetProperty("summary"))).SemiBold();
 
@@ -1142,11 +1155,15 @@ public static class ReportEndpoints
                         && zoneInsights.GetArrayLength() > 0)
                     {
                         col.Item().PaddingTop(4).Text("What to do").SemiBold();
+                        var perZone = zoneIndex < zoneWhy.Count ? zoneWhy[zoneIndex] : new List<AgroFlow.Business.Agronomy.RuleBook.Explanation?>();
+                        var insightIndex = 0;
                         foreach (var insight in zoneInsights.EnumerateArray())
                         {
                             col.Item().Text("- " + Str(insight.GetProperty("text")));
                             col.Item().PaddingLeft(10).Text("Source: " + Str(insight.GetProperty("source")))
                                 .FontSize(8).FontColor(Colors.Grey.Darken1);
+                            why.Line(col, insightIndex < perZone.Count ? perZone[insightIndex] : null);
+                            insightIndex++;
                         }
                     }
 
@@ -1258,6 +1275,7 @@ public static class ReportEndpoints
                         });
                     }
                 }
+                why.Appendix(col);
             });
 
         })).GeneratePdf();
@@ -1369,7 +1387,8 @@ public static class ReportEndpoints
     // Spec 9b: a top-level insights block, each line with its source in small
     // text underneath. Shared by the moisture and water-usage PDFs so the two
     // cannot drift apart.
-    private static void WriteInsightsBlock(ColumnDescriptor col, JsonElement root)
+    private static void WriteInsightsBlock(ColumnDescriptor col, JsonElement root,
+        AgroFlow.Api.Reports.ReportWhy why, List<AgroFlow.Business.Agronomy.RuleBook.Explanation?> perInsight)
     {
         if (!root.TryGetProperty("insights", out var insights)
             || insights.ValueKind != JsonValueKind.Array
@@ -1380,8 +1399,11 @@ public static class ReportEndpoints
 
         col.Item().PaddingTop(6).Text("What to do").FontSize(12).SemiBold();
 
+        var index = 0;
         foreach (var insight in insights.EnumerateArray())
         {
+            var explanation = index < perInsight.Count ? perInsight[index] : null;
+            index++;
             var text = insight.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String
                 ? t.GetString()! : "";
             var source = insight.TryGetProperty("source", out var sr) && sr.ValueKind == JsonValueKind.String
@@ -1393,6 +1415,8 @@ public static class ReportEndpoints
                 col.Item().PaddingLeft(10).Text("Source: " + source)
                     .FontSize(8).FontColor(Colors.Grey.Darken1);
             }
+
+            why.Line(col, explanation);
         }
     }
 

@@ -22,13 +22,26 @@ internal static class DesignedFarmWaterUsagePdf
 {
     public static byte[] Render(FarmWaterUsageReport farm)
     {
+        // Item 2c: numbered "Why:" notes, registered before rendering in page
+        // order - the farm verdict, then each zone's verdict and advice.
+        var why = new ReportWhy();
+        var farmVerdictWhy = farm.TotalNeedLitres is { } n && farm.TotalLitres is { } g
+            ? AgroFlow.Business.Agronomy.RuleBook.Explanations.Verdict(g, n, null, "this period across the farm")
+            : null;
+        why.Add(farmVerdictWhy);
+        foreach (var zone in farm.Zones)
+        {
+            why.Add(zone.VerdictWhy);
+            foreach (var line in zone.Advice) why.Add(line.Why);
+        }
+
         return Document.Create(doc =>
         {
             doc.Page(page =>
             {
                 ReportShell.ApplyPageDefaults(page);
                 Shell(page, farm);
-                page.Content().PaddingHorizontal(34).PaddingTop(18).Column(col => Summary(col, farm));
+                page.Content().PaddingHorizontal(34).PaddingTop(18).Column(col => Summary(col, farm, why, farmVerdictWhy));
             });
 
             foreach (var zone in farm.Zones)
@@ -58,7 +71,7 @@ internal static class DesignedFarmWaterUsagePdf
                     page.Content().PaddingHorizontal(34).PaddingTop(18).Column(col =>
                     {
                         ReportShell.ZoneHeading(col, zone.ZoneName, zone.CropLabel);
-                        DesignedWaterUsagePdf.PageTwo(col, zone);
+                        DesignedWaterUsagePdf.PageTwo(col, zone, why);
                     });
                 });
             }
@@ -69,6 +82,16 @@ internal static class DesignedFarmWaterUsagePdf
                 Shell(page, farm);
                 page.Content().PaddingHorizontal(34).PaddingTop(18).Column(col => Weather(col, farm));
             });
+
+            if (why.Notes.Count > 0)
+            {
+                doc.Page(page =>
+                {
+                    ReportShell.ApplyPageDefaults(page);
+                    Shell(page, farm);
+                    page.Content().PaddingHorizontal(34).PaddingTop(18).Column(col => why.Appendix(col));
+                });
+            }
         }).GeneratePdf();
     }
 
@@ -90,7 +113,8 @@ internal static class DesignedFarmWaterUsagePdf
      * Page 1 — the farm
      * ------------------------------------------------------------------ */
 
-    private static void Summary(ColumnDescriptor col, FarmWaterUsageReport farm)
+    private static void Summary(ColumnDescriptor col, FarmWaterUsageReport farm, ReportWhy why,
+        AgroFlow.Business.Agronomy.RuleBook.Explanation? farmVerdictWhy)
     {
         col.Item().Row(row =>
         {
@@ -159,16 +183,19 @@ internal static class DesignedFarmWaterUsagePdf
             var difference = got - need;
             var direction = difference >= 0 ? "more than" : "less than";
 
-            var verdict = Math.Abs(difference) < need * 0.15
-                ? "That's about right for the farm as a whole."
-                : difference > 0
-                    ? "That's a surplus across the farm - the zone table above shows where."
-                    : "That's short across the farm - the zone table above shows where.";
+            // VerdictRules (item 2b) - this used to be its own 15% band.
+            var verdict = AgroFlow.Business.Agronomy.RuleBook.VerdictRules.For(got, need) switch
+            {
+                AgroFlow.Business.Agronomy.RuleBook.WateringVerdict.TooMuch => "That's a surplus across the farm - the zone table above shows where.",
+                AgroFlow.Business.Agronomy.RuleBook.WateringVerdict.TooLittle => "That's short across the farm - the zone table above shows where.",
+                _ => "That's about right for the farm as a whole.",
+            };
 
             ReportShell.ChartNote(col,
                 $"Across every zone we can estimate, the crops needed about {ReportShell.Num(need, 0)} L " +
                 $"and got about {ReportShell.Num(got, 1)} L - {ReportShell.Num(Math.Abs(difference), 1)} L " +
                 $"{direction} needed. {verdict}");
+            why.Line(col, farmVerdictWhy);
         }
     }
 

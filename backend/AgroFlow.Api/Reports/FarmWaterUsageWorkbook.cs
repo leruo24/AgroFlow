@@ -50,7 +50,8 @@ internal static class FarmWaterUsageWorkbook
         var sheet = new Sheet
         {
             Name = "Summary",
-            ColumnWidths = new[] { 26.0, 14.0, 22.0, 14.0, 13.0, 13.0, 13.0, 13.0 },
+            // B and C are wide for the Advice section (item 2c).
+            ColumnWidths = new[] { 26.0, 40.0, 60.0, 14.0, 13.0, 13.0, 13.0, 13.0 },
         };
 
         sheet.Add(Cell.Of("AgroFlow — Water Usage Data (all zones)", XlsxStyle.Title));
@@ -157,6 +158,30 @@ internal static class FarmWaterUsageWorkbook
                 $"No flow rate on file for: {string.Join(", ", farm.ZonesWithoutEstimate)}. " +
                 "Those zones are not in the farm's water total. Type a rate into column E and they will be.",
                 XlsxStyle.Bold));
+        }
+
+        // Item 2c: every zone's verdict and advice, each with its "Why".
+        var adviceRows = new List<(string Zone, string Advice, string Why)>();
+        foreach (var zone in farm.Zones)
+        {
+            if (zone.Verdict is { } verdict && zone.VerdictWhy is { } verdictWhy)
+                adviceRows.Add((zone.ZoneName, "Water this period: " + AgroFlow.Business.Agronomy.RuleBook.VerdictRules.Label(verdict), verdictWhy.Summary));
+            foreach (var line in zone.Advice)
+                adviceRows.Add((zone.ZoneName, line.Message, line.Why?.Summary ?? ""));
+        }
+
+        if (adviceRows.Count > 0)
+        {
+            sheet.AddBlank();
+            sheet.Add(Cell.Of("Advice", XlsxStyle.SectionHeader),
+                      Cell.Of("", XlsxStyle.SectionHeader), Cell.Of("", XlsxStyle.SectionHeader));
+            sheet.Add(Cell.Of("Zone", XlsxStyle.TableHeader),
+                      Cell.Of("Advice", XlsxStyle.TableHeader),
+                      Cell.Of("Why", XlsxStyle.TableHeader));
+            foreach (var (zoneName, advice, why) in adviceRows)
+            {
+                sheet.Add(Cell.Of(zoneName), Cell.Of(advice), Cell.Of(why, XlsxStyle.Note));
+            }
         }
 
         return sheet;
