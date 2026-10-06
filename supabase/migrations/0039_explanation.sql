@@ -8,7 +8,9 @@
 -- "Why am I seeing this?" button can carry only a short id (Telegram limits
 -- callback data to 64 bytes, and it must not carry personal data). This
 -- table is what that id points at, so the bot can answer with the
--- explanation exactly as it was when the message was sent.
+-- explanation exactly as it was when the message was sent. Alerts are the
+-- same: the apps read `alert` straight from Supabase, and an alert's
+-- explanation lives here, keyed by alert_id.
 --
 -- The row belongs to a FARM. The bot answers a "Why?" tap only for a chat
 -- linked to a profile that owns or is a member of that farm - checked in the
@@ -24,6 +26,10 @@ create table if not exists explanation (
     farm_id      bigint not null references farm (farm_id) on delete cascade,
     zone_id      bigint references zone (id) on delete cascade,
 
+    -- Set when the explanation belongs to an alert row, so the apps (which
+    -- read alerts straight from Supabase) can show its "Why?".
+    alert_id     bigint references alert (id) on delete cascade,
+
     -- What the message was about: 'zone_critical', 'weather_frost',
     -- 'system_device_offline', ... Free text so a new message kind needs no
     -- migration.
@@ -35,6 +41,14 @@ create table if not exists explanation (
 
     created_at   timestamptz not null default now()
 );
+
+-- Re-run safety for a database that applied this file before alert_id was
+-- added to it.
+alter table explanation add column if not exists alert_id bigint references alert (id) on delete cascade;
+
+create index if not exists idx_explanation_alert
+    on explanation (alert_id)
+    where alert_id is not null;
 
 create index if not exists idx_explanation_farm_created
     on explanation (farm_id, created_at desc);

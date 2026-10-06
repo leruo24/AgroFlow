@@ -248,8 +248,9 @@ public static class SensorReadingProcessor
         // or high temperature, so the message says which one it was rather
         // than assuming dryness.
         var reasons = new List<string>();
+        // Item 2: a sensor reading, never a % - it may predate the wet/dry setup.
         if (moisture is not null && moisture < Zone.MoistureCriticalMax)
-            reasons.Add($"soil moisture {moisture:0.#}%");
+            reasons.Add($"soil sensor reading {moisture:0.#}");
         if (temperature is not null && temperature >= Zone.TemperatureCriticalMin)
             reasons.Add($"temperature {temperature:0.#}C");
 
@@ -257,11 +258,42 @@ public static class SensorReadingProcessor
             ? $"Zone entered Critical: {string.Join(", ", reasons)}."
             : "Zone entered Critical.";
 
-        await using var cmd = new NpgsqlCommand(
-            "insert into alert (zone_id, severity, message) values ($1, 'Critical', $2)", connection);
-        cmd.Parameters.AddWithValue(zoneId);
-        cmd.Parameters.AddWithValue(message);
-        await cmd.ExecuteNonQueryAsync();
+        long alertId;
+        await using (var cmd = new NpgsqlCommand(
+            "insert into alert (zone_id, severity, message) values ($1, 'Critical', $2) returning id", connection))
+        {
+            cmd.Parameters.AddWithValue(zoneId);
+            cmd.Parameters.AddWithValue(message);
+            alertId = (long)(await cmd.ExecuteScalarAsync())!;
+        }
+
+        // Item 2c: the alert's "Why am I seeing this?". Never lets a missing
+        // explanation table (migration 0039) get in the way of the alert.
+        var explanation = AgroFlow.Business.Agronomy.RuleBook.Explanations.CriticalAlert(
+            moisture, temperature, Zone.MoistureCriticalMax, Zone.TemperatureCriticalMin);
+        await SaveAlertExplanationAsync(connection, zoneId, alertId, "alert_critical", explanation);
+    }
+
+    internal static async Task SaveAlertExplanationAsync(
+        NpgsqlConnection connection, long zoneId, long alertId, string kind,
+        AgroFlow.Business.Agronomy.RuleBook.Explanation explanation)
+    {
+        try
+        {
+            await using var cmd = new NpgsqlCommand(
+                "insert into explanation (farm_id, zone_id, alert_id, kind, explanation) " +
+                "select z.farm_id, z.id, $2, $3, $4::jsonb from zone z where z.id = $1", connection);
+            cmd.Parameters.AddWithValue(zoneId);
+            cmd.Parameters.AddWithValue(alertId);
+            cmd.Parameters.AddWithValue(kind);
+            cmd.Parameters.AddWithValue(System.Text.Json.JsonSerializer.Serialize(explanation));
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch (PostgresException)
+        {
+            // The alert is what matters; its explanation is a bonus until
+            // migration 0039 is applied.
+        }
     }
 
     private static async Task ResolveCriticalAlertsAsync(NpgsqlConnection connection, long zoneId)

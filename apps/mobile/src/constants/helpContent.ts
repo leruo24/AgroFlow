@@ -38,6 +38,7 @@ export const helpContent = {
     body: [
       'Anything that needs your attention shows up here: a pump that did not work, a sensor that stopped reporting, or soil that got too dry.',
       'Newest alerts are at the top. Tap one to see which zone it came from.',
+      'Tap "Why am I seeing this?" under an alert to see what caused it and what would clear it.',
     ],
   },
 
@@ -89,6 +90,7 @@ export const helpContent = {
       "Today's suggestions for this zone, worked out from the weather, your crop and your soil readings.",
       'The most urgent ones are at the top. Tap one to clear it once you have dealt with it.',
       'These are suggestions only. Nothing here waters your crops by itself.',
+      'Each one has "Why am I seeing this?": what it was based on, the rule behind it, how sure we are, and what would change it. The badge at the top says how sure the advice is, and the one thing that would make it better.',
     ],
   },
 

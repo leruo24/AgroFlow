@@ -6,8 +6,20 @@ import { createZoneInsightsStyles } from '@/styles/zoneInsightsStyles';
 import {
   dismissZoneInsight,
   fetchZoneInsights,
+  type Explanation,
   type ZoneInsight,
 } from '@/services/agroFlowApi';
+import { WhyLink } from '@/components/WhySheet';
+
+// Item 2: how sure the advice is, and the ONE thing that would improve it.
+type Confidence = {
+  level: 'high' | 'medium' | 'low';
+  reason: string;
+  explanation: Explanation | null;
+  nextStep: string | null;
+};
+
+const LEVEL_LABEL = { high: 'High', medium: 'Medium', low: 'Low' } as const;
 
 type Props = {
   zoneId: number;
@@ -29,6 +41,7 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
   const [insights, setInsights] = useState<ZoneInsight[]>(provided ?? []);
   const [loading, setLoading] = useState(provided === undefined);
   const [failed, setFailed] = useState(false);
+  const [confidence, setConfidence] = useState<Confidence | null>(null);
 
   useEffect(() => {
     if (provided !== undefined) {
@@ -44,6 +57,16 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
       .then((result) => {
         if (!active) return;
         setInsights(result.insights ?? []);
+        setConfidence(
+          result.confidence
+            ? {
+                level: result.confidence.level,
+                reason: result.confidence.reason,
+                explanation: result.confidenceExplanation ?? null,
+                nextStep: result.nextStep?.ask ?? null,
+              }
+            : null
+        );
         setFailed(false);
       })
       .catch(() => {
@@ -110,6 +133,20 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
         )}
       </View>
 
+      {confidence && (
+        <View style={styles.confidence} accessibilityLabel={`Advice confidence: ${LEVEL_LABEL[confidence.level]}. ${confidence.reason}`}>
+          <Text style={styles.confidenceBadge}>{LEVEL_LABEL[confidence.level]} confidence</Text>
+          <Text style={styles.confidenceReason}>{confidence.reason}</Text>
+          <WhyLink explanation={confidence.explanation} compact />
+          {confidence.nextStep && (
+            <View style={styles.improve}>
+              <Text style={styles.improveTitle}>Improve your advice</Text>
+              <Text style={styles.improveText}>{confidence.nextStep}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {ordered.length === 0 ? (
         <Text style={styles.empty}>
           {failed
@@ -145,6 +182,7 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
               <Icon size={19} color={iconColor} strokeWidth={1.7} />
               <View style={styles.rowBody}>
                 <Text style={styles.message}>{insight.message}</Text>
+                <WhyLink explanation={insight.explanation} compact />
                 <Text style={styles.dismissHint}>Tap to dismiss</Text>
               </View>
             </Pressable>

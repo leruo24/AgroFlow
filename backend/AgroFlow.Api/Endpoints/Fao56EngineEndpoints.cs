@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgroFlow.Business;
 using AgroFlow.Business.Agronomy;
+using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Api.Endpoints;
 
@@ -235,7 +236,18 @@ public static class Fao56EngineEndpoints
             confidence = advice?.Confidence is { } c ? new { level = c.Key, reason = c.Reason } : null,
             nextStep = advice?.NextStep is { } s ? new { field = s.Field, ask = s.Ask } : null,
             stageAssumed = advice?.StageAssumed,
+
+            // ADDITIVE (item 2c): "Why am I seeing this?" for the confidence
+            // badge, from the same setup state ConfidenceRules judged.
+            confidenceExplanation = advice is null ? null : WithoutTechnical(Explanations.Confidence(advice)),
         });
+    }
+
+    // Farmers never get the technical line; it is for admins and appendices.
+    private static Explanation WithoutTechnical(Explanation e)
+    {
+        e.Technical = string.Empty;
+        return e;
     }
 
     // Item 2c: the explanation saved in ai_recommendation.data, or null.

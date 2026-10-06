@@ -198,6 +198,39 @@ public class ExplanationTests
     }
 
     [Fact]
+    public void AlertAndBadgeExplanations_AreCompleteAndPlain()
+    {
+        var result = Fao56Engine.Run(Zone(i => i.PlantingDate = null));
+        var cases = new Dictionary<string, Explanation>
+        {
+            ["critical dry"] = Explanations.CriticalAlert(12f, 25f, AgroFlow.Business.Zone.MoistureCriticalMax, AgroFlow.Business.Zone.TemperatureCriticalMin),
+            ["critical hot"] = Explanations.CriticalAlert(60f, 40f, AgroFlow.Business.Zone.MoistureCriticalMax, AgroFlow.Business.Zone.TemperatureCriticalMin),
+            ["dht"] = Explanations.DhtCallout(ReadingAt),
+            ["confidence"] = Explanations.Confidence(result),
+            ["verdict"] = Explanations.Verdict(30, 20, "Tomato", "this week"),
+        };
+
+        foreach (var (name, e) in cases)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(e.Summary), name);
+            Assert.False(string.IsNullOrWhiteSpace(e.Rule), name);
+            Assert.False(string.IsNullOrWhiteSpace(e.WhatWouldChangeIt), name);
+            Assert.NotEmpty(e.Facts);
+            foreach (var text in new[] { e.Summary, e.Rule, e.WhatWouldChangeIt! }.Concat(e.Facts.SelectMany(f => new[] { f.Label, f.Value })))
+            {
+                Assert.False(Jargon.IsMatch(text), $"{name}: jargon in \"{text}\"");
+            }
+        }
+
+        // The badge's facts are the same setup state ConfidenceRules judged.
+        Assert.Contains(cases["confidence"].Facts, f => f.Label == "Planting date" && f.Value == "not set yet");
+        Assert.Equal(result.NextStep!.Ask, cases["confidence"].WhatWouldChangeIt);
+        Assert.Contains("heat", cases["critical hot"].Summary);
+        Assert.DoesNotContain("heat", cases["critical dry"].Summary);
+        Assert.Contains("1.5 times", cases["verdict"].Summary);
+    }
+
+    [Fact]
     public void AssumedStage_IsLabelledInTheExplanation()
     {
         var s = AllScenarios().First(x => x.Scenario == "no planting date" && x.Insight.InsightType == InsightType.GrowthStatus);

@@ -406,10 +406,24 @@ export function createFarmerServiceRequest(
 
 export type ZoneSoilType = 'sandy' | 'loam' | 'clay';
 
+// Item 2c: "Why am I seeing this?", built on the server by the same rule that
+// produced the message. `technical` never reaches a farmer's app.
+export type ExplanationFact = { label: string; value: string; source: string };
+export type Explanation = {
+  summary: string;
+  facts: ExplanationFact[];
+  rule: string;
+  confidence: string;
+  whatWouldChangeIt?: string | null;
+  technical?: string;
+};
+
 export type ZoneInsight = {
   insightType: string;
   severity: 'act_now' | 'heads_up' | 'info';
   message: string;
+  // Optional: rows written before explanations existed have none.
+  explanation?: Explanation | null;
 };
 
 // How far through its season this zone's crop is.
@@ -435,6 +449,7 @@ export function fetchZoneInsights(zoneId: number) {
     confidence?: { level: 'high' | 'medium' | 'low'; reason: string } | null;
     nextStep?: { field: string; ask: string } | null;
     stageAssumed?: boolean | null;
+    confidenceExplanation?: Explanation | null;
   }>(`/api/farmer/zones/${zoneId}/insights`);
 }
 

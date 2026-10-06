@@ -403,6 +403,68 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             }, i, r);
         }
 
+        // ---- confidence badge ---------------------------------------------------
+
+        /// <summary>Why the advice is High / Medium / Low - from the same setup state ConfidenceRules used.</summary>
+        public static Explanation Confidence(ZoneEngineResult r)
+        {
+            var s = r.Setup;
+            string Set(bool v) => v ? "set" : "not set yet";
+
+            var e = new Explanation
+            {
+                Summary = r.Confidence.Reason,
+                Rule = $"High needs every setup detail and a sensor reading from the last {N(ConfidenceRules.FreshReadingHours)} hours. Medium is the weather and the crop with up to {ConfidenceRules.MaxMissingForMedium} details missing. Anything less is Low.",
+                Confidence = r.Confidence.Reason,
+                WhatWouldChangeIt = r.NextStep?.Ask ?? "Nothing - this zone is fully set up.",
+                Technical = "ConfidenceRules.For / NextStep (DATA RULES).",
+            };
+
+            e.Fact("Crop", Set(s.CropKnown), FromSetup)
+             .Fact("Planting date", Set(s.PlantingDateKnown), FromSetup)
+             .Fact("Pump flow rate", Set(s.FlowRateSet), FromSetup)
+             .Fact("Zone size", Set(s.AreaSet), FromSetup)
+             .Fact("Soil type", Set(s.SoilSet), FromSetup)
+             .Fact("Sensor wet/dry setup", s.Calibrated ? "done" : "not done yet", FromSetup)
+             .Fact("Soil sensor", !s.HasKit ? "no readings yet" : s.ReadingFresh ? "reporting" : ConfidenceRules.KitQuiet(s.LastReadingAtUtc), FromKit)
+             .Fact("Weather", s.WeatherAvailable ? "available" : "not available yet", FromWeather);
+            return e;
+        }
+
+        // ---- alert rows -----------------------------------------------------------
+
+        /// <summary>Why a zone's "entered Critical" alert was raised.</summary>
+        public static Explanation CriticalAlert(float? reading, float? temperatureC, float readingCriticalBelow, float temperatureCriticalFrom)
+        {
+            var dry = reading.HasValue && reading.Value < readingCriticalBelow;
+            var hot = temperatureC.HasValue && temperatureC.Value >= temperatureCriticalFrom;
+
+            var e = new Explanation
+            {
+                Summary = dry && hot ? "The zone's soil sensor reading was very low and the kit measured very high heat."
+                        : hot ? "The kit measured very high heat at this zone."
+                        : "The zone's soil sensor reading dropped very low.",
+                Rule = $"A zone is critical when its soil sensor reads below {N(readingCriticalBelow)}, or the kit measures {N(temperatureCriticalFrom)} °C or hotter. We record it once, when it happens.",
+                Confidence = "High: this comes straight from your kit's own readings.",
+                WhatWouldChangeIt = "The alert closes by itself once readings are back out of the critical range.",
+                Technical = $"Zone.CalculateHealthStatus = Critical (reading < {readingCriticalBelow} or temperature >= {temperatureCriticalFrom}).",
+            };
+            if (reading.HasValue) e.Fact("Soil sensor reading", N(reading.Value), FromSensor);
+            if (temperatureC.HasValue) e.Fact("Temperature at the kit", N(temperatureC.Value) + " °C", FromKit);
+            return e;
+        }
+
+        /// <summary>Why the DHT11 maintenance callout was raised.</summary>
+        public static Explanation DhtCallout(DateTime? lastGoodUtc) =>
+            new Explanation
+            {
+                Summary = "The kit's temperature and humidity sensor stopped sending readings while soil readings kept arriving.",
+                Rule = $"If temperature and humidity stop for {KitRules.DhtOfflineWindowHours} hours while soil readings continue, the sensor needs a visit. Until then the weather app stands in.",
+                Confidence = "High: this comes straight from your kit's own readings.",
+                WhatWouldChangeIt = "The team closes this after the visit. Advice keeps working from the weather app meanwhile.",
+                Technical = "KitRules.IsDhtOffline (DATA RULE).",
+            }.Fact("Last good reading", lastGoodUtc.HasValue ? Sast(lastGoodUtc.Value) : "none recorded", FromKit);
+
         // ---- verdicts (reports) ---------------------------------------------------
 
         /// <summary>Why a period's water was Too little / About right / Too much.</summary>

@@ -818,15 +818,34 @@ namespace AgroFlow.Data
                 ". System is using weather app data. Needs a site visit.";
 
             const string sql =
-                "insert into alert (zone_id, severity, message, status) values ($1, $2, $3, 'Open')";
+                "insert into alert (zone_id, severity, message, status) values ($1, $2, $3, 'Open') returning id";
 
             using (var connection = Open())
-            using (var cmd = new NpgsqlCommand(sql, connection))
             {
-                cmd.Parameters.AddWithValue(zoneId);
-                cmd.Parameters.AddWithValue("Warning");
-                cmd.Parameters.AddWithValue(message);
-                cmd.ExecuteNonQuery();
+                long alertId;
+                using (var cmd = new NpgsqlCommand(sql, connection))
+                {
+                    cmd.Parameters.AddWithValue(zoneId);
+                    cmd.Parameters.AddWithValue("Warning");
+                    cmd.Parameters.AddWithValue(message);
+                    alertId = Convert.ToInt64(cmd.ExecuteScalar());
+                }
+
+                // Item 2c: the callout's "Why?". A missing explanation table
+                // (migration 0039) never stops the callout itself.
+                try
+                {
+                    using var why = new NpgsqlCommand(
+                        "insert into explanation (farm_id, zone_id, alert_id, kind, explanation) " +
+                        "select z.farm_id, z.id, $2, 'alert_dht', $3::jsonb from zone z where z.id = $1", connection);
+                    why.Parameters.AddWithValue(zoneId);
+                    why.Parameters.AddWithValue(alertId);
+                    why.Parameters.AddWithValue(System.Text.Json.JsonSerializer.Serialize(Explanations.DhtCallout(offlineSinceUtc)));
+                    why.ExecuteNonQuery();
+                }
+                catch (PostgresException)
+                {
+                }
             }
         }
 
