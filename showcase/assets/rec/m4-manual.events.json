@@ -1,61 +1,61 @@
 {
-  "duration": 19.858,
+  "duration": 19.776,
   "width": 780,
   "height": 1688,
   "events": [
     {
       "type": "tap",
-      "t": 3.033,
+      "t": 3.023,
       "x": 303,
       "y": 262,
       "label": "manual mode"
     },
     {
       "type": "tap",
-      "t": 4.949,
+      "t": 4.919,
       "x": 195,
       "y": 343,
       "label": "duration"
     },
     {
       "type": "tap",
-      "t": 6.413,
+      "t": 6.372,
       "x": 195,
       "y": 407,
       "label": "start (invalid)"
     },
     {
       "type": "alert",
-      "t": 6.872,
+      "t": 6.829,
       "message": "Invalid Duration\n\nEnter a duration between 1 and 60 minutes."
     },
     {
       "type": "dialog-close",
-      "t": 9.472,
+      "t": 9.429,
       "accept": true
     },
     {
       "type": "tap",
-      "t": 12.715,
+      "t": 12.651,
       "x": 195,
       "y": 343,
       "label": "duration"
     },
     {
       "type": "tap",
-      "t": 14.045,
+      "t": 13.985,
       "x": 195,
       "y": 407,
       "label": "start"
     },
     {
       "type": "confirm",
-      "t": 14.502,
+      "t": 14.441,
       "message": "Start Manual Irrigation?\n\nRun irrigation for 5 minutes?"
     },
     {
       "type": "dialog-close",
-      "t": 17.103,
+      "t": 17.042,
       "accept": true
     }
   ]

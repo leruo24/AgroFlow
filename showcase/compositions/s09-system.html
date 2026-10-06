@@ -11,6 +11,12 @@
   .s09-it small { font-weight: 500; font-size: 17px; color: #4b5a4d; margin-left: auto; }
   #s09-words { position: absolute; left: 0; right: 0; top: 470px; display: flex; justify-content: center; gap: 70px; }
   .s09-w { font-weight: 700; font-size: 76px; letter-spacing: .05em; }
+  #s09-safe { position: absolute; left: 96px; top: 0; width: 1728px; height: 1080px; }
+  .s09-sc { position: absolute; top: 330px; width: 820px; padding: 26px 30px; }
+  .s09-sc .h { font-weight: 700; font-size: 16px; letter-spacing: .16em; color: #184d35; }
+  .s09-sl { display: flex; gap: 14px; margin-top: 20px; font-weight: 600; font-size: 25px; line-height: 1.35; color: #253126; }
+  .s09-sl i { width: 12px; height: 12px; border-radius: 4px; background: #4f8f62; display: block; flex: none; margin-top: 12px; }
+  #s09-ssrc { position: absolute; left: 0; top: 900px; font-weight: 500; font-size: 20px; color: #637064; }
 </style>
 <div id="root" data-composition-id="s09" data-width="1920" data-height="1080">
   <div id="s09-in" class="layer">
@@ -32,21 +38,37 @@
       <div class="s09-col card" id="s09-c1" style="left:140px;top:330px;width:360px;height:420px;">
         <div class="h">FIELD</div>
         <div class="s09-it"><i></i>Sensors<small>soil · temp/humidity</small></div>
-        <div class="s09-it"><i></i>ESP32<small>one per zone</small></div>
+        <div class="s09-it"><i></i>ESP32 kit<small>one per zone</small></div>
         <div class="s09-it"><i style="background:#168f99"></i>Relay &amp; pump<small>runs the water</small></div>
+        <div class="s09-it"><i style="background:#b9473e"></i>Safety limits<small>built into the kit</small></div>
       </div>
       <div class="s09-col card" id="s09-c2" style="left:700px;top:290px;width:520px;height:500px;border:2px solid #184d35;">
         <div class="h">CONNECTED AGROFLOW PLATFORM</div>
         <div class="s09-it"><i style="background:#168f99"></i>Connectivity<small>MQTT over TLS</small></div>
-        <div class="s09-it"><i></i>Services<small>AgroFlow.Api</small></div>
+        <div class="s09-it"><i></i>Services<small>AgroFlow.Api on Railway</small></div>
         <div class="s09-it"><i></i>Data<small>Supabase · Postgres</small></div>
         <div class="s09-it"><i></i>Decision support<small>FAO-56 water balance</small></div>
         <div class="s09-it"><i style="background:#168f99"></i>Weather<small>Open-Meteo forecast</small></div>
+        <div class="s09-it"><i style="background:#168f99"></i>Messages<small>Telegram alerts &amp; PDF reports</small></div>
       </div>
       <div class="s09-col card" id="s09-c3" style="left:1400px;top:330px;width:380px;height:220px;">
-        <div class="h">FARMER</div><div class="s09-it" style="font-size:26px">Mobile app</div><div class="s09-it" style="font-size:18px;font-weight:500;color:#4b5a4d;margin-top:8px">Conditions, advice, action</div></div>
+        <div class="h">FARMER</div><div class="s09-it" style="font-size:26px">Mobile app</div><div class="s09-it" style="font-size:18px;font-weight:500;color:#4b5a4d;margin-top:8px">Advice, action, history, reports</div></div>
       <div class="s09-col card" id="s09-c4" style="left:1400px;top:590px;width:380px;height:200px;">
-        <div class="h">ADMINISTRATOR</div><div class="s09-it" style="font-size:26px">Admin console</div><div class="s09-it" style="font-size:18px;font-weight:500;color:#4b5a4d;margin-top:8px">Farms, kits, alerts, upkeep</div></div>
+        <div class="h">ADMINISTRATOR</div><div class="s09-it" style="font-size:26px">Admin console</div><div class="s09-it" style="font-size:18px;font-weight:500;color:#4b5a4d;margin-top:8px">Requests, kits, alerts, reports</div></div>
+    </div>
+    <div id="s09-safe">
+      <div class="cap" id="s09-cap2" style="left:0"><div class="k">Built-in safety · ESP32 firmware</div><div class="t">The kit stays safe, even offline.</div></div>
+      <div class="s09-sc card" id="s09-s1" style="left:0;">
+        <div class="h">ALWAYS</div>
+        <div class="s09-sl"><i></i>Every pump run stops after 5 minutes at most, whatever started it.</div>
+        <div class="s09-sl"><i></i>Each kit has its own key from setup. A revoked kit wipes itself.</div>
+      </div>
+      <div class="s09-sc card" id="s09-s2" style="left:908px;">
+        <div class="h">IF THE CONNECTION DROPS</div>
+        <div class="s09-sl"><i style="background:#168f99"></i>After 10 minutes offline, the kit waters by itself from its own soil reading.</div>
+        <div class="s09-sl"><i style="background:#168f99"></i>Runs of up to 60 seconds, then 5 minutes' rest. Control returns on reconnect.</div>
+      </div>
+      <div id="s09-ssrc">Values from the firmware: SAFETY_MAX_RUN_MS, OFFLINE_FALLBACK_AFTER_MS, FALLBACK_MAX_RUN_MS, FALLBACK_MIN_REST_MS, MAX_AUTH_FAILURES.</div>
     </div>
     <div id="s09-words">
       <div class="s09-w" id="s09-w1" style="color:#2f6b4b">SENSE</div>
@@ -71,8 +93,15 @@
   run(document.querySelector(".s09-v"), 1220, 700, 1400, 700, 4.4, 0.7);
   run(document.querySelectorAll(".s09-u")[0], 1220, 450, 1400, 450, 5.6, 0.7);
   tl.to("#s09-dia", { opacity: 0, y: -30, duration: 0.6, ease: "power2.in" }, 8.2);
-  ["#s09-w1", "#s09-w2", "#s09-w3", "#s09-w4"].forEach((w, i) => tl.fromTo(w, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 9.0 + i * 0.9));
-  tl.to("#s09-in", { opacity: 0, duration: 0.45 }, 15.5);
+  // Kit safety, from the firmware constants.
+  tl.set("#s09-safe", { opacity: 1 }, 0);
+  tl.fromTo("#s09-cap2", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 8.9);
+  tl.fromTo("#s09-s1", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 9.3);
+  tl.fromTo("#s09-s2", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 11.0);
+  tl.fromTo("#s09-ssrc", { opacity: 0 }, { opacity: 1, duration: 0.5 }, 11.8);
+  tl.to("#s09-safe", { opacity: 0, y: -30, duration: 0.6, ease: "power2.in" }, 14.6);
+  ["#s09-w1", "#s09-w2", "#s09-w3", "#s09-w4"].forEach((w, i) => tl.fromTo(w, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 15.4 + i * 0.9));
+  tl.to("#s09-in", { opacity: 0, duration: 0.45 }, 21.5);
   window.__timelines["s09"] = tl;
 })();
 </script>

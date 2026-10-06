@@ -1,18 +1,18 @@
 {
-  "duration": 10.978,
+  "duration": 10.966,
   "width": 780,
   "height": 1688,
   "events": [
     {
       "type": "tap",
-      "t": 2.979,
+      "t": 3.03,
       "x": 196,
       "y": 388,
       "label": "manage irrigation"
     },
     {
       "type": "tap",
-      "t": 7.98,
+      "t": 7.976,
       "x": 195,
       "y": 728,
       "label": "manage zone 2"

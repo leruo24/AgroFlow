@@ -43,7 +43,7 @@ const TABLES = {
   farm: () => D.adminFarms, zone: () => D.adminZones,
   hardware: () => D.kits.map(({ deviceId, fw, online, mqtt, ...h }) => h),
   alert: () => D.adminAlerts.map(embedAlert), maintenance: () => D.maintenanceJobs,
-  irrigation_event: () => events, service_request: () => [], report_request: () => [], ai_recommendation: () => [],
+  irrigation_event: () => events, service_request: () => D.serviceRequests, report_request: () => [], ai_recommendation: () => [],
 };
 async function supa(route) {
   const req = route.request(); const url = new URL(req.url());
@@ -73,6 +73,7 @@ async function api(route) {
     actions: [...new Set(D.activity.map((a) => a.action))].map((a) => ({ value: a, label: a })),
     actors: [...new Set(D.activity.map((a) => a.actorName))].map((a) => ({ value: a, label: a })) });
   if (p.includes('report-schedule')) return json(route, { farmId: 1, enabled: false, frequency: 'monthly', reportKind: 'water_usage', nextRunAt: null, lastRunAt: null });
+  if (p === '/api/farmer/reports/zones') return json(route, D.adminZones.filter((z) => z.farm_id === 1).map((z) => ({ zoneId: z.id, name: z.name, cropType: z.crop_type })));
   if (p.includes('/zones')) return json(route, D.adminZones.filter((z) => p.includes(`/${z.farm_id}/`)).map((z) => ({ id: z.id, name: z.name })));
   console.log('unstubbed API', req.method(), p);
   return json(route, []);
@@ -105,17 +106,18 @@ await page.mouse.move(720, 760);
 const rec = await startRec(page, 'a1-admin', OUT, { width: W * DPR, height: H * DPR });
 await pause(3800);
 await shot('a-home');
-await tapAt(page, rec, nav('Farms & zones'), { kind: 'click', label: 'farms' });
-await pause(2600);
-await shot('a-farms');
-await tapAt(page, rec, page.locator('[data-act="view-farm"]').first(), { kind: 'click', label: 'view farm' });
+await tapAt(page, rec, nav('Requests'), { kind: 'click', label: 'requests' });
 await pause(3400);
-await shot('a-farm-detail');
-await page.keyboard.press('Escape'); rec.mark('key', { label: 'close' }); await pause(1200);
+await shot('a-requests');
+await tapAt(page, rec, nav('Farms & zones'), { kind: 'click', label: 'farms' });
+await pause(2800);
+await shot('a-farms');
 await tapAt(page, rec, nav('Kits'), { kind: 'click', label: 'kits' });
-await pause(2600);
+await pause(2400);
 await shot('a-kits');
 await glide(rec, page.locator('tbody tr').filter({ hasText: 'A4CF12B7E9C4' }).locator('td').nth(4), 'zone 2 kit connection');
+await pause(1000);
+await glide(rec, page.locator('tbody tr').filter({ hasText: 'A4CF12B7E9C4' }).locator('[data-act="device-change-wifi"]'), 'kit remote actions');
 await pause(1600);
 await tapAt(page, rec, nav('Alerts'), { kind: 'click', label: 'alerts' });
 await pause(2600);
@@ -124,9 +126,18 @@ await tapAt(page, rec, page.locator('[data-act="view-alert"][data-id="301"]').fi
 await pause(3600);
 await shot('a-alert-detail');
 await page.keyboard.press('Escape'); rec.mark('key', { label: 'close' }); await pause(1200);
-await tapAt(page, rec, nav('Maintenance'), { kind: 'click', label: 'maintenance' });
-await pause(3000);
-await shot('a-maintenance');
+await tapAt(page, rec, nav('Reports'), { kind: 'click', label: 'reports' });
+await pause(1800);
+// The live farm reports (real PDFs / Excel from the API) sit at the foot of the page.
+{ const target = page.locator('#liveFarm'); await target.waitFor();
+  for (let i = 0; i < 40; i++) { const b = await target.boundingBox(); if (!b || b.y < H * 0.42) break; await page.mouse.wheel(0, 90); await pause(30); } }
+rec.mark('scrolled', { label: 'live reports' });
+await pause(900);
+await glide(rec, page.locator('#liveFarm'), 'farm select'); rec.mark('click', { label: 'farm select' });
+await page.locator('#liveFarm').selectOption('1'); await pause(1400);
+await shot('a-reports');
+await glide(rec, page.locator('[data-act="live-report-pdf"][data-report="water-usage"]'), 'water usage pdf');
+await pause(1200);
 await tapAt(page, rec, nav('Activity'), { kind: 'click', label: 'activity' });
 await pause(3200);
 await shot('a-activity');

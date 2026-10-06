@@ -28,22 +28,29 @@
       <div class="b" id="s08-ib">One connected platform</div>
     </div>
     <div id="s08-head"><div class="k">SECOND PERSONA · PLATFORM ADMINISTRATOR</div><div class="t">Oversight across every farm.</div></div>
-    <div id="s08-rail"><span id="s08-r0">Home</span><span id="s08-r1">Farms</span><span id="s08-r2">Kits</span><span id="s08-r3">Alerts</span><span id="s08-r4">Maintenance</span><span id="s08-r5">Activity</span></div>
+    <div id="s08-rail"><span id="s08-r0">Home</span><span id="s08-r1">Requests</span><span id="s08-r2">Kits</span><span id="s08-r3">Alerts</span><span id="s08-r4">Reports</span><span id="s08-r5">Activity</span></div>
 
     <div id="s08-br" class="browser">
       <div class="bbar"><i></i><i></i><i></i><b>AgroFlow · Administration console</b></div>
       <div class="bscreen"><div class="bcam" id="s08-cam">
-        <video id="s08-va" class="clip" src="assets/rec/a1-admin.mp4" muted playsinline data-start="3" data-duration="7.3" data-media-start="0"></video>
-        <video id="s08-vb" class="clip" src="assets/rec/a1-admin.mp4" muted playsinline data-start="10.3" data-duration="24.3" data-media-start="13.3"></video>
-        <img class="clip" src="assets/screens/a-activity.png" alt="" data-start="34.55" data-duration="3.45" />
+        <video id="s08-va" class="clip" src="assets/rec/a1-admin.mp4" muted playsinline data-start="3" data-duration="8.55" data-media-start="0"></video>
+        <video id="s08-vb" class="clip" src="assets/rec/a1-admin.mp4" muted playsinline data-start="11.55" data-duration="15.2" data-media-start="12.1"></video>
+        <video id="s08-vc" class="clip" src="assets/rec/a1-admin.mp4" muted playsinline data-start="26.75" data-duration="13.7" data-media-start="29.9"></video>
+        <img class="clip" src="assets/screens/a-activity.png" alt="" data-start="40.4" data-duration="3.6" />
         <div class="hl" id="s08-h1" style="left:285px;top:198px;width:1212px;height:101px;"></div>
         <div class="hl" id="s08-h2" style="left:285px;top:405px;width:1212px;height:101px;"></div>
         <div class="hl" id="s08-h3" style="left:285px;top:526px;width:1212px;height:215px;"></div>
-        <div class="hl" id="s08-h4" style="left:300px;top:742px;width:1200px;height:68px;"></div>
-        <div class="callout" id="s08-c4" style="left:760px;top:690px;">Zone 2's kit · connection · last seen · token · status</div>
+        <div class="hl" id="s08-hR" style="left:303px;top:317px;width:1193px;height:412px;"></div>
+        <div class="callout" id="s08-cR" style="left:303px;top:262px;">Farmers' requests for a new farm or zone · pending → scheduled → completed</div>
+        <div class="hl" id="s08-h4" style="left:303px;top:705px;width:1193px;height:146px;"></div>
+        <div class="callout" id="s08-c4" style="left:560px;top:650px;">Zone 2's kit · online · last seen · token · MQTT login</div>
+        <div class="hl" id="s08-hA" style="left:1386px;top:735px;width:114px;height:82px;"></div>
+        <div class="callout" id="s08-cA" style="left:800px;top:650px;">Remote actions: change Wi-Fi · open setup page · revoke</div>
         <div class="hl" id="s08-h5" style="left:300px;top:694px;width:1200px;height:54px;"></div>
         <div class="callout" id="s08-c5" style="left:300px;top:640px;">The critical alert raised for Zone 2</div>
         <div class="hl" id="s08-h6" style="left:866px;top:92px;width:650px;height:326px;"></div>
+        <div class="hl" id="s08-hP" style="left:285px;top:528px;width:1210px;height:303px;"></div>
+        <div class="callout" id="s08-cP" style="left:285px;top:472px;">Farm reports from live data · PDF and Excel · water estimated from pump time × flow rate</div>
         <div class="callout" id="s08-c7" style="left:470px;top:560px;">Every administrator action is recorded</div>
         <svg class="cursor" id="s08-cur" viewBox="0 0 30 30"><path d="M4 2 L4 24 L10 18.5 L14 27 L18 25 L14 16.5 L22 16.5 Z" fill="#16241c" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
         <div class="ripple" id="s08-rp" style="left:0px;top:0px;"></div>
@@ -75,21 +82,25 @@
   // Rail follows the section on screen.
   const rail = (n, at) => { tl.to("#s08-rail span", { backgroundColor: "#ffffff", color: "#4b5a4d", borderColor: "#e4e7e4", duration: 0.2 }, at);
     tl.to("#s08-r" + n, { backgroundColor: "#184d35", color: "#ffffff", borderColor: "#184d35", duration: 0.2 }, at); };
-  rail(0, 3.0); rail(1, 7.9); rail(2, 11.3); rail(3, 17.7); rail(4, 27.4); rail(5, 31.3);
+  rail(0, 3.0); rail(1, 7.75); rail(2, 12.09); rail(3, 20.18); rail(4, 27.34); rail(5, 38.11);
   // Home highlights.
   const flash = (sel, a, b) => { tl.to(sel, { opacity: 1, duration: 0.25 }, a); tl.to(sel, { opacity: 0, duration: 0.25 }, b); };
   flash("#s08-h1", 3.8, 5.0); flash("#s08-h2", 5.1, 6.2); flash("#s08-h3", 6.3, 7.3);
-  // Kits, alerts, alert detail, activity.
-  flash("#s08-h4", 14.6, 17.1); flash("#s08-c4", 14.8, 17.1);
-  flash("#s08-h5", 18.5, 20.7); flash("#s08-c5", 18.6, 20.7);
-  flash("#s08-h6", 22.0, 25.3);
-  flash("#s08-c7", 32.0, 34.4);
+  // Requests, kits (+ remote actions), alerts, alert detail, reports, activity.
+  flash("#s08-hR", 8.7, 11.3); flash("#s08-cR", 8.8, 11.3);
+  flash("#s08-h4", 14.8, 17.1); flash("#s08-c4", 14.9, 17.1);
+  flash("#s08-hA", 17.4, 19.8); flash("#s08-cA", 17.5, 19.8);
+  flash("#s08-h5", 21.2, 23.4); flash("#s08-c5", 21.3, 23.4);
+  flash("#s08-h6", 24.6, 26.65);
+  flash("#s08-hP", 31.8, 37.6); flash("#s08-cP", 31.9, 37.6);
+  flash("#s08-c7", 38.9, 40.5);
   // Cursor: travels to each recorded click and clicks at the recorded moment.
   const pts = [
     [760, 600, 4.0],
-    [124 * K, 206 * K, 7.707, true], [124 * K, 242 * K, 11.098, true], [887 * K, 736 * K, 14.4, false],
-    [124 * K, 278 * K, 17.482, true], [1352 * K, 601 * K, 21.046, true],
-    [124 * K, 314 * K, 27.213, true], [124 * K, 386 * K, 31.06, true],
+    [124 * K, 134 * K, 7.75, true], [124 * K, 242 * K, 12.09, true], [887 * K, 736 * K, 15.1, false],
+    [1355 * K, 709 * K, 17.6, false], [124 * K, 278 * K, 20.18, true], [1351 * K, 601 * K, 23.65, true],
+    [124 * K, 350 * K, 27.34, true], [422 * K, 611 * K, 33.31, true], [693 * K, 700 * K, 35.6, false],
+    [124 * K, 386 * K, 38.11, true],
   ];
   tl.set("#s08-cur", { x: pts[0][0], y: pts[0][1] }, 0);
   tl.to("#s08-cur", { opacity: 1, duration: 0.3 }, pts[0][2]);
@@ -104,15 +115,15 @@
       tl.fromTo("#s08-cur", { scale: 1 }, { scale: 0.86, duration: 0.08, yoyo: true, repeat: 1, transformOrigin: "15% 10%", immediateRender: false }, t);
     }
   }
-  tl.to("#s08-cur", { opacity: 0, duration: 0.3 }, 33.8);
+  tl.to("#s08-cur", { opacity: 0, duration: 0.3 }, 39.9);
   // Responsive: the same console at phone width.
-  tl.to("#s08-br", { scale: 0.56, x: -330, y: -40, transformOrigin: "50% 50%", duration: 0.9, ease: IO }, 34.5);
-  tl.to(["#s08-head", "#s08-rail"], { opacity: 0, duration: 0.4 }, 34.5);
-  tl.to("#s08-narrow", { opacity: 1, duration: 0.01 }, 34.9);
-  tl.fromTo("#s08-narrow .s08-mini", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E3, stagger: 0.2 }, 34.9);
-  tl.fromTo("#s08-nlabel", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 35.4);
-  tl.fromTo("#s08-roles", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 35.8);
-  tl.to("#s08-in", { opacity: 0, duration: 0.4, ease: "power2.in" }, 37.6);
+  tl.to("#s08-br", { scale: 0.56, x: -330, y: -40, transformOrigin: "50% 50%", duration: 0.9, ease: IO }, 40.6);
+  tl.to(["#s08-head", "#s08-rail"], { opacity: 0, duration: 0.4 }, 40.6);
+  tl.to("#s08-narrow", { opacity: 1, duration: 0.01 }, 41.0);
+  tl.fromTo("#s08-narrow .s08-mini", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E3, stagger: 0.2 }, 41.0);
+  tl.fromTo("#s08-nlabel", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 41.5);
+  tl.fromTo("#s08-roles", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 41.9);
+  tl.to("#s08-in", { opacity: 0, duration: 0.4, ease: "power2.in" }, 43.6);
   window.__timelines["s08"] = tl;
 })();
 </script>

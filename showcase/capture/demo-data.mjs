@@ -81,7 +81,7 @@ export const adminFarms = [
 ];
 export const adminZones = [
   ...zones,
-  { id: 21, farm_id: 2, name: 'Zone 1', crop_type: 'cabbage', planting_date: sastDay(-30), area_m2: 300, flow_rate_lpm: 1.2, status: 'Active' },
+  { id: 21, farm_id: 2, name: 'Zone 1', crop_type: 'dry_beans', planting_date: sastDay(-30), area_m2: 300, flow_rate_lpm: 1.2, status: 'Active' },
   { id: 31, farm_id: 3, name: 'Zone 1', crop_type: 'potato', planting_date: sastDay(-20), area_m2: 500, flow_rate_lpm: 1.5, status: 'Active' },
   { id: 41, farm_id: 4, name: 'Zone 1', crop_type: 'tomato', planting_date: null, area_m2: null, flow_rate_lpm: 1.5, status: 'Active' },
 ];
@@ -113,3 +113,10 @@ export const activity = [
   ['Platform Administrator (demo)', 'device.enroll', 'Platform Administrator (demo) created an enrollment code for Sunfield (demo) · Zone 1', 4, 60 * 50],
   ['Platform Administrator (demo)', 'farm.register', 'Platform Administrator (demo) registered the farm Sunfield (demo)', 4, 60 * 52],
 ].map(([actorName, action, summary, farmId, mins], i) => ({ id: 700 - i, createdAt: ago(mins), actorName, action, summary, entityType: action.split('.')[0], entityId: null, farmId, farmName: adminFarms.find((f) => f.farm_id === farmId)?.name ?? null, details: '{}' }));
+
+// Farm Requests (service_request, migration 0021): farmers ask for a new farm or
+// zone; types/crops/statuses are the ones the CHECK constraints allow.
+export const serviceRequests = [
+  { id: 52, farmer_id: '00000000-0000-0000-0000-000000000004', farm_id: null, request_type: 'new_farm', location: 'Bloemfontein, Free State', rough_size: 0.5, crop_type: 'potato', notes: 'Second plot next to the house (demo).', status: 'pending', created_at: ago(60 * 5), updated_at: ago(60 * 5), assigned_to_profile_id: null, scheduled_by_profile_id: null, scheduled_at: null, completed_by_profile_id: null, completed_at: null },
+  { id: 51, farmer_id: FARMER_ID, farm_id: 1, request_type: 'new_zone', location: null, rough_size: 0.02, crop_type: 'tomato', notes: 'New tomato bed by the tunnel (demo).', status: 'scheduled', created_at: ago(60 * 24 * 3), updated_at: ago(60 * 24), assigned_to_profile_id: ADMIN_ID, scheduled_by_profile_id: ADMIN_ID, scheduled_at: ago(60 * 24), completed_by_profile_id: null, completed_at: null },
+];

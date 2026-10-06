@@ -1,70 +1,96 @@
 {
-  "duration": 37.575,
+  "duration": 44.905,
   "width": 2880,
   "height": 1620,
   "events": [
     {
       "type": "click",
-      "t": 4.257,
+      "t": 4.3,
+      "x": 124,
+      "y": 134,
+      "label": "requests"
+    },
+    {
+      "type": "click",
+      "t": 8.588,
       "x": 124,
       "y": 206,
       "label": "farms"
     },
     {
       "type": "click",
-      "t": 7.679,
-      "x": 468,
-      "y": 637,
-      "label": "view farm"
-    },
-    {
-      "type": "key",
-      "t": 12.392,
-      "label": "close"
-    },
-    {
-      "type": "click",
-      "t": 13.648,
+      "t": 12.191,
       "x": 124,
       "y": 242,
       "label": "kits"
     },
     {
       "type": "point",
-      "t": 17.113,
+      "t": 15.35,
       "x": 887,
       "y": 736,
       "label": "zone 2 kit connection"
     },
     {
+      "type": "point",
+      "t": 17.563,
+      "x": 1355,
+      "y": 709,
+      "label": "kit remote actions"
+    },
+    {
       "type": "click",
-      "t": 20.032,
+      "t": 20.278,
       "x": 124,
       "y": 278,
       "label": "alerts"
     },
     {
       "type": "click",
-      "t": 23.596,
-      "x": 1352,
+      "t": 23.755,
+      "x": 1351,
       "y": 601,
       "label": "view alert"
     },
     {
       "type": "key",
-      "t": 28.539,
+      "t": 28.824,
       "label": "close"
     },
     {
       "type": "click",
-      "t": 29.763,
+      "t": 30.04,
       "x": 124,
-      "y": 314,
-      "label": "maintenance"
+      "y": 350,
+      "label": "reports"
+    },
+    {
+      "type": "scrolled",
+      "t": 34.384,
+      "label": "live reports"
+    },
+    {
+      "type": "point",
+      "t": 35.295,
+      "x": 422,
+      "y": 611,
+      "label": "farm select"
     },
     {
       "type": "click",
-      "t": 33.61,
+      "t": 36.463,
+      "label": "farm select"
+    },
+    {
+      "type": "point",
+      "t": 38.355,
+      "x": 693,
+      "y": 700,
+      "label": "water usage pdf"
+    },
+    {
+      "type": "click",
+      "t": 40.809,
       "x": 124,
       "y": 386,
       "label": "activity"

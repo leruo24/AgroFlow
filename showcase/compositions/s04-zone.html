@@ -35,11 +35,11 @@
         <circle class="pkt s04-p" cx="282" cy="539" r="9" opacity="0"/><circle class="pkt s04-p" cx="282" cy="539" r="9" opacity="0"/><circle class="pkt s04-p" cx="282" cy="539" r="9" opacity="0"/>
       </svg>
       <div class="node card s04-node" id="s04-n1" style="left:96px;"><div class="h">Field sensors</div><div class="m" style="font-size:20px">Soil probe</div><div class="sm">+ DHT11 temp. &amp; humidity</div></div>
-      <div class="node card s04-node" id="s04-n2" style="left:312px;"><div class="h">Controller</div><div class="m">ESP32</div><div class="sm">one per zone</div></div>
+      <div class="node card s04-node" id="s04-n2" style="left:312px;"><div class="h">Controller</div><div class="m">ESP32</div><div class="sm">one kit per zone</div></div>
       <div class="node card s04-node" id="s04-n3" style="left:528px;"><div class="h">Connection</div><div class="m">MQTT</div><div class="sm">over TLS (HiveMQ Cloud)</div></div>
-      <div class="node card s04-node" id="s04-n4" style="left:744px;"><div class="h">Service</div><div class="m" style="font-size:21px">AgroFlow.Api</div><div class="sm">stores each reading</div></div>
+      <div class="node card s04-node" id="s04-n4" style="left:744px;"><div class="h">Service</div><div class="m" style="font-size:21px">AgroFlow.Api</div><div class="sm">on Railway · checks &amp; stores</div></div>
       <div class="node card s04-node" id="s04-n5" style="left:960px;"><div class="h">Database</div><div class="m">Supabase</div><div class="sm">Postgres, per-farm access</div></div>
-      <div id="s04-src">Readings arrive about every 30 seconds per sensor, so the app shows the latest field conditions.</div>
+      <div id="s04-src">Each kit sends its readings about every 30 seconds. The service stores them and updates the zone’s health.</div>
     </div>
 
     <div class="cap" id="s04-cap3"><div class="k">Zone 2 · Spinach</div><div class="t">The crop, and where it is in its season.</div></div>

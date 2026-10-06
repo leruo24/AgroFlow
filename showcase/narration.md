@@ -1,68 +1,68 @@
-# Narration — AgroFlow Showcase demo (active part, 0:00–4:00)
+# Narration — AgroFlow Showcase demo (active part, 0:00–4:20)
 
 Read at a calm, confident pace (about 125–135 words a minute). Time codes are where
-each paragraph starts. Nothing is spoken during the editor end plate (4:00–4:30).
+each paragraph starts. Nothing is spoken during the editor end plate (4:20–4:50).
 Word count: about 510.
+
+Every claim below is implemented on branch `dev` (see `system-audit.md`). Lines from the
+team's description that are *not* in the code are listed in `CLIP-REVIEW.md` and are
+deliberately not narrated.
 
 ---
 
 **0:00 — Title**
-This is AgroFlow, a smart irrigation management system, built by Team 2 for INF3003W.
+This is AgroFlow, a smart irrigation system, built by Team 2 for INF3003W.
 
 **0:10 — Persona and problem**
 Meet our farmer: a smallholder growing tomatoes, spinach and maize in separate zones.
-Each crop, and each patch of soil, dries out at its own pace. Watering everything the
-same way wastes water in one place and stresses plants in another. Today, Zone 2 needs
-attention.
+Most small farms water by habit: the same amount, on the same days. But each crop, and
+each patch of soil, dries out at its own pace. Today, Zone 2 needs attention.
 
 **0:30 — Opening AgroFlow**
-Our farmer signs in on their phone. The home screen shows today's weather and a summary
-of the farm, including one unread alert. One tap on Manage Irrigation shows every zone
-side by side. Zone 2, the spinach, immediately stands out: its health is critical.
+Our farmer opens the app. Drip, the app's helper, points straight at the one thing that
+matters today: water Zone 2 now, about five minutes. Below it, today's weather and a
+summary of the farm, with one unread alert. One tap shows every zone side by side, and
+Zone 2, the spinach, stands out: its health is critical.
 
 **1:00 — Understanding the zone**
-Opening Zone 2 shows the latest readings. Soil moisture is nineteen percent, and the app
-labels it dry, because it is below the start level set for this zone. Temperature and
-humidity sit alongside it.
+Zone 2's soil moisture is nineteen percent, below the start level set for this zone, so
+the app marks it dry. Temperature and humidity sit alongside it.
 
-These values are not typed in by hand. A soil-moisture probe and a temperature and
-humidity sensor feed an ESP32 controller in the field. It publishes readings over a
-secure MQTT connection to the AgroFlow service, which stores them in our Supabase
-database, and the app shows the latest values.
+These readings come from a kit in the field: a soil probe and a temperature and
+humidity sensor on an ESP32. About every thirty seconds it publishes them over a secure
+MQTT connection. The AgroFlow service, hosted on Railway, stores them in Supabase and
+updates the zone's health.
 
-**1:35 — From data to action**
-Raw numbers are only half the story. AgroFlow combines the crop and its growth stage,
-the soil, the zone's own moisture levels and the weather forecast, using the FAO-56
-water-balance method. It is a deterministic calculation, not a guess. The result is a
-plain instruction: water Zone 2 now, for about five minutes, roughly eight litres. And
-the week ahead shows why waiting is not an option: no rain is expected.
+**1:35 — How AgroFlow works out the advice**
+The advice comes from the FAO-56 method, in four steps: how thirsty the weather is,
+the crop's growth stage, how much water the soil and roots can hold, and a daily tally,
+like a bank balance. When the deficit reaches the safe limit, it is time to water. The
+sensor keeps the tally honest, and forecast rain can skip a watering. A deterministic
+calculation, not AI. In the app: water now, about five minutes, roughly eight litres.
 
-**2:05 — Taking action**
+**2:13 — Taking action**
 Zone 2 normally waters on a schedule, but its next run is days away. So the farmer
-switches it to manual. They type ninety minutes by mistake, and AgroFlow stops them
-with a clear message: a manual run must be between one and sixty minutes. They correct
-it to five, confirm, and the command is sent.
+switches it to manual. They type ninety minutes by mistake, and AgroFlow stops them: a
+manual run must be between one and sixty minutes. They correct it to five, confirm, and
+the command is sent.
 
-That command travels back the way the data came: from the app, through the AgroFlow
-service and the MQTT broker, to the ESP32, which switches the relay and runs the pump.
-When the run finishes, the controller reports it, and the irrigation event is recorded.
-Later, the farmer can see it in their history: five minutes, Zone 2, started
-manually.
+It travels back the way the data came: through the AgroFlow service and the MQTT broker
+to the ESP32, which switches the relay and runs the pump. When the run ends, the kit
+reports it, and the event is recorded. Later, the farmer sees it in their history: five
+minutes, Zone 2, started manually.
 
-**2:58 — The platform administrator**
-One farmer's decision is part of a larger, connected platform. Our second persona is
-the platform administrator. Their console opens on what needs attention across every
-farm, the platform's key numbers and the health of its services. From there they can
-review farms, check every field kit's connection, firmware and when it was last seen,
-follow up the critical alert from Zone 2, and see the maintenance jobs planned for the
-field kits. Every
-administrator action is recorded. The same console adapts to a phone-sized screen.
-Farmers manage their farms; administrators oversee the platform.
+**3:06 — The platform administrator**
+Our second persona is the platform administrator. Their console opens on what needs
+attention across every farm. They review farmers' requests for new farms and zones,
+check every kit's connection and last check-in, and can change a kit's Wi-Fi, reopen its
+setup page or revoke it remotely. They follow up Zone 2's critical alert, produce farm
+reports as PDF or Excel, and every administrator action is recorded. The console also
+works at phone size. Farmers manage their farms; administrators oversee the platform.
 
-**3:36 — The complete system**
-Put together, AgroFlow connects the field to the people who depend on it. Sensors and
-controllers in the soil, a connected platform in the middle, and an app for the farmer
-and a console for the administrator. Sense, understand, act, and monitor.
+**3:50 — The complete system**
+Put together: kits in the field, a connected platform, Telegram alerts and reports, an
+app and a console. And each kit is safe on its own: no pump run lasts over five
+minutes, and offline, it waters itself in short bursts. Sense, understand, act, monitor.
 
-**3:52 — Close**
+**4:12 — Close**
 AgroFlow: from field conditions to informed irrigation.

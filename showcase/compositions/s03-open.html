@@ -15,25 +15,21 @@
   <div id="s03-in" class="layer">
     <div class="cap" id="s03-cap"><div class="k">Smallholder Farmer · on the farm</div><div class="t">The farmer opens AgroFlow.</div></div>
     <div class="s03-steps">
-      <div class="s03-step" id="s03-st1"><i></i>Signs in on their phone</div>
-      <div class="s03-step" id="s03-st2"><i></i>Sees the weather and farm status</div>
+      <div class="s03-step" id="s03-st1"><i></i>Drip, the app's helper, names today's one action</div>
+      <div class="s03-step" id="s03-st2"><i></i>Weather and farm status at a glance</div>
       <div class="s03-step" id="s03-st3"><i></i>Opens every zone, side by side</div>
       <div class="s03-step" id="s03-st4"><i style="background:#b9473e"></i>Zone 2 &nbsp;<b>Health: Critical · 19%</b></div>
     </div>
     <div id="s03-one" class="chip soft">One view of every zone</div>
 
     <div id="s03-ph" class="phone"><div class="pscreen"><div class="pcam" id="s03-pcam">
-      <img class="clip" src="assets/screens/m-login.png" alt="" data-start="0" data-duration="1.1" />
-      <video id="s03-v1" class="clip" src="assets/rec/m1-signin.mp4" muted playsinline data-start="1" data-duration="7.84"></video>
-      <img class="clip" src="assets/screens/m-home.png" alt="" data-start="8.82" data-duration="5.28" />
-      <video id="s03-v2" class="clip" src="assets/rec/m2-zones.mp4" muted playsinline data-start="14" data-duration="10.98"></video>
-      <img class="clip" src="assets/screens/m-zone2.png" alt="" data-start="24.95" data-duration="5.05" />
+      <video id="s03-v1" class="clip" src="assets/rec/m1-open.mp4" muted playsinline data-start="0" data-duration="10.39"></video>
+      <video id="s03-v2" class="clip" src="assets/rec/m2-zones.mp4" muted playsinline data-start="10.38" data-duration="10.96"></video>
+      <img class="clip" src="assets/screens/m-zone2.png" alt="" data-start="21.32" data-duration="8.68" />
       <div class="spot" id="s03-spotA" style="left:12px;top:312px;width:380px;height:98px;"></div>
       <div class="spot" id="s03-spotB" style="left:12px;top:462px;width:380px;height:204px;"></div>
       <div class="spot" id="s03-spotC" style="left:10px;top:452px;width:384px;height:324px;"></div>
-      <div class="tap" id="s03-t1" style="left:202px;top:264px"></div>
-      <div class="tap" id="s03-t2" style="left:171px;top:360px"></div>
-      <div class="tap" id="s03-t3" style="left:202px;top:443px"></div>
+      <div class="spot" id="s03-spotD" style="left:66px;top:664px;width:318px;height:120px;"></div>
       <div class="tap" id="s03-t4" style="left:203px;top:402px"></div>
       <div class="tap" id="s03-t5" style="left:202px;top:754px"></div>
     </div></div></div>
@@ -46,22 +42,24 @@
   const tap = (sel, at) => tl.fromTo(sel, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, at);
   const step = (sel, at) => tl.fromTo(sel, { opacity: 0, x: -24 }, { opacity: 1, x: 0, duration: 0.55, ease: E3 }, at);
   tl.fromTo("#s03-cap", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 0.2);
-  step("#s03-st1", 1.0);
-  tap("#s03-t1", 2.195); tap("#s03-t2", 3.51); tap("#s03-t3", 4.447);
-  step("#s03-st2", 9.4);
-  // Spotlight the weather, then the farm status with its one unread alert.
-  tl.to("#s03-spotA", { opacity: 1, duration: 0.35 }, 9.7);
-  tl.to("#s03-spotA", { opacity: 0, duration: 0.3 }, 11.5);
-  tl.to("#s03-spotB", { opacity: 1, duration: 0.35 }, 11.6);
-  tl.to("#s03-spotB", { opacity: 0, duration: 0.3 }, 13.6);
-  tap("#s03-t4", 17.429);
-  step("#s03-st3", 17.4);
-  tl.fromTo("#s03-one", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 17.8);
+  // The app opens on Home; Drip shows the engine's advice for Zone 2.
+  step("#s03-st1", 0.9);
+  tl.to("#s03-spotD", { opacity: 1, duration: 0.35 }, 1.4);
+  tl.to("#s03-spotD", { opacity: 0, duration: 0.3 }, 6.4);
+  // Then the weather, and the farm status with its one unread alert.
+  step("#s03-st2", 6.6);
+  tl.to("#s03-spotA", { opacity: 1, duration: 0.35 }, 6.8);
+  tl.to("#s03-spotA", { opacity: 0, duration: 0.3 }, 8.3);
+  tl.to("#s03-spotB", { opacity: 1, duration: 0.35 }, 8.4);
+  tl.to("#s03-spotB", { opacity: 0, duration: 0.3 }, 10.1);
+  tap("#s03-t4", 13.86);
+  step("#s03-st3", 13.8);
+  tl.fromTo("#s03-one", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 14.2);
   // Zone 2's card, once the list has scrolled to it.
-  tl.to("#s03-spotC", { opacity: 1, duration: 0.35 }, 19.8);
-  step("#s03-st4", 19.9);
-  tl.to("#s03-spotC", { opacity: 0, duration: 0.25 }, 22.15);
-  tap("#s03-t5", 22.43);
+  tl.to("#s03-spotC", { opacity: 1, duration: 0.35 }, 16.2);
+  step("#s03-st4", 16.3);
+  tl.to("#s03-spotC", { opacity: 0, duration: 0.25 }, 18.55);
+  tap("#s03-t5", 18.81);
   tl.to(["#s03-cap", ".s03-steps", "#s03-one"], { opacity: 0, x: -20, duration: 0.5, ease: "power2.in" }, 29.3);
   window.__timelines["s03"] = tl;
 })();

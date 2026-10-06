@@ -82,7 +82,7 @@ await ctx.route(/tile\.openstreetmap|basemaps|arcgis|openfreemap/, (r) => r.abor
 // says "All your zones look good today" regardless (DripHelper.tsx: ready is
 // true while zones is still []). Switched off through the app's own preference
 // rather than shown misleading.
-await ctx.addInitScript(() => { try { if (!localStorage.getItem('agroflow_app_preferences')) localStorage.setItem('agroflow_app_preferences', JSON.stringify({ showRaindropHelper: false })); } catch {} });
+if (process.env.NO_DRIP) await ctx.addInitScript(() => { try { if (!localStorage.getItem('agroflow_app_preferences')) localStorage.setItem('agroflow_app_preferences', JSON.stringify({ showRaindropHelper: false })); } catch {} });
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('pageerror', e.message));
 
@@ -106,18 +106,22 @@ const scrollBy = async (dy, steps = 12) => { for (let i = 0; i < steps; i++) { a
 await page.goto(`${ORIGIN}/login`); await pause(9000);
 await shot('m-login');
 
-// ---- m1: sign in -> Home ------------------------------------------------------
-await page.goto(`${ORIGIN}/login`); await byText('Sign In', 1).waitFor({ timeout: 30000 }); await pause(1200);
-await page.mouse.move(195, 820);
-rec = await startRec(page, 'm1-signin', OUT, { width: W * DPR, height: H * DPR });
-await pause(700);
-await tapAt(page, rec, page.getByPlaceholder('farmer@example.com'), { label: 'email' });
-await page.keyboard.type('farmer@demo.invalid', { delay: 38 });
-await tapAt(page, rec, page.getByPlaceholder('Enter your password'), { label: 'password' });
-await page.keyboard.type('demo-password', { delay: 30 });
-await tapAt(page, rec, byText('Sign In', 1), { label: 'sign in' });
+// ---- m1: the farmer, already signed in, opens the app -> Home ----------------
+// Opening with a saved session (the everyday case) plays the app's own loading
+// animation, and Drip decides its greeting after it, once zones have loaded.
+// (Straight after a fresh sign-in Drip can decide before zones arrive and say
+// "All your zones look good today" - see system-audit.md; not used here.)
+await page.evaluate((v) => localStorage.setItem('sb-demo-auth-token', v), JSON.stringify(session));
+await page.goto('about:blank');
+rec = await startRec(page, 'm1-open', OUT, { width: W * DPR, height: H * DPR });
+await page.goto(`${ORIGIN}/`);
 await page.getByText('Your farm at a glance.').waitFor({ timeout: 30000 });
-await pause(4200);           // Home settles
+rec.mark('home');
+await page.getByText('Water Zone 2 now: about 5 min (~8 L).').filter({ visible: true }).first().waitFor({ timeout: 20000 });
+rec.mark('drip');
+await pause(2600);
+await shot('m-home-drip');
+await pause(6500);           // Drip hides itself after 8 s
 await shot('m-home');
 await stopRec(rec);
 

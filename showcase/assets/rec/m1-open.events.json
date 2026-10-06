@@ -1,0 +1,15 @@
+{
+  "duration": 10.394,
+  "width": 780,
+  "height": 1688,
+  "events": [
+    {
+      "type": "home",
+      "t": 0.275
+    },
+    {
+      "type": "drip",
+      "t": 1.122
+    }
+  ]
+}

@@ -46,9 +46,14 @@ Data is in `capture/demo-data.mjs` and is chosen to obey the real backend rules.
 | Admin Farms & zones | Partly — list real; health factors/user/device counts not computed (shown as 0) | `pages/farms.ts`, `data/api.ts getFarms` | Farms (brief) | Scale |
 | Admin Kits (hardware): connection, last seen, token, status | Yes | `pages/operations.ts hardwarePage` | Kits | Fleet health |
 | Admin Alerts list + detail | Yes (read); assign/resolve are session-only, DB allows Open/Resolved only | `pages/operations.ts alertsPage`, `interactions.ts` | Alerts → View | Follow-up |
-| Admin Maintenance | Read: Yes; scheduling/assign: session-only (no writer) | `pages/operations.ts maintenancePage` | Maintenance | Planned field work |
+| Admin Maintenance | Read: Yes; scheduling/assign: session-only (no writer) | `pages/operations.ts maintenancePage` | Not shown in v2 | Planned field work |
+| Admin Requests (farm/zone service requests) | Yes | `pages/requests.ts`, `0021_service_requests.sql` | Requests | Inbound work |
+| Admin kit remote actions (Change WiFi / Open setup page / Revoke) | Yes | `pages/operations.ts hardwarePage`, firmware `change_wifi` / `open_setup`, token revoke | Kits row actions | Fix kits remotely |
+| Admin farm reports (live, PDF/Excel) | Yes | `pages/analytics.ts liveReportsPanel`, `backend/AgroFlow.Api/Reports/*` | Reports → Farm Reports (live data) | Evidence for farmers |
+| Drip helper (one message: most important action) | Yes (greeting race after a fresh sign-in) | `components/DripHelper.tsx` | Home on app open | One clear action |
+| Kit safety: 5-min cap, offline fallback (10 min, ≤60 s runs, 5 min rest), revoked kit wipes itself | Yes | `AgroFlowIrrigationNode.ino` constants | Conceptual card | Safe when offline |
 | Admin Activity (audit log) | Yes (needs migration 0038 applied) | `0037_admin_audit_log.sql`, `pages/analytics.ts activityPage` | Activity | Accountability |
-| Reports (designed PDF/XLSX) | Yes | `backend/AgroFlow.Api/Reports/*`, mobile `app/reports.tsx` | Not shown (time) | — |
+| Reports (designed PDF/XLSX) | Yes | `backend/AgroFlow.Api/Reports/*`, mobile `app/reports.tsx` | Admin live reports (v2) | — |
 | Responsive admin | Yes (5 breakpoints) | `apps/web/admin/src/styles/main.css` | Optional narrow view | — |
 | Automated tests | Yes — 650 domain tests per `docs/final-finish-report.md` | `backend/AgroFlow.Domain.Tests` (29 files) | Not shown (code walkthrough) | — |
 
@@ -82,3 +87,16 @@ uses a 5-minute run. Worth aligning the app limit (or the advice) with the firmw
 4. Admin Farms search placeholder shows a mis-encoded ellipsis ("provinceâ€¦").
 5. Admin alert Assign/Resolve toasts succeed, then the row reverts on refresh.
 6. Dev build only: duplicate React key warning on History → Alerts & advice.
+
+## v2 alignment with the team's system description
+
+Searched `apps/`, `backend/`, `hardware/`, `supabase/` on `dev` for every feature in the
+team's "How AgroFlow works" text. Not found, and therefore not shown or narrated:
+"Why am I seeing this?", confidence levels, "I'll handle this", the public call-back
+enquiry form with call outcomes and reasons, POPIA consent/erasure, hand logging
+("I watered" / "soil feels dry"), a Telegram "Why" button, automatic watering in bursts at
+6 am, and a per-zone action list on Home. Full list and per-clip notes: `CLIP-REVIEW.md`.
+
+Additional quirks seen in v2 capture: Drip greets before zones load after a fresh sign-in
+(reproduced); admin Requests prints sizes in "ha" though the farmer form states no unit;
+admin Reports "Platform Availability" is hard-coded 0 and the growth charts are empty.
