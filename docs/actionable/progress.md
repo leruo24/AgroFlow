@@ -10,7 +10,8 @@ what is next.
 | 2 | done | 68ce29d | Confidence badge in the apps' UI → 2c/6 | 2b |
 | 2b | done | 6888586 | — | 2c |
 | 2c | done | 70a1c31, d3040c3, 86ad320, 41d351e, 4342ef4 | Recommended-settings Why → 6b; alert priority bug → 5; fixed-date KPIs → 4 | 3 |
-| 3 | done | (this commit) | — | 4 |
+| 3 | done | 154025b | — | 4 |
+| 4 | done | (this commit) | Apply migration 0040 | 5 |
 
 ---
 
@@ -320,7 +321,7 @@ endpoints the apps read are unchanged.
 
 ### Tests
 
-813 -> 855 (`ActionReportTests`: actions have when/how much/badge/why; never
+813 -> 854 (`ActionReportTests`: actions have when/how much/badge/why; never
 more than 5; rain -> skip with the rain in it; overwatering says by how much
 and what to shorten to; period words for 7/14/30 days and past periods;
 weekly past 14 days; weather section only with tub data; jargon/ISO scan over
@@ -332,3 +333,73 @@ per extra zone. `SampleReportsTests` renders every combination.)
 Samples: `docs/sample-reports/` (27 files + README) - three setups x three
 types x one/all zones, 30-day versions, workbooks. Checked by eye page by
 page; the README says they are generated sample data.
+
+---
+
+## 4 — Admin Reports page, and automatic reports
+
+### The Reports page
+
+Before: ten generic report cards (Device Performance, Support Performance,
+Hardware Downtime...). "Generate" only showed a message, and **every card's
+Excel exported the same irrigation table whatever its name**. A "Platform
+Availability" tile always read 0, and the growth charts always said "No data
+in this range" because `getGrowth()` returned empty arrays. The comparison
+offered "Device uptime" and "Alert volume" and showed water litres under
+those names.
+
+Now, in this order:
+1. **Farm reports** - farm (the last one used, else the newest) → zone or all
+   → period (7/14/30 days or dates) → report → Preview / PDF / Excel.
+   Preview is the PDF itself in the page, so it cannot differ from the file.
+2. **Farms needing attention this week** - grouped from the same stored
+   advice the farmers see (short of water, over-watering, kit offline,
+   pump ran with no effect, level too late, setup to finish); each line opens
+   the farms and zones behind it, each with its "Why am I seeing this?".
+3. **Automatic reports** for the chosen farm - what is set, last sent, next
+   send, who turned it off - and the editor.
+4. **Water use comparison** - kept, because it produces real numbers; the
+   metric picker that relabelled water as other things is gone, and the
+   default periods are the last two 30-day windows rather than fixed dates.
+5. **Growth** - new farmers, farms and maintenance per month, counted from
+   the records (also fixes the same empty charts on Home). Connectivity is
+   not shown: no history of it exists.
+
+### Automatic reports
+
+Migration **0040** (renumbered from the plan's 0041 because it was written
+first; the plan's table is updated): `daily` frequency, `day_of_week`,
+`per_zone_pdf`, `send_to_handler`, `admin_chat_enabled`,
+`turned_off_by`/`turned_off_at`. Every default is what a 0035 row already
+meant, so existing schedules behave exactly as before. Until 0040 is applied
+the new options are read as their defaults, shown disabled with the reason,
+and refused on save with a plain message - nothing is silently dropped.
+
+- **Daily** at 07:00: a one-page brief, "Today, do this", per zone.
+- **Weekly** on a chosen day (default Monday, as before), covering the seven
+  days before it. **Monthly** on the 1st.
+- **Scope**: all zones or chosen ones; one all-zones PDF or one tailored PDF
+  per zone. **Farm summary** = the farm's all-zones report (no new
+  `report_request` type, so the 0034 check constraint is untouched).
+- **Recipients**: the farmer; optionally the admin who set it up, and the
+  admin group chat (`Telegram__AdminGroupChatId` - configuration only).
+- **Send test now**: the schedule's reports for its current period, to the
+  calling admin's own Telegram only, at most five PDFs.
+- **Delivery**: a failed Telegram send is retried once, then raises an
+  admin alert naming the report.
+- The farmer's own "stop" now records that they did it.
+
+### Tests
+
+Backend 854 → 869 (`AutoReportScheduleTests`: daily once a day after 07:00;
+a chosen weekday fires that day only, for the 7 days before; no day chosen =
+exactly the old behaviour; Off never fires over a whole month for any
+frequency; next send; per-zone vs all-zones requests, once per period per
+zone; farm summary never duplicated; retry once then give up; recipients;
+the daily brief is one page). Admin Playwright 14 → 17 (`reports.spec.ts`).
+
+### Assumption to confirm
+
+"The handling admin" is read as the admin who set the schedule up
+(`report_schedule.created_by`): nothing else ties an admin to a farm yet.
+Item 5 adds who handles requests and alerts, not farms.

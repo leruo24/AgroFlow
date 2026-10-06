@@ -1,6 +1,6 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
-import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms } from "@/data/api";
+import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms, findAttentionGroup } from "@/data/api";
 import { toast } from "@/lib/toast";
 import { openDrawer, closeDrawer, beginPanelIntent, currentPanelIntent } from "@/lib/drawer";
 import {
@@ -22,6 +22,8 @@ import {
   createEnrollmentCode,
   getReportSchedule,
   saveReportSchedule,
+  sendReportScheduleTest,
+  type ReportFrequency,
   archiveFarm,
   restoreFarm,
   runAdviceNow,
@@ -40,8 +42,8 @@ import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard, errorState } from "@/ui/patterns";
-import { exportActivityWorkbook, exportSummaryWorkbook, exportRowsWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
-import { timelineHtml } from "@/pages/analytics";
+import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
+import { timelineHtml, rememberReportFarm } from "@/pages/analytics";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
 import { navigate, showPage, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
@@ -56,7 +58,7 @@ import { zoneRow } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -1681,6 +1683,14 @@ case "delete-user": {
 
       const types = current?.reportTypes ?? ["water_usage"];
       const chosenZones = current?.zoneIds ?? null;
+      // Item 4: daily, a chosen day, per-zone PDFs and extra recipients need
+      // migration 0040. Until then the controls are shown, disabled, with
+      // the reason - never silently ignored on save.
+      const extras = current?.optionsAvailable !== false;
+      const off = extras ? "" : "disabled";
+      const frequency = current?.enabled ? current.frequency : "off";
+      const day = current?.dayOfWeek ?? 1;
+      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
       const checkbox = (value: string, label: string, checked: boolean): string =>
         `<label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
@@ -1688,47 +1698,53 @@ case "delete-user": {
            <span>${esc(label)}</span>
          </label>`;
 
+      const when = (iso: string | null | undefined): string =>
+        iso ? fmtDateTimeSast(iso) : "—";
+
       return openDrawer({
         title: "Automatic reports",
         subtitle: api.findFarm(farmId)?.name ?? `Farm ${farmId}`,
         wide: true,
         bodyHtml: `
           <div class="drawer-section">
-            <h6>Send automatically</h6>
-            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
-              <input type="checkbox" id="autoReportsEnabled" ${current?.enabled ? "checked" : ""} />
-              <span>Automatic reports on</span>
-            </label>
-            <p class="muted">
-              Off by default. Weekly reports go out on Monday at 07:00; monthly ones on the 1st
-              at 07:00, South African time. They cover the week or month that has just finished.
-            </p>
+            <h6>Status</h6>
+            <div class="detail-list">
+              <div class="detail-row"><span>Now</span><b>${esc(current?.description ?? "Automatic reports: off")}</b></div>
+              <div class="detail-row"><span>Last sent</span><b data-sched="last">${esc(when(current?.lastSentAt))}</b></div>
+              <div class="detail-row"><span>Next send</span><b data-sched="next">${esc(when(current?.nextSendAt))}</b></div>
+              ${current?.turnedOffBy
+                ? `<div class="detail-row"><span>Turned off by</span><b>${esc(current.turnedOffBy)} · ${esc(when(current.turnedOffAt))}</b></div>`
+                : ""}
+            </div>
+            ${extras ? "" : `<p class="muted">Daily reports, a chosen weekday, one PDF per zone and extra recipients need database migration 0040, which has not been applied yet.</p>`}
           </div>
 
           <div class="drawer-section">
             <h6>How often</h6>
             <label class="drawer-field">
-              <span>Frequency</span>
+              <span>Send</span>
               <select id="autoReportsFrequency" class="input">
-                <option value="weekly" ${current?.frequency !== "monthly" ? "selected" : ""}>
-                  Weekly (Monday 07:00)
-                </option>
-                <option value="monthly" ${current?.frequency === "monthly" ? "selected" : ""}>
-                  Monthly (1st, 07:00)
-                </option>
+                <option value="off" ${frequency === "off" ? "selected" : ""}>Off</option>
+                <option value="daily" ${frequency === "daily" ? "selected" : ""} ${off}>Daily, 07:00 - one page of today's actions</option>
+                <option value="weekly" ${frequency === "weekly" ? "selected" : ""}>Weekly, 07:00</option>
+                <option value="monthly" ${frequency === "monthly" ? "selected" : ""}>Monthly, on the 1st at 07:00</option>
               </select>
             </label>
+            <label class="drawer-field">
+              <span>Weekly on</span>
+              <select id="autoReportsDay" class="input" ${off}>
+                ${days.map((d, i) => `<option value="${i + 1}" ${day === i + 1 ? "selected" : ""}>${d}</option>`).join("")}
+              </select>
+            </label>
+            <p class="muted">South African time. Weekly and monthly reports cover the week or month that has just ended; daily ones are today's actions.</p>
           </div>
 
           <div class="drawer-section">
             <h6>Which reports</h6>
             ${checkbox("water_usage", "Water usage", types.includes("water_usage"))}
-            ${checkbox("moisture", "Soil moisture", types.includes("moisture"))}
+            ${checkbox("moisture", "Soil moisture (one per zone)", types.includes("moisture"))}
             ${checkbox("schedule", "Watering schedule & advice", types.includes("schedule"))}
-            <p class="muted">
-              Soil moisture is per zone, so a farm with four zones gets four of those. The other
-              two cover the whole farm.
-            </p>
+            ${checkbox("farm_summary", "Farm summary (every zone in one report)", types.includes("farm_summary"))}
           </div>
 
           <div class="drawer-section">
@@ -1743,25 +1759,52 @@ case "delete-user": {
                    </option>`).join("")}
               </select>
             </label>
-            <p class="muted">
-              Leave "All zones" selected to include any zone added later.
-            </p>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="radio" name="autoReportsPdf" value="all" ${current?.perZonePdf ? "" : "checked"} />
+              <span>One PDF for all the chosen zones</span>
+            </label>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="radio" name="autoReportsPdf" value="zone" ${current?.perZonePdf ? "checked" : ""} ${off} />
+              <span>A tailored PDF for each zone</span>
+            </label>
           </div>
 
           <div class="drawer-section">
-            <p class="muted">
-              Delivered in the app always, and on Telegram as well for a farmer who has connected
-              it. The farmer can stop these themselves at any time.
-            </p>
+            <h6>Who gets them</h6>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" checked disabled />
+              <span>The farmer - in the app, and on Telegram if connected</span>
+            </label>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" id="autoReportsHandler" ${current?.sendToHandler ? "checked" : ""} ${off} />
+              <span>The admin who set this up (a copy on their Telegram)</span>
+            </label>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" id="autoReportsAdminChat" ${current?.adminChatEnabled ? "checked" : ""} ${off} />
+              <span>The admin group chat (configured on the server)</span>
+            </label>
+            <p class="muted">The farmer can stop these themselves at any time. Turning them off records who did it.</p>
+          </div>
+
+          <div class="drawer-section">
+            <h6>Check the template</h6>
+            <button type="button" class="btn ghost sm" data-act="test-auto-reports" data-id="${farmId}">Send test now</button>
+            <p class="muted">Sends this schedule's reports to your own Telegram only - never to the farmer. Save first.</p>
           </div>
         `,
         confirmLabel: "Save",
         onConfirm: () => {
-          const enabled =
-            (document.getElementById("autoReportsEnabled") as HTMLInputElement | null)?.checked ?? false;
-          const frequency =
-            ((document.getElementById("autoReportsFrequency") as HTMLSelectElement | null)?.value ??
-              "weekly") as "weekly" | "monthly";
+          const choice =
+            (document.getElementById("autoReportsFrequency") as HTMLSelectElement | null)?.value ?? "off";
+          const enabled = choice !== "off";
+          const frequency = (enabled ? choice : current?.frequency ?? "weekly") as ReportFrequency;
+          const dayOfWeek = Number((document.getElementById("autoReportsDay") as HTMLSelectElement | null)?.value ?? 1);
+          const perZonePdf =
+            (document.querySelector<HTMLInputElement>('input[name="autoReportsPdf"]:checked')?.value ?? "all") === "zone";
+          const sendToHandler =
+            (document.getElementById("autoReportsHandler") as HTMLInputElement | null)?.checked ?? false;
+          const adminChatEnabled =
+            (document.getElementById("autoReportsAdminChat") as HTMLInputElement | null)?.checked ?? false;
 
           const reportTypes = [...document.querySelectorAll<HTMLInputElement>("[data-report-type]")]
             .filter((el) => el.checked)
@@ -1782,7 +1825,10 @@ case "delete-user": {
             return;
           }
 
-          void saveReportSchedule(farmId, { enabled, frequency, reportTypes, zoneIds })
+          void saveReportSchedule(farmId, {
+            enabled, frequency, reportTypes, zoneIds,
+            ...(extras ? { dayOfWeek, perZonePdf, sendToHandler, adminChatEnabled } : {}),
+          })
             .then((saved) => {
               toast(saved.enabled ? saved.description : "Automatic reports are off.", "success");
               void refresh();
@@ -1795,6 +1841,20 @@ case "delete-user": {
             });
         },
       });
+    }
+
+    case "test-auto-reports": {
+      const farmId = Number(idAttr);
+      if (!farmId) return;
+      try {
+        const result = await sendReportScheduleTest(farmId);
+        return void toast(result.message, result.sent > 0 ? "success" : "warn");
+      } catch (error) {
+        return showErrorModal(
+          "Could not send the test",
+          error instanceof Error ? error.message : "The test could not be sent.",
+        );
+      }
     }
 
     case "toggle-archived-farms":
@@ -2542,59 +2602,11 @@ case "delete-user": {
        system has had for several migrations. */
 
     /* reports */
-    case "generate-report": {
-      const name = el.dataset["report"] ?? "Report";
-      await api.logReportGenerated(name);
-      return toast(`${name} generated for ${rangeLabel(getFilter("reports"))}.`, "success");
-    }
-    /* Excel is real now - the same rows the CSV export writes, in a workbook
-       Excel opens without guessing a separator.
-
-       PDF is NOT offered for these cards any more. There is no per-report-type
-       PDF generator for them, and the button toasted "(demo)" while producing
-       no file. The Reports page's live report section does produce real PDFs,
-       from the API, so that is where the admin is sent. */
-    case "export-report-excel": {
-      const name = el.dataset["report"] ?? "Report";
-      const f = getFilter("reports");
-
-      const events = applyFilters(await api.getIrrigationEvents(), f, {
-        date: (e) => e.date, farm: (e) => e.farm,
-        province: (e) => e.province, region: (e) => e.region,
-      });
-
-      await exportRowsWorkbook(
-        `agroflow-${name.toLowerCase().replace(/\s+/g, "-")}`,
-        name,
-        ["Date (SAST)", "Farm", "Region", "Crop", "Estimated litres"],
-        events.slice(0, 500).map((e) => [
-          fmtDate(e.date), e.farm, e.region, e.crop,
-          e.litres === null ? "No estimate" : e.litres,
-        ]),
-      );
-
-      return void toast(`${name} exported.`, "success");
-    }
-    case "export-report-csv": {
-      const name = el.dataset["report"] ?? "Report";
-      const f = getFilter("reports");
-      const events = applyFilters(await api.getIrrigationEvents(), f, {
-        date: (e) => e.date, farm: (e) => e.farm,
-        province: (e) => e.province, region: (e) => e.region,
-      });
-      const rows = events.slice(0, 500).map((e) => [
-        e.date, e.farm, e.region, e.crop,
-        e.litres === null ? "No estimate" : e.litres,
-      ]);
-      downloadExcelSafeCsv(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
-        toCSV(["Date", "Farm", "Region", "Crop", "Estimated litres"], rows));
-      await api.logReportGenerated(`${name} (CSV)`);
-      return toast(`${name} exported.`, "success");
-    }
     case "run-comparison": return runComparison();    
-    case "live-report-view": return liveReportRun(el.dataset["report"] ?? "", false);
-    case "live-report-pdf": return liveReportRun(el.dataset["report"] ?? "", true);
-    case "live-report-xlsx": return liveReportXlsx();
+    case "farm-report-preview": return farmReportPreview();
+    case "farm-report-pdf": return farmReportPdf();
+    case "farm-report-xlsx": return farmReportXlsx();
+    case "view-attention": return openAttentionGroup(idAttr);
     /* A real file, from what is on screen. The comparison table is rendered
        into #cmpResult by runComparison; reading it back is what makes
        this export match exactly what the admin is looking at, rather than
@@ -2755,7 +2767,6 @@ async function runComparison(): Promise<void> {
     (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
 
   const mode = get("cmpMode");
-  const metric = get("cmpMetric");
   const aFrom = get("cmpAFrom"), aTo = get("cmpATo");
   const bFrom = get("cmpBFrom"), bTo = get("cmpBTo");
 
@@ -2794,7 +2805,7 @@ async function runComparison(): Promise<void> {
   }
 
   host.innerHTML = `
-    <div class="cmp-head">${esc(metric)} · ${esc(mode)} — Period A (${esc(aFrom)} → ${esc(aTo)}) vs Period B (${esc(bFrom)} → ${esc(bTo)})</div>
+    <div class="cmp-head">Estimated water use · ${esc(mode)} — Period A (${esc(aFrom)} → ${esc(aTo)}) vs Period B (${esc(bFrom)} → ${esc(bTo)})</div>
     <div class="table-wrap"><table>
       <thead><tr><th>${esc(mode)}</th><th>Period A</th><th>Period B</th><th>Change</th></tr></thead>
       <tbody>${keys.map((k) => {
@@ -3321,7 +3332,7 @@ function wireRegisterFarmReview(): void {
   render();
 }
 
-/* ---- Live farm reports (real endpoints; the cards above are demo data) ---- */
+/* ---- Farm reports, attention, automatic reports (item 4) ---------------- */
 
 function liveEsc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -3332,114 +3343,79 @@ function liveVal(id: string): string {
   return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
 }
 
-function wireLiveReports(): void {
-  const farm = document.getElementById("liveFarm") as HTMLSelectElement | null;
-  const zone = document.getElementById("liveZone") as HTMLSelectElement | null;
-  if (!farm || !zone || farm.dataset["bound"]) return;
-  farm.dataset["bound"] = "1";
-  farm.addEventListener("change", async () => {
-    zone.innerHTML = `<option value="">Select a zone</option>`;
-    const id = Number(farm.value);
-    if (!id) return;
-    try {
-      const zones = await getReportZones(id);
-      zone.innerHTML = `<option value="">Select a zone</option>` + zones.map((z) =>
-        `<option value="${z.zoneId}">${liveEsc(z.name)}${z.cropType ? " (" + liveEsc(z.cropType) + ")" : ""}</option>`).join("");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not load zones.", "info");
-    }
-  });
+/* The chosen period as dates: the last N days ending today (SAST), or the
+   two date fields when "Choose dates" is picked. */
+function livePeriod(): { from: string; to: string } {
+  const choice = liveVal("livePeriod");
+  if (choice === "custom") return { from: liveVal("liveFrom"), to: liveVal("liveTo") };
+  const days = Number(choice) || 7;
+  const to = new Date(Date.now() + 2 * 3600_000);
+  const from = new Date(to.getTime() - (days - 1) * 86_400_000);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
-// One insight, with its source in small text underneath. Farmers never see the
-// source; reports always show it (spec 9b).
-function liveInsight(i: any): string {
-  const severity = typeof i?.severity === "string" ? i.severity : "info";
-  return `<li class="liveInsight liveInsight--${liveEsc(severity)}">
-    <span class="liveInsight__text">${liveEsc(i?.text ?? "")}</span>
-    ${i?.source ? `<small class="liveInsight__source">Source: ${liveEsc(i.source)}</small>` : ""}
-    ${whyLink(asExplanation(i?.explanation))}
-  </li>`;
-}
-
-function liveInsights(insights: any, heading = "What to do"): string {
-  if (!Array.isArray(insights) || insights.length === 0) return "";
-  return `<div class="liveInsights"><h6>${liveEsc(heading)}</h6>
-    <ul class="liveInsights__list">${insights.map(liveInsight).join("")}</ul></div>`;
-}
-
-// Spec 9c: weather app (the area) beside the DHT11 (in the tub), with the
-// difference. A missing value shows as "-" and a missing sensor as the row's own
-// note, never as a zero that would read as perfect agreement.
-function liveWeatherComparison(comparison: any): string {
-  if (!comparison) return "";
-  const days = Array.isArray(comparison.days) ? comparison.days : [];
-
-  if (days.length === 0) {
-    return `<div class="liveWeatherCompare"><h6>Weather: area vs tub</h6>
-      <p><small>${liveEsc(comparison.message ?? "No observed weather days to compare yet.")}</small></p></div>`;
-  }
-
-  const n = (v: any) => (v === null || v === undefined ? "-" : liveEsc(v));
-
-  const rows = days.map((day: any) => `<tr>
-      <td>${liveEsc(day.date)}</td>
-      <td>${n(day.app?.tminC)}</td><td>${n(day.app?.tmaxC)}</td>
-      <td>${n(day.app?.rhMeanPct)}</td><td>${n(day.app?.windMs)}</td><td>${n(day.app?.rainMm)}</td>
-      <td>${n(day.dht?.tminC)}</td><td>${n(day.dht?.tmaxC)}</td><td>${n(day.dht?.rhMeanPct)}</td>
-      <td>${n(day.difference?.tmaxC)}</td>
-      <td>${day.note ? liveEsc(day.note) : ""}</td>
-    </tr>`).join("");
-
-  return `<div class="liveWeatherCompare"><h6>Weather: area vs tub</h6>
-    <p><small>${liveEsc(comparison.caption ?? "")}</small></p>
-    <table><thead><tr>
-      <th>Date</th><th>Area min</th><th>Area max</th><th>Area RH</th><th>Wind m/s</th><th>Rain mm</th>
-      <th>Tub min</th><th>Tub max</th><th>Tub RH</th><th>Max diff</th><th>Note</th>
-    </tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-
-function liveRender(kind: string, d: any): string {
-  if (kind === "water-usage") {
-    const rows = (d.zones as any[]).map((z) => `<tr><td>${liveEsc(z.name)}</td><td>${liveEsc(z.eventCount)}</td>
-      <td>${z.status === "ok" ? liveEsc(z.estimatedLitres) + " L (estimated)" : liveEsc(z.message)}</td></tr>`).join("");
-    return `<p><em>${liveEsc(d.estimateNote)}</em></p>
-      ${liveInsights(d.insights)}
-      <table><thead><tr><th>Zone</th><th>Events</th><th>Water</th></tr></thead><tbody>${rows}</tbody></table>`;
-  }
-  if (kind === "moisture") {
-    if (d.status !== "ok") return `<p>${liveEsc(d.message)}</p>`;
-    const s = d.summary;
-    // Item 2: no % on readings taken before the wet/dry setup.
-    const pct = d.calibrated === false ? "" : "%";
-    const kind = d.calibrated === false ? " (sensor readings, not yet set up)" : "";
-    return `<p><strong>${liveEsc(d.zoneName)}</strong>: ${liveEsc(s.readingCount)} readings${kind}, average ${liveEsc(s.averagePct)}${pct},
-      lowest ${liveEsc(s.lowestPct)}${pct}, highest ${liveEsc(s.highestPct)}${pct}.</p>
-      <p>${liveEsc(s.action)}</p>
-      ${liveInsights(d.insights)}
-      ${d.calibrationNote ? `<p><small>${liveEsc(d.calibrationNote)}</small></p>` : ""}
-      <p>${liveEsc((d.irrigationEvents as any[]).length)} irrigation event(s) in this period. <em>${liveEsc(d.estimateNote)}</em></p>`;
-  }
-  const blocks = (d.zones as any[]).map((z) => `<h5>${liveEsc(z.name)} (${liveEsc(z.cropType ?? "no crop set")})</h5>
-    <p>${liveEsc(z.summary)}</p>
-    ${z.plainSummary ? `<p><strong>${liveEsc(z.plainSummary)}</strong></p>` : ""}
-    ${liveInsights(z.insights)}
-    ${(z.limitations as string[]).map((l) => `<p><small>${liveEsc(l)}</small></p>`).join("")}
-    <table><thead><tr><th>Date</th><th>Action</th><th>ET0 mm</th><th>Rain mm</th><th>Note</th></tr></thead><tbody>
-    ${(z.days as any[]).map((day) => `<tr><td>${liveEsc(day.date)}</td><td>${liveEsc(day.action)}</td>
-      <td>${liveEsc(day.et0MmPerDay ?? "-")}</td><td>${liveEsc(day.forecastRainMm ?? "-")}</td><td>${liveEsc(day.note)}</td></tr>`).join("")}
-    </tbody></table>`).join("");
-  return d.status === "ok"
-    ? blocks + liveWeatherComparison(d.weatherComparison)
-    : `<p>${liveEsc(d.message)}</p>`;
-}
-
-/* The same report as a workbook. Only water usage has one - see the note on
-   the button in pages/analytics.ts. */
-async function liveReportXlsx(): Promise<void> {
+/* The report path for the current choices, or a reason it cannot be made. */
+function farmReportPath(): { path: string; name: string } | { error: string } {
   const farmId = Number(liveVal("liveFarm"));
   const zoneId = Number(liveVal("liveZone"));
-  const from = liveVal("liveFrom"), to = liveVal("liveTo");
+  const type = liveVal("liveType") || "water-usage";
+  const { from, to } = livePeriod();
+
+  if (!farmId) return { error: "Pick a farm first." };
+  if (!from || !to) return { error: "Pick a from and to date." };
+
+  if (type === "moisture") {
+    if (!zoneId) return { error: "Soil moisture is one zone at a time - pick a zone." };
+    return { path: `moisture?zoneId=${zoneId}&from=${from}&to=${to}`, name: `soil-moisture-${from}-to-${to}` };
+  }
+  if (type === "schedule") {
+    return {
+      path: `schedule?farmId=${farmId}${zoneId ? `&zoneId=${zoneId}` : ""}`,
+      name: "watering-schedule",
+    };
+  }
+  return {
+    path: zoneId
+      ? `water-usage?farmId=${farmId}&zoneId=${zoneId}&from=${from}&to=${to}`
+      : `water-usage?farmId=${farmId}&from=${from}&to=${to}`,
+    name: `water-usage-${from}-to-${to}`,
+  };
+}
+
+async function farmReportPreview(): Promise<void> {
+  const choice = farmReportPath();
+  if ("error" in choice) return void toast(choice.error, "info");
+  const out = document.getElementById("liveReportResult");
+  if (!out) return;
+  out.innerHTML = `<div class="muted">Building the report…</div>`;
+  try {
+    const blob = await fetchReportPdfBlob(choice.path.replace("?", "/pdf?"));
+    const url = URL.createObjectURL(blob);
+    // The PDF itself, so the preview cannot differ from the download.
+    out.innerHTML = `<iframe class="report-preview" title="Report preview" src="${url}"></iframe>`;
+  } catch (e) {
+    out.innerHTML = "";
+    toast(e instanceof Error ? e.message : "The report could not be built.", "info");
+  }
+}
+
+async function farmReportPdf(): Promise<void> {
+  const choice = farmReportPath();
+  if ("error" in choice) return void toast(choice.error, "info");
+  try {
+    await downloadReportPdf(choice.path.replace("?", "/pdf?"), `agroflow-${choice.name}.pdf`);
+    toast("PDF downloaded.", "success");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "The report could not be built.", "info");
+  }
+}
+
+/* The water-usage figures as a workbook - the one report with a table of
+   numbers somebody wants to chart or paste. */
+async function farmReportXlsx(): Promise<void> {
+  const farmId = Number(liveVal("liveFarm"));
+  const zoneId = Number(liveVal("liveZone"));
+  const { from, to } = livePeriod();
 
   if (!farmId) return toast("Pick a farm first.", "info");
   if (!from || !to) return toast("Pick a from and to date.", "info");
@@ -3453,7 +3429,6 @@ async function liveReportXlsx(): Promise<void> {
       `/api/farmer/reports/water-usage/xlsx?${query}`,
       `agroflow-water-usage-${from}-to-${to}.xlsx`,
     );
-
     toast("Workbook downloaded.", "success");
   } catch (e) {
     showErrorModal(
@@ -3463,41 +3438,81 @@ async function liveReportXlsx(): Promise<void> {
   }
 }
 
-async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
-  const farmId = Number(liveVal("liveFarm"));
-  const zoneId = Number(liveVal("liveZone"));
-  const from = liveVal("liveFrom"), to = liveVal("liveTo");
-
-  let path: string;
-  if (kind === "moisture") {
-    if (!zoneId) return toast("Pick a farm and a zone first.", "info");
-    if (!from || !to) return toast("Pick a from and to date.", "info");
-    path = `moisture?zoneId=${zoneId}&from=${from}&to=${to}`;
-  } else if (kind === "water-usage") {
-    if (!farmId) return toast("Pick a farm first.", "info");
-    if (!from || !to) return toast("Pick a from and to date.", "info");
-
-    // A chosen zone gets that zone's own designed report; "all zones" gets
-    // the farm-wide one, which is the same document with a summary in front.
-    path = zoneId
-      ? `water-usage?farmId=${farmId}&zoneId=${zoneId}&from=${from}&to=${to}`
-      : `water-usage?farmId=${farmId}&from=${from}&to=${to}`;
-  } else if (kind === "schedule") {
-    if (!farmId) return toast("Pick a farm first.", "info");
-    path = `schedule?farmId=${farmId}`;
-  } else return;
-
+/* The automatic-reports summary for the chosen farm. */
+async function refreshAutoReportsSummary(farmId: number): Promise<void> {
+  const host = document.getElementById("autoReportsSummary");
+  const edit = document.getElementById("autoReportsEdit");
+  if (!host) return;
+  if (edit) edit.dataset["id"] = String(farmId);
   try {
-    if (pdf) {
-      await downloadReportPdf(path.replace("?", "/pdf?"), `${kind}-report.pdf`);
-      return toast("PDF downloaded.", "success");
-    }
-    const data = await getReportJson<any>(path);
-    const out = document.getElementById("liveReportResult");
-    if (out) out.innerHTML = liveRender(kind, data);
-  } catch (e) {
-    toast(e instanceof Error ? e.message : "Report failed.", "info");
+    const s = await getReportSchedule(farmId);
+    if (Number(liveVal("liveFarm")) !== farmId) return; // a newer choice won
+    const when = (iso: string | null | undefined): string => (iso ? fmtDateTimeSast(iso) : "—");
+    host.innerHTML = `
+      <div class="detail-list">
+        <div class="detail-row"><span>Now</span><b>${liveEsc(s.description)}</b></div>
+        <div class="detail-row"><span>Last sent</span><b>${liveEsc(when(s.lastSentAt))}</b></div>
+        <div class="detail-row"><span>Next send</span><b>${liveEsc(when(s.nextSendAt))}</b></div>
+        ${s.turnedOffBy ? `<div class="detail-row"><span>Turned off by</span><b>${liveEsc(s.turnedOffBy)} · ${liveEsc(when(s.turnedOffAt))}</b></div>` : ""}
+      </div>`;
+  } catch {
+    host.textContent = "This farm's automatic reports could not be read.";
   }
+}
+
+async function loadReportZones(farmId: number): Promise<void> {
+  const zone = document.getElementById("liveZone") as HTMLSelectElement | null;
+  if (!zone) return;
+  zone.innerHTML = `<option value="">All zones</option>`;
+  if (!farmId) return;
+  try {
+    const zones = await getReportZones(farmId);
+    if (Number(liveVal("liveFarm")) !== farmId) return;
+    zone.innerHTML = `<option value="">All zones</option>` + zones.map((z) =>
+      `<option value="${z.zoneId}">${liveEsc(z.name)}${z.cropType ? " (" + liveEsc(z.cropType) + ")" : ""}</option>`).join("");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Could not load zones.", "info");
+  }
+}
+
+function wireLiveReports(): void {
+  const farm = document.getElementById("liveFarm") as HTMLSelectElement | null;
+  const period = document.getElementById("livePeriod") as HTMLSelectElement | null;
+  if (!farm || farm.dataset["bound"]) return;
+  farm.dataset["bound"] = "1";
+
+  const onFarm = (): void => {
+    const id = Number(farm.value);
+    if (id) rememberReportFarm(id);
+    void loadReportZones(id);
+    void refreshAutoReportsSummary(id);
+  };
+  farm.addEventListener("change", onFarm);
+  onFarm(); // the pre-filled farm
+
+  period?.addEventListener("change", () => {
+    document.querySelectorAll<HTMLElement>(".live-custom").forEach((el) => {
+      el.hidden = period.value !== "custom";
+    });
+  });
+}
+
+/* One "Farms needing attention" line, opened: every farm and zone behind it,
+   each with its own "Why am I seeing this?". */
+function openAttentionGroup(key: string): void {
+  const group = findAttentionGroup(key);
+  if (!group) return;
+  openDrawer({
+    title: `${group.farms} ${group.label}`,
+    subtitle: "From the advice of the last 7 days",
+    wide: true,
+    bodyHtml: `<div class="drawer-section"><ul class="drawer-list">${group.items.map((i) => `
+      <li>
+        <b>${liveEsc(i.farm)} · ${liveEsc(i.zone)}</b> - ${liveEsc(i.message)}
+        <small class="muted">${liveEsc(fmtDate(i.day))}</small>
+        ${whyLink(i.explanation)}
+      </li>`).join("")}</ul></div>`,
+  });
 }
 
 /* ---------------------- delegated clicks (item 0b) ----------------------- */

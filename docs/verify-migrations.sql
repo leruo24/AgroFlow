@@ -164,6 +164,10 @@ select
     -- points at. Without it messages go out with no button.
     (select count(*) from pg_class where relname = 'explanation' and relkind = 'r')      as m0039_explanation,
 
+    -- 0040: report_schedule - daily, chosen weekday, per-zone PDFs, recipients.
+    (select count(*) from information_schema.columns
+      where table_name = 'report_schedule' and column_name = 'per_zone_pdf')               as m0040_report_schedule_extend,
+
     -- Not a migration, but applied by hand the same way and just as invisible
     -- when missed: the private bucket generated report PDFs are stored in.
     (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;

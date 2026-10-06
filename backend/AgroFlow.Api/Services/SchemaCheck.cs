@@ -115,6 +115,10 @@ public sealed class SchemaCheck
             "select to_regclass('public.explanation')",
             "Telegram messages go out without a \"Why am I seeing this?\" button."),
 
+        new("0040", "column", "report_schedule.per_zone_pdf",
+            "select 1 from information_schema.columns where table_name = 'report_schedule' and column_name = 'per_zone_pdf'",
+            "Automatic reports cannot be daily, on a chosen weekday or per zone; extra recipients are ignored."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

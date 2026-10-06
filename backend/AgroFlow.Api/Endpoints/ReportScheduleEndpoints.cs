@@ -1,16 +1,24 @@
 using System.Security.Claims;
 using AgroFlow.Api.Auth;
+using AgroFlow.Api.Services.Notifications;
 using AgroFlow.Business;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Npgsql;
 using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
+// Item 4 added the last four fields. Optional, so an older admin build that
+// sends only the first four still saves exactly what it did before.
 public record ReportScheduleBody(
     bool Enabled,
     string? Frequency,
     string[]? ReportTypes,
-    long[]? ZoneIds);
+    long[]? ZoneIds,
+    int? DayOfWeek = null,
+    bool? PerZonePdf = null,
+    bool? SendToHandler = null,
+    bool? AdminChatEnabled = null);
 
 public record ReportScheduleResponse(
     long FarmId,
@@ -19,7 +27,19 @@ public record ReportScheduleResponse(
     string[] ReportTypes,
     long[]? ZoneIds,
     string? LastRunAt,
-    string Description);
+    string Description,
+    // ---- item 4, additive ----
+    int DayOfWeek,
+    bool PerZonePdf,
+    bool SendToHandler,
+    bool AdminChatEnabled,
+    string? LastSentAt,
+    string? NextSendAt,
+    string? TurnedOffBy,
+    string? TurnedOffAt,
+    // False until migration 0040 is applied: daily, a chosen day, per-zone
+    // PDFs and extra recipients cannot be saved yet, and the page says so.
+    bool OptionsAvailable);
 
 public record AutoReportSummaryResponse(
     bool Enabled,
@@ -37,6 +57,10 @@ public record AutoReportSummaryResponse(
 // carries the frost warnings.
 public static class ReportScheduleEndpoints
 {
+    // A test send is for checking the template, not for flooding an admin's
+    // phone with one PDF per zone of a twenty-zone farm.
+    public const int MaxTestPdfs = 5;
+
     public static void MapReportScheduleEndpoints(this WebApplication app)
     {
         var admin = app.MapGroup("/api/admin/farms/{farmId:long}/report-schedule")
@@ -45,6 +69,7 @@ public static class ReportScheduleEndpoints
 
         admin.MapGet("/", GetForAdminAsync);
         admin.MapPut("/", SaveAsync);
+        admin.MapPost("/test", SendTestAsync);
 
         var farmer = app.MapGroup("/api/farmer/auto-reports").RequireAuthorization();
 
@@ -69,7 +94,9 @@ public static class ReportScheduleEndpoints
         {
             return Results.Ok(new ReportScheduleResponse(
                 farmId, false, "weekly", new[] { ReportKinds.WaterUsage }, null, null,
-                ReportSchedulePolicy.Describe(false, ReportFrequency.Weekly, Array.Empty<string>())));
+                ReportSchedulePolicy.Describe(false, ReportFrequency.Weekly, Array.Empty<string>()),
+                ReportSchedulePolicy.DefaultIsoDay, false, false, false, null, null, null, null,
+                await OptionsAvailableAsync(connection, cancellationToken)));
         }
 
         return Results.Ok(row);
@@ -85,7 +112,7 @@ public static class ReportScheduleEndpoints
     {
         var types = (request.ReportTypes ?? Array.Empty<string>())
             .Select(t => t?.Trim().ToLowerInvariant() ?? string.Empty)
-            .Where(ReportKinds.IsValid)
+            .Where(ReportSchedulePolicy.IsScheduleType)
             .Distinct()
             .ToArray();
 
@@ -100,11 +127,32 @@ public static class ReportScheduleEndpoints
             });
         }
 
+        if (request.DayOfWeek is { } d && (d < 1 || d > 7))
+        {
+            return Results.BadRequest(new { error = "Choose a day from Monday to Sunday." });
+        }
+
         var frequency = ReportSchedulePolicy.ParseFrequency(request.Frequency);
 
-        Guid? createdBy = Guid.TryParse(user.FindFirstValue("sub"), out var adminId) ? adminId : null;
+        // The actor is always the token's subject, never something in the body.
+        Guid? actor = Guid.TryParse(user.FindFirstValue("sub"), out var adminId) ? adminId : null;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var before = await LoadAsync(connection, farmId, cancellationToken);
+        var optionsAvailable = await OptionsAvailableAsync(connection, cancellationToken);
+
+        var asksForNewOptions = frequency == ReportFrequency.Daily
+            || ReportSchedulePolicy.IsoDay(request.DayOfWeek) != ReportSchedulePolicy.DefaultIsoDay
+            || request.PerZonePdf == true || request.SendToHandler == true || request.AdminChatEnabled == true;
+
+        if (asksForNewOptions && !optionsAvailable)
+        {
+            return Results.BadRequest(new
+            {
+                error = "Daily reports, a chosen weekday, one PDF per zone and extra recipients need database migration 0040, which has not been applied yet.",
+            });
+        }
 
         await using (var cmd = new NpgsqlCommand(
             """
@@ -128,8 +176,35 @@ public static class ReportScheduleEndpoints
             cmd.Parameters.AddWithValue(
                 NpgsqlDbType.Array | NpgsqlDbType.Bigint,
                 request.ZoneIds is { Length: > 0 } ? request.ZoneIds : (object)DBNull.Value);
-            cmd.Parameters.AddWithValue(NpgsqlDbType.Uuid, (object?)createdBy ?? DBNull.Value);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Uuid, (object?)actor ?? DBNull.Value);
 
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (optionsAvailable)
+        {
+            var turningOff = before is { Enabled: true } && !request.Enabled;
+
+            await using var cmd = new NpgsqlCommand(
+                """
+                update report_schedule
+                   set day_of_week = $2,
+                       per_zone_pdf = $3,
+                       send_to_handler = $4,
+                       admin_chat_enabled = $5,
+                       turned_off_by = case when $6 then $7 else turned_off_by end,
+                       turned_off_at = case when $6 then now() else turned_off_at end
+                 where farm_id = $1
+                """,
+                connection);
+            cmd.Parameters.AddWithValue(farmId);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Smallint,
+                frequency == ReportFrequency.Weekly ? (object)(short)ReportSchedulePolicy.IsoDay(request.DayOfWeek) : DBNull.Value);
+            cmd.Parameters.AddWithValue(request.PerZonePdf ?? before?.PerZonePdf ?? false);
+            cmd.Parameters.AddWithValue(request.SendToHandler ?? before?.SendToHandler ?? false);
+            cmd.Parameters.AddWithValue(request.AdminChatEnabled ?? before?.AdminChatEnabled ?? false);
+            cmd.Parameters.AddWithValue(turningOff);
+            cmd.Parameters.AddWithValue(NpgsqlDbType.Uuid, (object?)actor ?? DBNull.Value);
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -141,10 +216,115 @@ public static class ReportScheduleEndpoints
         await audit.WriteAsync(
             user, AgroFlow.Api.Services.AuditActions.ReportScheduleChanged,
             "report_schedule", farmId.ToString(), farmId: farmId,
-            details: new { request.Enabled, frequency = ReportSchedulePolicy.ToDatabaseValue(frequency), reportTypes = types },
+            details: new
+            {
+                request.Enabled,
+                frequency = ReportSchedulePolicy.ToDatabaseValue(frequency),
+                reportTypes = types,
+                dayOfWeek = request.DayOfWeek,
+                request.PerZonePdf,
+                request.SendToHandler,
+                request.AdminChatEnabled,
+            },
             cancellationToken: cancellationToken);
 
         return Results.Ok(saved);
+    }
+
+    // Item 4: "Send test now" - the schedule's reports for its current period,
+    // sent ONLY to the calling admin's own Telegram. Never the farmer, never
+    // the group chat: a test must not look like a real report to anyone else.
+    private static async Task<IResult> SendTestAsync(
+        long farmId,
+        ClaimsPrincipal user,
+        NpgsqlDataSource dataSource,
+        AgroFlow.Business.Fao56EngineController engine,
+        TelegramClient telegram,
+        AgroFlow.Api.Services.AuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(user.FindFirstValue("sub"), out var adminId)) return Results.Unauthorized();
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var schedule = await LoadAsync(connection, farmId, cancellationToken);
+        if (schedule is null || schedule.ReportTypes.Length == 0)
+        {
+            return Results.BadRequest(new { error = "Save a schedule with at least one report first." });
+        }
+
+        long? adminChat;
+        await using (var cmd = new NpgsqlCommand(
+            "select telegram_chat_id from profile where id = $1 and telegram_chat_id is not null", connection))
+        {
+            cmd.Parameters.AddWithValue(adminId);
+            adminChat = await cmd.ExecuteScalarAsync(cancellationToken) as long?;
+        }
+
+        if (adminChat is null)
+        {
+            return Results.BadRequest(new
+            {
+                error = "Your own Telegram is not connected, so there is nowhere to send a test. Connect it under My account.",
+            });
+        }
+
+        if (!telegram.IsConfigured)
+        {
+            return Results.BadRequest(new { error = "The Telegram bot is not configured on this server." });
+        }
+
+        var zoneIds = schedule.ZoneIds is { Length: > 0 }
+            ? schedule.ZoneIds.ToList()
+            : await FarmZonesAsync(connection, farmId, cancellationToken);
+
+        var frequency = ReportSchedulePolicy.ParseFrequency(schedule.Frequency);
+        var (from, to) = ReportSchedulePolicy.PeriodFor(
+            frequency, schedule.DayOfWeek, ReportSchedulePolicy.ToSast(DateTimeOffset.UtcNow));
+
+        var planned = ReportSchedulePolicy.RequestsFor(schedule.ReportTypes, schedule.PerZonePdf, zoneIds);
+        var sent = 0;
+        var failed = 0;
+
+        foreach (var (type, zoneId) in planned.Take(MaxTestPdfs))
+        {
+            IResult result = type switch
+            {
+                ReportKinds.Moisture => await ReportEndpoints.GetMoisturePdfAsync(user, dataSource, zoneId, from, to, engine),
+                ReportKinds.Schedule => await ReportEndpoints.GetSchedulePdfAsync(user, dataSource, farmId, engine, zoneId),
+                _ => await ReportEndpoints.GetWaterUsagePdfAsync(user, dataSource, farmId, from, to, engine, zoneId, cancellationToken),
+            };
+
+            if (result is not FileContentHttpResult file)
+            {
+                failed++;
+                continue;
+            }
+
+            var ok = await telegram.SendDocumentAsync(
+                adminChat.Value, file.FileContents.ToArray(), file.FileDownloadName ?? "agroflow-test.pdf",
+                $"TEST - not sent to the farmer. {ReportKinds.DisplayName(type)} ({ReportPeriods.Describe(from, to)}).",
+                cancellationToken);
+
+            if (ok) sent++; else failed++;
+        }
+
+        await audit.WriteAsync(
+            user, AgroFlow.Api.Services.AuditActions.ReportScheduleChanged,
+            "report_schedule", farmId.ToString(), farmId: farmId,
+            details: new { test = true, sent, failed }, cancellationToken: cancellationToken);
+
+        var skipped = Math.Max(0, planned.Count - MaxTestPdfs);
+        return Results.Ok(new
+        {
+            sent,
+            failed,
+            skipped,
+            message = sent == 0
+                ? "The test could not be sent. Check that the bot can message you."
+                : $"Sent {sent} test PDF{(sent == 1 ? "" : "s")} to your own Telegram." +
+                  (skipped > 0 ? $" {skipped} more were left out of the test." : ""),
+        });
     }
 
     // ------------------------------------------------------------------
@@ -218,7 +398,7 @@ public static class ReportScheduleEndpoints
             enabled,
             ReportSchedulePolicy.ToDatabaseValue(frequency),
             types,
-            types.Select(ReportKinds.DisplayName).ToArray(),
+            types.Select(ReportSchedulePolicy.DisplayName).ToArray(),
             ReportSchedulePolicy.Describe(enabled, frequency, types)));
     }
 
@@ -236,7 +416,8 @@ public static class ReportScheduleEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        await using var cmd = new NpgsqlCommand(
+        long? changed;
+        await using (var cmd = new NpgsqlCommand(
             """
             update report_schedule s
                set enabled = false, updated_at = now()
@@ -248,10 +429,22 @@ public static class ReportScheduleEndpoints
                      where fm.farm_id = s.farm_id and fm.profile_id = $1))
             returning s.farm_id
             """,
-            connection);
-        cmd.Parameters.AddWithValue(userId);
+            connection))
+        {
+            cmd.Parameters.AddWithValue(userId);
+            changed = await cmd.ExecuteScalarAsync(cancellationToken) as long?;
+        }
 
-        var changed = await cmd.ExecuteScalarAsync(cancellationToken);
+        // Item 4: record that the farmer turned it off. Skipped quietly until
+        // migration 0040 is applied - the off switch itself must always work.
+        if (changed is { } farmId && await OptionsAvailableAsync(connection, cancellationToken))
+        {
+            await using var who = new NpgsqlCommand(
+                "update report_schedule set turned_off_by = $2, turned_off_at = now() where farm_id = $1", connection);
+            who.Parameters.AddWithValue(farmId);
+            who.Parameters.AddWithValue(userId);
+            await who.ExecuteNonQueryAsync(cancellationToken);
+        }
 
         return Results.Ok(new
         {
@@ -266,9 +459,24 @@ public static class ReportScheduleEndpoints
     private static async Task<ReportScheduleResponse?> LoadAsync(
         NpgsqlConnection connection, long farmId, CancellationToken cancellationToken)
     {
+        // 0040's columns through jsonb: null before the migration, so this
+        // still answers on a database that does not have them.
         await using var cmd = new NpgsqlCommand(
-            "select farm_id, enabled, frequency, report_types, zone_ids, last_run_at " +
-            "from report_schedule where farm_id = $1", connection);
+            """
+            select s.farm_id, s.enabled, s.frequency, s.report_types, s.zone_ids, s.last_run_at,
+                   (to_jsonb(s) ->> 'day_of_week')::int,
+                   coalesce((to_jsonb(s) ->> 'per_zone_pdf')::boolean, false),
+                   coalesce((to_jsonb(s) ->> 'send_to_handler')::boolean, false),
+                   coalesce((to_jsonb(s) ->> 'admin_chat_enabled')::boolean, false),
+                   (select coalesce(nullif(p.name, ''), p.email) from profile p
+                     where p.id = (to_jsonb(s) ->> 'turned_off_by')::uuid),
+                   (to_jsonb(s) ->> 'turned_off_at')::timestamptz,
+                   (select max(r.completed_at) from report_request r
+                     where r.farm_id = s.farm_id and r.requested_via = 'auto' and r.status = 'ready')
+              from report_schedule s
+             where s.farm_id = $1
+            """,
+            connection);
         cmd.Parameters.AddWithValue(farmId);
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -277,15 +485,51 @@ public static class ReportScheduleEndpoints
         var enabled = reader.GetBoolean(1);
         var frequency = ReportSchedulePolicy.ParseFrequency(reader.GetString(2));
         var types = reader.IsDBNull(3) ? Array.Empty<string>() : reader.GetFieldValue<string[]>(3);
+        DateTimeOffset? lastRun = reader.IsDBNull(5) ? null : reader.GetFieldValue<DateTimeOffset>(5);
+        int? dayOfWeek = reader.IsDBNull(6) ? null : reader.GetInt32(6);
 
-        return new ReportScheduleResponse(
+        var next = ReportSchedulePolicy.NextSend(
+            enabled, frequency, dayOfWeek, lastRun, ReportSchedulePolicy.ToSast(DateTimeOffset.UtcNow));
+
+        var response = new ReportScheduleResponse(
             reader.GetInt64(0),
             enabled,
             ReportSchedulePolicy.ToDatabaseValue(frequency),
             types,
             reader.IsDBNull(4) ? null : reader.GetFieldValue<long[]>(4),
-            reader.IsDBNull(5) ? null : reader.GetFieldValue<DateTimeOffset>(5).ToString("o"),
-            ReportSchedulePolicy.Describe(enabled, frequency, types));
+            lastRun?.ToString("o"),
+            ReportSchedulePolicy.Describe(enabled, frequency, types),
+            ReportSchedulePolicy.IsoDay(dayOfWeek),
+            reader.GetBoolean(7),
+            reader.GetBoolean(8),
+            reader.GetBoolean(9),
+            reader.IsDBNull(12) ? null : reader.GetFieldValue<DateTimeOffset>(12).ToString("o"),
+            next?.ToString("o"),
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            reader.IsDBNull(11) ? null : reader.GetFieldValue<DateTimeOffset>(11).ToString("o"),
+            false);
+
+        await reader.DisposeAsync();
+        return response with { OptionsAvailable = await OptionsAvailableAsync(connection, cancellationToken) };
+    }
+
+    private static async Task<bool> OptionsAvailableAsync(NpgsqlConnection connection, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns " +
+            "where table_name = 'report_schedule' and column_name = 'per_zone_pdf')", connection);
+        return await cmd.ExecuteScalarAsync(ct) is true;
+    }
+
+    private static async Task<List<long>> FarmZonesAsync(NpgsqlConnection connection, long farmId, CancellationToken ct)
+    {
+        var ids = new List<long>();
+        await using var cmd = new NpgsqlCommand(
+            "select id from zone where farm_id = $1 and lower(coalesce(status, 'active')) <> 'inactive' order by id", connection);
+        cmd.Parameters.AddWithValue(farmId);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct)) ids.Add(reader.GetInt64(0));
+        return ids;
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>

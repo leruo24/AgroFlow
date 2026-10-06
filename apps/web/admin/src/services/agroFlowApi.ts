@@ -364,6 +364,12 @@ export async function getReportFarms(): Promise<ReportFarm[]> {
   return (await reportFetch("/api/farms")).json() as Promise<ReportFarm[]>;
 }
 
+/* Item 4: the report PDF as a blob, for the on-screen Preview - the same
+   file the PDF button downloads, so the two cannot differ. */
+export async function fetchReportPdfBlob(path: string): Promise<Blob> {
+  return (await reportFetch(`/api/farmer/reports/${path}`)).blob();
+}
+
 export async function getReportZones(farmId: number): Promise<ReportZone[]> {
   return (await reportFetch(`/api/farmer/reports/zones?farmId=${farmId}`)).json() as Promise<ReportZone[]>;
 }
@@ -693,14 +699,26 @@ export function createEnrollmentCode(input: {
 
 /* ---------------- Automatic reports (step 4) ---------------- */
 
+export type ReportFrequency = "daily" | "weekly" | "monthly";
+
 export type ReportScheduleDto = {
   farmId: number;
   enabled: boolean;
-  frequency: "weekly" | "monthly";
+  frequency: ReportFrequency;
   reportTypes: string[];
   zoneIds: number[] | null;
   lastRunAt: string | null;
   description: string;
+  // Item 4 - optional, so an older API still type-checks.
+  dayOfWeek?: number;
+  perZonePdf?: boolean;
+  sendToHandler?: boolean;
+  adminChatEnabled?: boolean;
+  lastSentAt?: string | null;
+  nextSendAt?: string | null;
+  turnedOffBy?: string | null;
+  turnedOffAt?: string | null;
+  optionsAvailable?: boolean;
 };
 
 export function getReportSchedule(farmId: number): Promise<ReportScheduleDto> {
@@ -718,9 +736,13 @@ export function saveReportSchedule(
   farmId: number,
   input: {
     enabled: boolean;
-    frequency: "weekly" | "monthly";
+    frequency: ReportFrequency;
     reportTypes: string[];
     zoneIds: number[] | null;
+    dayOfWeek?: number;
+    perZonePdf?: boolean;
+    sendToHandler?: boolean;
+    adminChatEnabled?: boolean;
   },
 ): Promise<ReportScheduleDto> {
   return authorizedJson<ReportScheduleDto>(
@@ -728,6 +750,13 @@ export function saveReportSchedule(
     "PUT",
     input,
   );
+}
+
+/* Item 4: "Send test now" - to the calling admin's own Telegram only. */
+export function sendReportScheduleTest(
+  farmId: number,
+): Promise<{ sent: number; failed: number; skipped: number; message: string }> {
+  return authorizedJson(`/api/admin/farms/${farmId}/report-schedule/test`, "POST", {});
 }
 
 /* ---------------- Archive (step 6) ----------------

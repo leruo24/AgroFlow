@@ -928,8 +928,17 @@ public static class ReportEndpoints
 
     internal static async Task<IResult> GetSchedulePdfAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId,
-        AgroFlow.Business.Fao56EngineController engine)
+        AgroFlow.Business.Fao56EngineController engine, long? zoneId = null)
     {
+        // Item 4: one zone's own schedule, for per-zone automatic reports.
+        if (zoneId is not null)
+        {
+            var day = AgroFlow.Business.Fao56EngineController.TodayInSast();
+            return await BuildDesignedAsync(
+                user, dataSource, zoneId.Value, day.AddDays(-6), day, engine,
+                asWorkbook: false, CancellationToken.None, ReportKind.Schedule);
+        }
+
         // Item 3: the watering schedule is the farm's action report over the
         // last 7 days, with the coming week's day cards.
         if (farmId is null)

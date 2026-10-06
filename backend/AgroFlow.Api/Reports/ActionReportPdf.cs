@@ -37,6 +37,23 @@ internal static class ActionReportPdf
 
         var generated = ReportShell.GeneratedLine(generatedAtSast);
 
+        // Item 4: a one-day report is the daily brief - one page of today's
+        // actions and the setup steps. No charts, no appendix; the "Why:"
+        // lines stand on their own, without note numbers.
+        if (ReportPeriod.Days(from, to) <= 1)
+        {
+            return Document.Create(doc => doc.Page(page =>
+            {
+                Shell(page, content, generated);
+                page.Content().PaddingHorizontal(34).PaddingTop(16).Column(col =>
+                {
+                    col.Spacing(4);
+                    Actions(col, content, why, heading: "Today, do this", numbered: false);
+                    Improve(col, content);
+                });
+            })).GeneratePdf();
+        }
+
         return Document.Create(doc =>
         {
             doc.Page(page =>
@@ -82,9 +99,10 @@ internal static class ActionReportPdf
 
     /* ---- 1. This week, do this -------------------------------------- */
 
-    private static void Actions(ColumnDescriptor col, ActionReportContent content, ReportWhy why)
+    private static void Actions(ColumnDescriptor col, ActionReportContent content, ReportWhy why,
+        string heading = "This week, do this", bool numbered = true)
     {
-        ReportShell.Heading(col, "This week, do this");
+        ReportShell.Heading(col, heading);
 
         if (content.Actions.Count == 0)
         {
@@ -92,10 +110,18 @@ internal static class ActionReportPdf
             return;
         }
 
+        // Decided before layout, so it cannot depend on how often a page
+        // is composed: a reason already given reads "the same reason as above".
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var plainWhy = content.Actions
+            .Select(x => x.Why is { } w ? (seen.Add(w.Summary) ? w.Summary : "the same reason as above.") : null)
+            .ToList();
+
         var n = 0;
         foreach (var a in content.Actions)
         {
             n++;
+            var index = n - 1;
             col.Item().ShowEntire().PaddingBottom(5).Background(ReportTheme.Surface).Padding(8).Row(row =>
             {
                 row.ConstantItem(22).AlignMiddle().Text(n.ToString(Inv)).FontSize(14).Bold().FontColor(ReportTheme.Brand);
@@ -107,7 +133,9 @@ internal static class ActionReportPdf
                         t.Span(a.Detail).FontSize(10);
                     });
                     c.Item().PaddingTop(3).Element(e => Badge(e, a.Confidence));
-                    why.Line(c, a.Why);
+                    if (numbered) why.Line(c, a.Why);
+                    else if (plainWhy[index] is { } text)
+                        c.Item().PaddingTop(2).Text("Why: " + text).FontSize(7.5f).FontColor(ReportTheme.Muted);
                 });
             });
         }

@@ -83,7 +83,8 @@ public sealed class AutoReportSchedulerService : BackgroundService
 
     private sealed record DueSchedule(
         long Id, long FarmId, Guid? OwnerId, string Frequency,
-        string[] ReportTypes, long[]? ZoneIds, DateTimeOffset? LastRunAt);
+        string[] ReportTypes, long[]? ZoneIds, DateTimeOffset? LastRunAt,
+        int? DayOfWeek, bool PerZonePdf);
 
     private async Task RunDueSchedulesAsync(CancellationToken ct)
     {
@@ -98,7 +99,7 @@ public sealed class AutoReportSchedulerService : BackgroundService
 
             var frequency = ReportSchedulePolicy.ParseFrequency(schedule.Frequency);
 
-            if (!ReportSchedulePolicy.IsDue(true, frequency, schedule.LastRunAt, sastNow))
+            if (!ReportSchedulePolicy.IsDue(true, frequency, schedule.DayOfWeek, schedule.LastRunAt, sastNow))
             {
                 continue;
             }
@@ -115,7 +116,7 @@ public sealed class AutoReportSchedulerService : BackgroundService
                 continue;
             }
 
-            var (start, end) = ReportSchedulePolicy.PeriodFor(frequency, sastNow);
+            var (start, end) = ReportSchedulePolicy.PeriodFor(frequency, schedule.DayOfWeek, sastNow);
 
             var created = await QueueReportsAsync(schedule, start, end, ct);
 
@@ -142,7 +143,11 @@ public sealed class AutoReportSchedulerService : BackgroundService
         // weekly PDFs about it.
         await using var cmd = new NpgsqlCommand(
             """
-            select s.id, s.farm_id, f.owner_id, s.frequency, s.report_types, s.zone_ids, s.last_run_at
+            select s.id, s.farm_id, f.owner_id, s.frequency, s.report_types, s.zone_ids, s.last_run_at,
+                   -- 0040's columns, read through jsonb so a database without
+                   -- them still runs every schedule as before (Monday, one PDF).
+                   (to_jsonb(s) ->> 'day_of_week')::int,
+                   coalesce((to_jsonb(s) ->> 'per_zone_pdf')::boolean, false)
               from report_schedule s
               join farm f on f.farm_id = s.farm_id
              where s.enabled
@@ -160,7 +165,9 @@ public sealed class AutoReportSchedulerService : BackgroundService
                 reader.GetString(3),
                 reader.IsDBNull(4) ? Array.Empty<string>() : reader.GetFieldValue<string[]>(4),
                 reader.IsDBNull(5) ? null : reader.GetFieldValue<long[]>(5),
-                reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTimeOffset>(6)));
+                reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTimeOffset>(6),
+                reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                reader.GetBoolean(8)));
         }
 
         return results;
@@ -180,26 +187,14 @@ public sealed class AutoReportSchedulerService : BackgroundService
 
         var created = 0;
 
-        foreach (var reportType in schedule.ReportTypes)
+        // Which PDFs: moisture is per zone; water usage and the schedule are
+        // one all-zones PDF, or one tailored PDF per zone when per_zone_pdf
+        // is set; the farm summary is the whole farm (ReportSchedulePolicy).
+        foreach (var (reportType, zoneId) in ReportSchedulePolicy.RequestsFor(
+                     schedule.ReportTypes, schedule.PerZonePdf, zoneIds))
         {
-            if (!ReportKinds.IsValid(reportType)) continue;
-
-            // A moisture report is per zone, so an "all reports" schedule on a
-            // four-zone farm produces four of them. The other two are per farm
-            // and produce one each however many zones there are.
-            if (ReportKinds.RequiresZone(reportType))
-            {
-                foreach (var zoneId in zoneIds)
-                {
-                    created += await InsertIfAbsentAsync(
-                        connection, schedule, reportType, zoneId, start, end, ct);
-                }
-            }
-            else
-            {
-                created += await InsertIfAbsentAsync(
-                    connection, schedule, reportType, null, start, end, ct);
-            }
+            created += await InsertIfAbsentAsync(
+                connection, schedule, reportType, zoneId, start, end, ct);
         }
 
         return created;

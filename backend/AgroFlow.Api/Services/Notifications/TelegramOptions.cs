@@ -58,6 +58,11 @@ public sealed class TelegramOptions
     // polling cheap rather than a busy loop.
     public int LongPollSeconds { get; set; } = 30;
 
+    // Item 4: the admins' group chat, for automatic reports whose schedule
+    // asks for a copy there. Configuration only (Telegram__AdminGroupChatId),
+    // never stored in the database. Absent means "no group chat".
+    public long? AdminGroupChatId { get; set; }
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(BotToken);
 }
 

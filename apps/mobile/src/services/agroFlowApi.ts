@@ -788,7 +788,7 @@ export async function openReportPdf(filePath: string): Promise<void> {
 
 export type AutoReportSummary = {
   enabled: boolean;
-  frequency: 'weekly' | 'monthly' | null;
+  frequency: 'daily' | 'weekly' | 'monthly' | null;
   reportTypes: ReportKind[];
   reportTypeLabels: string[];
   description: string;

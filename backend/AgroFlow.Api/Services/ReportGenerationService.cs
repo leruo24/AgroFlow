@@ -265,7 +265,7 @@ public sealed class ReportGenerationService : BackgroundService
                 principal, dataSource, request.ZoneId, request.PeriodStart, request.PeriodEnd, engine),
 
             ReportKinds.Schedule => await ReportEndpoints.GetSchedulePdfAsync(
-                principal, dataSource, request.FarmId, engine),
+                principal, dataSource, request.FarmId, engine, request.ZoneId),
 
             _ => Results.BadRequest(),
         };
@@ -302,7 +302,8 @@ public sealed class ReportGenerationService : BackgroundService
                 $"/api/farmer/reports/moisture/pdf?zoneId={request.ZoneId}" +
                 $"&from={request.PeriodStart:yyyy-MM-dd}&to={request.PeriodEnd:yyyy-MM-dd}",
 
-            _ => $"/api/farmer/reports/schedule/pdf?farmId={request.FarmId}",
+            _ => $"/api/farmer/reports/schedule/pdf?farmId={request.FarmId}" +
+                 (request.ZoneId is { } sz ? $"&zoneId={sz}" : ""),
         };
     }
 
@@ -317,7 +318,20 @@ public sealed class ReportGenerationService : BackgroundService
             if (!telegram.IsConfigured) return;
 
             var chatId = await GetChatIdAsync(request.ProfileId, ct);
-            if (chatId is null)
+
+            // Item 4: an automatic report may also go to the admin who set the
+            // schedule up and to the admin group chat.
+            var automatic = request.RequestedVia == "auto";
+            var (toHandler, toAdminChat, handler) = automatic
+                ? await LoadScheduleRecipientsAsync(request.FarmId, ct)
+                : (false, false, (Guid?)null);
+            var handlerChat = toHandler && handler is { } h ? await GetChatIdAsync(h, ct) : null;
+            var options = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramOptions>>().Value;
+
+            var recipients = ReportDelivery.Recipients(
+                chatId, automatic, toHandler, handlerChat, toAdminChat, options.AdminGroupChatId);
+
+            if (recipients.Count == 0)
             {
                 // Ordinary, not an error: a farmer who never pressed Start in
                 // the bot has no chat, and a bot cannot message first.
@@ -352,7 +366,17 @@ public sealed class ReportGenerationService : BackgroundService
             var fileName =
                 $"agroflow-{request.ReportType.Replace('_', '-')}-{request.PeriodEnd:yyyyMMdd}.pdf";
 
-            await telegram.SendDocumentAsync(chatId.Value, pdf, fileName, caption, ct);
+            // Each recipient: one retry, then an admin alert (item 4).
+            var failed = 0;
+            foreach (var chat in recipients)
+            {
+                var sent = await ReportDelivery.SendWithOneRetryAsync(
+                    () => telegram.SendDocumentAsync(chat, pdf, fileName, caption, ct),
+                    ReportDelivery.RetryDelay, ct);
+                if (!sent) failed++;
+            }
+
+            if (failed > 0) await RaiseDeliveryAlertAsync(request, failed, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -360,6 +384,54 @@ public sealed class ReportGenerationService : BackgroundService
             // failed Telegram send must never undo that.
             _logger.LogWarning(ex,
                 "Could not send report {Id} to Telegram. It is still available in the app.", request.Id);
+        }
+    }
+
+    // The schedule's extra recipients. Read through jsonb so a database
+    // without migration 0040 answers "nobody extra" instead of failing.
+    private async Task<(bool ToHandler, bool ToAdminChat, Guid? Handler)> LoadScheduleRecipientsAsync(
+        long farmId, CancellationToken ct)
+    {
+        try
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync(ct);
+            await using var cmd = new NpgsqlCommand(
+                "select coalesce((to_jsonb(s) ->> 'send_to_handler')::boolean, false), " +
+                "       coalesce((to_jsonb(s) ->> 'admin_chat_enabled')::boolean, false), s.created_by " +
+                "from report_schedule s where s.farm_id = $1", connection);
+            cmd.Parameters.AddWithValue(farmId);
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return (false, false, null);
+            return (reader.GetBoolean(0), reader.GetBoolean(1), reader.IsDBNull(2) ? null : reader.GetGuid(2));
+        }
+        catch (PostgresException)
+        {
+            return (false, false, null);
+        }
+    }
+
+    // A report that could not be delivered even after a retry is an admin's
+    // problem to chase, not something to lose in a log (item 4).
+    private async Task RaiseDeliveryAlertAsync(PendingRequest request, int failedRecipients, CancellationToken ct)
+    {
+        try
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync(ct);
+            await using var cmd = new NpgsqlCommand(
+                "insert into alert (zone_id, severity, message, status) " +
+                "select coalesce($1, (select min(z.id) from zone z where z.farm_id = $2)), 'Warning', $3, 'Open'",
+                connection);
+            cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Bigint, (object?)request.ZoneId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue(request.FarmId);
+            cmd.Parameters.AddWithValue(
+                $"The {ReportKinds.DisplayName(request.ReportType)} report " +
+                $"({ReportPeriods.Describe(request.PeriodStart, request.PeriodEnd)}) could not be sent on Telegram " +
+                $"to {failedRecipients} recipient(s), even after a retry. It is ready in the app (report {request.Id}).");
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Could not raise the delivery alert for report {Id}.", request.Id);
         }
     }
 

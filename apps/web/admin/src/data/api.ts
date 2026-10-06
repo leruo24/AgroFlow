@@ -48,7 +48,7 @@ import {
 } from "@/services/agroFlowApi";
 
 import type {
-  Kpis, Trends, GrowthSeries, SystemHealth, StatusDistribution,
+  Kpis, Trends, GrowthSeries, SeriesPoint, SystemHealth, StatusDistribution,
   User, Farm, Hardware, AdminAlert, MaintenanceJob,
   IrrigationSchedule, IrrigationEvent, ActivityEntry,
   AlertStatus, AlertPriority, UserStatus,
@@ -179,6 +179,28 @@ export function recordActivity(): void {
   // intentionally empty - see file header
 }
 
+/* Counts per calendar month for the last twelve months, oldest first, from
+   ISO-ish date strings ("2026-05-14" or a timestamp). Months with none are 0,
+   so the line shows a quiet month as quiet rather than skipping it. Returns
+   [] when no date falls in the window - the chart then says so. */
+export function monthlyCounts(dates: (string | null | undefined)[], now = new Date()): SeriesPoint[] {
+  const months: { key: string; label: string }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    months.push({
+      key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+      label: d.toLocaleString("en-ZA", { month: "short", timeZone: "UTC" }),
+    });
+  }
+  const counts = new Map(months.map((m) => [m.key, 0]));
+  let any = false;
+  for (const d of dates) {
+    const key = (d ?? "").slice(0, 7);
+    if (counts.has(key)) { counts.set(key, (counts.get(key) ?? 0) + 1); any = true; }
+  }
+  return any ? months.map((m) => ({ label: m.label, value: counts.get(m.key) ?? 0 })) : [];
+}
+
 export const api = {
   /* ------------------------------- reads ------------------------------- */
   async getKpis(): Promise<Kpis> {
@@ -211,9 +233,23 @@ export const api = {
   getTrends(): Promise<Trends> {
     return Promise.resolve({});
   },
-  /** Same reason as getTrends(). */
-  getGrowth(): Promise<GrowthSeries> {
-    return Promise.resolve({ users: [], farms: [], connectivity: [], maintenance: [] });
+  /* Item 4: new farmers, farms and maintenance jobs per month over the last
+     twelve months, counted from the records themselves - the charts used to
+     be permanently empty because this returned nothing. Connectivity stays
+     empty on purpose: no history of kit uptime is stored anywhere, so there
+     is nothing honest to plot (the Reports page no longer shows that chart). */
+  async getGrowth(): Promise<GrowthSeries> {
+    const [users, farmList, jobs] = await Promise.all([
+      api.getFarmerAccounts().catch(() => []),
+      api.getFarms().catch(() => []),
+      api.getMaintenance().catch(() => []),
+    ]);
+    return {
+      users: monthlyCounts(users.map((u) => u.dateJoined)),
+      farms: monthlyCounts(farmList.map((f) => f.registered)),
+      connectivity: [],
+      maintenance: monthlyCounts(jobs.map((m) => m.scheduledFor)),
+    };
   },
   /** No monitoring/health-check table exists anywhere in the schema - not
       empty, genuinely nothing to query. Empty object is the
@@ -1102,4 +1138,88 @@ export async function getFailedReportCount(): Promise<number> {
 
   if (error) throw error;
   return count ?? 0;
+}
+
+/* ---------------- Farms needing attention this week (item 4) ----------------
+
+   Built from the SAME stored insights the farmers see (ai_recommendation,
+   item 2c explanations included), grouped into a few things an admin acts on.
+   A farm is counted once per group however many zones or days raised it. */
+
+export type AttentionItem = {
+  farmId: number;
+  farm: string;
+  zone: string;
+  message: string;
+  day: string;
+  explanation: Explanation | null;
+};
+
+export type AttentionGroup = {
+  key: string;
+  label: string;
+  farms: number;
+  items: AttentionItem[];
+};
+
+export const ATTENTION_GROUPS: { key: string; label: string; types: string[] }[] = [
+  { key: "dry", label: "farms with crops short of water", types: ["water_now", "stress_days"] },
+  { key: "over", label: "farms over-watering", types: ["overwatering"] },
+  { key: "kits", label: "farms with a kit offline or faulty", types: ["zone_offline", "sensor_stuck", "dht_offline", "sensor_drift"] },
+  { key: "pumps", label: "farms where a pump ran with no effect", types: ["watering_failed"] },
+  { key: "level", label: "farms with a zone set to water too late", types: ["threshold_unsafe"] },
+  { key: "setup", label: "farms with setup to finish", types: ["setup_missing"] },
+];
+
+let attentionCache: AttentionGroup[] = [];
+
+export function findAttentionGroup(key: string): AttentionGroup | undefined {
+  return attentionCache.find((g) => g.key === key);
+}
+
+export async function getAttentionThisWeek(): Promise<AttentionGroup[]> {
+  const since = new Date(Date.now() + 2 * 3600_000 - 6 * 86_400_000).toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("ai_recommendation")
+    .select("insight_type, message, data, valid_for, zone:zone_id(name, farm:farm_id(farm_id, name, status))")
+    .gte("valid_for", since)
+    .is("dismissed_at", null)
+    .order("valid_for", { ascending: false });
+
+  if (error) throw error;
+
+  type Row = {
+    insight_type: string | null;
+    message: string | null;
+    data: { explanation?: unknown } | null;
+    valid_for: string;
+    zone: { name: string | null; farm: { farm_id: number; name: string; status: string | null } | null } | null;
+  };
+
+  const rows = ((data as unknown as Row[] | null) ?? [])
+    .filter((r) => r.insight_type && r.zone?.farm && !isArchived(r.zone.farm.status));
+
+  attentionCache = ATTENTION_GROUPS.map((g) => {
+    const seen = new Set<string>();
+    const items: AttentionItem[] = [];
+    for (const r of rows) {
+      if (!g.types.includes(r.insight_type!)) continue;
+      // Newest first, so the first row per zone is the latest one.
+      const key = `${r.zone!.farm!.farm_id}:${r.zone!.name}:${r.insight_type}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        farmId: r.zone!.farm!.farm_id,
+        farm: r.zone!.farm!.name,
+        zone: r.zone!.name ?? "Zone",
+        message: r.message ?? "",
+        day: r.valid_for,
+        explanation: asExplanation(r.data?.explanation),
+      });
+    }
+    return { key: g.key, label: g.label, farms: new Set(items.map((i) => i.farmId)).size, items };
+  });
+
+  return attentionCache;
 }
