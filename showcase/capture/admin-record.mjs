@@ -103,6 +103,48 @@ await page.waitForSelector('#appShell', { timeout: 30000 });
 await page.waitForLoadState('networkidle').catch(() => {}); await pause(3500);
 await page.mouse.move(720, 760);
 
+// MEASURE=1: print the boxes the highlight overlays in s08-admin.html must match
+// (CSS px of the 1440x810 viewport at the moment each page is shown), then exit.
+if (process.env.MEASURE) {
+  const box = (sel, text, pick = 'self') => page.evaluate(([sel, text, pick]) => {
+    let els = [...document.querySelectorAll(sel)].filter((e) => !text || e.textContent.includes(text));
+    if (!els.length) return null;
+    let el = els[0];
+    if (pick === 'next') el = el.nextElementSibling;
+    if (pick === 'panel') el = el.closest('.panel, section, .card') || el;
+    const r = el.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
+  }, [sel, text, pick]);
+  const union = (sel) => page.evaluate((sel) => { const rs = [...document.querySelectorAll(sel)].map((e) => e.getBoundingClientRect()).filter((r) => r.width);
+    const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)), r2 = Math.max(...rs.map((r) => r.right)), b = Math.max(...rs.map((r) => r.bottom));
+    return [Math.round(x), Math.round(y), Math.round(r2 - x), Math.round(b - y)]; }, sel);
+  const out = {};
+  out.homeAttn = await box('h3', 'Needs attention', 'next');
+  out.homeGlance = await box('h3', 'At a glance', 'next');
+  out.homeHealth = await box('h3, h4, .panel-title, b, strong', 'System health', 'panel');
+  out.homeHtml = await page.evaluate(() => [...document.querySelectorAll('h2,h3,h4')].map((h) => h.tagName + ':' + h.textContent.trim() + ':' + Math.round(h.getBoundingClientRect().y)).join(' | '));
+  await nav('Requests').click(); await pause(2500);
+  out.reqRows = await union('tbody tr');
+  await nav('Kits').click(); await pause(2500);
+  out.kitRow = await page.locator('tbody tr').filter({ hasText: 'A4CF12B7E9C4' }).first().boundingBox();
+  out.kitActs = await page.evaluate(() => { const tr = [...document.querySelectorAll('tbody tr')].find((t) => t.textContent.includes('A4CF12B7E9C4'));
+    const rs = ['device-change-wifi', 'device-open-setup', 'device-revoke'].map((a) => tr.querySelector(`[data-act="${a}"]`).getBoundingClientRect());
+    const x = Math.min(...rs.map((r) => r.x)), y = Math.min(...rs.map((r) => r.y)); return [Math.round(x), Math.round(y), Math.round(Math.max(...rs.map((r) => r.right)) - x), Math.round(Math.max(...rs.map((r) => r.bottom)) - y)]; });
+  await nav('Alerts').click(); await pause(2500);
+  out.alertRow = await page.locator('tr').filter({ has: page.locator('[data-act="view-alert"][data-id="301"]') }).first().boundingBox();
+  await page.locator('[data-act="view-alert"][data-id="301"]').first().click(); await pause(2500);
+  out.alertDetails = await box('*', 'DETAILS', 'self');
+  out.alertDetailHtml = await page.evaluate(() => { const d = [...document.querySelectorAll('h4,h5,h6,.section-title,div')].filter((e) => e.childElementCount < 3 && /^details$/i.test(e.textContent.trim()));
+    return d.map((e) => { const p = e.parentElement.getBoundingClientRect(); return [e.tagName, Math.round(p.x), Math.round(p.y), Math.round(p.width), Math.round(p.height)]; }); });
+  await page.keyboard.press('Escape'); await pause(800);
+  await nav('Reports').click(); await pause(1800);
+  { const target = page.locator('#liveFarm'); await target.waitFor();
+    for (let i = 0; i < 40; i++) { const b = await target.boundingBox(); if (!b || b.y < H * 0.42) break; await page.mouse.wheel(0, 90); await pause(30); } }
+  await pause(900);
+  out.liveReports = await page.evaluate(() => { const el = document.querySelector('#liveFarm').closest('.panel, section, .card'); const r = el.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]; });
+  console.log(JSON.stringify(out, null, 1));
+  await browser.close(); process.exit(0);
+}
+
 const rec = await startRec(page, 'a1-admin', OUT, { width: W * DPR, height: H * DPR });
 await pause(3800);
 await shot('a-home');
