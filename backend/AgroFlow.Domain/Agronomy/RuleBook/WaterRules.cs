@@ -13,6 +13,119 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         // must agree about what a watering is.
         public const double FullWateringMinimumSeconds = 120.0;
 
+        // DATA RULE: "water soon" looks this many days ahead - far enough to
+        // plan around, near enough that the forecast is still worth trusting.
+        public const int WaterSoonDays = 2;
+
+        // DATA RULE: forecast reference water use this many times the last
+        // week's average is "hot, dry days ahead". 30% more demand is roughly
+        // a heatwave's worth on the Western Cape's summer figures.
+        public const double HotDaysEtoMultiple = 1.3;
+
+        /// <summary>Whether the crop needs water today: the soil has dried to RAW or past it.</summary>
+        /// <remarks>
+        /// FAO-56 Chapter 8 (p. 171): "To avoid crop water stress, irrigations
+        /// should be applied before or at the moment when the readily available
+        /// soil water is depleted (Dr,i ≥ RAW)". Exactly at RAW counts.
+        /// </remarks>
+        public static bool ShouldWaterToday(double depletionMm, double rawMm)
+        {
+            return depletionMm >= rawMm;
+        }
+
+        /// <summary>
+        /// Whether a fresh, calibrated reading is at or below the farmer's own
+        /// trigger level.
+        /// </summary>
+        /// <remarks>
+        /// DATA RULE: the farmer's threshold is their own setting, not FAO-56.
+        /// "At or below" - the threshold is the level they asked us to water
+        /// at. Only a fresh reading counts (ConfidenceRules.FreshReadingHours):
+        /// yesterday's dry reading says nothing about today.
+        /// </remarks>
+        public static bool AtOrBelowFarmerThreshold(double? relativeMoisturePercent, double? thresholdPercent, bool readingFresh)
+        {
+            return readingFresh
+                   && relativeMoisturePercent.HasValue && thresholdPercent.HasValue
+                   && relativeMoisturePercent.Value <= thresholdPercent.Value;
+        }
+
+        /// <summary>Whole minutes to run the pump to refill the root zone, or null if it cannot be worked out.</summary>
+        /// <remarks>
+        /// Litres = depletion (mm) × area (m²), since 1 mm over 1 m² is 1 L
+        /// (FAO-56 Chapter 1, p. 3). Never more than the depletion: FAO-56
+        /// p. 171, "the net irrigation depth should be smaller than or equal to
+        /// the root zone depletion" - more drains away. Minutes are rounded UP
+        /// (DATA RULE): rounding down would under-water.
+        /// </remarks>
+        public static int? MinutesToRun(double depletionMm, double? areaM2, double? flowRateLpm)
+        {
+            return SoilWaterBalance.IrrigationMinutes(SoilWaterBalance.IrrigationLitres(depletionMm, areaM2), flowRateLpm);
+        }
+
+        /// <summary>Whether today's forecast rain covers today's need, so watering can be skipped.</summary>
+        /// <remarks>
+        /// DATA RULE: rain equal to or more than the crop's water use today
+        /// replaces today's watering. FAO-56 Eq. 85 (p. 170) credits rain
+        /// against depletion exactly as it credits irrigation, so rain that
+        /// covers the day's use leaves the soil no drier than watering would.
+        /// Exactly equal counts as covered.
+        /// </remarks>
+        public static bool SkipForRain(double forecastRainMm, double expectedNeedMm)
+        {
+            return forecastRainMm >= expectedNeedMm;
+        }
+
+        /// <summary>Whether the next watering is close enough to mention: within <see cref="WaterSoonDays"/>.</summary>
+        public static bool WaterSoon(int? daysToNextWatering)
+        {
+            return daysToNextWatering.HasValue && daysToNextWatering.Value <= WaterSoonDays;
+        }
+
+        /// <summary>Whether the forecast is hot and dry compared with the last week.</summary>
+        /// <remarks>DATA RULE: see <see cref="HotDaysEtoMultiple"/>.</remarks>
+        public static bool HotDaysAhead(double peakForecastEtoMm, double trailingMeanEtoMm)
+        {
+            return trailingMeanEtoMm > 0.0 && peakForecastEtoMm >= HotDaysEtoMultiple * trailingMeanEtoMm;
+        }
+
+        /// <summary>Whether the crop was under water stress on a day.</summary>
+        /// <remarks>FAO-56 Eq. 84 (p. 169): Ks &lt; 1 once the soil is drier than RAW; Ks = 1 otherwise.</remarks>
+        public static bool WasStressed(double ks)
+        {
+            return ks < 1.0;
+        }
+
+        /// <summary>
+        /// The trigger level FAO-56 recommends for this crop and soil, in the
+        /// zone's own sensor units.
+        /// </summary>
+        /// <remarks>
+        /// p from FAO-56 Table 22 (pp. 163-165), adjusted for soil (p. 167,
+        /// <see cref="SoilRules.DepletionFactorAdjust"/>) and held within
+        /// 0.1-0.8 (p. 162). The sensor's wet/dry span stands in for TAW -
+        /// DATA RULE: a resistive probe reads relative wetness, so the
+        /// threshold sits p of the way from wet to dry.
+        /// </remarks>
+        public static double RecommendedThreshold(double depletionFractionP, double soilPFactor, double calibrationWet, double calibrationDry)
+        {
+            var pr = depletionFractionP * soilPFactor;
+            if (pr < SoilWaterBalance.MinDepletionFraction) pr = SoilWaterBalance.MinDepletionFraction;
+            if (pr > SoilWaterBalance.MaxDepletionFraction) pr = SoilWaterBalance.MaxDepletionFraction;
+            return calibrationWet - pr * (calibrationWet - calibrationDry);
+        }
+
+        /// <summary>Whether the farmer's trigger waits longer (drier) than recommended.</summary>
+        /// <remarks>
+        /// Which way is "drier" depends on the probe: wired so that wet is the
+        /// LOWER raw number, a drier threshold is a HIGHER number.
+        /// </remarks>
+        public static bool ThresholdTooDry(double threshold, double recommended, double calibrationWet, double calibrationDry)
+        {
+            var wetIsLower = calibrationWet < calibrationDry;
+            return wetIsLower ? threshold > recommended : threshold < recommended;
+        }
+
         /// <summary>
         /// Litres per square metre for a depth of water in millimetres.
         /// </summary>

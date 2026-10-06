@@ -463,14 +463,16 @@ namespace AgroFlow.Business.Agronomy
                 return AdviceAction.InsufficientData;
             }
 
-            if (moisture.Value < threshold.Value)
+            // The same rule the insight builder uses (item 2b), so the two
+            // never disagree at exactly the threshold.
+            if (RuleBook.WaterRules.AtOrBelowFarmerThreshold(moisture, threshold, readingFresh: true))
             {
-                sentence = "Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "% is below the " +
+                sentence = "Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "% is at or below the " +
                            Fao56Knowledge.Format(threshold.Value, 0) + "% threshold set for this zone, so the crop needs water.";
                 return AdviceAction.IrrigateNow;
             }
 
-            sentence = "Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "% is at or above the " +
+            sentence = "Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "% is above the " +
                        Fao56Knowledge.Format(threshold.Value, 0) + "% threshold set for this zone, so no irrigation is called for today.";
             return AdviceAction.NoActionNeeded;
         }
@@ -634,7 +636,7 @@ namespace AgroFlow.Business.Agronomy
             if (moisture.HasValue && threshold.HasValue)
             {
                 parts.Add("Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "%, " +
-                          (moisture.Value < threshold.Value ? "below" : "at or above") + " the " +
+                          (RuleBook.WaterRules.AtOrBelowFarmerThreshold(moisture, threshold, readingFresh: true) ? "at or below" : "above") + " the " +
                           Fao56Knowledge.Format(threshold.Value, 0) + "% threshold");
             }
             else if (moisture.HasValue)

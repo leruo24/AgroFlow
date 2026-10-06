@@ -7,7 +7,8 @@ what is next.
 |---|---|---|---|---|
 | pre-flight | done | 116f773 | — | 0b |
 | 0b | done | 43a9ce0 | — | 2 |
-| 2 | done | (this commit) | Confidence badge in the apps' UI → 2c/6 | 2b |
+| 2 | done | 68ce29d | Confidence badge in the apps' UI → 2c/6 | 2b |
+| 2b | done | (this commit) | — | 2c |
 
 ---
 
@@ -154,3 +155,48 @@ and were tightened until every one did.
 
 The confidence badge in the apps' UI - the API carries it; showing it is
 2c ("Why am I seeing this?") and 6 (Home cards).
+
+---
+
+## 2b — The rule book
+
+`backend/AgroFlow.Domain/Agronomy/RuleBook/`: `SoilRules`, `CropRules`,
+`WaterRules`, `VerdictRules`, `ConfidenceRules`, `KitRules`. Every method is
+pure, every threshold a named constant with its reason, and every method cites
+a printed FAO-56 page or says `DATA RULE`. Pages were checked against
+`docs/Fao56.pdf`, not memory: soil p-adjustment **p. 167**; "irrigate before or
+at the moment RAW is depleted" and "net depth ≤ depletion" **p. 171**; Ks = 1
+below RAW **p. 169**; sensitive stage **p. 176**, with mid-season defined on
+**p. 96** and full cover at the start of flowering on **p. 95**.
+
+- `ZoneInsightBuilder` now only words the answer; every decision is a rule
+  call, in the numbered order written at the top of the file. All 669
+  existing tests passed unchanged through the refactor.
+- The data layer's kit decisions (stuck, DHT11 offline, pump ran with no
+  change) moved into `KitRules`; `Fao56EngineXDB` reads rows and calls them.
+- **One behaviour change, on purpose:** the schedule report's own threshold
+  check said "below" (strict `<`) while the insights said "at or below"
+  (`<=`), so at exactly the threshold the two disagreed. Both now use
+  `WaterRules.AtOrBelowFarmerThreshold`.
+- `water_now` with no zone size now uses the brief's own sentence: "For each
+  square metre, run the pump about N minutes".
+- `docs/rule-book.md` is **generated** by `RuleBookDocument.cs` from the
+  rules themselves - every outcome and farmer sentence is computed, never
+  typed - and a test fails if it drifts. Includes the brief's soil × stage ×
+  RAW × rain table and "Needs another source".
+
+### Tests
+
+669 → 773: `RuleBookTests` (table-driven per rule, boundaries: exactly at RAW,
+rain exactly equal to need, ratio exactly 1.2 and 0.8, 3 h / 6 h / 15%) and
+`RuleBookDocumentTests`. Mutations checked: `>=` → `>` at RAW fails both the
+rule test and the doc test; changing a constant fails the doc test.
+
+### Known, not changed
+
+`fao56-crop-knowledge.json` still exists beside `Fao56EngineReference.cs`
+(pre-existing; maize and potato use a different Table 11 row there, explained
+at the top of `Fao56EngineReference.cs`). No rule reads it. Merging them would
+change the schedule report's FAO-56 notes for maize and potato; that is a
+decision about which planting season to plan against, not a cleanup, so it is
+stated in the rule book rather than done silently.

@@ -214,8 +214,9 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             // Everything is set up; the only thing left to fix is a quiet kit.
             if (s.HasKit && !s.ReadingFresh)
             {
+                var quiet = KitQuiet(s.LastReadingAtUtc);
                 return new SetupStep("kit",
-                    "Check the kit: " + KitQuiet(s.LastReadingAtUtc) + ". Make sure it has power and WiFi.");
+                    char.ToUpperInvariant(quiet[0]) + quiet.Substring(1) + ". Check it has power and WiFi.");
             }
 
             return null;

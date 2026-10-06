@@ -203,7 +203,8 @@ public class AdviceNeverBlockedTests
 
         Assert.Null(result.RecommendedLitres);
         Assert.Equal(Math.Round(result.DepletionMm!.Value / 1.5, 1), result.RecommendedMinutesPerSquareMetre);
-        Assert.Contains("per m²", water.Message);
+        // The brief's own sentence.
+        Assert.Contains($"For each square metre, run the pump about {result.RecommendedMinutesPerSquareMetre!.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} minutes", water.Message);
         Assert.Contains("mm", water.Message);
         _out.WriteLine("     " + water.Message);
     }
@@ -223,7 +224,7 @@ public class AdviceNeverBlockedTests
 
         Assert.Null(result.RecommendedMinutesPerSquareMetre);
         Assert.Contains("mm", water.Message);
-        Assert.Contains("L per m²", water.Message);
+        Assert.Contains("L per square metre", water.Message);
         _out.WriteLine("     " + water.Message);
     }
 

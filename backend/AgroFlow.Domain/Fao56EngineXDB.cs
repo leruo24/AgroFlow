@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Data;
 using System.Linq;
 using AgroFlow.Business.Agronomy;
+using AgroFlow.Business.Agronomy.RuleBook;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -490,27 +491,12 @@ namespace AgroFlow.Data
             if (recent.Count > 0)
             {
                 signals.SinceLastReading = nowUtc - recent[0].At;
+                signals.IdenticalReadingFor = KitRules.IdenticalFor(recent);
 
-                // Walk back while the value is identical to the newest one.
-                var newest = recent[0].Value;
-                var oldestIdentical = recent[0].At;
-                for (var i = 1; i < recent.Count; i++)
-                {
-                    if (Math.Abs(recent[i].Value - newest) > 1e-9) break;
-                    oldestIdentical = recent[i].At;
-                }
-                signals.IdenticalReadingFor = recent[0].At - oldestIdentical;
-
-                // Wettest reading over the last 7 days, for sensor_drift. Which
-                // extreme is "wettest" depends on which way the probe reads.
+                // Wettest reading over the last 7 days, for sensor_drift.
                 var weekAgo = nowUtc.AddDays(-7);
                 var week = recent.Where(r => r.At >= weekAgo).Select(r => r.Value).ToList();
-                if (week.Count > 0 && zone.CalibrationWet.HasValue && zone.CalibrationDry.HasValue)
-                {
-                    signals.SevenDayMinimumReading = zone.CalibrationWet.Value < zone.CalibrationDry.Value
-                        ? week.Min()
-                        : week.Max();
-                }
+                signals.SevenDayMinimumReading = KitRules.Wettest(week, zone.CalibrationWet, zone.CalibrationDry);
             }
 
             // DHT11: is the board reporting soil readings but no valid
@@ -526,8 +512,9 @@ namespace AgroFlow.Data
             return signals;
         }
 
-        public const int DhtOfflineWindowHours = 2;
-        public const int DhtBackOnlineReadingCount = 3;
+        // The thresholds live in RuleBook/KitRules.cs with their reasons.
+        public const int DhtOfflineWindowHours = KitRules.DhtOfflineWindowHours;
+        public const int DhtBackOnlineReadingCount = KitRules.DhtBackOnlineReadingCount;
 
         // A zone is DHT offline when soil readings are still arriving but none of
         // the last two hours' readings carries a valid DHT11 temperature or
@@ -574,43 +561,17 @@ namespace AgroFlow.Data
                 }
             }
 
-            var validRecent = dht
-                .Where(d => d.At >= since && IsValidDhtValue(d.Type, d.Value))
-                .ToList();
-
-            if (validRecent.Count > 0)
-            {
-                // Back online needs 3 consecutive valid readings, so a single good
-                // reading in a flapping sensor does not clear the fault.
-                var consecutive = 0;
-                foreach (var d in dht)
-                {
-                    if (IsValidDhtValue(d.Type, d.Value)) consecutive++;
-                    else break;
-                }
-                if (consecutive >= DhtBackOnlineReadingCount) return false;
-            }
-
-            var lastValid = dht.FirstOrDefault(d => IsValidDhtValue(d.Type, d.Value));
-            offlineSinceUtc = lastValid.At == default ? (DateTime?)null : lastValid.At;
-
-            return true;
+            return KitRules.IsDhtOffline(soilStillReporting: true, dht, nowUtc, out offlineSinceUtc);
         }
 
-        // Spec 3b plausibility: temperature -10..60 C, humidity 0..100 %. NaN is
-        // what a DHT11 timeout or checksum failure looks like once it reaches a
-        // real column.
+        // Spec 3b plausibility - the rule is KitRules.IsValidDhtValue.
         public static bool IsValidDhtValue(string sensorType, double value)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value)) return false;
-
-            if (sensorType == "Temperature") return value >= -10.0 && value <= 60.0;
-            if (sensorType == "Humidity") return value >= 0.0 && value <= 100.0;
-            return false;
+            return KitRules.IsValidDhtValue(sensorType, value);
         }
 
-        public const int WateringFailedMinRuntimeSeconds = 120;
-        public const int WateringFailedWindowMinutes = 30;
+        public const int WateringFailedMinRuntimeSeconds = (int)KitRules.PumpCheckMinimumSeconds;
+        public const int WateringFailedWindowMinutes = KitRules.PumpCheckWindowMinutes;
 
         private bool DidWateringFail(EngineZoneRow zone, DateTime nowUtc, out DateTime? failedAtUtc)
         {
@@ -685,20 +646,13 @@ namespace AgroFlow.Data
 
             // No readings on one side of the run: that is a data gap, not a proven
             // pump failure. Do not accuse the hardware on missing evidence.
-            if (!before.HasValue || after.Count == 0) return false;
-
             var wetIsLower = zone.CalibrationWet.HasValue && zone.CalibrationDry.HasValue
                              && zone.CalibrationWet.Value < zone.CalibrationDry.Value;
 
             // An uncalibrated zone still gets this check - spec section 8 says the
             // sensor is used to confirm the soil got wetter even without
-            // calibration. The firmware currently reports a percentage, where
-            // higher is wetter, which is the default assumption.
-            var movedTowardWet = wetIsLower
-                ? after.Min() < before.Value
-                : after.Max() > before.Value;
-
-            if (movedTowardWet) return false;
+            // calibration. The rule itself is KitRules.PumpRanNoChange.
+            if (!KitRules.PumpRanNoChange(startedAt, runtimeSeconds, nowUtc, before, after, wetIsLower)) return false;
 
             failedAtUtc = startedAt;
             return true;
