@@ -31,6 +31,9 @@ builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+// Part 2: a character the report font cannot draw (an emoji in a farm name)
+// prints as a blank box rather than failing the whole report.
+QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = false;
 
 
 // TODO: set ConnectionStrings:Supabase in appsettings.json (or via the
@@ -154,6 +157,7 @@ builder.Services.AddSingleton<DeviceAuthService>();
 builder.Services.AddSingleton<ClaimRateLimiter>();
 // Item 6c: per-IP ceiling on the public enquiry form.
 builder.Services.AddSingleton<EnquiryRateLimiter>();
+builder.Services.AddSingleton<AgroFlow.Api.Auth.IProfileRoles, AgroFlow.Api.Auth.DbProfileRoles>();
 builder.Services.AddSingleton<MqttCredentialPoolService>();
 
 builder.Services.AddSingleton<MqttConnectionService>();
@@ -375,6 +379,11 @@ app.Use(async (context, next) =>
                   // the Telegram chat already linked to that account - see
                   // PasswordResetEndpoints.
                   path.StartsWithSegments("/api/auth") ||
+                  // Item 6c: the public "Get a call back" form. Anonymous by
+                  // design; it limits itself per IP and drops a filled
+                  // honeypot (EnquiryEndpoints). Found missing in Part 2 by
+                  // ApiContractTests - the form answered 401 to everyone.
+                  path.StartsWithSegments("/api/public") ||
                   path.StartsWithSegments("/api/farmers") ||
                   path.StartsWithSegments("/api/farmer") ||
                   path.StartsWithSegments("/api/farms")||
@@ -465,3 +474,6 @@ internal sealed class JwksOnlyConfigurationRetriever : IConfigurationRetriever<O
         return configuration;
     }
 }
+
+// Lets the contract tests host the real API in memory (WebApplicationFactory).
+public partial class Program { }

@@ -18,6 +18,14 @@ namespace AgroFlow.Api.Reports;
 /// It also means the logo is loaded once, not three times.
 internal static class ReportShell
 {
+    // Part 2: an emoji in a farm or zone name must not fail the report -
+    // the font has no glyph for it, so it prints as a blank box instead.
+    // Also set in Program.cs; here so every path through the shell has it.
+    static ReportShell()
+    {
+        QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = false;
+    }
+
     /// The report's logo, read once out of the assembly.
     ///
     /// Embedded rather than deployed beside the binary: a Railway container's
