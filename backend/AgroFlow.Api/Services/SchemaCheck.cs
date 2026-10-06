@@ -111,6 +111,10 @@ public sealed class SchemaCheck
             "select 1 where has_table_privilege('service_role', 'public.admin_audit_log', 'INSERT')",
             "Admin actions are not recorded if the API does not connect as the table's owner."),
 
+        new("0039", "table", "explanation",
+            "select to_regclass('public.explanation')",
+            "Telegram messages go out without a \"Why am I seeing this?\" button."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

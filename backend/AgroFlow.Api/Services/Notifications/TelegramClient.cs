@@ -41,9 +41,22 @@ public sealed class TelegramClient
     // the characters Markdown and HTML treat as markup (_ * ` [ < &), and a
     // password is exactly the kind of string that must arrive byte-for-byte.
     // Asking Telegram to parse it would either mangle it or fail the send.
+    public Task<bool> SendMessageAsync(
+        long chatId,
+        string text,
+        CancellationToken cancellationToken) =>
+        SendMessageAsync(chatId, text, whyExplanationId: null, cancellationToken);
+
+    // Item 2c: callback data for the "Why am I seeing this?" button. Only the
+    // explanation row id - no names, no farm, nothing personal - and well
+    // under Telegram's 64-byte limit.
+    public const string WhyCallbackPrefix = "why:";
+    public const string WhyButtonText = "Why am I seeing this?";
+
     public async Task<bool> SendMessageAsync(
         long chatId,
         string text,
+        long? whyExplanationId,
         CancellationToken cancellationToken)
     {
         if (!_options.IsConfigured)
@@ -61,15 +74,29 @@ public sealed class TelegramClient
         {
             var client = _httpClientFactory.CreateClient();
 
-            using var response = await client.PostAsJsonAsync(
-                BuildUrl("sendMessage"),
-                new
+            object payload = whyExplanationId is null
+                ? new
                 {
                     chat_id = chatId,
                     text,
                     disable_web_page_preview = true,
-                },
-                cancellationToken);
+                }
+                : new
+                {
+                    chat_id = chatId,
+                    text,
+                    disable_web_page_preview = true,
+                    reply_markup = new
+                    {
+                        inline_keyboard = new[]
+                        {
+                            new[] { new { text = WhyButtonText, callback_data = WhyCallbackPrefix + whyExplanationId.Value } },
+                        },
+                    },
+                };
+
+            using var response = await client.PostAsJsonAsync(
+                BuildUrl("sendMessage"), payload, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -198,9 +225,10 @@ public sealed class TelegramClient
                 offset,
                 timeout = _options.LongPollSeconds,
 
-                // Only message updates matter; this keeps edited messages,
-                // reactions and channel posts out of the loop entirely.
-                allowed_updates = new[] { "message" },
+                // Messages, and button taps (item 2c's "Why am I seeing
+                // this?"). Edited messages, reactions and channel posts stay
+                // out of the loop entirely.
+                allowed_updates = new[] { "message", "callback_query" },
             },
             cancellationToken);
 
@@ -217,6 +245,32 @@ public sealed class TelegramClient
             cancellationToken: cancellationToken);
 
         return payload?.Result ?? [];
+    }
+
+    // Stops the spinner on a tapped inline button. Telegram shows it until
+    // this is called. Never throws - a spinner that keeps turning is not
+    // worth failing anything over.
+    public async Task<bool> AnswerCallbackQueryAsync(
+        string callbackQueryId,
+        string? text,
+        CancellationToken cancellationToken)
+    {
+        if (!_options.IsConfigured) return false;
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            using var response = await client.PostAsJsonAsync(
+                BuildUrl("answerCallbackQuery"),
+                new { callback_query_id = callbackQueryId, text },
+                cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "answerCallbackQuery failed.");
+            return false;
+        }
     }
 
     private string BuildUrl(string method) =>
@@ -251,7 +305,15 @@ public sealed record TelegramUpdatesResponse(
 
 public sealed record TelegramUpdate(
     [property: JsonPropertyName("update_id")] long UpdateId,
-    [property: JsonPropertyName("message")] TelegramMessage? Message);
+    [property: JsonPropertyName("message")] TelegramMessage? Message,
+    [property: JsonPropertyName("callback_query")] TelegramCallbackQuery? CallbackQuery = null);
+
+// A tap on an inline button. Message is the message the button was on, so
+// its chat is the chat that tapped.
+public sealed record TelegramCallbackQuery(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("message")] TelegramMessage? Message,
+    [property: JsonPropertyName("data")] string? Data);
 
 public sealed record TelegramMessage(
     [property: JsonPropertyName("chat")] TelegramChat? Chat,

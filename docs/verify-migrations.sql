@@ -160,6 +160,10 @@ select
     -- it every admin action succeeds and the Activity page stays empty.
     (select has_table_privilege('service_role', 'public.admin_audit_log', 'INSERT'))::int as m0038_audit_insert_grant,
 
+    -- 0039: explanation - what a Telegram "Why am I seeing this?" button
+    -- points at. Without it messages go out with no button.
+    (select count(*) from pg_class where relname = 'explanation' and relkind = 'r')      as m0039_explanation,
+
     -- Not a migration, but applied by hand the same way and just as invisible
     -- when missed: the private bucket generated report PDFs are stored in.
     (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;

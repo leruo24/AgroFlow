@@ -98,13 +98,14 @@ probe in `docs/verify-migrations.sql` **and** in `Services/SchemaCheck.cs`.
 
 | # | Item | Objects |
 |---|---|---|
-| 0039 | 5 | `handled_by_profile_id`, `claimed_at`, `resolved_by_profile_id`, `resolved_at` on `service_request`, `alert`, `maintenance`; `actor_role` on `admin_audit_log` |
-| 0040 | 6 | `soil_feel_check` table (zone, feel, actor, at); `irrigation_event.logged_by_profile_id` |
-| 0041 | 4 | `report_schedule`: `daily` frequency, `day_of_week`, `per_zone_pdf`, `send_to_handler`, `admin_chat_enabled`, `turned_off_by`, `next_send_at`; per-zone rows allowed |
-| 0042 | 6c | `enquiry`, `enquiry_call` tables |
+| 0039 | 2c | `explanation` table - what a Telegram "Why am I seeing this?" button points at *(added during 2c: a Telegram message has nowhere else to keep its explanation; the later numbers moved up by one)* |
+| 0040 | 5 | `handled_by_profile_id`, `claimed_at`, `resolved_by_profile_id`, `resolved_at` on `service_request`, `alert`, `maintenance`; `actor_role` on `admin_audit_log` |
+| 0041 | 6 | `soil_feel_check` table (zone, feel, actor, at); `irrigation_event.logged_by_profile_id` |
+| 0042 | 4 | `report_schedule`: `daily` frequency, `day_of_week`, `per_zone_pdf`, `send_to_handler`, `admin_chat_enabled`, `turned_off_by`, `next_send_at`; per-zone rows allowed |
+| 0043 | 6c | `enquiry`, `enquiry_call` tables |
 
 `ai_recommendation.data` (jsonb, 0027) already exists — explanations are stored
-inside it under `explanation`, no migration. `irrigation_event.trigger_source`
+inside it under `explanation`, no migration for those. `irrigation_event.trigger_source`
 already allows `'manual'` — "I watered" needs no schema change.
 
 ---

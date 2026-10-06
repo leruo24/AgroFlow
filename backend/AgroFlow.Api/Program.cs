@@ -210,6 +210,14 @@ builder.Services.AddSingleton<FarmRequestNotifier>();
 builder.Services.AddSingleton<AuditLog>();
 builder.Services.AddSingleton<SchemaCheck>();
 
+// "Why am I seeing this?" for Telegram (item 2c, migration 0039): the
+// stored explanations, who may read them, and the handler for button taps
+// and /why.
+builder.Services.AddSingleton<IExplanationStore, ExplanationStore>();
+builder.Services.AddSingleton<IChatFarmAccess, ChatFarmAccess>();
+builder.Services.AddSingleton<ITelegramReplies, TelegramReplies>();
+builder.Services.AddSingleton<TelegramWhyHandler>();
+
 // Self-service password recovery over Telegram. Supabase's own email reset
 // needs SMTP that this project has never configured, so the mobile
 // forgot-password screen silently did nothing before this.
