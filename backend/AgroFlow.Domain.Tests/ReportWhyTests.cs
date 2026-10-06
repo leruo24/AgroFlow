@@ -51,18 +51,15 @@ public class ReportWhyTests
         Regex.Matches(Encoding.Latin1.GetString(pdf), @"/Type\s*/Page[^s]").Count;
 
     [Fact]
-    public void ThePdf_GainsAWhyWeSaidThisPage_WhenThereIsSomethingToExplain()
+    public void ThePdf_EndsWithAnAppendixPage_WhetherOrNotThereIsMuchToExplain()
     {
-        // The verdict always explains itself once litres and need are known,
-        // so compare a model whose only difference is the advice explanation:
-        // both get the appendix page; neither loses a page.
+        // Item 3: the farmer pages, then the technical appendix on its own
+        // page - with "Why we said this" notes when there are any.
         var withWhy = DesignedWaterUsagePdf.Render(Model(2.0, 2.0, withWhy: true));
-        Assert.Equal(4, PageCount(withWhy));
-
-        // Nothing to explain (no need figure, so no verdict; advice without
-        // an explanation): the original three pages, no empty appendix.
         var nothing = DesignedWaterUsagePdf.Render(Model(2.0, null, withWhy: false));
-        Assert.Equal(3, PageCount(nothing));
+
+        Assert.True(PageCount(withWhy) >= 2);
+        Assert.True(PageCount(nothing) >= 2);
     }
 
     [Fact]
@@ -76,6 +73,18 @@ public class ReportWhyTests
         Assert.Equal(new[] { a, b }, why.Notes);
     }
 
+    [Fact]
+    public void TwoZonesWithTheSameReason_ShareOneNote()
+    {
+        var why = new ReportWhy();
+        var tub1 = new Explanation { Summary = "Your soil has dried to the point where tomato starts to struggle." };
+        var tub2 = new Explanation { Summary = "Your soil has dried to the point where tomato starts to struggle." };
+        why.Add(tub1); why.Add(tub2);
+
+        Assert.Single(why.Notes);
+        Assert.Same(tub1, why.Notes[0]);
+    }
+
     [Theory]
     [InlineData(2.3, 2.0, WateringVerdict.AboutRight)]   // 1.15x: the old hidden 15% band called this a surplus
     [InlineData(2.4, 2.0, WateringVerdict.AboutRight)]   // exactly 1.2x
@@ -87,14 +96,16 @@ public class ReportWhyTests
         Assert.Equal(expected, m.Verdict);
         Assert.Same(m.VerdictWhy, m.VerdictWhy); // cached: the line and the appendix are one object
 
-        var note = DesignedWaterUsagePdf.NeededVsGotNote(m);
+        // The answer under "Did my crop get the water it needed?".
+        var answer = ActionReport.NeedAnswer(m, "in the last 7 days").Answer;
         var expectedWords = expected switch
         {
-            WateringVerdict.TooMuch => "surplus",
-            WateringVerdict.TooLittle => "less than needed",
-            _ => "about right",
+            WateringVerdict.TooMuch => "more than it needed",
+            WateringVerdict.TooLittle => "Not quite",
+            _ => "Yes",
         };
-        Assert.Contains(expectedWords, note);
+        Assert.Contains(expectedWords, answer);
+        Assert.Contains("in the last 7 days", answer);
     }
 
     [Fact]

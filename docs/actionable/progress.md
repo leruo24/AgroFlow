@@ -9,7 +9,8 @@ what is next.
 | 0b | done | 43a9ce0 | — | 2 |
 | 2 | done | 68ce29d | Confidence badge in the apps' UI → 2c/6 | 2b |
 | 2b | done | 6888586 | — | 2c |
-| 2c | done | 70a1c31, d3040c3, 86ad320, 41d351e, (this commit) | Recommended-settings Why → 6b; alert priority bug → 5; fixed-date KPIs → 4 | 3 |
+| 2c | done | 70a1c31, d3040c3, 86ad320, 41d351e, 4342ef4 | Recommended-settings Why → 6b; alert priority bug → 5; fixed-date KPIs → 4 | 3 |
+| 3 | done | (this commit) | — | 4 |
 
 ---
 
@@ -273,3 +274,61 @@ inputs, jargon scan, mutation-checked; `TelegramWhyTests`; `ReportWhyTests` -
 the appendix page is counted, 4 pages vs 3 without). Mobile 22 → 31
 (`whySheet.test.tsx`; RNTL 14 is async - `render`/`fireEvent` are awaited).
 Admin Playwright 11 → 14 (`why.spec.ts`).
+
+---
+
+## 3 — Reports rebuilt around actions
+
+All three farmer PDFs - water usage, soil moisture, watering schedule; one
+zone or all zones - are now one report, `ActionReportPdf`, laid out from
+words composed in `ActionReport.Compose`:
+
+1. **This week, do this** - 1-5 actions, each with when and how much, a
+   confidence badge and a grey "Why:" line ("Water Tub 1 today (Tue 10 Feb):
+   about 39 minutes (about 58 L).").
+2. **How your farm did {period}** - one row per zone with a verdict: Watered
+   about right / Too much / Too little / Not enough data.
+3. **Three questions** - "Did my crop get the water it needed?" (weekly bars
+   past 14 days), "Was my soil in the healthy range?" (only when calibrated;
+   otherwise one line saying why), "What's coming this week?" (seven day
+   cards with an action each).
+4. **Area weather vs at your plants** - only days the tub sensor reported;
+   none -> one sentence.
+5. **Improve your advice** - one step per zone, grouped so the same sentence
+   is never printed per zone ("Tub 1, Tub 2 and Tub 3: Add the planting date").
+6. **Technical appendix** on its own page - FAO-56 figures with printed page
+   numbers, notes every zone shares printed once, assumptions, and the
+   numbered "Why we said this" notes.
+
+The moisture PDF is the action report for its zone; the schedule PDF is the
+farm's action report over the last 7 days plus the coming week. The JSON
+endpoints the apps read are unchanged.
+
+### Found on the way
+
+- The old `NeededVsGotNote` said "this week" whatever the period - the bug
+  item 1 quotes. Gone with the old layout.
+- I had written the ETo assumption from memory as "Penman-Monteith, falling
+  back to Hargreaves (Eq. 6 p. 65)". Checked against the PDF and the code:
+  Eq. 6 is on **p. 24**, and the resolver does not fall back to Hargreaves -
+  it estimates radiation with Eq. 50 (p. 60) and humidity with Eq. 64
+  (p. 124). Corrected before committing.
+- An explanation printed "Watering level: 2000%". The zone's level is stored
+  in its sensor's own units, so it never carries a % now.
+- Two zones with the same reason printed the same "Why:" sentence. A shared
+  reason is now one note; the second line reads "the same reason as note 1".
+
+### Tests
+
+813 -> 855 (`ActionReportTests`: actions have when/how much/badge/why; never
+more than 5; rain -> skip with the rain in it; overwatering says by how much
+and what to shorten to; period words for 7/14/30 days and past periods;
+weekly past 14 days; weather section only with tub data; jargon/ISO scan over
+every farmer sentence for full/partial/no-kit x 7/14/30 days x one/two zones
+(mutation-checked); no sentence repeated across three zones; shared notes
+once; length: one zone 3-4 pages = 2 farmer pages + appendix, about a page
+per extra zone. `SampleReportsTests` renders every combination.)
+
+Samples: `docs/sample-reports/` (27 files + README) - three setups x three
+types x one/all zones, 30-day versions, workbooks. Checked by eye page by
+page; the README says they are generated sample data.

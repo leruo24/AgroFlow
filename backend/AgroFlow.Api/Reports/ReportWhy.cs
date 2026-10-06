@@ -18,6 +18,12 @@ internal sealed class ReportWhy
 {
     private readonly List<Explanation> _notes = new();
 
+    // Every registered explanation -> its note number. Two zones with the
+    // same reason share one note (item 3: no sentence repeated across zones),
+    // so the second one's line says "as in note N" instead of repeating it.
+    private readonly Dictionary<Explanation, int> _numbers = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, int> _bySummary = new(StringComparer.Ordinal);
+
     public IReadOnlyList<Explanation> Notes => _notes;
 
     /// Registers an explanation BEFORE rendering, so numbering never
@@ -25,22 +31,39 @@ internal sealed class ReportWhy
     public void Add(Explanation? explanation)
     {
         if (explanation is null || string.IsNullOrWhiteSpace(explanation.Summary)) return;
-        if (!_notes.Contains(explanation)) _notes.Add(explanation);
+        if (_numbers.ContainsKey(explanation)) return;
+
+        if (_bySummary.TryGetValue(explanation.Summary, out var shared))
+        {
+            _numbers[explanation] = shared;
+            return;
+        }
+
+        _notes.Add(explanation);
+        _numbers[explanation] = _notes.Count;
+        _bySummary[explanation.Summary] = _notes.Count;
     }
 
-    /// Writes the grey "Why:" line for a registered explanation.
+    /// Writes the grey "Why:" line for a registered explanation - in full the
+    /// first time a reason appears, "as in note N" after that.
     public void Line(ColumnDescriptor col, Explanation? explanation)
     {
-        if (explanation is null) return;
-        var index = _notes.IndexOf(explanation);
-        if (index < 0) return;
-        var number = index + 1;
+        if (explanation is null || !_numbers.TryGetValue(explanation, out var number)) return;
+        var owner = ReferenceEquals(_notes[number - 1], explanation);
+        var n = number.ToString(CultureInfo.InvariantCulture);
 
         col.Item().PaddingTop(2).Text(t =>
         {
             t.Span("Why: ").SemiBold().FontSize(7.5f).FontColor(ReportTheme.Muted);
-            t.Span(explanation.Summary).FontSize(7.5f).FontColor(ReportTheme.Muted);
-            t.Span($" (note {number.ToString(CultureInfo.InvariantCulture)})").FontSize(7.5f).FontColor(ReportTheme.Muted);
+            if (owner)
+            {
+                t.Span(explanation.Summary).FontSize(7.5f).FontColor(ReportTheme.Muted);
+                t.Span($" (note {n})").FontSize(7.5f).FontColor(ReportTheme.Muted);
+            }
+            else
+            {
+                t.Span($"the same reason as note {n}.").FontSize(7.5f).FontColor(ReportTheme.Muted);
+            }
         });
     }
 

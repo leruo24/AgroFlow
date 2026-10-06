@@ -529,7 +529,9 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             else if (r.RelativeMoisturePercent.HasValue)
             {
                 e.Fact("Soil moisture", N(Math.Round(r.RelativeMoisturePercent.Value)) + "%", FromSensor);
-                if (i.MoistureThreshold.HasValue) e.Fact("Watering level", N(i.MoistureThreshold.Value) + "%", FromSetup);
+                // The level is in the zone's own sensor units (the engine compares it
+                // in those units), so it never carries a %.
+                if (i.MoistureThreshold.HasValue) e.Fact("Watering level", N(i.MoistureThreshold.Value), FromSetup);
             }
             else
             {

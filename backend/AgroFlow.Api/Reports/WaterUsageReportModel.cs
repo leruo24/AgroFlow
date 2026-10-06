@@ -44,6 +44,21 @@ internal sealed class WaterUsageReportModel
     public int? NextWateringMinutes { get; init; }
     public double? NextWateringLitres { get; init; }
 
+    /* ---- Item 3: what the action report needs from the engine ------- */
+
+    /// Every insight for the zone, not just the four Advice lines - the
+    /// "This week, do this" list picks from all of them.
+    public IReadOnlyList<ZoneInsight> Insights { get; init; } = Array.Empty<ZoneInsight>();
+
+    /// The engine run behind the figures, for confidence, the next setup
+    /// step, the forecast and the technical appendix. Null when the zone has
+    /// no engine row (its columns missing) - the report then says so.
+    public ZoneEngineInput? EngineInput { get; init; }
+    public ZoneEngineResult? Engine { get; init; }
+
+    /// True once the wet/dry setup is done: the soil chart is drawn only then.
+    public bool Calibrated { get; init; }
+
     public double HealthyLowPercent { get; init; } = 60;
     public double HealthyHighPercent { get; init; } = 100;
 
@@ -325,6 +340,7 @@ internal static class WaterUsageReportBuilder
         // about a period the report does not cover.
         var engineZone = engine.Data.GetZone(zoneId);
         ZoneEngineResult? engineResult = null;
+        ZoneEngineInput? engineInput = null;
         var weatherByDay = new Dictionary<DateOnly, ZoneWeatherDay>();
         var insights = new List<ZoneInsight>();
 
@@ -334,6 +350,7 @@ internal static class WaterUsageReportBuilder
             var anchor = to > today ? today : to;
 
             var input = engine.BuildInput(engineZone, anchor);
+            engineInput = input;
             foreach (var w in input.Weather) weatherByDay[w.Date] = w;
 
             engineResult = Fao56Engine.Run(input);
@@ -440,6 +457,10 @@ internal static class WaterUsageReportBuilder
             FarmName = farmName,
             ZoneName = zoneName,
             CropLabel = crop?.Label,
+            Insights = insights,
+            EngineInput = engineInput,
+            Engine = engineResult,
+            Calibrated = calibrationWet.HasValue && calibrationDry.HasValue,
             From = from,
             To = to,
             GeneratedAtSast = DateTimeOffset.UtcNow.ToOffset(Sast),

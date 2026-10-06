@@ -671,7 +671,8 @@ public static class ReportEndpoints
         long farmId, DateOnly from, DateOnly to,
         AgroFlow.Business.Fao56EngineController engine,
         bool asWorkbook,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ReportKind kind = ReportKind.WaterUsage)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         if (from > to) return Results.BadRequest(new { error = "from must not be after to." });
@@ -697,9 +698,10 @@ public static class ReportEndpoints
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"agroflow-water-{slug}-{stamp}.xlsx")
             : Results.File(
-                DesignedFarmWaterUsagePdf.Render(farm),
+                ActionReportPdf.Render(kind, farm.FarmName, farm.Zones, from, to,
+                    AgroFlow.Business.Fao56EngineController.TodayInSast(), farm.GeneratedAtSast),
                 "application/pdf",
-                $"agroflow-water-{slug}-{stamp}.pdf");
+                $"agroflow-{FilePrefix(kind)}-{slug}-{stamp}.pdf");
     }
 
     private static async Task<IResult> BuildDesignedAsync(
@@ -707,7 +709,8 @@ public static class ReportEndpoints
         long zoneId, DateOnly from, DateOnly to,
         AgroFlow.Business.Fao56EngineController engine,
         bool asWorkbook,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ReportKind kind = ReportKind.WaterUsage)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         if (from > to) return Results.BadRequest(new { error = "from must not be after to." });
@@ -734,11 +737,20 @@ public static class ReportEndpoints
                 WaterUsageWorkbook.Render(model),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"agroflow-water-{slug}-{stamp}.xlsx")
+            // Item 3: every farmer PDF is the action report.
             : Results.File(
-                DesignedWaterUsagePdf.Render(model),
+                ActionReportPdf.Render(kind, model.FarmName, new[] { model }, from, to,
+                    AgroFlow.Business.Fao56EngineController.TodayInSast(), model.GeneratedAtSast),
                 "application/pdf",
-                $"agroflow-water-{slug}-{stamp}.pdf");
+                $"agroflow-{FilePrefix(kind)}-{slug}-{stamp}.pdf");
     }
+
+    private static string FilePrefix(ReportKind kind) => kind switch
+    {
+        ReportKind.Moisture => "moisture",
+        ReportKind.Schedule => "schedule",
+        _ => "water",
+    };
 
     /// A filename a phone will not mangle: lowercase, ASCII, hyphens.
     private static string Slug(string name)
@@ -899,388 +911,36 @@ public static class ReportEndpoints
         return Results.File(bytes, "application/pdf", $"water-usage-farm{farmId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
     }
 
-        internal static async Task<IResult> GetMoisturePdfAsync(
+    internal static async Task<IResult> GetMoisturePdfAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to,
         AgroFlow.Business.Fao56EngineController engine)
     {
-        // Reuse the on-screen report so the PDF can never disagree with it.
-        var result = await GetMoistureAsync(user, dataSource, zoneId, from, to, engine);
-        if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
-        if (result is not IValueHttpResult { Value: { } value }) return result;
-
-        using var json = JsonSerializer.SerializeToDocument(value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        var root = json.RootElement;
-
-        static string Num(JsonElement e, string suffix) =>
-            e.ValueKind == JsonValueKind.Number
-                ? e.GetDouble().ToString("0.#", CultureInfo.InvariantCulture) + suffix
-                : "not set";
-
-        var zoneName = root.GetProperty("zoneName").GetString();
-        var generated = root.GetProperty("generatedAt").GetDateTimeOffset().ToOffset(TimeSpan.FromHours(2));
-        var note = root.GetProperty("estimateNote").GetString();
-        var hasData = root.GetProperty("status").GetString() == "ok";
-        var thresholds = root.GetProperty("thresholds");
-
-        // Item 2: no % on a reading taken before the wet/dry setup.
-        var calibratedReport = !root.TryGetProperty("calibrated", out var cal) || cal.ValueKind != JsonValueKind.False;
-        var pctSuffix = calibratedReport ? "%" : "";
-
-        // The designed shell (item 3): the same green band, logo and footer as
-        // the water usage report, so the three farmer-facing reports look
-        // like one product rather than three. The CONTENT below is unchanged -
-        // this report's figures were already right, and rewriting working
-        // report logic to match a template was not what was asked for.
-        var why = new AgroFlow.Api.Reports.ReportWhy();
-        var insightWhy = why.AddInsights(root);
-        var bytes = Document.Create(container => container.Page(page =>
+        // Item 3: the soil moisture report is the action report for one zone.
+        if (zoneId is null || from is null || to is null)
         {
-            ReportShell.ApplyPageDefaults(page);
+            return await GetMoistureAsync(user, dataSource, zoneId, from, to, engine);
+        }
 
-            page.Header().Element(c => ReportShell.Header(
-                c,
-                "Soil Moisture Report",
-                $"{zoneName}  ·  {FarmWaterUsageReportBuilder.DescribePeriod(from!.Value, to!.Value)}",
-                ReportShell.GeneratedLine(generated)));
-
-            page.Footer().Element(c => ReportShell.Footer(
-                c, calibratedReport
-                    ? "Soil moisture is relative to this zone's setup: 100% = soaked and drained, 0% = dry."
-                    : "The soil sensor is not yet set up, so readings are the sensor's own numbers, not moisture."));
-
-            page.Content().PaddingHorizontal(34).PaddingTop(18).PaddingBottom(12).Column(col =>
-            {
-                col.Spacing(10);
-
-                if (!hasData)
-                {
-                    col.Item().Text(root.GetProperty("message").GetString());
-                    return;
-                }
-
-                var s = root.GetProperty("summary");
-                col.Item().Text(
-                    $"Dry threshold: {Num(thresholds.GetProperty("dryPct"), "%")}  |  " +
-                    $"Target moisture: {Num(thresholds.GetProperty("targetPct"), "%")}");
-                col.Item().Text(
-                    $"{s.GetProperty("readingCount").GetInt64()} readings. " +
-                    (calibratedReport ? "" : "Sensor readings (not yet set up): ") +
-                    $"average {Num(s.GetProperty("averagePct"), pctSuffix)}, " +
-                    $"lowest {Num(s.GetProperty("lowestPct"), pctSuffix)}, " +
-                    $"highest {Num(s.GetProperty("highestPct"), pctSuffix)}.");
-                col.Item().Text(s.GetProperty("action").GetString()).SemiBold();
-
-                WriteInsightsBlock(col, root, why, insightWhy);
-
-                // Spec 3b: say in the report that a resistive probe drifts.
-                if (root.TryGetProperty("calibrationNote", out var calibrationNote)
-                    && calibrationNote.ValueKind == JsonValueKind.String)
-                {
-                    col.Item().PaddingTop(4).Text(calibrationNote.GetString()!).FontSize(8).Italic();
-                }
-
-                col.Item().PaddingTop(6).Text("Irrigation events").FontSize(12).SemiBold();
-                col.Item().Text(note).Italic();
-                var events = root.GetProperty("irrigationEvents");
-                if (events.GetArrayLength() == 0)
-                {
-                    col.Item().Text("No irrigation recorded in this period.");
-                }
-                else
-                {
-                    col.Item().Table(table =>
-                    {
-                        table.ColumnsDefinition(c =>
-                        {
-                            c.RelativeColumn(2); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(2);
-                        });
-                        table.Header(h =>
-                        {
-                            h.Cell().Text("Started (SAST)").SemiBold();
-                            h.Cell().Text("Minutes").SemiBold();
-                            h.Cell().Text("Trigger").SemiBold();
-                            h.Cell().Text("Estimated litres").SemiBold();
-                        });
-                        foreach (var e in events.EnumerateArray())
-                        {
-                            var trigger = e.GetProperty("triggerSource");
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(e.GetProperty("startedAt").GetString());
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text((e.GetProperty("runtimeSeconds").GetInt64() / 60.0).ToString("0.#", CultureInfo.InvariantCulture));
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(trigger.ValueKind == JsonValueKind.String ? trigger.GetString() : "unknown");
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(
-                                e.GetProperty("estimatedLitres").ValueKind == JsonValueKind.Number
-                                    ? Num(e.GetProperty("estimatedLitres"), " L (estimated)")
-                                    : "not enough data yet");
-                        }
-                    });
-                }
-
-                col.Item().PaddingTop(6).Text("Soil moisture by hour").FontSize(12).SemiBold();
-                col.Item().Table(table =>
-                {
-                    table.ColumnsDefinition(c =>
-                    {
-                        c.RelativeColumn(2); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn();
-                    });
-                    table.Header(h =>
-                    {
-                        h.Cell().Text("Hour (SAST)").SemiBold();
-                        h.Cell().Text("Average").SemiBold();
-                        h.Cell().Text("Min").SemiBold();
-                        h.Cell().Text("Max").SemiBold();
-                        h.Cell().Text("Readings").SemiBold();
-                    });
-                    foreach (var p in root.GetProperty("series").EnumerateArray())
-                    {
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("time").GetString());
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("avgMoisturePct"), pctSuffix));
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("minMoisturePct"), pctSuffix));
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(p.GetProperty("maxMoisturePct"), pctSuffix));
-                        table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(p.GetProperty("readings").GetInt64().ToString());
-                    }
-                });
-                why.Appendix(col);
-            });
-
-        })).GeneratePdf();
-
-        return Results.File(bytes, "application/pdf", $"moisture-zone{zoneId}-{from:yyyyMMdd}-{to:yyyyMMdd}.pdf");
+        return await BuildDesignedAsync(
+            user, dataSource, zoneId.Value, from.Value, to.Value, engine,
+            asWorkbook: false, CancellationToken.None, ReportKind.Moisture);
     }
 
-        internal static async Task<IResult> GetSchedulePdfAsync(
+    internal static async Task<IResult> GetSchedulePdfAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId,
         AgroFlow.Business.Fao56EngineController engine)
     {
-        // Reuse the on-screen report so the PDF can never disagree with it.
-        var result = await GetScheduleAsync(user, dataSource, farmId, engine);
-        if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return result;
-        if (result is not IValueHttpResult { Value: { } value }) return result;
-
-        using var json = JsonSerializer.SerializeToDocument(value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        var root = json.RootElement;
-
-        static string Str(JsonElement e) => e.ValueKind == JsonValueKind.String ? e.GetString() ?? "-" : "-";
-        static string Num(JsonElement e, string suffix = "") =>
-            e.ValueKind == JsonValueKind.Number
-                ? e.GetDouble().ToString("0.#", CultureInfo.InvariantCulture) + suffix
-                : "-";
-        static string ActionText(string? a) => a switch
+        // Item 3: the watering schedule is the farm's action report over the
+        // last 7 days, with the coming week's day cards.
+        if (farmId is null)
         {
-            "IrrigateNow" => "Irrigate today",
-            "NoActionNeeded" => "No irrigation needed",
-            "HoldRainExpected" => "Rain expected: skip watering",
-            "InsufficientData" => "Finish setup for a watering call",
-            "RainExpectedCheckMoisture" => "Rain expected: check moisture",
-            "CheckMoisture" => "Check moisture",
-            _ => a ?? "-",
-        };
+            return await GetScheduleAsync(user, dataSource, farmId, engine);
+        }
 
-        var farmName = root.GetProperty("farmName").GetString();
-        var generated = root.GetProperty("generatedAt").GetDateTimeOffset().ToOffset(TimeSpan.FromHours(2));
-        var today = root.GetProperty("today").GetString();
-        var hasZones = root.GetProperty("status").GetString() == "ok";
-
-        // Item 2c: one numbered "Why:" per insight, in page order.
-        var why = new AgroFlow.Api.Reports.ReportWhy();
-        var zoneWhy = root.TryGetProperty("zones", out var whyZones) && whyZones.ValueKind == JsonValueKind.Array
-            ? whyZones.EnumerateArray().Select(zone => why.AddInsights(zone)).ToList()
-            : new List<List<AgroFlow.Business.Agronomy.RuleBook.Explanation?>>();
-        var bytes = Document.Create(container => container.Page(page =>
-        {
-            ReportShell.ApplyPageDefaults(page);
-
-            page.Header().Element(c => ReportShell.Header(
-                c,
-                "Watering Schedule & Advice",
-                $"{farmName}  ·  the next 7 days from {today}",
-                ReportShell.GeneratedLine(generated)));
-
-            page.Footer().Element(c => ReportShell.Footer(
-                c, "Advice comes from FAO-56 crop guidance, the farm's weather and each zone's own moisture threshold."));
-
-            page.Content().PaddingHorizontal(34).PaddingTop(18).PaddingBottom(12).Column(col =>
-            {
-                col.Spacing(8);
-                col.Item().Text(
-                    "Rule-based advice from FAO-56 crop water guidance, the farm's weather records and the zone's own moisture threshold. " +
-                    "Soil moisture can only be measured today, so later days show a prompt to check moisture, not a watering decision.")
-                    .Italic();
-
-                if (!hasZones)
-                {
-                    col.Item().Text(root.GetProperty("message").GetString());
-                    return;
-                }
-
-                var zoneIndex = -1;
-                foreach (var z in root.GetProperty("zones").EnumerateArray())
-                {
-                    zoneIndex++;
-                    col.Item().PaddingTop(8).Text($"{Str(z.GetProperty("name"))} ({Str(z.GetProperty("cropType"))})").FontSize(13).SemiBold();
-                    col.Item().Text(Str(z.GetProperty("summary"))).SemiBold();
-
-                    var lm = z.GetProperty("latestMoisture");
-                    col.Item().Text(Str(lm.GetProperty("label")));
-
-                    if (z.TryGetProperty("confidence", out var confidence) && confidence.ValueKind == JsonValueKind.Object)
-                    {
-                        col.Item().Text("How sure: " + Str(confidence.GetProperty("reason"))).FontSize(9);
-                    }
-                    if (z.TryGetProperty("nextStep", out var nextStep) && nextStep.ValueKind == JsonValueKind.Object)
-                    {
-                        col.Item().Text("Next step: " + Str(nextStep.GetProperty("ask"))).FontSize(9);
-                    }
-
-                    var reasoning = z.GetProperty("reasoning");
-                    if (reasoning.GetArrayLength() > 0)
-                    {
-                        col.Item().Text("Why").SemiBold();
-                        foreach (var r in reasoning.EnumerateArray()) col.Item().Text("- " + Str(r));
-                    }
-
-                    var facts = z.GetProperty("facts");
-                    if (facts.GetArrayLength() > 0)
-                    {
-                        col.Item().Text("Figures and their sources").SemiBold();
-                        foreach (var f in facts.EnumerateArray())
-                            col.Item().Text($"- {Str(f.GetProperty("label"))}: {Str(f.GetProperty("value"))}  [{Str(f.GetProperty("source"))}]").FontSize(9);
-                    }
-
-                    // Spec 9b: the insights block sits after "Figures and their
-                    // sources" and before the 7-day outlook. Each line shows its
-                    // source in smaller text underneath, because a report reader
-                    // must be able to check where the advice came from.
-                    if (z.TryGetProperty("insights", out var zoneInsights)
-                        && zoneInsights.ValueKind == JsonValueKind.Array
-                        && zoneInsights.GetArrayLength() > 0)
-                    {
-                        col.Item().PaddingTop(4).Text("What to do").SemiBold();
-                        var perZone = zoneIndex < zoneWhy.Count ? zoneWhy[zoneIndex] : new List<AgroFlow.Business.Agronomy.RuleBook.Explanation?>();
-                        var insightIndex = 0;
-                        foreach (var insight in zoneInsights.EnumerateArray())
-                        {
-                            col.Item().Text("- " + Str(insight.GetProperty("text")));
-                            col.Item().PaddingLeft(10).Text("Source: " + Str(insight.GetProperty("source")))
-                                .FontSize(8).FontColor(Colors.Grey.Darken1);
-                            why.Line(col, insightIndex < perZone.Count ? perZone[insightIndex] : null);
-                            insightIndex++;
-                        }
-                    }
-
-                    var limitations = z.GetProperty("limitations");
-                    if (limitations.GetArrayLength() > 0)
-                    {
-                        col.Item().Text("What could not be determined").SemiBold();
-                        foreach (var l in limitations.EnumerateArray()) col.Item().Text("- " + Str(l)).FontSize(9);
-                    }
-
-                    col.Item().Text("7-day outlook").SemiBold();
-                    col.Item().Table(table =>
-                    {
-                        table.ColumnsDefinition(c =>
-                        {
-                            c.RelativeColumn(1.4f); c.RelativeColumn(2.2f); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(); c.RelativeColumn(3f);
-                        });
-                        table.Header(h =>
-                        {
-                            h.Cell().Text("Date").SemiBold();
-                            h.Cell().Text("Action").SemiBold();
-                            h.Cell().Text("ET0 mm").SemiBold();
-                            h.Cell().Text("ETc mm").SemiBold();
-                            h.Cell().Text("Rain mm").SemiBold();
-                            h.Cell().Text("Note").SemiBold();
-                        });
-                        foreach (var d in z.GetProperty("days").EnumerateArray())
-                        {
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Str(d.GetProperty("date")));
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(ActionText(d.GetProperty("action").GetString()));
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(d.GetProperty("et0MmPerDay")));
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(d.GetProperty("etcMmPerDay")));
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Num(d.GetProperty("forecastRainMm")));
-                            table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2).Text(Str(d.GetProperty("note"))).FontSize(9);
-                        }
-                    });
-                }
-
-                // Spec 9c: "Weather: area vs tub", after the 7-day outlook. One
-                // table for the farm, not per zone - weather_daily is per farm.
-                if (root.TryGetProperty("weatherComparison", out var comparison))
-                {
-                    col.Item().PaddingTop(10).Text("Weather: area vs tub").FontSize(13).SemiBold();
-                    col.Item().Text(Str(comparison.GetProperty("caption"))).FontSize(9).Italic();
-
-                    var comparisonDays = comparison.GetProperty("days");
-                    if (comparisonDays.GetArrayLength() == 0)
-                    {
-                        col.Item().Text(comparison.TryGetProperty("message", out var cm) && cm.ValueKind == JsonValueKind.String
-                            ? cm.GetString()!
-                            : "No observed weather days to compare yet.");
-                    }
-                    else
-                    {
-                        col.Item().PaddingTop(4).Table(table =>
-                        {
-                            table.ColumnsDefinition(c =>
-                            {
-                                c.RelativeColumn(1.4f);                      // date
-                                c.RelativeColumn(); c.RelativeColumn();      // app tmin/tmax
-                                c.RelativeColumn();                          // app RH
-                                c.RelativeColumn();                          // app wind
-                                c.RelativeColumn();                          // app rain
-                                c.RelativeColumn(); c.RelativeColumn();      // tub tmin/tmax
-                                c.RelativeColumn();                          // tub RH
-                                c.RelativeColumn();                          // diff tmax
-                                c.RelativeColumn(2f);                        // note
-                            });
-                            table.Header(h =>
-                            {
-                                h.Cell().Text("Date").SemiBold().FontSize(8);
-                                h.Cell().Text("Area min").SemiBold().FontSize(8);
-                                h.Cell().Text("Area max").SemiBold().FontSize(8);
-                                h.Cell().Text("Area RH").SemiBold().FontSize(8);
-                                h.Cell().Text("Wind m/s").SemiBold().FontSize(8);
-                                h.Cell().Text("Rain mm").SemiBold().FontSize(8);
-                                h.Cell().Text("Tub min").SemiBold().FontSize(8);
-                                h.Cell().Text("Tub max").SemiBold().FontSize(8);
-                                h.Cell().Text("Tub RH").SemiBold().FontSize(8);
-                                h.Cell().Text("Max diff").SemiBold().FontSize(8);
-                                h.Cell().Text("Note").SemiBold().FontSize(8);
-                            });
-
-                            foreach (var d in comparisonDays.EnumerateArray())
-                            {
-                                var app = d.GetProperty("app");
-                                var dht = d.GetProperty("dht");
-                                var diff = d.GetProperty("difference");
-
-                                void Cell(string text) =>
-                                    table.Cell().BorderBottom(0.5f).BorderColor(Colors.Grey.Lighten2)
-                                        .Text(text).FontSize(8);
-
-                                Cell(Str(d.GetProperty("date")));
-                                Cell(Num(app.GetProperty("tminC")));
-                                Cell(Num(app.GetProperty("tmaxC")));
-                                Cell(Num(app.GetProperty("rhMeanPct")));
-                                Cell(Num(app.GetProperty("windMs")));
-                                Cell(Num(app.GetProperty("rainMm")));
-                                Cell(Num(dht.GetProperty("tminC")));
-                                Cell(Num(dht.GetProperty("tmaxC")));
-                                Cell(Num(dht.GetProperty("rhMeanPct")));
-                                // Difference is left blank rather than zero when
-                                // there is nothing to compare.
-                                Cell(Num(diff.GetProperty("tmaxC")));
-                                Cell(d.TryGetProperty("note", out var n) && n.ValueKind == JsonValueKind.String
-                                    ? n.GetString()! : "");
-                            }
-                        });
-                    }
-                }
-                why.Appendix(col);
-            });
-
-        })).GeneratePdf();
-
-        return Results.File(bytes, "application/pdf", $"schedule-farm{farmId}-{today}.pdf");
+        var today = AgroFlow.Business.Fao56EngineController.TodayInSast();
+        return await BuildFarmDesignedAsync(
+            user, dataSource, farmId.Value, today.AddDays(-6), today, engine,
+            asWorkbook: false, CancellationToken.None, ReportKind.Schedule);
     }
 
         private static async Task<IResult> GetZonesAsync(
