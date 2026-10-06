@@ -15,7 +15,9 @@ what is next.
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
 | 6 | done | 77b9533, be80a1a | Apply migration 0042 | 6b |
 | 6b | done | f079cde | Apply migration 0043 | 6c |
-| 6c | done | b8cf3a2, 6c4982b, 2d7a988, part 4 (this commit) | Apply migration 0044 | Land Part 1, then Part 2 |
+| 6c | done | b8cf3a2, 6c4982b, 2d7a988, 77e392a | Apply migration 0044 | Land Part 1 |
+| Land Part 1 | done | c16bfaf (merge into dev, pushed) | — | Part 2 |
+| Part 2 | in progress | `test/full-proof` | see Part 2 below | 7 |
 
 ---
 
@@ -752,3 +754,11 @@ chart was wrong and the code right, corrected in the test; "Do this next";
 filters; working days skip weekends; the PDF and workbook render; filter
 parsing). Admin Playwright 37 → 38 (the download carries period, province
 and handler).
+
+## Landing Part 1
+
+`feat/actionable` merged into `dev` with `--no-ff` (c16bfaf) and pushed.
+`dev` had gained commits meanwhile (presentation, showcase and
+walkthrough-video folders only - no overlap); the merge was clean. On the
+merged tree: backend 972 passed, mobile jest 47 passed, admin build and
+Playwright 38 passed.
