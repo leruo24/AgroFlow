@@ -110,6 +110,17 @@ export function zoneRow(index: number): string {
       <span>Zone ${n}: planted about how many weeks ago? (optional)</span>
       <input type="number" min="0" max="104" step="1" data-field="zone_weeks_${index}" placeholder="e.g. 3" />
     </label>
+
+    <label class="drawer-field">
+      <span>Zone ${n} flow rate, litres a minute (optional)</span>
+      <input type="number" min="0.1" step="0.1" data-field="zone_flow_${index}"
+        placeholder="Or time a 500 mL bottle in the app later" />
+    </label>
+
+    <label class="drawer-field">
+      <span>Zone ${n} soil depth in cm (tubs and raised beds, optional)</span>
+      <input type="number" min="1" max="300" step="1" data-field="zone_depth_cm_${index}" placeholder="e.g. 30" />
+    </label>
   </div>
 </div>`;
 }
@@ -122,6 +133,8 @@ export type ZoneSetupInput = {
   soilType: string;
   areaM2: number | null;
   plantingDate: string | null;
+  flowRateLpm: number | null;
+  rootDepthLimitM: number | null;
 };
 
 export function readZoneSetup(v: Record<string, string>, i: number, today: Date = new Date()): ZoneSetupInput {
@@ -148,6 +161,10 @@ export function readZoneSetup(v: Record<string, string>, i: number, today: Date 
     soilType: v[`zone_soil_${i}`] || "loam",
     areaM2,
     plantingDate,
+    flowRateLpm: Number(v[`zone_flow_${i}`]) > 0 ? Number(v[`zone_flow_${i}`]) : null,
+    // The roots cannot go deeper than the soil in a tub: the engine caps
+    // its root depth here (item 2). Typed in cm, stored in metres.
+    rootDepthLimitM: Number(v[`zone_depth_cm_${i}`]) > 0 ? Number(v[`zone_depth_cm_${i}`]) / 100 : null,
   };
 }
 
@@ -160,6 +177,14 @@ export function zoneSetupProblem(v: Record<string, string>, i: number): string |
   const weeks = (v[`zone_weeks_${i}`] ?? "").trim();
   if (weeks !== "" && !(Number(weeks) >= 0 && Number(weeks) <= 104)) {
     return `Zone ${n}: weeks since planting must be between 0 and 104.`;
+  }
+  const flow = (v[`zone_flow_${i}`] ?? "").trim();
+  if (flow !== "" && !(Number(flow) > 0 && Number(flow) <= 1000)) {
+    return `Zone ${n}: the flow rate must be between 0.1 and 1000 litres a minute.`;
+  }
+  const depth = (v[`zone_depth_cm_${i}`] ?? "").trim();
+  if (depth !== "" && !(Number(depth) >= 1 && Number(depth) <= 300)) {
+    return `Zone ${n}: the soil depth must be between 1 and 300 cm.`;
   }
   const z = readZoneSetup(v, i);
   if (z.areaM2 != null && z.areaM2 > z.sizeHectares * 10000 * 1.001) {

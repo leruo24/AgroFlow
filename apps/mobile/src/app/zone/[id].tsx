@@ -1406,6 +1406,26 @@ export default function ZoneControlScreen() {
             />
           </TouchableOpacity>
 
+          {/* Item 6: the checklist of what this zone's advice is missing. */}
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={() =>
+              router.push({
+                pathname: '/zone-setup',
+                params: { zoneId: String(selectedZone.id) },
+              })
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Finish setup"
+          >
+            <View style={styles.linkRowCopy}>
+              <Text style={styles.linkRowTitle}>Finish setup</Text>
+              <Text style={styles.linkRowHint}>Planting date, size, flow rate - for surer advice</Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={
               styles.linkRow

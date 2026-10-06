@@ -113,6 +113,8 @@ export async function onboardFarmer(input: {
       soilType?: string;
       areaM2?: number | null;
       plantingDate?: string | null;
+      flowRateLpm?: number | null;
+      rootDepthLimitM?: number | null;
     }[];
   };
 }): Promise<FarmerOnboardedResult> {
@@ -199,6 +201,8 @@ export async function registerFarm(input: {
       soilType?: string;
       areaM2?: number | null;
       plantingDate?: string | null;
+      flowRateLpm?: number | null;
+      rootDepthLimitM?: number | null;
     }[];
   };
 }): Promise<void> {

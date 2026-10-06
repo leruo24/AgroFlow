@@ -98,6 +98,8 @@ test("registering a farm asks for soil (Loam by default), a size preset and week
   await expect(wiz.locator('[data-area-custom="0"]')).toBeHidden();
 
   await wiz.locator('[data-field="zone_weeks_0"]').fill("3");
+  await wiz.locator('[data-field="zone_flow_0"]').fill("1.5");
+  await wiz.locator('[data-field="zone_depth_cm_0"]').fill("30");
   await wiz.locator("[data-wizard-next]").click();
 
   await expect(page.locator("#registerFarmReview")).toContainText("Clay");
@@ -106,6 +108,8 @@ test("registering a farm asks for soil (Loam by default), a size preset and week
 
   await expect.poll(() => posts.length).toBe(1);
   const zone = (posts[0] as { farm: { zones: Record<string, unknown>[] } }).farm.zones[0];
-  expect(zone).toMatchObject({ name: "Tub 1", soilType: "clay", areaM2: 0.2, sizeHectares: 0.00002 });
+  expect(zone).toMatchObject({
+    name: "Tub 1", soilType: "clay", areaM2: 0.2, sizeHectares: 0.00002, flowRateLpm: 1.5, rootDepthLimitM: 0.3,
+  });
   expect(zone.plantingDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 });

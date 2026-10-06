@@ -13,7 +13,7 @@ what is next.
 | 3 | done | 154025b | — | 4 |
 | 4 | done | 74efb2d | Apply migration 0040 | 5 |
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
-| 6 | done | (this commit) | Apply migration 0042 | 6b |
+| 6 | done | 77b9533 + follow-up (this commit) | Apply migration 0042 | 6b |
 
 ---
 
@@ -543,5 +543,9 @@ spec and fixed.
 
 - The older "Onboard a Farmer" page uses the same zone row and checks, but
   only the Register-a-farm wizard has a browser test.
-- Root depth limit is accepted by the API but not asked in the wizard: no
-  source gives a tub's usable depth, and guessing one would change advice.
+- Root depth is never guessed: the wizard asks for the soil depth in cm as an
+  optional field (tubs and raised beds) and leaves it empty otherwise, since
+  no source gives a tub's usable depth. Flow rate is optional there too - the
+  app's bottle helper measures it on site. (Follow-up commit: both fields
+  were missing from the first item 6 commit; the zone page also gained a
+  "Finish setup" row.)
