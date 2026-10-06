@@ -167,6 +167,41 @@ async function sendAuthorizedRequest<T>(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Item 6c: "Not a farmer on AgroFlow yet? Ask for a call" - no login.
+// ---------------------------------------------------------------------------
+
+export type EnquiryInput = {
+  fullName: string;
+  phone: string;
+  email: string | null;
+  province: string;
+  town: string;
+  farmSizeHa: number | null;
+  crops: string[];
+  cropsOther: string | null;
+  bestTime: 'morning' | 'afternoon' | 'evening';
+  notes: string | null;
+  consent: boolean;
+};
+
+// Single-flight like every write, so a double tap sends one enquiry.
+export function submitEnquiry(input: EnquiryInput): Promise<{ message: string }> {
+  const body = JSON.stringify({ ...input, website: '' });
+  return singleFlight(writeKey('POST', '/api/public/enquiries', body), async () => {
+    const apiBase = resolveApiBase();
+    if (!apiBase) throw new Error('AgroFlow.Api could not be located. Set EXPO_PUBLIC_AGROFLOW_API_BASE.');
+    const response = await fetch(`${apiBase}/api/public/enquiries`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body,
+    });
+    const reply = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+    if (!response.ok) throw new Error(reply.error || `The enquiry could not be sent (${response.status}).`);
+    return { message: reply.message ?? 'Thank you, a representative will call you within 2 working days.' };
+  });
+}
+
 export function fetchFarmerDashboard(farmId?: string) {
   return authorizedRequest<FarmerDashboard>(
     `/api/farmer/dashboard${farmId ? `?farmId=${encodeURIComponent(farmId)}` : ''}`

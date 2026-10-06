@@ -152,6 +152,8 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
 // appsettings.json and must never be committed.
 builder.Services.AddSingleton<DeviceAuthService>();
 builder.Services.AddSingleton<ClaimRateLimiter>();
+// Item 6c: per-IP ceiling on the public enquiry form.
+builder.Services.AddSingleton<EnquiryRateLimiter>();
 builder.Services.AddSingleton<MqttCredentialPoolService>();
 
 builder.Services.AddSingleton<MqttConnectionService>();
@@ -430,6 +432,7 @@ app.MapTodayEndpoints();
 app.MapZoneSetupEndpoints();
 app.MapRecommendationEndpoints();
 app.MapFarmZoneEndpoints();
+app.MapEnquiryEndpoints();
 app.MapMqttPoolEndpoints();
 app.MapPasswordResetEndpoints();
 

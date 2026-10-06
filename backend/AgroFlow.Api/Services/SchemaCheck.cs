@@ -131,6 +131,10 @@ public sealed class SchemaCheck
             "select to_regprocedure('public.zone_farmer_edit_guard()')",
             "A farmer's own login could change any zone column directly, including the watering thresholds."),
 
+        new("0044", "table", "enquiry",
+            "select to_regclass('public.enquiry')",
+            "The public \"Get a call back\" form cannot take enquiries, and the Enquiries tab is empty."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

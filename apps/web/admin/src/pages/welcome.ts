@@ -23,6 +23,7 @@
    bundle itself. */
 
 import { Icon } from "@/lib/icons";
+import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
 
 /* Download links come from configuration so the page can ship before the
    files exist. Each one is HIDDEN ENTIRELY when its variable is unset -
@@ -156,6 +157,8 @@ export const WELCOME_HTML = `
           </p>` : ""}
       </section>` : ""}
 
+      ${ENQUIRY_SECTION_HTML}
+
       <section class="landing-section landing-credits" aria-labelledby="creditsHeading">
         <h2 id="creditsHeading" class="landing-h2">Who made this</h2>
         <p class="landing-credit-line">
@@ -178,4 +181,5 @@ export const WELCOME_HTML = `
 export function wireWelcome(root: HTMLElement, onLogin: () => void): void {
   root.querySelectorAll<HTMLButtonElement>("#welcomeLogin, #welcomeLoginBottom")
     .forEach((button) => button.addEventListener("click", onLogin));
+  wireEnquiry(root);
 }

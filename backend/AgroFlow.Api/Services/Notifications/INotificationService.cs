@@ -113,6 +113,11 @@ public interface INotificationService
     Task NotifyAdminsOfFarmRequestAsync(
         FarmRequestAdminNotification notification,
         CancellationToken cancellationToken);
+
+    // Item 6c: a plain work-queue notice to every admin with a linked chat
+    // ("New enquiry: ..."). A default body, so a channel that has nothing to
+    // send with - and every test double - needs no change; Telegram overrides it.
+    Task NotifyAdminsAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 // Why AgroFlow could not water a Critical zone itself. Each value is a

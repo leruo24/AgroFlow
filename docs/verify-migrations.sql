@@ -178,6 +178,9 @@ select
     -- 0043: a farmer may change only crop, planting date, soil and size of a zone.
     (select count(*) from pg_trigger where tgname = 'zone_farmer_edit_guard')              as m0043_zone_farmer_edit_guard,
 
+    -- 0044: public enquiries and the append-only call log.
+    (select count(*) from pg_class where relname = 'enquiry_call' and relkind = 'r')       as m0044_enquiry,
+
     -- Not a migration, but applied by hand the same way and just as invisible
     -- when missed: the private bucket generated report PDFs are stored in.
     (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;

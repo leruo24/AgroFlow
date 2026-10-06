@@ -134,6 +134,11 @@ function RootNavigator() {//decides which screens the user is permitted to acces
         <Stack.Screen
           name="forgot-password"
         />
+
+        {/* Item 6c: "Ask for a call" - for people not on AgroFlow yet. */}
+        <Stack.Screen
+          name="enquiry"
+        />
       </Stack.Protected>
 
       <Stack.Protected

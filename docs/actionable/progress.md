@@ -15,7 +15,7 @@ what is next.
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
 | 6 | done | 77b9533, be80a1a | Apply migration 0042 | 6b |
 | 6b | done | f079cde | Apply migration 0043 | 6c |
-| 6c | in progress | part 1 (this commit) | Part 2: public enquiry; part 3: Enquiries tab; part 4: enquiry report | 6c part 2 |
+| 6c | in progress | b8cf3a2 (part 1), part 2 (this commit) | Apply migration 0044; part 3: Enquiries tab; part 4: enquiry report | 6c part 3 |
 
 ---
 
@@ -658,3 +658,34 @@ optional note, no actor in the body). Admin Playwright 25 → 29
 (`requests.spec.ts`: email for a nameless farmer, request type, no sideways
 scroll at 1366 px, Mark complete sends the note and no actor, both wizards
 prefilled and completing their request).
+
+
+### Part 2: the public enquiry
+
+- **Landing page**: "Interested in AgroFlow? Get a call back" → a form with
+  every field in the brief (name, SA phone, optional email, province, town,
+  optional farm size, crops incl. Other, best time, notes) and the POPIA
+  consent box, which is required. After sending: "Thank you, a
+  representative will call you within 2 working days." `#enquire` opens it
+  directly.
+- **Mobile login**: "Not a farmer on AgroFlow yet? Ask for a call" → the same
+  form as an app screen (signed-out route), posting to the same endpoint;
+  single-flight, so a double tap sends one enquiry.
+- **`POST /api/public/enquiries`** (no login): every field checked on the
+  server (`EnquiryRules`; SA numbers stored as +27...), at most 5 per IP per
+  hour (`EnquiryRateLimiter`, 429), a hidden `website` honeypot - a bot that
+  fills it gets the same thank-you and nothing is stored. Answers 503 with a
+  plain sentence if migration 0044 is not applied.
+- **Admins on Telegram**: "New enquiry: {name}, {town}, {crops}, call in the
+  {time}" to every admin with a linked chat (`NotifyAdminsAsync`, a default
+  no-op on the interface so other channels and test doubles are unchanged).
+- **Migration 0044**: `enquiry` (with `consent_at`, status, handler,
+  call-back, no-answer count, outcome/reason, linked farmer, anonymised_at)
+  and the append-only `enquiry_call`. RLS on, admins read, inserts only via
+  the API.
+
+Tests: backend 937 → 954 (`EnquiryTests`: phone formats, every field rule,
+the admin message, the limiter, and the route itself without a database -
+honeypot thanked, bad form 400, sixth in an hour 429; call-log rules).
+Mobile jest 44 → 47. Admin Playwright 29 → 32 (`enquiry-form.spec.ts`:
+sent and thanked, nothing sent without consent, the server's refusal shown).

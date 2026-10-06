@@ -494,6 +494,33 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
+    // Item 6c: the same recipients as a farm request - every admin with a
+    // linked chat - for any work-queue notice. Never throws.
+    public async Task NotifyAdminsAsync(string message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var chatIds = new List<long>();
+            await using (var connection = await _dataSource.OpenConnectionAsync(cancellationToken))
+            {
+                await using var command = new NpgsqlCommand(
+                    "select distinct p.telegram_chat_id from profile p " +
+                    "where p.role = 'admin' and p.telegram_chat_id is not null", connection);
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken)) chatIds.Add(reader.GetInt64(0));
+            }
+
+            foreach (var chatId in chatIds)
+            {
+                await _client.SendMessageAsync(chatId, message, cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not send an admin notice on Telegram.");
+        }
+    }
+
     public async Task NotifyAdminsOfFarmRequestAsync(
         FarmRequestAdminNotification notification,
         CancellationToken cancellationToken)
