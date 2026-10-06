@@ -77,7 +77,7 @@ async function renderDashboard(): Promise<string> {
       act: "go-requests-pending",
       tone: "bad",
       icon: Icon.inbox,
-      why: countExplanation({ label: "New requests waiting", what: "new farm or zone requests have had no reply yet", count: newRequests.length, counted: "service requests", rule: "A request counts here while its status is still pending.", whyHighlighted: "First in the queue: a farmer is waiting on a person.", clears: "Scheduling, completing or closing a request takes it off this count.", query: "service_request where status = pending" }),
+      why: countExplanation({ label: "New requests waiting", what: "new farm or zone requests have had no reply yet", count: newRequests.length, counted: "service requests", rule: "A request counts here while its status is still pending.", whyHighlighted: "First in the queue: a farmer is waiting on a person.", clears: "Completing the request (Mark complete, or saving the wizard it opens) takes it off this count.", query: "service_request where status = pending" }),
     },
     {
       title: "Call-backs due",
@@ -178,7 +178,7 @@ async function renderDashboard(): Promise<string> {
     ${kpiCard({ label: "Kits online", value: kpis.connectedHardware, format: "ratio", total: fmtInt(kpis.totalHardware), trend: trends["connectedHardware"] ?? undefined, icon: Icon.radio, act: "go-kits", why: { counts: "kits are online", rule: "A kit counts as online while the equipment monitor has heard from it inside its offline window.", query: "hardware.status = Online, out of all hardware" } })}
     ${kpiCard({ label: "Open alerts", value: kpis.activeAlerts, trend: trends["activeAlerts"] ?? undefined, icon: Icon.bell, act: "go-alerts", why: { counts: "alerts are open", rule: "Every alert that is not Resolved or Closed, at any priority.", query: "alert.status not in (Resolved, Closed)", clears: "Resolving alerts." } })}
     ${kpiCard({ label: "Open maintenance", value: kpis.openMaintenance, trend: trends["openMaintenance"] ?? undefined, icon: Icon.wrench, act: "go-maintenance", why: { counts: "maintenance jobs are not completed", rule: "Every maintenance job whose status is anything but Completed.", query: "maintenance.status <> Completed", clears: "Completing the job." } })}
-    ${kpiCard({ label: "Requests waiting", value: newRequests.length, icon: Icon.inbox, act: "go-requests-pending", why: { counts: "requests are waiting for a reply", rule: "Requests whose status is still pending.", query: "service_request.status = pending", clears: "Scheduling, completing or closing the request." } })}
+    ${kpiCard({ label: "Requests waiting", value: newRequests.length, icon: Icon.inbox, act: "go-requests-pending", why: { counts: "requests are waiting for a reply", rule: "Requests whose status is still pending.", query: "service_request.status = pending", clears: "Completing the request." } })}
   </div>
 
   <!-- Health, from GET /api/admin/health. Rendered server-truthfully: a

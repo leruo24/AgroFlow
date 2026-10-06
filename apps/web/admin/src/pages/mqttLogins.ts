@@ -1,3 +1,4 @@
+import { errorState } from "@/ui/patterns";
 import { esc, fmtDate } from "@/lib/format";
 import { badge, kpiCard, pageHeader, panel, resultCount, table } from "@/ui/components";
 import { Icon } from "@/lib/icons";
@@ -34,16 +35,13 @@ export async function mqttLoginsPage(): Promise<string> {
 
     return `
       ${pageHeader("MQTT logins", "Per-kit broker logins, created by hand in HiveMQ and handed out automatically.")}
-      ${panel(
-        "Unable to load the pool",
-        "The login list could not be retrieved.",
-        "",
-        `<div class="muted">
-           If this keeps happening, check that <span class="mono sm">Mqtt__PoolEncryptionKey</span>
-           is set on the server - pooled passwords are encrypted at rest, so the pool cannot be
-           read without it.
-         </div>`,
-      )}
+      ${errorState({
+        title: "The MQTT login pool could not be loaded",
+        // Part 2: the same error panel, with Retry, as every other page.
+        detail: `${error instanceof Error ? error.message : "The login list could not be retrieved."} ` +
+          "If this keeps happening, check that Mqtt__PoolEncryptionKey is set on the server - " +
+          "pooled passwords are encrypted at rest, so the pool cannot be read without it.",
+      })}
     `;
   }
 

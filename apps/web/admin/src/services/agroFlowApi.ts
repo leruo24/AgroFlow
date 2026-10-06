@@ -12,6 +12,26 @@ import { supabase } from "@/lib/supabase";
 
 const API_BASE = import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "";
 
+/* The sentence to show for a refused or failed call (Part 2).
+   This API sends its sentence as `error` or `message`; ASP.NET problem
+   details use `detail` / `title`. Four copies of this read only the last two,
+   so a refusal such as "Farm size must be greater than 0." reached the admin
+   as "Request failed (400)" - and a body that was not JSON surfaced as the
+   parse error ("Unexpected token…"). One reader, used everywhere. */
+export function errorMessage(text: string, status: number): string {
+  try {
+    const problem = JSON.parse(text) as Record<string, unknown>;
+    for (const key of ["error", "message", "detail", "title"]) {
+      const value = problem?.[key];
+      if (typeof value === "string" && value.trim()) return value;
+    }
+    return `Request failed (${status}).`;   // JSON with no sentence in it: never show it raw
+  } catch {
+    // Not JSON: the text itself, if there is any.
+  }
+  return text.trim() || `Request failed (${status}).`;
+}
+
 async function postAuthorized<T = void>(path: string, body: unknown): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -32,23 +52,7 @@ async function postAuthorized<T = void>(path: string, body: unknown): Promise<T>
   if (!response.ok) {
     const text = await response.text();
 
-    try {
-      const problem = JSON.parse(text);
-
-      throw new Error(
-        problem.detail ||
-        problem.title ||
-        `Request failed (${response.status}).`,
-      );
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-
-      throw new Error(
-        text || `Request failed (${response.status}).`,
-      );
-    }
+    throw new Error(errorMessage(text, response.status));
   }
 
   // 204s and empty bodies are normal here (several of these endpoints only
@@ -236,24 +240,7 @@ export async function getFarmers(): Promise<FarmerOption[]> {
   if (!response.ok) {
     const text = await response.text();
 
-    try {
-      const problem = JSON.parse(text);
-
-      throw new Error(
-        problem.detail ||
-        problem.title ||
-        problem.message ||
-        `Request failed (${response.status}).`,
-      );
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-
-      throw new Error(
-        text || `Request failed (${response.status}).`,
-      );
-    }
+    throw new Error(errorMessage(text, response.status));
   }
 
   return await response.json() as FarmerOption[];
@@ -279,24 +266,7 @@ export async function deleteFarmerUser(id: string): Promise<void> {
   if (!response.ok) {
     const text = await response.text();
 
-    try {
-      const problem = JSON.parse(text);
-
-      throw new Error(
-        problem.detail ||
-        problem.title ||
-        problem.message ||
-        `Request failed (${response.status}).`,
-      );
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-
-      throw new Error(
-        text || `Request failed (${response.status}).`,
-      );
-    }
+    throw new Error(errorMessage(text, response.status));
   }
 }
 
@@ -321,40 +291,14 @@ export async function deleteFarm(id: number): Promise<void> {
   if (!response.ok) {
     const text = await response.text();
 
-    try {
-      const problem = JSON.parse(text);
-
-      throw new Error(
-        problem.detail ||
-        problem.title ||
-        problem.message ||
-        `Request failed (${response.status}).`,
-      );
-    } catch (error) {
-      if (error instanceof Error) {
-        throw error;
-      }
-
-      throw new Error(
-        text || `Request failed (${response.status}).`,
-      );
-    }
+    throw new Error(errorMessage(text, response.status));
   }
 }
 
 /* ---------------- Reports (live data) ---------------- */
 
 async function reportError(response: Response): Promise<Error> {
-  const text = await response.text();
-  try {
-    const problem = JSON.parse(text);
-    return new Error(
-      problem.error || problem.detail || problem.title || problem.message ||
-      `Request failed (${response.status}).`,
-    );
-  } catch {
-    return new Error(text || `Request failed (${response.status}).`);
-  }
+  return new Error(errorMessage(await response.text(), response.status));
 }
 
 async function reportFetch(path: string): Promise<Response> {

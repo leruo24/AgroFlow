@@ -1,5 +1,5 @@
 import { getAdminProfile } from "@/app/auth";
-import { handlingCell } from "@/ui/patterns";
+import { handlingCell, errorState } from "@/ui/patterns";
 import { getHandling, getEnquiries, type Enquiry } from "@/services/agroFlowApi";
 import { enquiriesTable, isCallbackDue } from "@/pages/enquiries";
 import { api } from "@/data/api";
@@ -229,12 +229,10 @@ export async function requestsPage(): Promise<string> {
     return `
       ${pageHeader("Requests", "Farmers' requests, and people asking about AgroFlow.")}
 
-      ${panel(
-        "Unable to load requests",
-        "The request list could not be retrieved.",
-        "",
-        `<div class="muted">Please refresh the page and try again.</div>`,
-      )}
+      ${errorState({
+        title: "Requests could not be loaded",
+        detail: error instanceof Error ? error.message : "The request list could not be retrieved.",
+      })}
     `;
   }
 }

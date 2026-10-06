@@ -113,3 +113,27 @@ test("registering a farm asks for soil (Loam by default), a size preset and week
   });
   expect(zone.plantingDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 });
+
+test("the wizard blocks Next until a step is valid, and Back keeps what was typed", async ({ page }) => {
+  await open(page);
+  await page.locator('[data-act="add-farm"]').click();
+  const wiz = page.locator('[data-wizard="register-farm"]');
+
+  // Step 1: no farmer chosen - Next stays on step 1 and says why.
+  await wiz.locator("[data-wizard-next]").click();
+  await expect(page.locator("body")).toContainText("Choose the farmer this farm belongs to.");
+  await wiz.locator(".picker-option", { hasText: "Owner A" }).click();
+  await wiz.locator("[data-wizard-next]").click();
+
+  // Step 2: empty name blocks; then fill, go on, come back - still there.
+  await wiz.locator("[data-wizard-next]").click();
+  await expect(page.locator("body")).toContainText("Give the farm a name.");
+  await wiz.locator('[data-field="farmName"]').fill("Back And Forth Farm");
+  await wiz.locator('[data-field="location"]').fill("Ceres, Western Cape");
+  await wiz.locator('[data-field="farmSize"]').fill("2");
+  await wiz.locator("[data-wizard-next]").click();
+  await expect(wiz.locator('[data-field="zone_name_0"]')).toBeVisible();
+  await wiz.locator("[data-wizard-back]").click();
+  await expect(wiz.locator('[data-field="farmName"]')).toHaveValue("Back And Forth Farm");
+  await expect(wiz.locator('[data-field="farmSize"]')).toHaveValue("2");
+});
