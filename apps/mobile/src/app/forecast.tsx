@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Cloud, CloudRain, Sun } from 'lucide-react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { router } from '@/lib/router';
 
 import { useTheme } from '@/context/ThemeContext';
 import { useAgroFlow } from '@/context/AgroFlowContext';

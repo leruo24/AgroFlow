@@ -160,6 +160,27 @@ select
     -- it every admin action succeeds and the Activity page stays empty.
     (select has_table_privilege('service_role', 'public.admin_audit_log', 'INSERT'))::int as m0038_audit_insert_grant,
 
+    -- 0039: explanation - what a Telegram "Why am I seeing this?" button
+    -- points at. Without it messages go out with no button.
+    (select count(*) from pg_class where relname = 'explanation' and relkind = 'r')      as m0039_explanation,
+
+    -- 0040: report_schedule - daily, chosen weekday, per-zone PDFs, recipients.
+    (select count(*) from information_schema.columns
+      where table_name = 'report_schedule' and column_name = 'per_zone_pdf')               as m0040_report_schedule_extend,
+
+    -- 0041: accountability - who is handling, and who resolved, each item.
+    (select count(*) from information_schema.columns
+      where table_name = 'alert' and column_name = 'handled_by_profile_id')               as m0041_accountability,
+
+    -- 0042: manual logging - "I watered" and "How does the soil feel?".
+    (select count(*) from pg_class where relname = 'soil_feel_check' and relkind = 'r')   as m0042_manual_logging,
+
+    -- 0043: a farmer may change only crop, planting date, soil and size of a zone.
+    (select count(*) from pg_trigger where tgname = 'zone_farmer_edit_guard')              as m0043_zone_farmer_edit_guard,
+
+    -- 0044: public enquiries and the append-only call log.
+    (select count(*) from pg_class where relname = 'enquiry_call' and relkind = 'r')       as m0044_enquiry,
+
     -- Not a migration, but applied by hand the same way and just as invisible
     -- when missed: the private bucket generated report PDFs are stored in.
     (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;

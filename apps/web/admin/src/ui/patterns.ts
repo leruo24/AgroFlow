@@ -17,8 +17,11 @@
  * this app.
  */
 
-import { esc } from "@/lib/format";
+import { whyLink, type Explanation } from "@/lib/why";
+import { esc, fmtDateTimeSast } from "@/lib/format";
+import type { Handling } from "@/types/models";
 import { Icon } from "@/lib/icons";
+import { isAbort } from "@/lib/navigation";
 
 /* ------------------------------------------------------------------ *
  * Empty states
@@ -84,6 +87,11 @@ export async function withErrorState(
   try {
     return await render();
   } catch (error) {
+    // A cancelled navigation is not a failure, and nobody is looking at the
+    // page it belonged to. lib/navigation.ts already keeps aborts from
+    // surfacing; this is the belt to that brace.
+    if (isAbort(error)) return "";
+
     console.error(`[admin] ${title} failed to load:`, error);
 
     return errorState({
@@ -386,6 +394,8 @@ export type AttentionCard = {
   id?: string;
   tone: "bad" | "warn" | "info";
   icon?: string;
+  /* Item 2c: what the count counts and why it is in the queue. */
+  why?: Explanation;
 };
 
 /* Home's action queue.
@@ -409,6 +419,13 @@ export function attentionCard(c: AttentionCard): string {
     </button>`;
 }
 
+/* The card plus its "Why am I seeing this?" link, side by side rather than
+   nested - a button inside a button is invalid HTML. */
+function attentionItem(c: AttentionCard): string {
+  const link = whyLink(c.why);
+  return link ? `<div class="attn-item">${attentionCard(c)}${link}</div>` : attentionCard(c);
+}
+
 export function attentionQueue(cards: AttentionCard[]): string {
   const live = cards.filter((c) => c.count > 0);
 
@@ -423,7 +440,7 @@ export function attentionQueue(cards: AttentionCard[]): string {
       </div>`;
   }
 
-  return `<div class="attn-grid">${live.map(attentionCard).join("")}</div>`;
+  return `<div class="attn-grid">${live.map(attentionItem).join("")}</div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -448,4 +465,36 @@ export function confirmBody(opts: {
         ? `<p class="confirm-alt">${esc(opts.alternative)}</p>`
         : ""}
     </div>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * Item 5: who is handling an item
+ * ------------------------------------------------------------------ */
+
+/* The "Handled by" cell. Nobody can put work in somebody else's name, so
+   there is no picker: "I'll handle this" puts the caller's own; somebody
+   else's can only be taken over (with a reason); only the handler can let
+   it go. */
+export function handlingCell(
+  kind: "requests" | "alerts" | "maintenance",
+  item: Handling & { id: string | number },
+  myId: string | undefined,
+  done = false,
+): string {
+  const id = esc(String(item.id));
+  const since = item.claimedAt ? `<small class="muted">since ${esc(fmtDateTimeSast(item.claimedAt))}</small>` : "";
+
+  if (!item.handledByName) {
+    return done
+      ? `<span class="muted">Nobody</span>`
+      : `<a href="#" data-act="claim-item" data-kind="${kind}" data-id="${id}">I'll handle this</a>`;
+  }
+
+  if (myId && item.handledById === myId) {
+    return `<b>You</b> ${since}
+      ${done ? "" : `<a href="#" data-act="release-item" data-kind="${kind}" data-id="${id}">Let go</a>`}`;
+  }
+
+  return `${esc(item.handledByName)} ${since}
+    ${done ? "" : `<a href="#" data-act="take-over-item" data-kind="${kind}" data-id="${id}" data-handler="${esc(item.handledByName)}">Take over</a>`}`;
 }

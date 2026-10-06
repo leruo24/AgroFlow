@@ -42,6 +42,31 @@ export function createZoneInsightsStyles(colors: AppColors) {
 
     empty: { fontSize: Type.body, lineHeight: 23, color: colors.textSecondary },
 
+    // ---- Confidence badge and the one next step (item 2) ----
+    confidence: { gap: Spacing.one, paddingBottom: Spacing.two },
+    confidenceBadge: {
+      alignSelf: 'flex-start',
+      fontSize: Type.label,
+      fontWeight: '700',
+      color: colors.primaryDark,
+      borderWidth: 1,
+      borderColor: colors.primaryDark,
+      borderRadius: Radius.full,
+      paddingHorizontal: Spacing.two,
+      paddingVertical: 2,
+      overflow: 'hidden',
+    },
+    confidenceReason: { fontSize: Type.caption, lineHeight: 20, color: colors.textSecondary },
+    improve: {
+      marginTop: Spacing.two,
+      padding: Spacing.three,
+      borderRadius: Radius.md,
+      backgroundColor: colors.surfaceSecondary,
+      gap: Spacing.one,
+    },
+    improveTitle: { fontSize: Type.label, fontWeight: '700', color: colors.text },
+    improveText: { fontSize: Type.body, lineHeight: 23, color: colors.text },
+
     // ---- Growth bar ----
     growthCard: { paddingVertical: Spacing.three, gap: Spacing.two },
     growthHeading: { ...sharedLayout.inlineRow, justifyContent: 'space-between' },

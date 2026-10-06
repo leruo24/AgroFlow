@@ -37,7 +37,10 @@
      real, itemised gap, not a cop-out; see the Phase 6 summary.
    ========================================================================== */
 
+import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
+import { asExplanation, type Explanation } from "@/lib/why";
+import { getHandling, type HandlingKind, type HandlingState } from "@/services/agroFlowApi";
 import {
   getMqttLogins,
   getAdminHardware,
@@ -46,10 +49,10 @@ import {
 } from "@/services/agroFlowApi";
 
 import type {
-  Kpis, Trends, GrowthSeries, SystemHealth, StatusDistribution,
+  Kpis, Trends, GrowthSeries, SeriesPoint, SystemHealth, StatusDistribution,
   User, Farm, Hardware, AdminAlert, MaintenanceJob,
   IrrigationSchedule, IrrigationEvent, ActivityEntry,
-  AlertStatus, AlertPriority, UserStatus,
+  Handling, AlertPriority, UserStatus,
   ServiceRequest, ServiceRequestStatus,
 } from "@/types/models";
 
@@ -111,7 +114,7 @@ async function getAuthorized<T>(path: string): Promise<T> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -177,6 +180,59 @@ export function recordActivity(): void {
   // intentionally empty - see file header
 }
 
+/* Counts per calendar month for the last twelve months, oldest first, from
+   ISO-ish date strings ("2026-05-14" or a timestamp). Months with none are 0,
+   so the line shows a quiet month as quiet rather than skipping it. Returns
+   [] when no date falls in the window - the chart then says so. */
+export function monthlyCounts(dates: (string | null | undefined)[], now = new Date()): SeriesPoint[] {
+  const months: { key: string; label: string }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    months.push({
+      key: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+      label: d.toLocaleString("en-ZA", { month: "short", timeZone: "UTC" }),
+    });
+  }
+  const counts = new Map(months.map((m) => [m.key, 0]));
+  let any = false;
+  for (const d of dates) {
+    const key = (d ?? "").slice(0, 7);
+    if (counts.has(key)) { counts.set(key, (counts.get(key) ?? 0) + 1); any = true; }
+  }
+  return any ? months.map((m) => ({ label: m.label, value: counts.get(m.key) ?? 0 })) : [];
+}
+
+/* Item 5: alert severity -> priority. The alert table has no priority
+   column; its severity is the honest source. */
+function priorityOf(severity: string | null | undefined): AlertPriority {
+  switch ((severity ?? "").toLowerCase()) {
+    case "critical": return "Critical";
+    case "warning": return "High";
+    case "info": return "Low";
+    default: return "Medium";
+  }
+}
+
+/* Item 5: who is handling what, from the API. An older API or a missing
+   migration answers nothing - every item then reads as unclaimed, which is
+   true: nobody can have claimed it. */
+async function handlingMap(kind: HandlingKind): Promise<Map<string, HandlingState>> {
+  try {
+    return new Map((await getHandling(kind)).map((h) => [h.id, h]));
+  } catch {
+    return new Map();
+  }
+}
+
+function applyHandling(item: Handling, h: HandlingState): void {
+  item.handledById = h.handledBy;
+  item.handledByName = h.handledByName;
+  item.claimedAt = h.claimedAt;
+  item.resolvedByName = h.resolvedByName;
+  item.resolvedAt = h.resolvedAt;
+  item.escalatedAt = h.escalatedAt;
+}
+
 export const api = {
   /* ------------------------------- reads ------------------------------- */
   async getKpis(): Promise<Kpis> {
@@ -209,9 +265,23 @@ export const api = {
   getTrends(): Promise<Trends> {
     return Promise.resolve({});
   },
-  /** Same reason as getTrends(). */
-  getGrowth(): Promise<GrowthSeries> {
-    return Promise.resolve({ users: [], farms: [], connectivity: [], maintenance: [] });
+  /* Item 4: new farmers, farms and maintenance jobs per month over the last
+     twelve months, counted from the records themselves - the charts used to
+     be permanently empty because this returned nothing. Connectivity stays
+     empty on purpose: no history of kit uptime is stored anywhere, so there
+     is nothing honest to plot (the Reports page no longer shows that chart). */
+  async getGrowth(): Promise<GrowthSeries> {
+    const [users, farmList, jobs] = await Promise.all([
+      api.getFarmerAccounts().catch(() => []),
+      api.getFarms().catch(() => []),
+      api.getMaintenance().catch(() => []),
+    ]);
+    return {
+      users: monthlyCounts(users.map((u) => u.dateJoined)),
+      farms: monthlyCounts(farmList.map((f) => f.registered)),
+      connectivity: [],
+      maintenance: monthlyCounts(jobs.map((m) => m.scheduledFor)),
+    };
   },
   /** No monitoring/health-check table exists anywhere in the schema - not
       empty, genuinely nothing to query. Empty object is the
@@ -416,7 +486,8 @@ export const api = {
       return {
         id: row.id,
         farmerId: row.farmer_id,
-        farmerName: farmer?.name || "(no name on file)",
+        // Item 6c: the email when there is no name - never "(no name on file)".
+        farmerName: farmer?.name || farmer?.email || "Farmer without a name or email",
         farmerEmail: farmer?.email || "",
         farmId: row.farm_id,
         farmName: row.farm_id === null ? null : farmMap.get(row.farm_id) ?? null,
@@ -460,8 +531,9 @@ export const api = {
   async updateServiceRequestStatus(
     id: number,
     status: ServiceRequestStatus,
+    note?: string,
   ): Promise<void> {
-    await updateServiceRequestStatusThroughApi(id, status);
+    await updateServiceRequestStatusThroughApi(id, status, note);
   },
 
   async getHardware(): Promise<Hardware[]> {
@@ -583,17 +655,27 @@ export const api = {
           farm: farm?.name ?? null,
           user: owner?.name || owner?.email || null,
 
-          // Nothing writes either of these: alert has no assignee or
-          // priority column. Left null and Medium rather than invented, and
-          // the Assign action writes to the session's working copy only -
-          // see the file header.
+          // Item 5: who is handling it comes from the API (merged below).
+          // Priority is the alert's own severity - it used to be a
+          // hard-coded "Medium", so no alert could ever count as critical.
           assignedTo: null,
-          priority: "Medium" as AlertPriority,
+          priority: priorityOf(a.severity),
 
-          status: (a.status as AdminAlert["status"]) ?? "New",
+          status: a.status === "Resolved" ? "Resolved" as const : "New" as const,
           notes: [],
         };
       });
+
+    const handling = await handlingMap("alerts");
+    for (const a of alerts) {
+      const h = handling.get(a.id);
+      if (!h) continue;
+      applyHandling(a, h);
+      a.assignedTo = h.handledByName;
+      if (a.status !== "Resolved") {
+        a.status = h.escalatedAt ? "Escalated" : h.handledBy ? "In Progress" : "New";
+      }
+    }
 
     return alerts;
   },
@@ -618,6 +700,16 @@ export const api = {
       completedOn: null,
       reportUploaded: false,
     }));
+
+    // Item 5: who is handling each job, and who completed it.
+    const handling = await handlingMap("maintenance");
+    for (const m of maintenance) {
+      const h = handling.get(m.id);
+      if (!h) continue;
+      applyHandling(m, h);
+      m.technician = h.handledByName;
+      m.completedOn = h.resolvedAt ? h.resolvedAt.slice(0, 10) : null;
+    }
     return maintenance;
   },
   getSchedules(): Promise<IrrigationSchedule[]> {
@@ -740,6 +832,22 @@ export const api = {
   findFarmByName(name: string): Farm | undefined { return farms.find((f) => f.name === name); },
   findHardware(id: string): Hardware | undefined { return hardware.find((h) => h.id === id); },
   findAlert(id: string): AdminAlert | undefined { return alerts.find((a) => a.id === id); },
+
+  /* Item 2c: an alert's "Why am I seeing this?" (table explanation, 0039).
+     Null when there is none - including before the migration is applied. */
+  async getAlertExplanation(alertId: string): Promise<Explanation | null> {
+    const numeric = Number(alertId);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    const { data, error } = await supabase
+      .from("explanation")
+      .select("explanation")
+      .eq("alert_id", numeric)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error || !data) return null;
+    return asExplanation((data as { explanation: unknown }).explanation);
+  },
   findMaintenance(id: string): MaintenanceJob | undefined { return maintenance.find((m) => m.id === id); },
   findSchedule(id: number): IrrigationSchedule | undefined { return schedules.find((s) => s.id === id); },
 
@@ -805,59 +913,8 @@ export const api = {
   // write is possible here. Left as working-copy-only in this pass
   // anyway, matching every other mutation, since alert has no writer
   // populating real rows yet either (Phase 7); revisit once it does.
-  async setAlertStatus(id: string, status: AlertStatus): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a) a.status = status;
-    return alerts;
-  },
-  async assignAlert(id: string, administrator: string): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a && administrator.trim()) {
-      a.assignedTo = administrator.trim();
-      if (a.status === "New") a.status = "Assigned";
-    }
-    return alerts;
-  },
-  async setAlertPriority(id: string, priority: AlertPriority): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a) a.priority = priority;
-    return alerts;
-  },
-  async addAlertNote(id: string, note: string): Promise<AdminAlert[]> {
-    const a = alerts.find((x) => x.id === id);
-    if (a && note.trim()) {
-      a.notes.unshift({
-        id: Date.now(), author: "Admin", note: note.trim(),
-        when: new Date().toISOString().slice(0, 16).replace("T", " "),
-      });
-    }
-    return alerts;
-  },
 
   /* --------------------------- maintenance actions ---------------------- */
-  async assignTechnician(id: string, technician: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m && technician.trim()) {
-      m.technician = technician.trim();
-      if (m.status === "Overdue" || m.status === "Upcoming") m.status = "Scheduled";
-    }
-    return maintenance;
-  },
-  async completeMaintenance(id: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m) { m.status = "Completed"; m.completedOn = new Date().toISOString().slice(0, 10); }
-    return maintenance;
-  },
-  async uploadMaintenanceReport(id: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m) m.reportUploaded = true;
-    return maintenance;
-  },
-  async scheduleVisit(id: string, date: string): Promise<MaintenanceJob[]> {
-    const m = maintenance.find((x) => x.id === id);
-    if (m && date) { m.scheduledFor = date; m.status = "Scheduled"; }
-    return maintenance;
-  },
 
   /* ---------------------------- schedule actions ------------------------ */
   // Untouched - see getSchedules().
@@ -1084,4 +1141,88 @@ export async function getFailedReportCount(): Promise<number> {
 
   if (error) throw error;
   return count ?? 0;
+}
+
+/* ---------------- Farms needing attention this week (item 4) ----------------
+
+   Built from the SAME stored insights the farmers see (ai_recommendation,
+   item 2c explanations included), grouped into a few things an admin acts on.
+   A farm is counted once per group however many zones or days raised it. */
+
+export type AttentionItem = {
+  farmId: number;
+  farm: string;
+  zone: string;
+  message: string;
+  day: string;
+  explanation: Explanation | null;
+};
+
+export type AttentionGroup = {
+  key: string;
+  label: string;
+  farms: number;
+  items: AttentionItem[];
+};
+
+export const ATTENTION_GROUPS: { key: string; label: string; types: string[] }[] = [
+  { key: "dry", label: "farms with crops short of water", types: ["water_now", "stress_days"] },
+  { key: "over", label: "farms over-watering", types: ["overwatering"] },
+  { key: "kits", label: "farms with a kit offline or faulty", types: ["zone_offline", "sensor_stuck", "dht_offline", "sensor_drift"] },
+  { key: "pumps", label: "farms where a pump ran with no effect", types: ["watering_failed"] },
+  { key: "level", label: "farms with a zone set to water too late", types: ["threshold_unsafe"] },
+  { key: "setup", label: "farms with setup to finish", types: ["setup_missing"] },
+];
+
+let attentionCache: AttentionGroup[] = [];
+
+export function findAttentionGroup(key: string): AttentionGroup | undefined {
+  return attentionCache.find((g) => g.key === key);
+}
+
+export async function getAttentionThisWeek(): Promise<AttentionGroup[]> {
+  const since = new Date(Date.now() + 2 * 3600_000 - 6 * 86_400_000).toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("ai_recommendation")
+    .select("insight_type, message, data, valid_for, zone:zone_id(name, farm:farm_id(farm_id, name, status))")
+    .gte("valid_for", since)
+    .is("dismissed_at", null)
+    .order("valid_for", { ascending: false });
+
+  if (error) throw error;
+
+  type Row = {
+    insight_type: string | null;
+    message: string | null;
+    data: { explanation?: unknown } | null;
+    valid_for: string;
+    zone: { name: string | null; farm: { farm_id: number; name: string; status: string | null } | null } | null;
+  };
+
+  const rows = ((data as unknown as Row[] | null) ?? [])
+    .filter((r) => r.insight_type && r.zone?.farm && !isArchived(r.zone.farm.status));
+
+  attentionCache = ATTENTION_GROUPS.map((g) => {
+    const seen = new Set<string>();
+    const items: AttentionItem[] = [];
+    for (const r of rows) {
+      if (!g.types.includes(r.insight_type!)) continue;
+      // Newest first, so the first row per zone is the latest one.
+      const key = `${r.zone!.farm!.farm_id}:${r.zone!.name}:${r.insight_type}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({
+        farmId: r.zone!.farm!.farm_id,
+        farm: r.zone!.farm!.name,
+        zone: r.zone!.name ?? "Zone",
+        message: r.message ?? "",
+        day: r.valid_for,
+        explanation: asExplanation(r.data?.explanation),
+      });
+    }
+    return { key: g.key, label: g.label, farms: new Set(items.map((i) => i.farmId)).size, items };
+  });
+
+  return attentionCache;
 }

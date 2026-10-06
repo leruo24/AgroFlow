@@ -76,6 +76,9 @@ namespace AgroFlow.Business
                 FarmElevationM = 0.0,
 
                 Today = today,
+
+                // Item 2: lets the engine tell a fresh reading from a stale one.
+                NowUtc = DateTime.UtcNow,
             };
 
             input.Weather.AddRange(db.GetWeather(zone.FarmId, zone.ZoneId, from, to));
@@ -91,6 +94,19 @@ namespace AgroFlow.Business
             foreach (var pair in db.GetIrrigationMmByDay(zone.ZoneId, zone.FlowRateLpm, zone.AreaM2, from, to))
             {
                 input.IrrigationMmByDay[pair.Key] = pair.Value;
+            }
+
+            // Item 6: the farmer's own soil checks.
+            input.SoilFeelChecks.AddRange(db.GetSoilFeelChecks(zone.ZoneId, from));
+
+            // Only needed when a watering cannot be measured in mm.
+            if (input.IrrigationMmByDay.Count == 0
+                && (!(zone.FlowRateLpm > 0.0) || !(zone.AreaM2 > 0.0)))
+            {
+                foreach (var pair in db.GetLongestRunSecondsByDay(zone.ZoneId, from, today))
+                {
+                    input.LongestRunSecondsByDay[pair.Key] = pair.Value;
+                }
             }
 
             return input;
@@ -123,7 +139,8 @@ namespace AgroFlow.Business
                 {
                     db.SaveWaterBalanceDay(
                         zone.ZoneId, day,
-                        day.Stage.HasValue ? Fao56EngineReference.StageLabel(day.Stage.Value) : null);
+                        // An assumed stage (item 2) is never stored as if it were known.
+                        day.Stage.HasValue && !result.StageAssumed ? Fao56EngineReference.StageLabel(day.Stage.Value) : null);
                 }
 
                 // ETo belongs to the farm-day, not the zone, so it is written once
@@ -150,7 +167,7 @@ namespace AgroFlow.Business
             {
                 db.SaveWaterBalanceDay(
                     zone.ZoneId, day,
-                    day.Stage.HasValue ? Fao56EngineReference.StageLabel(day.Stage.Value) : null);
+                    day.Stage.HasValue && !result.StageAssumed ? Fao56EngineReference.StageLabel(day.Stage.Value) : null);
             }
 
             var todayRow = result.Days.FirstOrDefault(d => d.Day == today);
@@ -217,6 +234,9 @@ namespace AgroFlow.Business
                 ["source"] = insight.Data.ContainsKey("source") ? insight.Data["source"] : insight.Source,
                 ["provenance"] = insight.Source,
             };
+
+            // Item 2c: stored with the insight so "Why?" shows what was true then.
+            if (insight.Explanation != null) payload["explanation"] = insight.Explanation;
 
             return JsonSerializer.Serialize(payload);
         }

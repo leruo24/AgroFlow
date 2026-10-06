@@ -13,7 +13,8 @@ import type { IrrigationEvent, SeriesPoint, SettingsTab } from "@/types/models";
 import { Icon } from "@/lib/icons";
 import { emptyState, withErrorState } from "@/ui/patterns";
 import { getActivityLog, type AuditRow } from "@/services/agroFlowApi";
-import { getReportFarms, type ReportFarm } from "@/services/agroFlowApi";
+import { getReportFarms, getEnquiries, type ReportFarm } from "@/services/agroFlowApi";
+import { getAttentionThisWeek, type AttentionGroup } from "@/data/api";
 
 /* ============================ IRRIGATION DATA ============================ */
 /* Historical analytics for administrators — NOT live irrigation control.   */
@@ -115,9 +116,9 @@ export async function irrigationPage(): Promise<string> {
   })}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Water delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet })}
-    ${kpiCard({ label: "Irrigation events", value: filteredEvents.length, icon: Icon.repeat })}
-    ${kpiCard({ label: "Total pump time", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer })}
+    ${kpiCard({ label: "Water delivered", value: Math.round(totalLitres / 1000), format: "int", trend: { dir: "up", text: "kL in range (estimated)" }, icon: Icon.droplet, why: { counts: "kilolitres were delivered in this range (estimated)", rule: "Pump run time times each zone flow rate, summed over the irrigation events in the chosen range. There is no flow meter, so this is an estimate.", query: "sum(runtime_seconds / 60 x zone.flow_rate_lpm) over filtered irrigation_event / 1000" } })}
+    ${kpiCard({ label: "Irrigation events", value: filteredEvents.length, icon: Icon.repeat, why: { counts: "pump runs are in this range", rule: "Every irrigation event in the chosen range and filters.", query: "count(irrigation_event) filtered" } })}
+    ${kpiCard({ label: "Total pump time", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer, why: { counts: "hours of pump time are in this range", rule: "Pump run time of every irrigation event in the chosen range, in hours.", query: "sum(runtime_seconds) / 3600 over filtered irrigation_event" } })}
     ${
       /* This tile used to read "Schedule Compliance" and show a percentage
          computed from a field that was hardcoded true - so it always said
@@ -132,6 +133,7 @@ export async function irrigationPage(): Promise<string> {
           ? { dir: "down", text: `${noEstimate} zone(s) have no flow rate set` }
           : undefined,
         icon: Icon.circleCheck,
+        why: { counts: "per cent of these events can be turned into litres", rule: "An event can be estimated when its zone has a flow rate on file.", highlighted: "Litre totals leave out the rest.", query: "share of filtered irrigation_event whose zone.flow_rate_lpm is set", clears: "Setting a flow rate on the zones that have none." },
       })
     }
   </div>
@@ -199,160 +201,198 @@ export async function irrigationPage(): Promise<string> {
 
 /* =========================== REPORTS & ANALYTICS ========================== */
 
-const REPORT_TYPES = [
-  { id: "farm-growth", name: "Farm Growth", desc: "New farm registrations over time", icon: Icon.tractor },
-  { id: "user-growth", name: "User Growth", desc: "Account creation and activation trend", icon: Icon.users },
-  { id: "device-performance", name: "Device Performance", desc: "Uptime and reliability by device type", icon: Icon.radio },
-  { id: "hardware-downtime", name: "Hardware Downtime", desc: "Outage duration and root cause", icon: Icon.pause },
-  { id: "connectivity", name: "Connectivity", desc: "Gateway and node connection quality", icon: Icon.wifi },
-  { id: "maintenance-history", name: "Maintenance History", desc: "Jobs raised, completed and overdue", icon: Icon.wrench },
-  { id: "alert-trends", name: "Alert Trends", desc: "Volume and category breakdown", icon: Icon.bell },
-  { id: "support-performance", name: "Support Performance", desc: "Response and resolution times", icon: Icon.headphones },
-  { id: "irrigation-history", name: "Irrigation History", desc: "Scheduled vs actual irrigation runs", icon: Icon.droplet },
-  { id: "water-usage", name: "Water Usage Trends", desc: "Estimated volume delivered by farm and region", icon: Icon.barChart },
-];
+/* Item 4: the Reports page is about farms, not about the platform.
+ *
+ * It used to open on ten generic report cards (Device Performance, Support
+ * Performance, Hardware Downtime...). "Generate" only showed a message, and
+ * every card's Excel exported the same irrigation table whatever its name.
+ * Those are gone. What is left all produces real numbers: farm reports
+ * (preview = the PDF itself), the farms that need attention this week, a
+ * farm's automatic reports, a water-use comparison, and growth charts
+ * counted from the records. */
 
-function liveReportsPanel(farms: ReportFarm[] | null): string {
-  const iso = (d: Date): string => d.toISOString().slice(0, 10);
-  const to = new Date();
-  const from = new Date(Date.now() - 30 * 86400000);
+const FARM_KEY = "agroflow.reports.farm";
 
-  const body = farms === null
-    ? `<div class="empty-state">The live farm list could not load. Check that you are signed in as an administrator and that the API is running.</div>`
-    : `
-    <div class="compare-grid">
-      <div class="filter-field"><label>Farm</label>
-        <select id="liveFarm"><option value="">Select a farm</option>${farms.map((f) =>
-          `<option value="${f.farm_id}">${esc(f.name)}${f.owner_name ? " · " + esc(f.owner_name) : ""}</option>`).join("")}</select></div>
-      <div class="filter-field"><label>Zone (moisture report only)</label>
-        <select id="liveZone"><option value="">Select a farm first</option></select></div>
-      <div class="filter-field"><label>From</label><input type="date" id="liveFrom" value="${iso(from)}" /></div>
-      <div class="filter-field"><label>To</label><input type="date" id="liveTo" value="${iso(to)}" /></div>
-    </div>
-    ${[
-      ["moisture", "Moisture and irrigation over time"],
-      ["water-usage", "Water usage - all zones, or pick one (estimated)"],
-      ["schedule", "Suggested 7-day irrigation schedule"],
-    ].map(([id, label]) => `
-      <div class="filter-buttons" style="margin-top:12px">
-        <span style="min-width:260px;display:inline-block">${esc(label ?? "")}</span>
-        <button class="btn sm" data-act="live-report-view" data-report="${id}">View</button>
-        <button class="btn ghost sm" data-act="live-report-pdf" data-report="${id}">PDF</button>
-        ${
-          // Only water usage has a workbook: it is the report with a table of
-          // numbers somebody wants to chart or paste. A schedule is advice
-          // and a moisture report is a trace - neither is improved by being
-          // a spreadsheet.
-          id === "water-usage"
-            ? `<button class="btn ghost sm" data-act="live-report-xlsx" data-report="${id}">Excel</button>`
-            : ""
-        }
-      </div>`).join("")}
-    <div id="liveReportResult" class="cmp-result"></div>`;
-
-  return panel("Farm Reports (live data)",
-    "Real sensor, weather and irrigation records. Water figures are estimated: pump run time x zone flow rate.", "", body);
+export function rememberReportFarm(farmId: number): void {
+  try { localStorage.setItem(FARM_KEY, String(farmId)); } catch { /* storage unavailable: no pre-fill next time */ }
 }
 
-export async function reportsPage(): Promise<string> {
-  const [growth, kpis, events, maintenance] = await Promise.all([
-    api.getGrowth(), api.getKpis(), api.getIrrigationEvents(), api.getMaintenance(),
-  ]);
-  const f = getFilter("reports");
-  const liveFarms = await getReportFarms().catch(() => null);
+function preferredFarm(farms: ReportFarm[]): number | null {
+  let remembered: number | null = null;
+  try { remembered = Number(localStorage.getItem(FARM_KEY)) || null; } catch { remembered = null; }
+  if (remembered && farms.some((f) => f.farm_id === remembered)) return remembered;
+  // No farm picked before: the newest farm, which is the one most likely
+  // being set up and checked.
+  return farms.length ? Math.max(...farms.map((f) => f.farm_id)) : null;
+}
 
-  const filteredEvents = applyFilters(events, f, {
-    date: (e) => e.date,
-    farm: (e) => e.farm,
-    province: (e) => e.province,
-    region: (e) => e.region,
-  });
+function farmReportsPanel(farms: ReportFarm[] | null, chosen: number | null): string {
+  const iso = (d: Date): string => d.toISOString().slice(0, 10);
+  const to = new Date(Date.now() + 2 * 3600_000);
+  const from = new Date(to.getTime() - 6 * 86_400_000);
 
-  const filteredJobs = applyFilters(maintenance, f, {
-    date: (m) => m.scheduledFor,
-    farm: (m) => m.farm,
-    province: (m) => m.province,
-  });
-
-  // estimable(), not a plain sum: an event whose zone has no flow rate has
-  // no volume to add, and counting it as 0 would quietly lower the figure.
-  const waterInRange = estimable(filteredEvents).reduce((a, e) => a + e.litres, 0);
-
-  return `
-  ${pageHeader("Reports & Analytics", "Generate, compare and export platform reports across farms, regions and time periods.")}
-
-  ${filterBar({
-    page: "reports",
-    filter: f,
-    showDateRange: true,
-    searchPlaceholder: "Search report types…",
-    selects: [
-      { key: "farm", label: "Farm", options: [...new Set([...events.map((e) => e.farm), ...maintenance.map((m) => m.farm)])] },
-      { key: "province", label: "Province", options: [...PROVINCES] },
-      { key: "region", label: "Region", options: [...REGIONS] },
-    ],
-  })}
-
-  <div class="grid kpis four">
-    ${kpiCard({ label: "Farms Reporting", value: kpis.totalFarms, icon: Icon.tractor })}
-    ${kpiCard({ label: "Water in Range", value: Math.round(waterInRange / 1000), trend: { dir: "up", text: "kL" }, icon: Icon.droplet })}
-    ${kpiCard({ label: "Maintenance in Range", value: filteredJobs.length, icon: Icon.wrench })}
-    ${kpiCard({ label: "Platform Availability", value: kpis.platformAvailability, format: "pct2", icon: Icon.circleCheck })}
-  </div>
-
-  <div class="grid split-2">
-    ${panel("User Growth", `New accounts per month · ${rangeLabel(f)}`, "", lineChart(growth.users, "#22c55e"))}
-    ${panel("Farm Growth", `New farms per month · ${rangeLabel(f)}`, "", lineChart(growth.farms, "#38bdf8"))}
-  </div>
-
-  <div class="grid split-2">
-    ${panel("Device Connectivity", "Monthly average connectivity (%)", "", lineChart(growth.connectivity, "#a78bfa"))}
-    ${panel("Maintenance Volume", "Jobs raised per month", "", barChart(growth.maintenance))}
-  </div>
-
-  ${panel("Generate Report", `Reports respect the filters above · ${rangeLabel(f)}`, "", `
-    <div class="report-grid">
-      ${REPORT_TYPES.map((r) => `
-        <div class="report-card reveal">
-          <div class="report-ico">${r.icon}</div>
-          <div class="report-body">
-            <h5>${esc(r.name)}</h5>
-            <p>${esc(r.desc)}</p>
-          </div>
-          <div class="report-actions">
-            <button class="btn sm" data-act="generate-report" data-report="${esc(r.name)}">Generate</button>
-                  <button class="btn ghost sm" data-act="export-report-excel" data-report="${esc(r.name)}">Excel</button>
-            <button class="btn ghost sm" data-act="export-report-csv" data-report="${esc(r.name)}">CSV</button>
-          </div>
-        </div>`).join("")}
+  const body = farms === null
+    ? `<div class="empty-state">The farm list could not load. Check that you are signed in as an administrator and that the API is running.</div>`
+    : farms.length === 0
+      ? `<div class="empty-state">No farms yet. Reports appear here once a farm has been registered.</div>`
+      : `
+    <div class="compare-grid">
+      <div class="filter-field"><label>Farm</label>
+        <select id="liveFarm">${farms.map((f) =>
+          `<option value="${f.farm_id}" ${f.farm_id === chosen ? "selected" : ""}>${esc(f.name)}${f.owner_name ? " · " + esc(f.owner_name) : ""}</option>`).join("")}</select></div>
+      <div class="filter-field"><label>Zone</label>
+        <select id="liveZone"><option value="">All zones</option></select></div>
+      <div class="filter-field"><label>Period</label>
+        <select id="livePeriod">
+          <option value="7" selected>Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="custom">Choose dates</option>
+        </select></div>
+      <div class="filter-field"><label>Report</label>
+        <select id="liveType">
+          <option value="water-usage">Water usage</option>
+          <option value="moisture">Soil moisture (one zone)</option>
+          <option value="schedule">Watering schedule &amp; advice (last 7 days and the week ahead)</option>
+        </select></div>
+      <div class="filter-field live-custom" hidden><label>From</label><input type="date" id="liveFrom" value="${iso(from)}" /></div>
+      <div class="filter-field live-custom" hidden><label>To</label><input type="date" id="liveTo" value="${iso(to)}" /></div>
     </div>
-  `)}
+    <div class="filter-buttons" style="margin-top:12px">
+      <button class="btn sm" data-act="farm-report-preview">Preview</button>
+      <button class="btn ghost sm" data-act="farm-report-pdf">PDF</button>
+      <button class="btn ghost sm" data-act="farm-report-xlsx">Excel</button>
+      <span class="muted" style="margin-left:8px">Excel is the water-usage figures. Preview is the PDF itself.</span>
+    </div>
+    <div id="liveReportResult" class="cmp-result"></div>`;
 
-  ${panel("Comparison Report", "Compare farms or regions across two time periods", "", `
+  return panel("Farm reports", "What the farmer receives: actions first, then how the farm did. Water is estimated from pump run time x flow rate.", "", body);
+}
+
+function attentionPanel(groups: AttentionGroup[] | null): string {
+  if (groups === null) {
+    return panel("Farms needing attention this week", "", "",
+      `<div class="empty-state">This week's advice could not be read. It appears here once the advice engine has run for the farms.</div>`);
+  }
+
+  const live = groups.filter((g) => g.farms > 0);
+  const body = live.length === 0
+    ? `<div class="empty-state">Nothing this week: no farm has crops short of water, over-watering, a faulty kit or unfinished setup in the last 7 days of advice.</div>`
+    : `<ul class="attn-list">${live.map((g) => `
+        <li><button type="button" class="link-btn" data-act="view-attention" data-id="${esc(g.key)}">
+          <b>${g.farms}</b> ${esc(g.farms === 1 ? g.label.replace(/^farms /, "farm ") : g.label)}
+        </button></li>`).join("")}</ul>`;
+
+  return panel("Farms needing attention this week",
+    "From the same advice the farmers see. Click a line for the farms and zones behind it.", "", body);
+}
+
+function autoReportsPanel(farms: ReportFarm[] | null, chosen: number | null): string {
+  if (!farms || chosen === null) return "";
+  return panel("Automatic reports", "Daily, weekly or monthly PDFs on Telegram for the farm chosen above.", "", `
+    <div id="autoReportsSummary" class="muted">Loading this farm's automatic reports…</div>
+    <div class="filter-buttons" style="margin-top:12px">
+      <button class="btn sm" data-act="edit-auto-reports" data-id="${chosen}" id="autoReportsEdit">Set up automatic reports</button>
+    </div>`);
+}
+
+function comparisonPanel(): string {
+  const iso = (d: Date): string => d.toISOString().slice(0, 10);
+  const day = 86_400_000;
+  const now = Date.now() + 2 * 3600_000;
+  return panel("Water use comparison", "Estimated water delivered, two periods side by side. Events on zones with no flow rate have no estimate and are left out.", "", `
     <div class="compare-grid">
       <div class="filter-field">
         <label>Compare</label>
         <select id="cmpMode"><option>Farms</option><option>Regions</option><option>Provinces</option></select>
       </div>
-      <div class="filter-field">
-        <label>Metric</label>
-        <select id="cmpMetric">
-          <option>Water usage</option><option>Device uptime</option>
-          <option>Maintenance jobs</option><option>Alert volume</option>
-        </select>
-      </div>
-      <div class="filter-field"><label>Period A from</label><input type="date" id="cmpAFrom" value="2026-04-01" /></div>
-      <div class="filter-field"><label>Period A to</label><input type="date" id="cmpATo" value="2026-05-31" /></div>
-      <div class="filter-field"><label>Period B from</label><input type="date" id="cmpBFrom" value="2026-06-01" /></div>
-      <div class="filter-field"><label>Period B to</label><input type="date" id="cmpBTo" value="2026-07-22" /></div>
+      <div class="filter-field"><label>Period A from</label><input type="date" id="cmpAFrom" value="${iso(new Date(now - 59 * day))}" /></div>
+      <div class="filter-field"><label>Period A to</label><input type="date" id="cmpATo" value="${iso(new Date(now - 30 * day))}" /></div>
+      <div class="filter-field"><label>Period B from</label><input type="date" id="cmpBFrom" value="${iso(new Date(now - 29 * day))}" /></div>
+      <div class="filter-field"><label>Period B to</label><input type="date" id="cmpBTo" value="${iso(new Date(now))}" /></div>
     </div>
     <div class="filter-buttons" style="margin-top:12px">
       <button class="btn" data-act="run-comparison">Run comparison</button>
       <button class="btn ghost" data-act="export-comparison">Export result</button>
     </div>
-    <div id="cmpResult" class="cmp-result"></div>
-  `)}
-    ${liveReportsPanel(liveFarms)}
+    <div id="cmpResult" class="cmp-result"></div>`);
+}
+
+/* Item 6c: "Enquiries & sales follow-up" - for the team that phones people
+   back. Period, province and handler; PDF or Excel, the same content. */
+const ENQUIRY_PROVINCES = [
+  "Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo",
+  "Mpumalanga", "North West", "Northern Cape", "Western Cape",
+];
+
+function enquiriesReportPanel(handlers: { id: string; name: string }[]): string {
+  const today = new Date();
+  const iso = (d: Date): string => d.toISOString().slice(0, 10);
+  const monthAgo = new Date(today.getTime() - 29 * 86400000);
+  return panel("Enquiries & sales follow-up",
+    "Who asked about AgroFlow, how the calls went, why people said no, and what to do next.", "", `
+    <div class="fields enquiry-report">
+      <label class="f">From<input type="date" data-enq-from value="${iso(monthAgo)}" /></label>
+      <label class="f">To<input type="date" data-enq-to value="${iso(today)}" /></label>
+      <label class="f">Province
+        <select data-enq-province>
+          <option value="">All provinces</option>
+          ${ENQUIRY_PROVINCES.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("")}
+        </select>
+      </label>
+      <label class="f">Handled by
+        <select data-enq-handler>
+          <option value="">Everyone</option>
+          ${handlers.map((h) => `<option value="${esc(h.id)}">${esc(h.name)}</option>`).join("")}
+        </select>
+      </label>
+    </div>
+    <div class="form-foot">
+      <button type="button" class="btn ghost" data-act="enquiry-report" data-format="xlsx">Download Excel</button>
+      <button type="button" class="btn" data-act="enquiry-report" data-format="pdf">Download PDF</button>
+    </div>`);
+}
+
+export async function reportsPage(): Promise<string> {
+  const [growth, farms, attention, enquiries] = await Promise.all([
+    api.getGrowth(),
+    getReportFarms().catch(() => null),
+    getAttentionThisWeek().catch(() => null),
+    getEnquiries().catch(() => []),
+  ]);
+  const handlers = [...new Map(enquiries
+    .filter((e) => e.handledBy && e.handledByName)
+    .map((e) => [e.handledBy!, { id: e.handledBy!, name: e.handledByName! }])).values()];
+  const chosen = farms ? preferredFarm(farms) : null;
+
+  return `
+  ${pageHeader("Reports", "Farm reports, automatic reports, and the farms that need attention this week.")}
+
+  ${farmReportsPanel(farms, chosen)}
+
+  <div class="grid split-2">
+    ${attentionPanel(attention)}
+    ${autoReportsPanel(farms, chosen)}
+  </div>
+
+  ${comparisonPanel()}
+
+  ${enquiriesReportPanel(handlers)}
+
+  <div class="grid split-2">
+    ${panel("New farmers and farms", "Per month, last 12 months", "", `
+      <div class="chart-legend">
+        <span><i class="sw" style="background:#22c55e"></i>Farmers</span>
+        <span><i class="sw" style="background:#38bdf8"></i>Farms</span>
+      </div>
+      ${growth.users.length || growth.farms.length
+        ? lineChart(growth.users, "#22c55e") + lineChart(growth.farms, "#38bdf8")
+        : `<div class="empty-state">No farmer or farm has joined in the last 12 months.</div>`}`)}
+    ${panel("Maintenance jobs", "Per month, last 12 months", "",
+      growth.maintenance.length
+        ? barChart(growth.maintenance)
+        : `<div class="empty-state">No maintenance job is dated in the last 12 months.</div>`)}
+  </div>
   `;
 }
 
@@ -416,6 +456,18 @@ export async function activityPage(): Promise<string> {
 
 /* A timeline for one item, oldest first - the shape a person reads a history
    in, which is the opposite of the activity list above. */
+/* Item 5: what the person said - a take-over's reason and who had it
+   before, or a note - under the line, so the chain explains itself. */
+function timelineDetail(r: AuditRow): string {
+  let d: { note?: unknown; reason?: unknown; from?: unknown } = {};
+  try { d = JSON.parse(r.details ?? "{}") ?? {}; } catch { d = {}; }
+  const parts: string[] = [];
+  if (typeof d.from === "string" && d.from) parts.push(`Before: ${esc(d.from)}.`);
+  if (typeof d.reason === "string" && d.reason) parts.push(`Reason: “${esc(d.reason)}”`);
+  if (typeof d.note === "string" && d.note) parts.push(`“${esc(d.note)}”`);
+  return parts.length ? `<p class="timeline-note">${parts.join(" ")}</p>` : "";
+}
+
 export function timelineHtml(rows: AuditRow[], emptyText: string): string {
   if (rows.length === 0) return `<p class="muted">${esc(emptyText)}</p>`;
 
@@ -427,6 +479,7 @@ export function timelineHtml(rows: AuditRow[], emptyText: string): string {
         <div>
           <b>${esc(r.summary)}</b>
           <span class="timeline-when">${esc(fmtDateTimeSast(r.createdAt))}</span>
+          ${timelineDetail(r)}
         </div>
       </li>`,
     )

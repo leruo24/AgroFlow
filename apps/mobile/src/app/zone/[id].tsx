@@ -18,9 +18,9 @@ import {
 } from 'lucide-react-native';
 
 import {
-  router,
   useLocalSearchParams,
 } from 'expo-router';
+import { router } from '@/lib/router';
 
 import {
   useEffect,
@@ -52,6 +52,10 @@ import {
 import {
   createZoneDetailStyles,
 } from '@/styles/zoneDetailStyles';
+
+import {
+  soilReadingText,
+} from '@/lib/moistureDisplay';
 
 const SCHEDULE_DAY_OPTIONS = [
   'Mon',
@@ -410,9 +414,11 @@ export default function ZoneControlScreen() {
       label:
         'Soil Moisture',
       value:
-        soil.status === 'Online' ? `${soil.value}${soil.unit}` : 'Unavailable',
+        soilReadingText(soil, 'Unavailable'),
       note:
-        soil.moistureStatus,
+        soil.calibrated
+          ? soil.moistureStatus
+          : 'Do the wet/dry setup to read this as moisture',
     },
     {
       label:
@@ -1398,6 +1404,50 @@ export default function ZoneControlScreen() {
               color={colors.textMuted}
               strokeWidth={2}
             />
+          </TouchableOpacity>
+
+          {/* Item 6b: the farmer changes the crop and planting date. */}
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={() =>
+              router.push({
+                pathname: '/zone-crop',
+                params: {
+                  zoneId: String(selectedZone.id),
+                  cropType: selectedZone.crop,
+                  plantingDate: selectedZone.plantingDate ?? '',
+                },
+              })
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Crop and planting date"
+          >
+            <View style={styles.linkRowCopy}>
+              <Text style={styles.linkRowTitle}>Crop and planting date</Text>
+              <Text style={styles.linkRowHint}>What is growing, and since when</Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
+          </TouchableOpacity>
+
+          {/* Item 6: the checklist of what this zone's advice is missing. */}
+          <TouchableOpacity
+            style={styles.linkRow}
+            onPress={() =>
+              router.push({
+                pathname: '/zone-setup',
+                params: { zoneId: String(selectedZone.id) },
+              })
+            }
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Finish setup"
+          >
+            <View style={styles.linkRowCopy}>
+              <Text style={styles.linkRowTitle}>Finish setup</Text>
+              <Text style={styles.linkRowHint}>Planting date, size, flow rate - for surer advice</Text>
+            </View>
+            <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
           </TouchableOpacity>
 
           <TouchableOpacity

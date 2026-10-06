@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { router } from 'expo-router';
+import { router } from '@/lib/router';
 import { Pressable, Text } from 'react-native';
 
 import { useAuth } from '@/context/AuthContext';

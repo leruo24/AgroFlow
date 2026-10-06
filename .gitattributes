@@ -1,0 +1,22 @@
+# Binary files are never text-converted.
+#
+# docs/Fao56.pdf was committed corrupt: something copied it through a text
+# encoding, every non-ASCII byte became EF BF BD (the UTF-8 replacement
+# character), and the 6.4 MB book grew to 11.3 MB that no PDF reader can open.
+# With core.autocrlf=true on this repo, marking these explicitly is what stops
+# git itself from ever being that something.
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.mp4   binary
+*.xlsx  binary
+*.docx  binary
+*.zip   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary

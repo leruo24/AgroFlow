@@ -25,6 +25,7 @@ public sealed class TelegramPollingService : BackgroundService
     private readonly INotificationService _notifications;
     private readonly SupabaseAdminService _supabaseAdmin;
     private readonly NpgsqlDataSource _dataSource;
+    private readonly TelegramWhyHandler _why;
     private readonly TelegramOptions _options;
     private readonly ILogger<TelegramPollingService> _logger;
 
@@ -52,9 +53,11 @@ public sealed class TelegramPollingService : BackgroundService
         INotificationService notifications,
         SupabaseAdminService supabaseAdmin,
         NpgsqlDataSource dataSource,
+        TelegramWhyHandler why,
         IOptions<TelegramOptions> options,
         ILogger<TelegramPollingService> logger)
     {
+        _why = why;
         _client = client;
         _onboarding = onboarding;
         _notifications = notifications;
@@ -185,6 +188,21 @@ public sealed class TelegramPollingService : BackgroundService
     // already one atomic statement. A code delivered twice redeems once.
     public async Task HandleUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken)
     {
+        // Item 2c: a tap on "Why am I seeing this?". Answered only to a chat
+        // on the farm the explanation belongs to - see TelegramWhyHandler.
+        if (update.CallbackQuery is { } callback)
+        {
+            var callbackChat = callback.Message?.Chat?.Id;
+            if (callbackChat is null)
+            {
+                await _client.AnswerCallbackQueryAsync(callback.Id, null, cancellationToken);
+                return;
+            }
+
+            await _why.HandleCallbackAsync(callback.Id, callbackChat.Value, callback.Data, cancellationToken);
+            return;
+        }
+
         var chatId = update.Message?.Chat?.Id;
         var text = update.Message?.Text?.Trim();
 
@@ -212,6 +230,11 @@ public sealed class TelegramPollingService : BackgroundService
 
             case "/help":
                 await SendHelpAsync(chatId.Value, cancellationToken);
+                break;
+
+            // Fallback for the "Why am I seeing this?" button: /why <id>.
+            case "/why":
+                await _why.HandleWhyCommandAsync(chatId.Value, argument, cancellationToken);
                 break;
 
             default:
@@ -513,6 +536,7 @@ public sealed class TelegramPollingService : BackgroundService
                 "/status - your open requests",
                 "/alerts on - weather and equipment messages on",
                 "/alerts off - weather and equipment messages off",
+                "/why <number> - why I sent you a message (or tap its button)",
                 "/help - this message",
                 "",
                 "To send a new request, use the AgroFlow app on your phone.",

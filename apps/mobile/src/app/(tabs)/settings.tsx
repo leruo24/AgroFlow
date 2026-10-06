@@ -1,6 +1,6 @@
 // Settings tab screen
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router } from '@/lib/router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ScrollView,

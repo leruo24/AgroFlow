@@ -1,8 +1,8 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
-import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms } from "@/data/api";
+import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms, findAttentionGroup } from "@/data/api";
 import { toast } from "@/lib/toast";
-import { openDrawer, closeDrawer } from "@/lib/drawer";
+import { openDrawer, closeDrawer, beginPanelIntent, currentPanelIntent } from "@/lib/drawer";
 import {
   createFarmer,
   deleteFarm,
@@ -22,10 +22,17 @@ import {
   createEnrollmentCode,
   getReportSchedule,
   saveReportSchedule,
+  sendReportScheduleTest,
+  type ReportFrequency,
   archiveFarm,
   restoreFarm,
   runAdviceNow,
-  assignRequest,
+  claimItem,
+  releaseItem,
+  takeOverItem,
+  itemAction,
+  createMaintenance,
+  type HandlingKind,
   getActivityLog,
   getEntityTimeline,
   KIT_TYPES,
@@ -39,24 +46,27 @@ import {
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
 import { showQrModal } from "@/lib/qrModal";
-import { picker, detailList, wizard, errorState } from "@/ui/patterns";
-import { exportActivityWorkbook, exportSummaryWorkbook, exportRowsWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
-import { timelineHtml } from "@/pages/analytics";
+import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
+import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
+import { timelineHtml, rememberReportFarm } from "@/pages/analytics";
+import { requestActions, setRequestsTab } from "@/pages/requests";
+import { callHistory, enquiryActions, enquiryStatus, cropsText, logCallHtml, readLogCall, syncLogCall } from "@/pages/enquiries";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
-import { go, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
+import { navigate, showPage, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
 import { refreshHealthPanel } from "@/app/health";
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
-import { TECHNICIANS, ZONE_CROPS } from "@/data/referenceData";
-import type { AdminAlert, DateRangePreset, Farm, FilterState, AlertPriority, ServiceRequest } from "@/types/models";
-import { zoneRow } from "@/pages/onboarding";
+import { ZONE_CROPS } from "@/data/referenceData";
+import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
+import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getReportZones, getReportJson, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
 /* ------------------------------- pickers -------------------------------- */
@@ -510,6 +520,7 @@ async function exportSummaryPdf(): Promise<void> {
 /* ------------------------------ detail views ----------------------------- */
 
 async function openUserProfile(id: string): Promise<void> {
+  const intent = currentPanelIntent();
   const u = api.findUser(id);
   if (!u) return;
   const schedules = await api.getSchedules();
@@ -524,6 +535,7 @@ async function openUserProfile(id: string): Promise<void> {
       : `<p class="muted">None recorded.</p>`;
 
   openDrawer({
+    intent,
     title: u.name,
     subtitle: `${u.email} · ${u.farm}`,
     wide: true,
@@ -555,9 +567,10 @@ async function openUserProfile(id: string): Promise<void> {
 }
 
 async function openFarmDetail(id: number): Promise<void> {
+  const intent = currentPanelIntent();
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones, today] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
     // Read-only, and allowed to fail: the rest of the drawer must still open
     // if 0033 has not been applied or the query is refused.
@@ -580,7 +593,14 @@ async function openFarmDetail(id: number): Promise<void> {
       console.warn("Could not load zones for farm", id, e);
       return [];
     }),
+    // Item 6: what the farmer is told today, per zone. Allowed to fail too.
+    getFarmToday(id).catch((e: unknown) => {
+      console.warn("Could not load today's advice for farm", id, e);
+      return null;
+    }),
   ]);
+  const todayByZone = new Map((today?.zones ?? []).map((z) => [z.zoneId, z]));
+  const levelLabel = { high: "High", medium: "Medium", low: "Low" } as const;
 
   const farmUsers = users.filter((u) => u.farm === f.name);
   const farmHw = hardware.filter((h) => h.farm === f.name);
@@ -595,6 +615,7 @@ async function openFarmDetail(id: number): Promise<void> {
                  : `<p class="muted">None recorded.</p>`;
 
   openDrawer({
+    intent,
     // Not healthDot(f.health) here - openDrawer's title is HTML-escaped by
     // design (see lib/drawer.ts's escapeText), so it can't safely carry the
     // dot's markup. Health status is already shown explicitly in the
@@ -663,17 +684,28 @@ async function openFarmDetail(id: number): Promise<void> {
       section(`Zones (${farmZones.length})`,
         farmZones.length
           ? `<div class="table-wrap"><table>
-               <thead><tr><th>Zone</th><th>Crop</th><th>Advice</th></tr></thead>
-               <tbody>${farmZones.map((z) => `
-                 <tr>
+               <thead><tr><th>Zone</th><th>Crop</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
+               <tbody>${farmZones.map((z) => {
+                 const t = todayByZone.get(z.zoneId);
+                 return `
+                 <tr data-today-zone="${z.zoneId}">
                    <td>${esc(z.name)}</td>
                    <td>${esc(z.cropType ?? "Not set")}</td>
+                   <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
+                   <td>${t?.confidence
+                     ? `<b>${levelLabel[t.confidence.level]}</b> ${whyLink(asExplanation(t.confidenceExplanation))}`
+                     : `<span class="muted">—</span>`}</td>
+                   <td>${t?.nextStep ? esc(t.nextStep.ask) : `<span class="muted">Nothing missing</span>`}</td>
                    <td>
                      <a href="#" class="row-act" data-act="run-advice" data-id="${z.zoneId}">
                        Run advice now
                      </a>
+                     <a href="#" class="row-act" data-act="zone-recommend" data-id="${z.zoneId}">
+                       Recommended settings
+                     </a>
                    </td>
-                 </tr>`).join("")}
+                 </tr>`;
+               }).join("")}
                </tbody></table>
              <p class="muted">
                Runs the FAO-56 engine for that zone today and shows what it worked out, including
@@ -726,7 +758,7 @@ async function openFarmDetail(id: number): Promise<void> {
         // live report section of the Reports page, against the API, so this
         // takes the admin there instead of claiming work it did not do.
         toast(`Choose ${f.name} under Reports to produce a report for it.`, "info");
-        void go("reports");
+        void navigate("reports");
       }
     },
   });
@@ -743,38 +775,6 @@ async function openFarmDetail(id: number): Promise<void> {
  *
  * Steps that have not happened are still shown, greyed, so an admin can see
  * what is outstanding rather than only what is done. */
-function alertTimeline(a: AdminAlert): string {
-  const step = (label: string, when: string | null, done: boolean): string => `
-    <li class="timeline-item${done ? "" : " is-pending"}">
-      <span class="timeline-dot" aria-hidden="true"></span>
-      <div>
-        <b>${esc(label)}</b>
-        <span class="timeline-when">${when ? esc(when) : "not yet"}</span>
-      </div>
-    </li>`;
-
-  const resolved = ["Resolved", "Closed"].includes(a.status);
-
-  // Notes sit in the middle of the chain in the order they were written.
-  // api.addAlertNote unshifts, so the newest is first - reversed here because
-  // a timeline reads downwards through time.
-  const notes = [...a.notes].reverse().map((n) => `
-    <li class="timeline-item">
-      <span class="timeline-dot" aria-hidden="true"></span>
-      <div>
-        <b>Note by ${esc(n.author)}</b>
-        <span class="timeline-when">${esc(n.when)}</span>
-        <p class="muted">${esc(n.note)}</p>
-      </div>
-    </li>`).join("");
-
-  return `<ol class="timeline">
-    ${step("Raised", a.raised, true)}
-    ${a.assignedTo ? step(`Assigned to ${a.assignedTo}`, null, true) : step("Assigned", null, false)}
-    ${notes}
-    ${step(a.status === "Closed" ? "Closed" : "Resolved", null, resolved)}
-  </ol>`;
-}
 
 /* Today as yyyy-mm-dd in SAST (UTC+2, no DST).
    Shifting before slicing the ISO string is what makes this right: at 01:30
@@ -801,6 +801,13 @@ async function handleAction(el: HTMLElement): Promise<void> {
   const numId = Number(idAttr);
 
   switch (act) {
+    /* item 2c: "Why am I seeing this?" - every link in the console opens here */
+    case "why": {
+      const e = getWhy(idAttr);
+      if (!e) return;
+      return openDrawer({ title: WHY_LINK_TEXT, subtitle: e.summary, wide: true, bodyHtml: whyHtml(e) });
+    }
+
     /* filters */
     case "clear-filters":
       resetFilter(appState.activePage);
@@ -1220,148 +1227,32 @@ case "delete-user": {
      * Now: pick the farmer, place the farm on a map, describe the zones from
      * a crop list the engine actually knows, and see all of it before
      * anything is written. */
-    case "add-farm": {
-      let farmers;
-      try {
-        farmers = await getFarmers();
-      } catch (e) {
-        showErrorModal(
-          "Could not load the farmer list",
-          e instanceof Error ? e.message : "The farmer list could not be retrieved.",
-        );
-        return;
-      }
-
-      if (farmers.length === 0) {
-        showErrorModal(
-          "No farmers yet",
-          "A farm belongs to a farmer, so there is nobody to register this one to. Create a farmer account first.",
-        );
-        return;
-      }
-
-      return openDrawer({
-        title: "Register a new farm",
-        wide: true,
-        bodyHtml: wizard({
-          id: "register-farm",
-          title: "Register a new farm",
-          subtitle: "Four steps. Nothing is saved until the last one.",
-          confirmLabel: "Register the farm",
-          confirmAct: "wizard-register-farm",
-          steps: [
-            {
-              title: "Farmer",
-              hint: "Who this farm belongs to.",
-              bodyHtml: picker({
-                name: "ownerId",
-                label: "Farmer",
-                required: true,
-                requiredMessage: "Choose the farmer this farm belongs to.",
-                placeholder: "Search by name or email…",
-                hint: "Only existing farmer accounts can own a farm.",
-                options: farmers.map((f) => ({
-                  value: f.id,
-                  label: f.name,
-                  secondary: f.email,
-                })),
-              }),
-            },
-            {
-              title: "Farm details",
-              hint: "Where it is and how big it is.",
-              bodyHtml: `
-                <div class="fields">
-                  <label class="f">
-                    Farm name
-                    <input
-                      type="text"
-                      data-field="farmName"
-                      data-required
-                      data-required-message="Give the farm a name."
-                      placeholder="Sunrise Valley Farm"
-                    />
-                  </label>
-                  <label class="f">
-                    Nearest town or district
-                    <input
-                      type="text"
-                      data-field="location"
-                      data-required
-                      data-required-message="Say roughly where the farm is."
-                      placeholder="Ceres, Western Cape"
-                    />
-                  </label>
-                  <label class="f">
-                    Farm size (hectares)
-                    <input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      data-field="farmSize"
-                      data-required
-                      data-required-message="Enter the farm size in hectares."
-                      placeholder="0"
-                    />
-                  </label>
-                </div>
-                ${locationPickerHtml({})}`,
-            },
-            {
-              title: "Zones",
-              hint: "One per irrigated block. Each one gets its own advice.",
-              bodyHtml: `
-                <label class="f">
-                  How many zones?
-                  <input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value="1"
-                    data-register-farm-zone-count
-                  />
-                </label>
-                <div id="registerFarmZones"></div>`,
-            },
-            {
-              title: "Review",
-              hint: "Check this, then register.",
-              bodyHtml: `<div id="registerFarmReview" class="review-pane"></div>`,
-            },
-          ],
-        }),
-
-        onOpen: () => {
-          wirePickers();
-          wireRegisterFarmZones();
-          wireWizards();
-          wireRegisterFarmReview();
-
-          /* The map lives on step 2, which is display:none when the drawer
-             opens, so it is mounted now and told to re-measure when the step
-             becomes visible. Mounting it lazily on first reveal would be
-             neater but needs an observer per wizard; this is one call. */
-          const mapHost = document.querySelector<HTMLElement>("[data-map-pick]");
-          if (mapHost) void mountLocationPicker(mapHost);
-        },
-      });
-    }
+    case "add-farm":
+      return openRegisterFarmWizard(null);
 
     /* The wizard's Confirm. wireWizards has already re-validated every step,
        so what is missing here can only be something the steps do not mark
        required - the zone arithmetic the API also enforces. Checked here too
        so the admin is told in the drawer rather than by a 400. */
+    /* Item 6: a soil card sets its zone's hidden soil field. */
+    case "zone-soil": {
+      const row = el.closest<HTMLElement>("[data-zone-row]");
+      const hidden = row?.querySelector<HTMLInputElement>(`[data-field="zone_soil_${el.dataset["zone"]}"]`);
+      if (!row || !hidden) return;
+      hidden.value = el.dataset["soil"] ?? "loam";
+      syncZoneChoices(row);
+      return;
+    }
+
     case "wizard-register-farm": {
       const v = collectFields();
 
       const zoneCount = registerFarmZoneCount();
-      const zones = Array.from({ length: zoneCount }, (_, i) => ({
-        name: (v[`zone_name_${i}`] ?? "").trim(),
-        sizeHectares: Number(v[`zone_size_${i}`]) || 0,
-        cropType: v[`zone_crop_${i}`] ?? "",
-      }));
+      const zones = Array.from({ length: zoneCount }, (_, i) => readZoneSetup(v, i));
 
-      const problem = validateRegisterFarmZones(zones, Number(v["farmSize"]) || 0);
+      const problem =
+        Array.from({ length: zoneCount }, (_, i) => zoneSetupProblem(v, i)).find((p) => p) ??
+        validateRegisterFarmZones(zones, Number(v["farmSize"]) || 0);
       if (problem) return void toast(problem, "warn");
 
       const latitude = v["latitude"] ? Number(v["latitude"]) : null;
@@ -1382,6 +1273,7 @@ case "delete-user": {
 
         closeDrawer();
         toast(`${v["farmName"] || "The farm"} is registered.`, "success");
+        await completeLaunchingRequest(`Completed by registering the farm "${(v["farmName"] ?? "").trim()}".`);
         return void refresh();
       } catch (e) {
         showErrorModal(
@@ -1418,14 +1310,7 @@ case "delete-user": {
 
   clearOnboardingError();
 
- const zones = Array.from(
-  { length: zoneCount },
-  (_, i) => ({
-    name: v[`zone_name_${i}`] ?? "",
-    sizeHectares: Number(v[`zone_size_${i}`]) || 0,
-    cropType: v[`zone_crop_${i}`] ?? "",
-  }),
-);
+ const zones = Array.from({ length: zoneCount }, (_, i) => readZoneSetup(v, i));
 
   try {
     const result = await onboardFarmer({
@@ -1455,6 +1340,16 @@ case "delete-user": {
        to reset it. The handover step is where the installer finishes the
        job. */
     handoverProfileId = result.profileId;
+
+    // Item 6c: onboarding started from an enquiry completes it and links
+    // the new farmer. A failure here leaves the enquiry open, and says so.
+    if (onboardingFromEnquiry) {
+      const enquiryId = onboardingFromEnquiry.id;
+      onboardingFromEnquiry = null;
+      await markEnquiryOnboarded(enquiryId, result.profileId)
+        .then((r) => toast(r.message, "success"))
+        .catch((e: unknown) => toast(e instanceof Error ? `The enquiry is still open: ${e.message}` : "The enquiry is still open.", "warn"));
+    }
 
     await renderHandover(result);
 
@@ -1511,7 +1406,7 @@ case "delete-user": {
     }
     case "handover-done":
       handoverProfileId = null;
-      return void go("farms");
+      return void navigate("farms");
     /* hardware */
     case "view-device": {
       const h = api.findHardware(idAttr);
@@ -1669,6 +1564,14 @@ case "delete-user": {
 
       const types = current?.reportTypes ?? ["water_usage"];
       const chosenZones = current?.zoneIds ?? null;
+      // Item 4: daily, a chosen day, per-zone PDFs and extra recipients need
+      // migration 0040. Until then the controls are shown, disabled, with
+      // the reason - never silently ignored on save.
+      const extras = current?.optionsAvailable !== false;
+      const off = extras ? "" : "disabled";
+      const frequency = current?.enabled ? current.frequency : "off";
+      const day = current?.dayOfWeek ?? 1;
+      const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
       const checkbox = (value: string, label: string, checked: boolean): string =>
         `<label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
@@ -1676,47 +1579,53 @@ case "delete-user": {
            <span>${esc(label)}</span>
          </label>`;
 
+      const when = (iso: string | null | undefined): string =>
+        iso ? fmtDateTimeSast(iso) : "—";
+
       return openDrawer({
         title: "Automatic reports",
         subtitle: api.findFarm(farmId)?.name ?? `Farm ${farmId}`,
         wide: true,
         bodyHtml: `
           <div class="drawer-section">
-            <h6>Send automatically</h6>
-            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
-              <input type="checkbox" id="autoReportsEnabled" ${current?.enabled ? "checked" : ""} />
-              <span>Automatic reports on</span>
-            </label>
-            <p class="muted">
-              Off by default. Weekly reports go out on Monday at 07:00; monthly ones on the 1st
-              at 07:00, South African time. They cover the week or month that has just finished.
-            </p>
+            <h6>Status</h6>
+            <div class="detail-list">
+              <div class="detail-row"><span>Now</span><b>${esc(current?.description ?? "Automatic reports: off")}</b></div>
+              <div class="detail-row"><span>Last sent</span><b data-sched="last">${esc(when(current?.lastSentAt))}</b></div>
+              <div class="detail-row"><span>Next send</span><b data-sched="next">${esc(when(current?.nextSendAt))}</b></div>
+              ${current?.turnedOffBy
+                ? `<div class="detail-row"><span>Turned off by</span><b>${esc(current.turnedOffBy)} · ${esc(when(current.turnedOffAt))}</b></div>`
+                : ""}
+            </div>
+            ${extras ? "" : `<p class="muted">Daily reports, a chosen weekday, one PDF per zone and extra recipients need database migration 0040, which has not been applied yet.</p>`}
           </div>
 
           <div class="drawer-section">
             <h6>How often</h6>
             <label class="drawer-field">
-              <span>Frequency</span>
+              <span>Send</span>
               <select id="autoReportsFrequency" class="input">
-                <option value="weekly" ${current?.frequency !== "monthly" ? "selected" : ""}>
-                  Weekly (Monday 07:00)
-                </option>
-                <option value="monthly" ${current?.frequency === "monthly" ? "selected" : ""}>
-                  Monthly (1st, 07:00)
-                </option>
+                <option value="off" ${frequency === "off" ? "selected" : ""}>Off</option>
+                <option value="daily" ${frequency === "daily" ? "selected" : ""} ${off}>Daily, 07:00 - one page of today's actions</option>
+                <option value="weekly" ${frequency === "weekly" ? "selected" : ""}>Weekly, 07:00</option>
+                <option value="monthly" ${frequency === "monthly" ? "selected" : ""}>Monthly, on the 1st at 07:00</option>
               </select>
             </label>
+            <label class="drawer-field">
+              <span>Weekly on</span>
+              <select id="autoReportsDay" class="input" ${off}>
+                ${days.map((d, i) => `<option value="${i + 1}" ${day === i + 1 ? "selected" : ""}>${d}</option>`).join("")}
+              </select>
+            </label>
+            <p class="muted">South African time. Weekly and monthly reports cover the week or month that has just ended; daily ones are today's actions.</p>
           </div>
 
           <div class="drawer-section">
             <h6>Which reports</h6>
             ${checkbox("water_usage", "Water usage", types.includes("water_usage"))}
-            ${checkbox("moisture", "Soil moisture", types.includes("moisture"))}
+            ${checkbox("moisture", "Soil moisture (one per zone)", types.includes("moisture"))}
             ${checkbox("schedule", "Watering schedule & advice", types.includes("schedule"))}
-            <p class="muted">
-              Soil moisture is per zone, so a farm with four zones gets four of those. The other
-              two cover the whole farm.
-            </p>
+            ${checkbox("farm_summary", "Farm summary (every zone in one report)", types.includes("farm_summary"))}
           </div>
 
           <div class="drawer-section">
@@ -1731,25 +1640,52 @@ case "delete-user": {
                    </option>`).join("")}
               </select>
             </label>
-            <p class="muted">
-              Leave "All zones" selected to include any zone added later.
-            </p>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="radio" name="autoReportsPdf" value="all" ${current?.perZonePdf ? "" : "checked"} />
+              <span>One PDF for all the chosen zones</span>
+            </label>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="radio" name="autoReportsPdf" value="zone" ${current?.perZonePdf ? "checked" : ""} ${off} />
+              <span>A tailored PDF for each zone</span>
+            </label>
           </div>
 
           <div class="drawer-section">
-            <p class="muted">
-              Delivered in the app always, and on Telegram as well for a farmer who has connected
-              it. The farmer can stop these themselves at any time.
-            </p>
+            <h6>Who gets them</h6>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" checked disabled />
+              <span>The farmer - in the app, and on Telegram if connected</span>
+            </label>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" id="autoReportsHandler" ${current?.sendToHandler ? "checked" : ""} ${off} />
+              <span>The admin who set this up (a copy on their Telegram)</span>
+            </label>
+            <label class="drawer-field" style="flex-direction:row;align-items:center;gap:8px">
+              <input type="checkbox" id="autoReportsAdminChat" ${current?.adminChatEnabled ? "checked" : ""} ${off} />
+              <span>The admin group chat (configured on the server)</span>
+            </label>
+            <p class="muted">The farmer can stop these themselves at any time. Turning them off records who did it.</p>
+          </div>
+
+          <div class="drawer-section">
+            <h6>Check the template</h6>
+            <button type="button" class="btn ghost sm" data-act="test-auto-reports" data-id="${farmId}">Send test now</button>
+            <p class="muted">Sends this schedule's reports to your own Telegram only - never to the farmer. Save first.</p>
           </div>
         `,
         confirmLabel: "Save",
         onConfirm: () => {
-          const enabled =
-            (document.getElementById("autoReportsEnabled") as HTMLInputElement | null)?.checked ?? false;
-          const frequency =
-            ((document.getElementById("autoReportsFrequency") as HTMLSelectElement | null)?.value ??
-              "weekly") as "weekly" | "monthly";
+          const choice =
+            (document.getElementById("autoReportsFrequency") as HTMLSelectElement | null)?.value ?? "off";
+          const enabled = choice !== "off";
+          const frequency = (enabled ? choice : current?.frequency ?? "weekly") as ReportFrequency;
+          const dayOfWeek = Number((document.getElementById("autoReportsDay") as HTMLSelectElement | null)?.value ?? 1);
+          const perZonePdf =
+            (document.querySelector<HTMLInputElement>('input[name="autoReportsPdf"]:checked')?.value ?? "all") === "zone";
+          const sendToHandler =
+            (document.getElementById("autoReportsHandler") as HTMLInputElement | null)?.checked ?? false;
+          const adminChatEnabled =
+            (document.getElementById("autoReportsAdminChat") as HTMLInputElement | null)?.checked ?? false;
 
           const reportTypes = [...document.querySelectorAll<HTMLInputElement>("[data-report-type]")]
             .filter((el) => el.checked)
@@ -1770,7 +1706,10 @@ case "delete-user": {
             return;
           }
 
-          void saveReportSchedule(farmId, { enabled, frequency, reportTypes, zoneIds })
+          void saveReportSchedule(farmId, {
+            enabled, frequency, reportTypes, zoneIds,
+            ...(extras ? { dayOfWeek, perZonePdf, sendToHandler, adminChatEnabled } : {}),
+          })
             .then((saved) => {
               toast(saved.enabled ? saved.description : "Automatic reports are off.", "success");
               void refresh();
@@ -1783,6 +1722,20 @@ case "delete-user": {
             });
         },
       });
+    }
+
+    case "test-auto-reports": {
+      const farmId = Number(idAttr);
+      if (!farmId) return;
+      try {
+        const result = await sendReportScheduleTest(farmId);
+        return void toast(result.message, result.sent > 0 ? "success" : "warn");
+      } catch (error) {
+        return showErrorModal(
+          "Could not send the test",
+          error instanceof Error ? error.message : "The test could not be sent.",
+        );
+      }
     }
 
     case "toggle-archived-farms":
@@ -1848,6 +1801,45 @@ case "delete-user": {
        laid out as the numbers somebody checking it reads in order - and,
        when it cannot answer, the named missing fields rather than a blank
        panel. */
+    /* Item 6b: the zone's "Recommended for you", with Use these settings
+       (the existing Reset to recommended) or Keep my own. */
+    case "zone-recommend": {
+      const zoneId = Number(idAttr);
+      if (!zoneId) return void toast("No zone selected.", "warn");
+      try {
+        const r = await getRecommendedSettings(zoneId);
+        const level = r.confidence ? r.confidence.level.charAt(0).toUpperCase() + r.confidence.level.slice(1) : null;
+        return openDrawer({
+          title: "Recommended for you",
+          subtitle: r.cropLabel ?? "",
+          bodyHtml: r.available
+            ? `<div class="drawer-section" data-recommend-zone="${zoneId}">
+                 <p>${esc(r.text)}</p>
+                 ${level ? `<p class="muted"><span class="pill">${esc(level)} confidence</span> ${esc(r.confidence!.reason)}</p>` : ""}
+                 ${r.canApply === false && r.applyNote ? `<p class="muted">${esc(r.applyNote)}</p>` : ""}
+                 <div class="form-foot">
+                   <button class="btn ghost" data-drawer-close>Keep my own</button>
+                   <button class="btn" data-act="zone-recommend-apply" data-id="${zoneId}"${r.canApply === false ? " disabled" : ""}>Use these settings</button>
+                 </div>
+               </div>`
+            : `<p class="muted">${esc(r.text)}</p>`,
+        });
+      } catch (e) {
+        return void showErrorModal("Could not work out recommended settings", e instanceof Error ? e.message : "Try again.");
+      }
+    }
+
+    case "zone-recommend-apply": {
+      const zoneId = Number(idAttr);
+      try {
+        const r = await useRecommendedSettings(zoneId);
+        closeDrawer();
+        return void toast(r.message, "success");
+      } catch (e) {
+        return void showErrorModal("Could not save these settings", e instanceof Error ? e.message : "Try again.");
+      }
+    }
+
     case "run-advice": {
       const zoneId = Number(idAttr);
       if (!zoneId) return void toast("No zone selected.", "warn");
@@ -1921,7 +1913,7 @@ case "delete-user": {
               <h6>Advice written for the farmer (${r.insights.length})</h6>
               ${r.insights.length
                 ? `<ul class="drawer-list">${r.insights.map((i) =>
-                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)}</li>`).join("")}</ul>`
+                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)} ${whyLink(asExplanation(i.explanation))}</li>`).join("")}</ul>`
                 : `<p class="muted">Nothing to tell the farmer today.</p>`}
             </div>
 
@@ -1944,38 +1936,38 @@ case "delete-user": {
        never arrives at a page and has to find the thing again. */
     case "go-requests-pending":
       setFilter("requests", { status: "pending" });
-      return void go("requests");
+      return void showPage("requests");
 
     case "go-alerts-critical":
       setFilter("alerts", { priority: "Critical" });
-      return void go("alerts");
+      return void showPage("alerts");
 
     case "go-kits-offline":
       setFilter("hardware", { status: "Offline" });
-      return void go("hardware");
+      return void showPage("hardware");
 
     case "go-zones-setup":
       // Farms and zones, where the list itself highlights which field each
       // zone is missing.
-      return void go("farms");
+      return void navigate("farms");
 
     case "go-users-no-telegram":
       setFilter("users", { search: "" });
-      return void go("users");
+      return void showPage("users");
 
     case "go-reports-failed":
-      return void go("reports");
+      return void navigate("reports");
 
     case "go-farms":
-      return void go("farms");
+      return void navigate("farms");
     case "go-users":
-      return void go("users");
+      return void navigate("users");
     case "go-kits":
-      return void go("hardware");
+      return void navigate("hardware");
     case "go-alerts":
-      return void go("alerts");
+      return void navigate("alerts");
     case "go-maintenance":
-      return void go("maintenance");
+      return void navigate("maintenance");
 
     /* ---- Health ------------------------------------------------------ */
     case "open-health":
@@ -1985,7 +1977,7 @@ case "delete-user": {
         document.getElementById("systemHealth")?.scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
-      return void go("dashboard");
+      return void navigate("dashboard");
 
     case "refresh-health":
       await refreshHealthPanel();
@@ -2004,10 +1996,17 @@ case "delete-user": {
     case "view-request": {
       const requestId = Number(idAttr);
       if (!requestId) return;
+      const intent = currentPanelIntent();
 
       const requests = await api.getServiceRequests();
       const request = requests.find((r) => r.id === requestId);
       if (!request) return void toast("That request could not be found.", "warn");
+      const handledBy = (await getHandling("requests").catch(() => [])).find((h) => h.id === String(requestId));
+      if (handledBy) {
+        request.handledById = handledBy.handledBy;
+        request.handledByName = handledBy.handledByName;
+        request.claimedAt = handledBy.claimedAt;
+      }
 
       // The log is a nicety on this panel, not the panel itself: if 0037 has
       // not been applied the details must still open.
@@ -2015,19 +2014,27 @@ case "delete-user": {
         .catch(() => [] as AuditRow[]);
 
       return openDrawer({
+        intent,
         title: `${request.farmerName}`,
         subtitle: request.requestType === "new_farm" ? "New farm request" : "New zone request",
         wide: true,
         bodyHtml: `
           <div class="drawer-section"><h6>What was asked for</h6>
             ${detailList([
-              ["Farm", esc(request.farmName ?? "New farm request")],
+              ["Request", request.requestType === "new_farm" ? "New farm" : "New zone"],
+              ["Farm", esc(request.farmName ?? "Not set up yet")],
               ["Crop", esc(formatCrop(request.cropType))],
               ["Rough size", request.roughSize !== null ? `${request.roughSize} ha` : "Not stated"],
               ["Location", esc(request.location ?? "Not stated")],
               ["Contact", esc(request.farmerEmail || "Not on file")],
               ["Notes", esc(request.notes ?? "None")],
             ])}
+          </div>
+          <div class="drawer-section"><h6>Handled by</h6>
+            ${handlingCell("requests", request, getAdminProfile()?.id, request.status === "completed")}
+          </div>
+          <div class="drawer-section"><h6>Next</h6>
+            ${requestActions(request, getAdminProfile()?.id)}
           </div>
           <div class="drawer-section"><h6>Where it has got to</h6>
             ${requestTimeline(request)}
@@ -2043,63 +2050,6 @@ case "delete-user": {
     /* Who is dealing with a request.
        A picker over real admin profiles, not a text field - the whole point
        of recording an owner is that the name means a specific person. */
-    case "assign-request": {
-      const requestId = Number(idAttr);
-      if (!requestId) return;
-
-      const [requests, candidates] = await Promise.all([
-        api.getServiceRequests(),
-        api.getAdministrators().catch(() => []),
-      ]);
-
-      const request = requests.find((r) => r.id === requestId);
-      if (!request) return void toast("That request could not be found.", "warn");
-
-      if (candidates.length === 0) {
-        return void toast("No administrator accounts to assign to.", "warn");
-      }
-
-      return openDrawer({
-        title: "Assign this request",
-        subtitle: `${request.farmerName} · ${request.requestType === "new_farm" ? "New farm" : "New zone"}`,
-        bodyHtml: `
-          ${picker({
-            name: "assignee",
-            label: "Assign to",
-            value: request.assignedToProfileId ?? "",
-            placeholder: "Search administrators…",
-            options: candidates.map((u) => ({
-              value: u.id,
-              label: u.name || u.email,
-              secondary: u.email,
-            })),
-          })}
-          <p class="muted">
-            Assigning does not change the status. Somebody usually picks a request up before it
-            is scheduled, and "booked, nobody owns it yet" is a real state worth being able to see.
-          </p>`,
-        confirmLabel: "Save",
-        onConfirm: (values) => {
-          const assignee = values["assignee"] ?? "";
-
-          void assignRequest(requestId, assignee || null)
-            .then((r) => {
-              toast(r.message, "success");
-              void refresh();
-            })
-            .catch((error: unknown) => {
-              showErrorModal(
-                "Could not assign the request",
-                error instanceof Error ? error.message : "The request could not be assigned.",
-              );
-            });
-        },
-      });
-    }
-
-    /* The activity log, as a file. CSV for anything, XLSX for the one people
-       actually open in Excel - see item 7 for why the plain CSV was useless
-       in a South African locale. */
     case "export-activity-csv": {
       const log = await getActivityLog();
 
@@ -2133,14 +2083,182 @@ case "delete-user": {
     }
 
     case "go-mqtt-logins":
-      return void go("mqttLogins");
+      return void navigate("mqttLogins");
+
+    /* Item 6c: the Enquiries & sales follow-up report. */
+    case "enquiry-report": {
+      const val = (sel: string): string =>
+        (document.querySelector<HTMLInputElement | HTMLSelectElement>(sel)?.value ?? "").trim();
+      const from = val("[data-enq-from]");
+      const to = val("[data-enq-to]");
+      if (from && to && from > to) return void toast("The start date is after the end date.", "warn");
+      const qs = new URLSearchParams();
+      if (from) qs.set("from", from);
+      if (to) qs.set("to", to);
+      if (val("[data-enq-province]")) qs.set("province", val("[data-enq-province]"));
+      if (val("[data-enq-handler]")) qs.set("handler", val("[data-enq-handler]"));
+      const format = el.dataset["format"] === "xlsx" ? "xlsx" : "pdf";
+      try {
+        await downloadReportFile(`/api/admin/reports/enquiries.${format}?${qs.toString()}`,
+          `agroflow-enquiries-${from || "last-30-days"}_${to || "today"}.${format}`);
+        return void toast("Report downloaded.", "success");
+      } catch (e) {
+        return void showErrorModal("Could not build the report", e instanceof Error ? e.message : "Try again.");
+      }
+    }
+
+    /* Item 6c: the two tabs on Requests. */
+    case "requests-tab":
+      setRequestsTab(el.dataset["tab"] ?? "requests");
+      return void refresh();
+
+    case "go-enquiries":
+      setRequestsTab("enquiries");
+      return void showPage("requests");
+
+    case "enquiry-claim":
+      try {
+        toast((await claimEnquiry(Number(idAttr))).message, "success");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Could not take this on.", "warn");
+      }
+      return void refresh();
+
+    case "enquiry-take-over": {
+      const who = el.dataset["handler"] ?? "another admin";
+      return openDrawer({
+        title: "Take over",
+        subtitle: `${who} is handling this enquiry. Your name and theirs, and your reason, go on the record.`,
+        fields: [{ label: "Why are you taking this over?", value: "", editable: true, name: "reason" }],
+        confirmLabel: "Take over",
+        onConfirm: (v) => {
+          void takeOverEnquiry(Number(idAttr), v["reason"] ?? "")
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not take this over", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
+
+    case "enquiry-log-call": {
+      const enquiryId = Number(idAttr);
+      return openDrawer({
+        title: "Log call",
+        subtitle: "Every call is kept, with your name and the time.",
+        bodyHtml: logCallHtml(),
+        confirmLabel: "Log call",
+        onOpen: () => {
+          const box = document.querySelector<HTMLElement>(".log-call");
+          box?.addEventListener("change", () => syncLogCall(box));
+        },
+        onConfirm: () => {
+          const box = document.querySelector<HTMLElement>(".log-call");
+          if (!box) return;
+          const { call, problem } = readLogCall(box);
+          if (problem) {
+            toast(problem, "warn");
+            return false;
+          }
+          void logEnquiryCall(enquiryId, call)
+            .then((r) => { toast(r.message, r.suggestClosing ? "warn" : "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not log the call", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
+
+    case "enquiry-close":
+      return openDrawer({
+        title: "Close this enquiry",
+        subtitle: "For an enquiry nobody can reach. It stays in the report.",
+        fields: [{ label: "Note (optional)", value: "", editable: true, name: "note" }],
+        confirmLabel: "Close",
+        onConfirm: (v) => {
+          void closeEnquiry(Number(idAttr), (v["note"] ?? "").trim() || undefined)
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not close the enquiry", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+
+    case "enquiry-anonymise":
+      return openDrawer({
+        title: "Delete personal details",
+        subtitle: "Their name, phone number, email and notes are removed for good. Province, crops, outcome and reason stay, for the statistics. This is recorded.",
+        confirmLabel: "Delete personal details",
+        onConfirm: () => {
+          void anonymiseEnquiry(Number(idAttr))
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not delete the details", e instanceof Error ? e.message : "Nothing was changed."));
+        },
+      });
+
+    case "enquiry-onboard": {
+      const enquiry = (await getEnquiries()).find((e) => String(e.id) === idAttr);
+      if (!enquiry) return void toast("That enquiry could not be found.", "warn");
+      onboardingFromEnquiry = enquiry;
+      onboardingPrefilled = false;
+      return void navigate("onboarding");
+    }
+
+    case "view-enquiry": {
+      const intent = currentPanelIntent();
+      const [enquiries, calls] = await Promise.all([getEnquiries(), getEnquiryCalls(Number(idAttr)).catch(() => [])]);
+      const e = enquiries.find((x) => String(x.id) === idAttr);
+      if (!e) return void toast("That enquiry could not be found.", "warn");
+      const myId = getAdminProfile()?.id;
+      return openDrawer({
+        intent,
+        title: e.fullName ?? "Enquiry (details deleted)",
+        subtitle: [e.town, e.province].filter(Boolean).join(", "),
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section"><h6>What they told us</h6>
+            ${detailList([
+              ["Phone", e.phone ? `<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>` : "Deleted"],
+              ["Email", esc(e.email ?? (e.anonymisedAt ? "Deleted" : "Not given"))],
+              ["Crops", esc(cropsText(e))],
+              ["Farm size", e.farmSizeHa != null ? `${e.farmSizeHa} ha` : "Not given"],
+              ["Best time to call", esc(e.bestTime)],
+              ["Notes", esc(e.notes ?? "None")],
+              ["Received", esc(fmtDateTimeSast(e.createdAt))],
+            ])}
+          </div>
+          <div class="drawer-section"><h6>Status</h6>${enquiryStatus(e)}</div>
+          <div class="drawer-section"><h6>Next</h6>${enquiryActions(e, myId)}</div>
+          <div class="drawer-section"><h6>Calls</h6>${callHistory(calls)}</div>`,
+        confirmLabel: "Close",
+        onConfirm: () => undefined,
+      });
+    }
+
+    /* Item 6c: [Mark complete], with an optional note. */
+    case "request-complete": {
+      const requestId = Number(idAttr);
+      return openDrawer({
+        title: "Mark complete",
+        subtitle: "Your name and the time go on the record.",
+        fields: [{ label: "Note (optional)", value: "", editable: true, name: "note" }],
+        confirmLabel: "Mark complete",
+        onConfirm: (v) => {
+          void api.updateServiceRequestStatus(requestId, "completed", (v["note"] ?? "").trim() || undefined)
+            .then(() => { toast("Request completed.", "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not complete the request", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
+
+    /* Item 6c: carry the request out - prefilled, and saving completes it. */
+    case "request-setup": {
+      const r = (await api.getServiceRequests()).find((x) => String(x.id) === idAttr);
+      if (!r) return void toast("That request could not be found.", "warn");
+      if (r.requestType === "new_zone" && r.farmId !== null) return openAddZonesWizard(r);
+      return openRegisterFarmWizard(r);
+    }
 
     case "go-onboarding":
       // A new_farm request has no farm yet, so there is no zone to enrol a
       // kit onto. Send the admin through the existing zone setup flow first
       // rather than offering an action that cannot work.
       toast("Set up the farm and its zones first, then create the enrollment code.", "warn");
-      return void go("onboarding");
+      return void navigate("onboarding");
 
     /* The code the installer types into the kit's setup page.
        Uses the EXISTING generator (POST /api/devices/enroll) unchanged -
@@ -2153,7 +2271,7 @@ case "delete-user": {
 
       if (request.farmId === null) {
         toast("This request has no farm yet. Set up the farm and its zones first.", "warn");
-        return void go("onboarding");
+        return void navigate("onboarding");
       }
 
       let zones;
@@ -2172,7 +2290,7 @@ case "delete-user": {
         // request: the zone has to exist before a kit can be enrolled onto
         // it, because hardware.zone_id is what the claim resolves.
         toast("This farm has no zones yet. Add one first, then create the code.", "warn");
-        return void go("onboarding");
+        return void navigate("onboarding");
       }
 
       return openDrawer({
@@ -2281,33 +2399,21 @@ case "delete-user": {
         },
       });
     }
+    // Item 5: a real maintenance job for this kit, booked by - and handled
+    // by - the caller. There is no technician picker: the list it offered
+    // was four invented names.
     case "schedule-device-maint":
       return openDrawer({
         title: `Schedule service — ${idAttr}`,
-        bodyHtml: picker({
-          name: "tech",
-          label: "Technician",
-          required: true,
-          requiredMessage: "Choose a technician.",
-          placeholder: "Search technicians…",
-          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
-        }),
         fields: [
-          // Today, not a date hardcoded during development - that one is now
-          // in the past, so every scheduled visit defaulted to overdue.
-          { label: "Date", value: todayIso(), editable: true, name: "date" },
+          { label: "What needs doing", value: "", editable: true, name: "issue" },
+          { label: "Visit date (yyyy-mm-dd)", value: todayIso(), editable: true, name: "date" },
         ],
-        confirmLabel: "Schedule",
-        /* The maintenance list is a session working copy - there is no
-           writer for it (see data/api.ts's header). scheduleVisit at least
-           puts the date and status on the row in front of the admin, which
-           is honest optimistic feedback; the old toast claimed a booking
-           that existed nowhere, not even on screen. */
+        confirmLabel: "Book visit",
         onConfirm: (v) => {
-          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
-            toast("Visit put on the job for this session.", "info");
-            void refresh();
-          });
+          void createMaintenance({ hardwareId: Number(idAttr) || null, description: v["issue"] ?? "", date: v["date"] ?? "" })
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not book the visit", e instanceof Error ? e.message : "Not saved."));
         },
       });
     // The old free-text version of this wrote nothing at all - it toasted
@@ -2316,69 +2422,81 @@ case "delete-user": {
     case "add-device":
       return handleAction(withAct(el, "register-hardware"));
 
+    /* item 5: handling - always the caller's own name */
+    case "claim-item": {
+      const kind = (el.dataset["kind"] ?? "") as HandlingKind;
+      try {
+        const r = await claimItem(kind, idAttr);
+        toast(r.message, "success");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Could not claim this.", "warn");
+      }
+      return void refresh();
+    }
+    case "release-item": {
+      const kind = (el.dataset["kind"] ?? "") as HandlingKind;
+      try {
+        const r = await releaseItem(kind, idAttr);
+        toast(r.message, "info");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Could not let this go.", "warn");
+      }
+      return void refresh();
+    }
+    case "take-over-item": {
+      const kind = (el.dataset["kind"] ?? "") as HandlingKind;
+      const who = el.dataset["handler"] ?? "another admin";
+      return openDrawer({
+        title: "Take over",
+        subtitle: `${who} is handling this. Your name and theirs, and your reason, go on the record.`,
+        fields: [{ label: "Why are you taking this over?", value: "", editable: true, name: "reason" }],
+        confirmLabel: "Take over",
+        onConfirm: (v) => {
+          void takeOverItem(kind, idAttr, v["reason"] ?? "")
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not take this over", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
+
     /* alerts */
     case "view-alert": {
       const a = api.findAlert(idAttr);
       if (!a) return;
+      // Item 2c: the alert's own explanation, if it has one (migration 0039).
+      // The panel intent is taken BEFORE the await (item 0b): if another
+      // panel is asked for meanwhile, this one must not open over it.
+      const alertIntent = currentPanelIntent();
+      const [alertWhy, history] = await Promise.all([
+        api.getAlertExplanation(a.id).catch(() => null),
+        getEntityTimeline("alert", a.id).catch(() => null),
+      ]);
       return openDrawer({
+        intent: alertIntent,
         title: a.id,
         subtitle: a.title,
         wide: true,
         bodyHtml: `
           <div class="drawer-section"><h6>Details</h6>
             <div class="detail-list">
-              <div class="detail-row"><span>Raised</span><b>${esc(a.raised)}</b></div>
+              <div class="detail-row"><span>Raised</span><b>${esc(fmtDateTimeSast(a.raised))}</b></div>
               <div class="detail-row"><span>Category</span><b>${esc(a.category)}</b></div>
               <div class="detail-row"><span>Farm</span><b>${esc(a.farm ?? "Platform")}</b></div>
-              <div class="detail-row"><span>User</span><b>${esc(a.user ?? "—")}</b></div>
-              <div class="detail-row"><span>Assigned to</span><b>${esc(a.assignedTo ?? "Unassigned")}</b></div>
+              <div class="detail-row"><span>Farmer</span><b>${esc(a.user ?? "—")}</b></div>
+              <div class="detail-row"><span>Handled by</span><b>${handledLine(a)}</b></div>
+              ${a.resolvedByName ? `<div class="detail-row"><span>Resolved</span><b>Resolved by ${esc(a.resolvedByName)} on ${esc(fmtDateTimeSast(a.resolvedAt ?? ""))}</b></div>` : ""}
               <div class="detail-row"><span>Priority</span><b>${esc(a.priority)}</b></div>
               <div class="detail-row"><span>Status</span><b>${esc(a.status)}</b></div>
             </div>
           </div>
-          <div class="drawer-section"><h6>History</h6>
-            ${alertTimeline(a)}
+          ${alertWhy ? `<div class="drawer-section"><h6>${esc(WHY_LINK_TEXT)}</h6>${whyHtml(alertWhy)}</div>` : ""}
+          <div class="drawer-section"><h6>Timeline</h6>
+            ${history === null
+              ? `<p class="muted">The timeline could not be read.</p>`
+              : timelineHtml(history, "Nothing has been done on this alert yet.")}
           </div>`,
-        confirmLabel: "Resolve alert",
-        onConfirm: () => {
-          void api.setAlertStatus(a.id, "Resolved").then(() => {
-            toast(`${a.id} resolved.`, "success"); void refresh();
-          });
-        },
-      });
-    }
-    /* A picker over real administrator accounts. Typing a name into a text
-       field meant "Leruo", "leruo" and "L. Mosiane" were three different
-       assignees as far as the Assigned-to filter was concerned. */
-    case "assign-alert": {
-      const admins = await api.getAdministrators().catch(() => []);
-
-      if (admins.length === 0) {
-        return void toast("No administrator accounts to assign to.", "warn");
-      }
-
-      const current = api.findAlert(idAttr);
-
-      return openDrawer({
-        title: `Assign ${idAttr}`,
-        subtitle: current?.title,
-        bodyHtml: picker({
-          name: "admin",
-          label: "Assign to",
-          value: current?.assignedTo ?? "",
-          placeholder: "Search administrators…",
-          options: admins.map((u) => ({
-            value: u.name || u.email,
-            label: u.name || u.email,
-            secondary: u.email,
-          })),
-        }),
-        confirmLabel: "Assign",
-        onConfirm: (v) => {
-          void api.assignAlert(idAttr, v["admin"] ?? "").then(() => {
-            toast("Alert assigned.", "success"); void refresh();
-          });
-        },
+        confirmLabel: a.status === "Resolved" ? undefined : "Resolve alert",
+        onConfirm: a.status === "Resolved" ? undefined : () => { void runItemAction("alerts", a.id, "resolve"); },
       });
     }
     case "note-alert":
@@ -2386,130 +2504,64 @@ case "delete-user": {
         title: `Add note — ${idAttr}`,
         fields: [{ label: "Note", value: "", editable: true, name: "note" }],
         confirmLabel: "Add note",
-        onConfirm: (v) => {
-          void api.addAlertNote(idAttr, v["note"] ?? "").then(() => {
-            toast("Note added.", "success"); void refresh();
-          });
-        },
+        onConfirm: (v) => { void runItemAction("alerts", idAttr, "note", v["note"] ?? ""); },
       });
-    case "priority-alert":
-      return openDrawer({
-        title: `Change priority — ${idAttr}`,
-        fields: [{ label: "Priority (Critical / High / Medium / Low)", value: "High", editable: true, name: "p" }],
-        confirmLabel: "Update",
-        onConfirm: (v) => {
-          const p = (v["p"] ?? "Medium") as AlertPriority;
-          void api.setAlertPriority(idAttr, p).then(() => {
-            toast(`Priority set to ${p}.`, "success"); void refresh();
-          });
-        },
-      });
-    case "escalate-alert":
-      await api.setAlertStatus(idAttr, "Escalated");
-      toast(`${idAttr} escalated.`, "warn");
-      return void refresh();
-    case "resolve-alert":
-      await api.setAlertStatus(idAttr, "Resolved");
-      toast(`${idAttr} resolved.`, "success");
-      return void refresh();
-    case "close-alert":
-      await api.setAlertStatus(idAttr, "Closed");
-      toast(`${idAttr} closed.`, "success");
-      return void refresh();
-    case "reopen-alert":
-      await api.setAlertStatus(idAttr, "In Progress");
-      toast(`${idAttr} reopened.`, "info");
-      return void refresh();
+    case "escalate-alert": return runItemAction("alerts", idAttr, "escalate");
+    case "resolve-alert": return runItemAction("alerts", idAttr, "resolve");
+    case "close-alert": return runItemAction("alerts", idAttr, "close");
+    case "reopen-alert": return runItemAction("alerts", idAttr, "reopen");
 
     /* maintenance */
-    case "assign-tech":
-      return openDrawer({
-        title: `Assign technician — ${idAttr}`,
-        // A name typed by hand meant the same person appeared as three
-        // different technicians in the Assigned-to filter.
-        bodyHtml: picker({
-          name: "tech",
-          label: "Technician",
-          required: true,
-          requiredMessage: "Choose a technician.",
-          placeholder: "Search technicians…",
-          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
-        }),
-        confirmLabel: "Assign",
-        onConfirm: (v) => {
-          void api.assignTechnician(idAttr, v["tech"] ?? "").then(() => {
-            toast("Technician assigned.", "success"); void refresh();
-          });
-        },
-      });
     case "schedule-visit":
       return openDrawer({
         title: `Schedule visit — ${idAttr}`,
-        fields: [{ label: "Visit date", value: "2026-07-29", editable: true, name: "date" }],
+        fields: [{ label: "Visit date (yyyy-mm-dd)", value: todayIso(), editable: true, name: "date" }],
         confirmLabel: "Schedule",
-        onConfirm: (v) => {
-          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
-            toast("Visit scheduled.", "success"); void refresh();
-          });
-        },
+        onConfirm: (v) => { void runItemAction("maintenance", idAttr, "schedule", undefined, v["date"] ?? ""); },
       });
-    case "complete-maint":
-      await api.completeMaintenance(idAttr);
-      toast("Maintenance marked complete.", "success");
-      return void refresh();
-    case "upload-report":
-      await api.uploadMaintenanceReport(idAttr);
-      toast("Maintenance report uploaded.", "success");
-      return void refresh();
-    case "replace-hw": {
-      const m = api.findMaintenance(idAttr);
+    case "complete-maint": return runItemAction("maintenance", idAttr, "complete");
+    case "note-maint":
       return openDrawer({
-        title: `Replace hardware — ${m?.device ?? idAttr}`,
-        fields: [{ label: "Replacement device ID", value: "", editable: true, name: "newId" }],
-        confirmLabel: "Record replacement",
-        onConfirm: () => toast("Hardware replacement recorded.", "success"),
+        title: `Add note — job ${idAttr}`,
+        fields: [{ label: "Note", value: "", editable: true, name: "note" }],
+        confirmLabel: "Add note",
+        onConfirm: (v) => { void runItemAction("maintenance", idAttr, "note", v["note"] ?? ""); },
       });
-    }
     case "maint-history": {
       const m = api.findMaintenance(idAttr);
       if (!m) return;
-      const all = await api.getMaintenance();
-      const history = all.filter((x) => x.device === m.device);
+      const intent = currentPanelIntent();
+      const history = await getEntityTimeline("maintenance", m.id).catch(() => null);
       return openDrawer({
-        title: `History — ${m.device}`,
-        subtitle: m.farm,
-        bodyHtml: `<ul class="drawer-list">${history.map((h) =>
-          `<li><span class="mono">${esc(h.id)}</span> ${esc(h.issue)} — <b>${esc(h.status)}</b>
-           <span class="muted">${esc(fmtDate(h.scheduledFor))}</span></li>`).join("")}</ul>`,
+        intent,
+        title: `Job ${m.id}`,
+        subtitle: `${m.issue} · ${m.farm}`,
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section"><div class="detail-list">
+            <div class="detail-row"><span>Handled by</span><b>${handledLine(m)}</b></div>
+            ${m.resolvedByName ? `<div class="detail-row"><span>Completed</span><b>Completed by ${esc(m.resolvedByName)} on ${esc(fmtDateTimeSast(m.resolvedAt ?? ""))}</b></div>` : ""}
+          </div></div>
+          <div class="drawer-section"><h6>Timeline</h6>
+            ${history === null
+              ? `<p class="muted">The timeline could not be read.</p>`
+              : timelineHtml(history, "Nothing has been done on this job yet.")}
+          </div>`,
       });
     }
     case "schedule-maint":
       return openDrawer({
         title: "Schedule maintenance",
-        bodyHtml: picker({
-          name: "tech",
-          label: "Technician",
-          required: true,
-          requiredMessage: "Choose a technician.",
-          placeholder: "Search technicians…",
-          options: TECHNICIANS.map((t) => ({ value: t, label: t })),
-        }),
         fields: [
-          { label: "Device ID", value: "", editable: true, name: "device" },
-          { label: "Issue", value: "", editable: true, name: "issue" },
-          { label: "Date", value: todayIso(), editable: true, name: "date" },
+          { label: "Kit (device) number", value: "", editable: true, name: "device" },
+          { label: "What needs doing", value: "", editable: true, name: "issue" },
+          { label: "Visit date (yyyy-mm-dd)", value: todayIso(), editable: true, name: "date" },
         ],
-        confirmLabel: "Schedule",
-        /* The maintenance list is a session working copy - there is no
-           writer for it (see data/api.ts's header). scheduleVisit at least
-           puts the date and status on the row in front of the admin, which
-           is honest optimistic feedback; the old toast claimed a booking
-           that existed nowhere, not even on screen. */
+        confirmLabel: "Book visit",
         onConfirm: (v) => {
-          void api.scheduleVisit(idAttr, v["date"] ?? "").then(() => {
-            toast("Visit put on the job for this session.", "info");
-            void refresh();
-          });
+          void createMaintenance({ hardwareId: Number(v["device"]) || null, description: v["issue"] ?? "", date: v["date"] ?? "" })
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not book the visit", e instanceof Error ? e.message : "Not saved."));
         },
       });
 
@@ -2521,59 +2573,11 @@ case "delete-user": {
        system has had for several migrations. */
 
     /* reports */
-    case "generate-report": {
-      const name = el.dataset["report"] ?? "Report";
-      await api.logReportGenerated(name);
-      return toast(`${name} generated for ${rangeLabel(getFilter("reports"))}.`, "success");
-    }
-    /* Excel is real now - the same rows the CSV export writes, in a workbook
-       Excel opens without guessing a separator.
-
-       PDF is NOT offered for these cards any more. There is no per-report-type
-       PDF generator for them, and the button toasted "(demo)" while producing
-       no file. The Reports page's live report section does produce real PDFs,
-       from the API, so that is where the admin is sent. */
-    case "export-report-excel": {
-      const name = el.dataset["report"] ?? "Report";
-      const f = getFilter("reports");
-
-      const events = applyFilters(await api.getIrrigationEvents(), f, {
-        date: (e) => e.date, farm: (e) => e.farm,
-        province: (e) => e.province, region: (e) => e.region,
-      });
-
-      await exportRowsWorkbook(
-        `agroflow-${name.toLowerCase().replace(/\s+/g, "-")}`,
-        name,
-        ["Date (SAST)", "Farm", "Region", "Crop", "Estimated litres"],
-        events.slice(0, 500).map((e) => [
-          fmtDate(e.date), e.farm, e.region, e.crop,
-          e.litres === null ? "No estimate" : e.litres,
-        ]),
-      );
-
-      return void toast(`${name} exported.`, "success");
-    }
-    case "export-report-csv": {
-      const name = el.dataset["report"] ?? "Report";
-      const f = getFilter("reports");
-      const events = applyFilters(await api.getIrrigationEvents(), f, {
-        date: (e) => e.date, farm: (e) => e.farm,
-        province: (e) => e.province, region: (e) => e.region,
-      });
-      const rows = events.slice(0, 500).map((e) => [
-        e.date, e.farm, e.region, e.crop,
-        e.litres === null ? "No estimate" : e.litres,
-      ]);
-      downloadExcelSafeCsv(`agroflow-${name.toLowerCase().replace(/\s+/g, "-")}.csv`,
-        toCSV(["Date", "Farm", "Region", "Crop", "Estimated litres"], rows));
-      await api.logReportGenerated(`${name} (CSV)`);
-      return toast(`${name} exported.`, "success");
-    }
     case "run-comparison": return runComparison();    
-    case "live-report-view": return liveReportRun(el.dataset["report"] ?? "", false);
-    case "live-report-pdf": return liveReportRun(el.dataset["report"] ?? "", true);
-    case "live-report-xlsx": return liveReportXlsx();
+    case "farm-report-preview": return farmReportPreview();
+    case "farm-report-pdf": return farmReportPdf();
+    case "farm-report-xlsx": return farmReportXlsx();
+    case "view-attention": return openAttentionGroup(idAttr);
     /* A real file, from what is on screen. The comparison table is rendered
        into #cmpResult by runComparison; reading it back is what makes
        this export match exactly what the admin is looking at, rather than
@@ -2734,7 +2738,6 @@ async function runComparison(): Promise<void> {
     (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
 
   const mode = get("cmpMode");
-  const metric = get("cmpMetric");
   const aFrom = get("cmpAFrom"), aTo = get("cmpATo");
   const bFrom = get("cmpBFrom"), bTo = get("cmpBTo");
 
@@ -2773,7 +2776,7 @@ async function runComparison(): Promise<void> {
   }
 
   host.innerHTML = `
-    <div class="cmp-head">${esc(metric)} · ${esc(mode)} — Period A (${esc(aFrom)} → ${esc(aTo)}) vs Period B (${esc(bFrom)} → ${esc(bTo)})</div>
+    <div class="cmp-head">Estimated water use · ${esc(mode)} — Period A (${esc(aFrom)} → ${esc(aTo)}) vs Period B (${esc(bFrom)} → ${esc(bTo)})</div>
     <div class="table-wrap"><table>
       <thead><tr><th>${esc(mode)}</th><th>Period A</th><th>Period B</th><th>Change</th></tr></thead>
       <tbody>${keys.map((k) => {
@@ -3005,13 +3008,16 @@ function validateOnboardingStep2(v: Record<string, string>, zoneCount: number): 
       return `Zone ${i + 1} needs a name.`;
     }
 
-    if (!v[`zone_size_${i}`] || Number(v[`zone_size_${i}`]) <= 0) {
-      return `Zone ${i + 1} needs a valid size.`;
+    if (!v[`zone_area_preset_${i}`]) {
+      return `Choose how big zone ${i + 1} is.`;
     }
 
     if (!v[`zone_crop_${i}`]?.trim()) {
       return `Zone ${i + 1} needs a crop type.`;
     }
+
+    const setup = zoneSetupProblem(v, i);
+    if (setup) return setup;
   }
 
   return null;
@@ -3028,11 +3034,58 @@ function wireOnboardingZones(): void {
     const count = Math.max(0, Math.min(50, Number(countInput.value) || 0));
     const existing = collectFields();
     container.innerHTML = Array.from({ length: count }, (_, i) => zoneRow(i)).join("");
-    container.querySelectorAll<HTMLInputElement>("[data-field]").forEach((el) => {
+    container.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((el) => {
       const name = el.dataset["field"] ?? "";
       if (existing[name]) el.value = existing[name];
     });
+    syncZoneChoices(container);
   });
+  wireZoneChoices(container);
+}
+
+/* Item 6: a custom size shows its m² box. Soil cards go through the
+   delegated "zone-soil" action. Bound once per container. */
+function wireZoneChoices(container: HTMLElement): void {
+  if (container.dataset["choicesBound"]) return;
+  container.dataset["choicesBound"] = "1";
+  container.addEventListener("change", (e) => {
+    const target = e.target as HTMLElement;
+    if (target.matches("[data-area-preset]")) syncZoneChoices(container);
+    const row = target.closest<HTMLElement>("[data-zone-row]");
+    if (row) void refreshRecommendation(row);
+  });
+  // The soil cards are buttons, not inputs, so they raise no change event.
+  container.addEventListener("click", (e) => {
+    const card = (e.target as HTMLElement).closest<HTMLElement>('[data-act="zone-soil"]');
+    const row = card?.closest<HTMLElement>("[data-zone-row]");
+    if (row) window.setTimeout(() => void refreshRecommendation(row), 0);
+  });
+}
+
+/* Item 6b: the wizard's card for one zone, once a crop is chosen. The latest
+   request wins - an answer for an older crop choice is dropped. */
+async function refreshRecommendation(row: HTMLElement): Promise<void> {
+  const i = Number(row.dataset["zoneIndex"]);
+  const box = row.querySelector<HTMLElement>(`[data-recommend="${i}"]`);
+  if (!box) return;
+  const v = collectFields();
+  const z = readZoneSetup(v, i);
+  if (!z.cropType) {
+    box.innerHTML = "";
+    return;
+  }
+  const ticket = String(Date.now() + Math.random());
+  box.dataset["ticket"] = ticket;
+  try {
+    const r = await previewRecommendedSettings({
+      cropType: z.cropType, soilType: z.soilType, areaM2: z.areaM2, flowRateLpm: z.flowRateLpm,
+      rootDepthLimitM: z.rootDepthLimitM, plantingDate: z.plantingDate,
+      location: (v["location"] ?? "").split(",")[0].trim(),
+    });
+    if (box.dataset["ticket"] === ticket) box.innerHTML = recommendHtml(r);
+  } catch {
+    if (box.dataset["ticket"] === ticket) box.innerHTML = "";
+  }
 }
 
 /* --------------------------- binding after render ------------------------ */
@@ -3067,9 +3120,11 @@ function wireRegisterFarmZones(): void {
         const name = el.dataset["field"] ?? "";
         if (existing[name]) el.value = existing[name];
       });
+    syncZoneChoices(container);
   };
 
   countInput.addEventListener("input", renderZones);
+  wireZoneChoices(container);
 
   renderZones();
 }
@@ -3203,6 +3258,236 @@ function wireKitWizard(farms: Farm[]): void {
   renderReview();
 }
 
+/* The register-farm wizard. Item 6c: given a request, it is prefilled from it
+   (farmer, location, size, crop) and saving it completes the request. */
+let completeRequestOnSave: number | null = null;
+
+async function openRegisterFarmWizard(fromRequest: ServiceRequest | null): Promise<void> {
+  let farmers;
+  try {
+    farmers = await getFarmers();
+  } catch (e) {
+    showErrorModal(
+      "Could not load the farmer list",
+      e instanceof Error ? e.message : "The farmer list could not be retrieved.",
+    );
+    return;
+  }
+
+  if (farmers.length === 0) {
+    showErrorModal(
+      "No farmers yet",
+      "A farm belongs to a farmer, so there is nobody to register this one to. Create a farmer account first.",
+    );
+    return;
+  }
+
+  // Item 6c: launched from a request, saving completes that request.
+  completeRequestOnSave = fromRequest?.id ?? null;
+
+  return openDrawer({
+    title: fromRequest ? `Set up ${fromRequest.farmerName}'s farm` : "Register a new farm",
+    wide: true,
+    bodyHtml: wizard({
+      id: "register-farm",
+      title: "Register a new farm",
+      subtitle: "Four steps. Nothing is saved until the last one.",
+      confirmLabel: "Register the farm",
+      confirmAct: "wizard-register-farm",
+      steps: [
+        {
+          title: "Farmer",
+          hint: "Who this farm belongs to.",
+          bodyHtml: picker({
+            name: "ownerId",
+            label: "Farmer",
+            required: true,
+            requiredMessage: "Choose the farmer this farm belongs to.",
+            placeholder: "Search by name or email…",
+            hint: "Only existing farmer accounts can own a farm.",
+            value: fromRequest?.farmerId,
+            options: farmers.map((f) => ({
+              value: f.id,
+              label: f.name,
+              secondary: f.email,
+            })),
+          }),
+        },
+        {
+          title: "Farm details",
+          hint: "Where it is and how big it is.",
+          bodyHtml: `
+            <div class="fields">
+              <label class="f">
+                Farm name
+                <input
+                  type="text"
+                  data-field="farmName"
+                  data-required
+                  data-required-message="Give the farm a name."
+                  placeholder="Sunrise Valley Farm"
+                />
+              </label>
+              <label class="f">
+                Nearest town or district
+                <input
+                  type="text"
+                  data-field="location"
+                  data-required
+                  data-required-message="Say roughly where the farm is."
+                  placeholder="Ceres, Western Cape"
+                />
+              </label>
+              <label class="f">
+                Farm size (hectares)
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  data-field="farmSize"
+                  data-required
+                  data-required-message="Enter the farm size in hectares."
+                  placeholder="0"
+                />
+              </label>
+            </div>
+            ${locationPickerHtml({})}`,
+        },
+        {
+          title: "Zones",
+          hint: "One per irrigated block. Each one gets its own advice.",
+          bodyHtml: `
+            <label class="f">
+              How many zones?
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value="1"
+                data-register-farm-zone-count
+              />
+            </label>
+            <div id="registerFarmZones"></div>`,
+        },
+        {
+          title: "Review",
+          hint: "Check this, then register.",
+          bodyHtml: `<div id="registerFarmReview" class="review-pane"></div>`,
+        },
+      ],
+    }),
+
+    onOpen: () => {
+      wirePickers();
+      wireRegisterFarmZones();
+      wireWizards();
+      wireRegisterFarmReview();
+
+      /* The map lives on step 2, which is display:none when the drawer
+         opens, so it is mounted now and told to re-measure when the step
+         becomes visible. Mounting it lazily on first reveal would be
+         neater but needs an observer per wizard; this is one call. */
+      const mapHost = document.querySelector<HTMLElement>("[data-map-pick]");
+      if (mapHost) void mountLocationPicker(mapHost);
+
+      if (fromRequest) prefillFromRequest(fromRequest);
+    },
+  });
+}
+
+/* Fill the wizard from what the farmer asked for. Only what the request says;
+   anything it does not say is left for the admin to fill in. */
+function prefillFromRequest(r: ServiceRequest): void {
+  const set = (field: string, value: string | number | null | undefined): void => {
+    const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-field="${field}"]`);
+    if (el && value !== null && value !== undefined && value !== "") el.value = String(value);
+  };
+  set("location", r.location);
+  set("farmSize", r.roughSize);
+  set("zone_name_0", "Zone 1");
+  set("zone_crop_0", r.cropType);
+  set("zone_size_0", r.roughSize);
+}
+
+/* Item 6c: after a wizard launched from a request has saved, the request is
+   done - completed by whoever saved it (the API takes them from the login). */
+async function completeLaunchingRequest(note: string): Promise<void> {
+  const id = completeRequestOnSave;
+  completeRequestOnSave = null;
+  if (id === null) return;
+  try {
+    await api.updateServiceRequestStatus(id, "completed", note);
+    toast("The request is marked complete.", "success");
+  } catch (e) {
+    toast(e instanceof Error ? `The request is still open: ${e.message}` : "The request is still open.", "warn");
+  }
+}
+
+/* Item 6c: Add zones to an existing farm, for a "new zone" request. */
+function openAddZonesWizard(r: ServiceRequest): void {
+  completeRequestOnSave = r.id;
+  openDrawer({
+    title: `Add a zone to ${r.farmName ?? "the farm"}`,
+    subtitle: `For ${r.farmerName}'s request. Saving it completes the request.`,
+    wide: true,
+    bodyHtml: `
+      <label class="f">
+        How many zones?
+        <input type="number" min="1" max="10" value="1" data-add-zones-count />
+      </label>
+      <div id="addZonesContainer"></div>`,
+    confirmLabel: "Add the zone",
+    onOpen: () => {
+      const count = document.querySelector<HTMLInputElement>("[data-add-zones-count]");
+      const box = document.getElementById("addZonesContainer");
+      if (!count || !box) return;
+      const render = (): void => {
+        const existing = collectFields();
+        const n = Math.max(1, Math.min(10, Number(count.value) || 1));
+        box.innerHTML = Array.from({ length: n }, (_, i) => zoneRow(i)).join("");
+        box.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-field]").forEach((el) => {
+          const name = el.dataset["field"] ?? "";
+          if (existing[name]) el.value = existing[name];
+        });
+        syncZoneChoices(box);
+      };
+      count.addEventListener("input", render);
+      render();
+      wireZoneChoices(box);
+      const crop = box.querySelector<HTMLSelectElement>('[data-field="zone_crop_0"]');
+      if (crop) crop.value = r.cropType;
+      const size = box.querySelector<HTMLInputElement>('[data-field="zone_size_0"]');
+      if (size && r.roughSize !== null) size.value = String(r.roughSize);
+    },
+    onConfirm: () => {
+      const v = collectFields();
+      const n = document.querySelectorAll("#addZonesContainer [data-zone-row]").length || 1;
+      for (let i = 0; i < n; i++) {
+        const problem =
+          !v[`zone_name_${i}`]?.trim() ? `Give zone ${i + 1} a name.`
+          : !v[`zone_crop_${i}`] ? `Choose a crop for zone ${i + 1}.`
+          : !v[`zone_area_preset_${i}`] ? `Choose how big zone ${i + 1} is.`
+          : zoneSetupProblem(v, i);
+        if (problem) {
+          toast(problem, "warn");
+          return false;
+        }
+      }
+      const zones = Array.from({ length: n }, (_, i) => readZoneSetup(v, i));
+      void addZonesToFarm(r.farmId!, zones)
+        .then(async (res) => {
+          toast(res.message, "success");
+          await completeLaunchingRequest(`Completed by adding ${zones.map((z) => z.name).join(", ")}.`);
+          void refresh();
+        })
+        .catch((e: unknown) => {
+          completeRequestOnSave = r.id;
+          showErrorModal("Could not add the zone", e instanceof Error ? e.message : "Nothing was saved.");
+        });
+    },
+  });
+}
+
 /* The count, clamped to what the API will accept (1-50). Read from the DOM
    rather than passed around, because the repeater and the confirm handler
    both need it and the input is the only thing that knows. */
@@ -3215,7 +3500,7 @@ function registerFarmZoneCount(): number {
    Both are enforced by the API as well; checked here so the answer arrives
    in the drawer the admin is looking at rather than as a 400. */
 function validateRegisterFarmZones(
-  zones: { name: string; sizeHectares: number; cropType: string }[],
+  zones: { name: string; sizeHectares: number; cropType: string; areaM2?: number | null }[],
   farmSize: number,
 ): string | null {
   const total = zones.reduce((sum, z) => sum + z.sizeHectares, 0);
@@ -3252,11 +3537,21 @@ function wireRegisterFarmReview(): void {
       .querySelector<HTMLElement>('[data-picker="ownerId"] .picker-option.is-selected .picker-option-main b')
       ?.textContent?.trim();
 
-    const zones = Array.from({ length: registerFarmZoneCount() }, (_, i) => ({
-      name: v[`zone_name_${i}`] ?? "",
-      size: v[`zone_size_${i}`] ?? "",
-      crop: v[`zone_crop_${i}`] ?? "",
-    }));
+    const zones = Array.from({ length: registerFarmZoneCount() }, (_, i) => {
+      const z = readZoneSetup(v, i);
+      const preset = AREA_PRESETS.find((a) => a.value === v[`zone_area_preset_${i}`]);
+      return {
+        name: z.name,
+        size: v[`zone_size_${i}`]
+          ? `${v[`zone_size_${i}`]} ha`
+          : z.areaM2 != null
+            ? preset && preset.m2 != null ? preset.label : `${z.areaM2} m²`
+            : "",
+        crop: z.cropType,
+        soil: SOILS.find((s) => s.value === z.soilType)?.label ?? z.soilType,
+        planted: z.plantingDate ? `about ${v[`zone_weeks_${i}`]} weeks ago` : "Not given",
+      };
+    });
 
     const coords =
       v["latitude"] && v["longitude"]
@@ -3273,14 +3568,16 @@ function wireRegisterFarmReview(): void {
         ["Zones", String(zones.length)],
       ])}
       <table class="table review-zones">
-        <thead><tr><th>Zone</th><th>Size</th><th>Crop</th></tr></thead>
+        <thead><tr><th>Zone</th><th>Size</th><th>Crop</th><th>Soil</th><th>Planted</th></tr></thead>
         <tbody>
           ${zones
             .map(
               (z) => `<tr>
                 <td>${esc(z.name || "(no name)")}</td>
-                <td>${z.size ? `${esc(z.size)} ha` : "—"}</td>
+                <td>${z.size ? esc(z.size) : "—"}</td>
                 <td>${z.crop ? esc(cropLabel(z.crop)) : "—"}</td>
+                <td>${esc(z.soil)}</td>
+                <td>${esc(z.planted)}</td>
               </tr>`,
             )
             .join("")}
@@ -3300,7 +3597,7 @@ function wireRegisterFarmReview(): void {
   render();
 }
 
-/* ---- Live farm reports (real endpoints; the cards above are demo data) ---- */
+/* ---- Farm reports, attention, automatic reports (item 4) ---------------- */
 
 function liveEsc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -3311,110 +3608,79 @@ function liveVal(id: string): string {
   return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
 }
 
-function wireLiveReports(): void {
-  const farm = document.getElementById("liveFarm") as HTMLSelectElement | null;
-  const zone = document.getElementById("liveZone") as HTMLSelectElement | null;
-  if (!farm || !zone || farm.dataset["bound"]) return;
-  farm.dataset["bound"] = "1";
-  farm.addEventListener("change", async () => {
-    zone.innerHTML = `<option value="">Select a zone</option>`;
-    const id = Number(farm.value);
-    if (!id) return;
-    try {
-      const zones = await getReportZones(id);
-      zone.innerHTML = `<option value="">Select a zone</option>` + zones.map((z) =>
-        `<option value="${z.zoneId}">${liveEsc(z.name)}${z.cropType ? " (" + liveEsc(z.cropType) + ")" : ""}</option>`).join("");
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not load zones.", "info");
-    }
-  });
+/* The chosen period as dates: the last N days ending today (SAST), or the
+   two date fields when "Choose dates" is picked. */
+function livePeriod(): { from: string; to: string } {
+  const choice = liveVal("livePeriod");
+  if (choice === "custom") return { from: liveVal("liveFrom"), to: liveVal("liveTo") };
+  const days = Number(choice) || 7;
+  const to = new Date(Date.now() + 2 * 3600_000);
+  const from = new Date(to.getTime() - (days - 1) * 86_400_000);
+  return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
-// One insight, with its source in small text underneath. Farmers never see the
-// source; reports always show it (spec 9b).
-function liveInsight(i: any): string {
-  const severity = typeof i?.severity === "string" ? i.severity : "info";
-  return `<li class="liveInsight liveInsight--${liveEsc(severity)}">
-    <span class="liveInsight__text">${liveEsc(i?.text ?? "")}</span>
-    ${i?.source ? `<small class="liveInsight__source">Source: ${liveEsc(i.source)}</small>` : ""}
-  </li>`;
-}
-
-function liveInsights(insights: any, heading = "What to do"): string {
-  if (!Array.isArray(insights) || insights.length === 0) return "";
-  return `<div class="liveInsights"><h6>${liveEsc(heading)}</h6>
-    <ul class="liveInsights__list">${insights.map(liveInsight).join("")}</ul></div>`;
-}
-
-// Spec 9c: weather app (the area) beside the DHT11 (in the tub), with the
-// difference. A missing value shows as "-" and a missing sensor as the row's own
-// note, never as a zero that would read as perfect agreement.
-function liveWeatherComparison(comparison: any): string {
-  if (!comparison) return "";
-  const days = Array.isArray(comparison.days) ? comparison.days : [];
-
-  if (days.length === 0) {
-    return `<div class="liveWeatherCompare"><h6>Weather: area vs tub</h6>
-      <p><small>${liveEsc(comparison.message ?? "No observed weather days to compare yet.")}</small></p></div>`;
-  }
-
-  const n = (v: any) => (v === null || v === undefined ? "-" : liveEsc(v));
-
-  const rows = days.map((day: any) => `<tr>
-      <td>${liveEsc(day.date)}</td>
-      <td>${n(day.app?.tminC)}</td><td>${n(day.app?.tmaxC)}</td>
-      <td>${n(day.app?.rhMeanPct)}</td><td>${n(day.app?.windMs)}</td><td>${n(day.app?.rainMm)}</td>
-      <td>${n(day.dht?.tminC)}</td><td>${n(day.dht?.tmaxC)}</td><td>${n(day.dht?.rhMeanPct)}</td>
-      <td>${n(day.difference?.tmaxC)}</td>
-      <td>${day.note ? liveEsc(day.note) : ""}</td>
-    </tr>`).join("");
-
-  return `<div class="liveWeatherCompare"><h6>Weather: area vs tub</h6>
-    <p><small>${liveEsc(comparison.caption ?? "")}</small></p>
-    <table><thead><tr>
-      <th>Date</th><th>Area min</th><th>Area max</th><th>Area RH</th><th>Wind m/s</th><th>Rain mm</th>
-      <th>Tub min</th><th>Tub max</th><th>Tub RH</th><th>Max diff</th><th>Note</th>
-    </tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-
-function liveRender(kind: string, d: any): string {
-  if (kind === "water-usage") {
-    const rows = (d.zones as any[]).map((z) => `<tr><td>${liveEsc(z.name)}</td><td>${liveEsc(z.eventCount)}</td>
-      <td>${z.status === "ok" ? liveEsc(z.estimatedLitres) + " L (estimated)" : liveEsc(z.message)}</td></tr>`).join("");
-    return `<p><em>${liveEsc(d.estimateNote)}</em></p>
-      ${liveInsights(d.insights)}
-      <table><thead><tr><th>Zone</th><th>Events</th><th>Water</th></tr></thead><tbody>${rows}</tbody></table>`;
-  }
-  if (kind === "moisture") {
-    if (d.status !== "ok") return `<p>${liveEsc(d.message)}</p>`;
-    const s = d.summary;
-    return `<p><strong>${liveEsc(d.zoneName)}</strong>: ${liveEsc(s.readingCount)} readings, average ${liveEsc(s.averagePct)}%,
-      lowest ${liveEsc(s.lowestPct)}%, highest ${liveEsc(s.highestPct)}%.</p>
-      <p>${liveEsc(s.action)}</p>
-      ${liveInsights(d.insights)}
-      ${d.calibrationNote ? `<p><small>${liveEsc(d.calibrationNote)}</small></p>` : ""}
-      <p>${liveEsc((d.irrigationEvents as any[]).length)} irrigation event(s) in this period. <em>${liveEsc(d.estimateNote)}</em></p>`;
-  }
-  const blocks = (d.zones as any[]).map((z) => `<h5>${liveEsc(z.name)} (${liveEsc(z.cropType ?? "no crop set")})</h5>
-    <p>${liveEsc(z.summary)}</p>
-    ${z.plainSummary ? `<p><strong>${liveEsc(z.plainSummary)}</strong></p>` : ""}
-    ${liveInsights(z.insights)}
-    ${(z.limitations as string[]).map((l) => `<p><small>${liveEsc(l)}</small></p>`).join("")}
-    <table><thead><tr><th>Date</th><th>Action</th><th>ET0 mm</th><th>Rain mm</th><th>Note</th></tr></thead><tbody>
-    ${(z.days as any[]).map((day) => `<tr><td>${liveEsc(day.date)}</td><td>${liveEsc(day.action)}</td>
-      <td>${liveEsc(day.et0MmPerDay ?? "-")}</td><td>${liveEsc(day.forecastRainMm ?? "-")}</td><td>${liveEsc(day.note)}</td></tr>`).join("")}
-    </tbody></table>`).join("");
-  return d.status === "ok"
-    ? blocks + liveWeatherComparison(d.weatherComparison)
-    : `<p>${liveEsc(d.message)}</p>`;
-}
-
-/* The same report as a workbook. Only water usage has one - see the note on
-   the button in pages/analytics.ts. */
-async function liveReportXlsx(): Promise<void> {
+/* The report path for the current choices, or a reason it cannot be made. */
+function farmReportPath(): { path: string; name: string } | { error: string } {
   const farmId = Number(liveVal("liveFarm"));
   const zoneId = Number(liveVal("liveZone"));
-  const from = liveVal("liveFrom"), to = liveVal("liveTo");
+  const type = liveVal("liveType") || "water-usage";
+  const { from, to } = livePeriod();
+
+  if (!farmId) return { error: "Pick a farm first." };
+  if (!from || !to) return { error: "Pick a from and to date." };
+
+  if (type === "moisture") {
+    if (!zoneId) return { error: "Soil moisture is one zone at a time - pick a zone." };
+    return { path: `moisture?zoneId=${zoneId}&from=${from}&to=${to}`, name: `soil-moisture-${from}-to-${to}` };
+  }
+  if (type === "schedule") {
+    return {
+      path: `schedule?farmId=${farmId}${zoneId ? `&zoneId=${zoneId}` : ""}`,
+      name: "watering-schedule",
+    };
+  }
+  return {
+    path: zoneId
+      ? `water-usage?farmId=${farmId}&zoneId=${zoneId}&from=${from}&to=${to}`
+      : `water-usage?farmId=${farmId}&from=${from}&to=${to}`,
+    name: `water-usage-${from}-to-${to}`,
+  };
+}
+
+async function farmReportPreview(): Promise<void> {
+  const choice = farmReportPath();
+  if ("error" in choice) return void toast(choice.error, "info");
+  const out = document.getElementById("liveReportResult");
+  if (!out) return;
+  out.innerHTML = `<div class="muted">Building the report…</div>`;
+  try {
+    const blob = await fetchReportPdfBlob(choice.path.replace("?", "/pdf?"));
+    const url = URL.createObjectURL(blob);
+    // The PDF itself, so the preview cannot differ from the download.
+    out.innerHTML = `<iframe class="report-preview" title="Report preview" src="${url}"></iframe>`;
+  } catch (e) {
+    out.innerHTML = "";
+    toast(e instanceof Error ? e.message : "The report could not be built.", "info");
+  }
+}
+
+async function farmReportPdf(): Promise<void> {
+  const choice = farmReportPath();
+  if ("error" in choice) return void toast(choice.error, "info");
+  try {
+    await downloadReportPdf(choice.path.replace("?", "/pdf?"), `agroflow-${choice.name}.pdf`);
+    toast("PDF downloaded.", "success");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "The report could not be built.", "info");
+  }
+}
+
+/* The water-usage figures as a workbook - the one report with a table of
+   numbers somebody wants to chart or paste. */
+async function farmReportXlsx(): Promise<void> {
+  const farmId = Number(liveVal("liveFarm"));
+  const zoneId = Number(liveVal("liveZone"));
+  const { from, to } = livePeriod();
 
   if (!farmId) return toast("Pick a farm first.", "info");
   if (!from || !to) return toast("Pick a from and to date.", "info");
@@ -3428,7 +3694,6 @@ async function liveReportXlsx(): Promise<void> {
       `/api/farmer/reports/water-usage/xlsx?${query}`,
       `agroflow-water-usage-${from}-to-${to}.xlsx`,
     );
-
     toast("Workbook downloaded.", "success");
   } catch (e) {
     showErrorModal(
@@ -3438,41 +3703,188 @@ async function liveReportXlsx(): Promise<void> {
   }
 }
 
-async function liveReportRun(kind: string, pdf: boolean): Promise<void> {
-  const farmId = Number(liveVal("liveFarm"));
-  const zoneId = Number(liveVal("liveZone"));
-  const from = liveVal("liveFrom"), to = liveVal("liveTo");
-
-  let path: string;
-  if (kind === "moisture") {
-    if (!zoneId) return toast("Pick a farm and a zone first.", "info");
-    if (!from || !to) return toast("Pick a from and to date.", "info");
-    path = `moisture?zoneId=${zoneId}&from=${from}&to=${to}`;
-  } else if (kind === "water-usage") {
-    if (!farmId) return toast("Pick a farm first.", "info");
-    if (!from || !to) return toast("Pick a from and to date.", "info");
-
-    // A chosen zone gets that zone's own designed report; "all zones" gets
-    // the farm-wide one, which is the same document with a summary in front.
-    path = zoneId
-      ? `water-usage?farmId=${farmId}&zoneId=${zoneId}&from=${from}&to=${to}`
-      : `water-usage?farmId=${farmId}&from=${from}&to=${to}`;
-  } else if (kind === "schedule") {
-    if (!farmId) return toast("Pick a farm first.", "info");
-    path = `schedule?farmId=${farmId}`;
-  } else return;
-
+/* The automatic-reports summary for the chosen farm. */
+async function refreshAutoReportsSummary(farmId: number): Promise<void> {
+  const host = document.getElementById("autoReportsSummary");
+  const edit = document.getElementById("autoReportsEdit");
+  if (!host) return;
+  if (edit) edit.dataset["id"] = String(farmId);
   try {
-    if (pdf) {
-      await downloadReportPdf(path.replace("?", "/pdf?"), `${kind}-report.pdf`);
-      return toast("PDF downloaded.", "success");
-    }
-    const data = await getReportJson<any>(path);
-    const out = document.getElementById("liveReportResult");
-    if (out) out.innerHTML = liveRender(kind, data);
-  } catch (e) {
-    toast(e instanceof Error ? e.message : "Report failed.", "info");
+    const s = await getReportSchedule(farmId);
+    if (Number(liveVal("liveFarm")) !== farmId) return; // a newer choice won
+    const when = (iso: string | null | undefined): string => (iso ? fmtDateTimeSast(iso) : "—");
+    host.innerHTML = `
+      <div class="detail-list">
+        <div class="detail-row"><span>Now</span><b>${liveEsc(s.description)}</b></div>
+        <div class="detail-row"><span>Last sent</span><b>${liveEsc(when(s.lastSentAt))}</b></div>
+        <div class="detail-row"><span>Next send</span><b>${liveEsc(when(s.nextSendAt))}</b></div>
+        ${s.turnedOffBy ? `<div class="detail-row"><span>Turned off by</span><b>${liveEsc(s.turnedOffBy)} · ${liveEsc(when(s.turnedOffAt))}</b></div>` : ""}
+      </div>`;
+  } catch {
+    host.textContent = "This farm's automatic reports could not be read.";
   }
+}
+
+async function loadReportZones(farmId: number): Promise<void> {
+  const zone = document.getElementById("liveZone") as HTMLSelectElement | null;
+  if (!zone) return;
+  zone.innerHTML = `<option value="">All zones</option>`;
+  if (!farmId) return;
+  try {
+    const zones = await getReportZones(farmId);
+    if (Number(liveVal("liveFarm")) !== farmId) return;
+    zone.innerHTML = `<option value="">All zones</option>` + zones.map((z) =>
+      `<option value="${z.zoneId}">${liveEsc(z.name)}${z.cropType ? " (" + liveEsc(z.cropType) + ")" : ""}</option>`).join("");
+  } catch (e) {
+    toast(e instanceof Error ? e.message : "Could not load zones.", "info");
+  }
+}
+
+function wireLiveReports(): void {
+  const farm = document.getElementById("liveFarm") as HTMLSelectElement | null;
+  const period = document.getElementById("livePeriod") as HTMLSelectElement | null;
+  if (!farm || farm.dataset["bound"]) return;
+  farm.dataset["bound"] = "1";
+
+  const onFarm = (): void => {
+    const id = Number(farm.value);
+    if (id) rememberReportFarm(id);
+    void loadReportZones(id);
+    void refreshAutoReportsSummary(id);
+  };
+  farm.addEventListener("change", onFarm);
+  onFarm(); // the pre-filled farm
+
+  period?.addEventListener("change", () => {
+    document.querySelectorAll<HTMLElement>(".live-custom").forEach((el) => {
+      el.hidden = period.value !== "custom";
+    });
+  });
+}
+
+/* One "Farms needing attention" line, opened: every farm and zone behind it,
+   each with its own "Why am I seeing this?". */
+function openAttentionGroup(key: string): void {
+  const group = findAttentionGroup(key);
+  if (!group) return;
+  openDrawer({
+    title: `${group.farms} ${group.label}`,
+    subtitle: "From the advice of the last 7 days",
+    wide: true,
+    bodyHtml: `<div class="drawer-section"><ul class="drawer-list">${group.items.map((i) => `
+      <li>
+        <b>${liveEsc(i.farm)} · ${liveEsc(i.zone)}</b> - ${liveEsc(i.message)}
+        <small class="muted">${liveEsc(fmtDate(i.day))}</small>
+        ${whyLink(i.explanation)}
+      </li>`).join("")}</ul></div>`,
+  });
+}
+
+/* ---------------------- delegated clicks (item 0b) ----------------------- */
+
+let delegatedBound = false;
+
+/* Elements whose action is still running. A second click on one of them is
+ * dropped, so a double-click on Save, Confirm or Create sends ONE request.
+ * Keyed on the element rather than the action, so two different rows' Save
+ * buttons are still independent. A WeakSet, so a re-rendered page's old
+ * buttons are simply forgotten. */
+const busy = new WeakSet<HTMLElement>();
+
+/* One listener for every action in the console, registered once.
+ *
+ * The innermost [data-act] under the pointer wins, which is what lets an
+ * action link inside a clickable card do its own thing instead of opening the
+ * card. preventDefault matters: most actions are `<a href="#">`, and letting
+ * that through would set the hash to "#" - which is a navigation to Home. */
+function bindDelegatedClicks(): void {
+  if (delegatedBound) return;
+  delegatedBound = true;
+
+  document.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (!target) return;
+
+    const go = target.closest<HTMLElement>("[data-go]");
+    if (go) {
+      e.preventDefault();
+      navigate(go.dataset["go"] ?? "dashboard");
+      return;
+    }
+
+    const tab = target.closest<HTMLElement>(".tab[data-tab]");
+    if (tab) {
+      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+      tab.classList.add("active");
+      positionTabUnderline();
+      // Synchronous, so the last tab clicked is the one shown. Its network
+      // panels guard themselves against late answers (see the settings
+      // loaders), so a slow tab cannot paint over a fast one.
+      renderSettingsTab(tab.dataset["tab"] ?? "My account");
+      return;
+    }
+
+    const el = target.closest<HTMLElement>("[data-act]");
+    if (!el) return;
+
+    e.preventDefault();
+
+    if (busy.has(el)) return;
+
+    // A newer click supersedes any detail panel still loading from an older
+    // one - see beginPanelIntent().
+    if ((el.dataset["act"] ?? "").startsWith("view-")) beginPanelIntent();
+
+    busy.add(el);
+    el.setAttribute("aria-busy", "true");
+
+    void handleAction(el).finally(() => {
+      busy.delete(el);
+      el.removeAttribute("aria-busy");
+    });
+  });
+}
+
+/* Item 6c: onboarding launched from an enquiry starts filled in from it. */
+let onboardingFromEnquiry: Enquiry | null = null;
+let onboardingPrefilled = false;
+
+function prefillOnboardingFromEnquiry(): void {
+  const e = onboardingFromEnquiry;
+  if (!e || onboardingPrefilled) return;
+  const set = (field: string, value: string | number | null): void => {
+    const el = document.querySelector<HTMLInputElement>(`[data-field="${field}"]`);
+    if (el && value !== null && value !== "") el.value = String(value);
+  };
+  if (!document.querySelector('[data-field="fullName"]')) return;
+  set("fullName", e.fullName);
+  set("email", e.email);
+  set("phone", e.phone);
+  set("location", [e.town, e.province].filter(Boolean).join(", "));
+  set("farmSize", e.farmSizeHa);
+  onboardingPrefilled = true;
+  toast("Filled in from the enquiry. Finishing onboarding completes it.", "info");
+}
+
+/* Item 6c: the Requests entry in the sidebar shows how many enquiries need a
+   person - nobody has them yet, or a call-back is due. */
+async function refreshEnquiryBadge(): Promise<void> {
+  const button = document.querySelector<HTMLElement>('#nav button[data-page="requests"]');
+  if (!button) return;
+  const summary = await getEnquirySummary().catch(() => null);
+  const count = (Number(summary?.waiting) || 0) + (Number(summary?.callbacksDue) || 0);
+  let badgeEl = button.querySelector<HTMLElement>(".nav-badge");
+  if (count <= 0) {
+    badgeEl?.remove();
+    return;
+  }
+  if (!badgeEl) {
+    badgeEl = document.createElement("span");
+    badgeEl.className = "nav-badge";
+    button.appendChild(badgeEl);
+  }
+  badgeEl.textContent = String(count);
+  badgeEl.setAttribute("aria-label", `${count} enquir${count === 1 ? "y" : "ies"} need a call`);
 }
 
 export function wirePageInteractions(): void {
@@ -3488,41 +3900,17 @@ export function wirePageInteractions(): void {
   wireFilters();
   wireLiveReports();
  wireOnboardingZones();
+  prefillOnboardingFromEnquiry();
+  void refreshEnquiryBadge();
   wirePickers();
   wireWizards();
 
-  document.querySelectorAll<HTMLElement>("[data-go]").forEach((a) => {
-    if (a.dataset["bound"]) return;
-    a.dataset["bound"] = "1";
-    a.addEventListener("click", (e) => {
-      e.preventDefault();
-      void go(a.dataset["go"] ?? "dashboard");
-    });
-  });
-
-  document.querySelectorAll<HTMLElement>("[data-act]").forEach((el) => {
-    if (el.dataset["bound"]) return;
-    el.dataset["bound"] = "1";
-    el.addEventListener("click", (e) => {
-      // Let inner action links win over a clickable card wrapper.
-      const inner = (e.target as HTMLElement).closest<HTMLElement>("[data-act]");
-      if (inner && inner !== el) return;
-      e.preventDefault();
-      e.stopPropagation();
-      void handleAction(el);
-    });
-  });
-
-  document.querySelectorAll<HTMLElement>(".tab").forEach((t) => {
-    if (t.dataset["bound"]) return;
-    t.dataset["bound"] = "1";
-    t.addEventListener("click", () => {
-      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
-      t.classList.add("active");
-      positionTabUnderline();
-      renderSettingsTab(t.dataset["tab"] ?? "General");
-    });
-  });
+  // [data-go], [data-act] and .tab clicks are handled by ONE delegated
+  // listener on the document - see bindDelegatedClicks() below. They used to
+  // be bound element by element after every render, which never double-bound
+  // (each element was flagged) but missed anything rendered later: a drawer's
+  // buttons, a picker rebuilt in place, a timeline loaded after the page.
+  bindDelegatedClicks();
 
   document.querySelectorAll<HTMLElement>("[data-toggle]").forEach((t) => {
     if (t.dataset["bound"]) return;
@@ -3534,36 +3922,6 @@ export function wirePageInteractions(): void {
     t.addEventListener("click", flip);
     t.addEventListener("keydown", (e) => {
       if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); }
-    });
-  });
-
-  document.querySelectorAll<HTMLSelectElement>(".request-status-select").forEach((select) => {
-    if (select.dataset["bound"]) return;
-    select.dataset["bound"] = "1";
-
-    select.addEventListener("change", () => {
-      const id = Number(select.dataset["requestId"]);
-      const status = select.value as "pending" | "scheduled" | "completed";
-
-      if (!id) {
-        toast("Invalid request selected.", "warn");
-        return;
-      }
-
-      void api.updateServiceRequestStatus(id, status)
-        .then(() => {
-          toast("Request status updated.", "success");
-          void refresh();
-        })
-        .catch((error) => {
-          console.error("Failed to update request status:", error);
-          toast(
-            error instanceof Error
-              ? error.message
-              : "Unable to update request status.",
-            "warn",
-          );
-        });
     });
   });
 
@@ -3655,3 +4013,23 @@ export function updateHeaderIdentity(): void {
   btn.title = profile.name || profile.email;
   nameEl.textContent = profile.name || profile.email;
 }
+
+/* Item 5: one action on an alert, a job or a request, sent to the API. The
+   actor is never sent - the API takes it from the login. */
+async function runItemAction(kind: HandlingKind, id: string, action: string, note?: string, date?: string): Promise<void> {
+  try {
+    const r = await itemAction(kind, id, action, note, date);
+    toast(r.message, action === "escalate" ? "warn" : "success");
+  } catch (e) {
+    showErrorModal("Could not save that", e instanceof Error ? e.message : "Nothing was changed.");
+  }
+  void refresh();
+}
+
+/* "You, since 09:49 on 6 Oct" / "Name, since ..." / "Nobody yet". */
+function handledLine(item: Handling): string {
+  if (!item.handledByName) return `<span class="muted">Nobody yet</span>`;
+  const me = getAdminProfile()?.id === item.handledById;
+  return `${esc(me ? "You" : item.handledByName)}${item.claimedAt ? `, since ${esc(fmtDateTimeSast(item.claimedAt))}` : ""}`;
+}
+

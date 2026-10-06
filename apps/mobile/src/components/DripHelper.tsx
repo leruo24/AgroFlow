@@ -8,12 +8,14 @@ import {
   View,
 } from 'react-native';
 import { X } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { router } from '@/lib/router';
 
 import Drip, { MASCOT_NAME, type DripMood } from '@/components/mascot/Drip';
 import { useTheme } from '@/context/ThemeContext';
 import { createDripHelperStyles } from '@/styles/dripHelperStyles';
 import { useAppPreferences } from '@/hooks/useAppPreferences';
+import { WhyLink } from '@/components/WhySheet';
+import type { Explanation } from '@/services/agroFlowApi';
 import {
   fetchTodayZoneInsights,
   type ZoneInsightRow,
@@ -76,6 +78,8 @@ type Decision = {
   mood: DripMood;
   // Where tapping the bubble goes. null means there is nothing to open.
   target: { kind: 'alerts' } | { kind: 'zone'; zoneId: string } | null;
+  // Item 2c: the explanation of the insight behind the message, if any.
+  explanation?: Explanation | null;
 };
 
 // The priority order from the spec. The first rule that matches wins, so the
@@ -104,6 +108,7 @@ export function decideMessage(
           ? 'thirsty'
           : 'alert',
       target: { kind: 'zone', zoneId: actNow.zoneId },
+      explanation: actNow.explanation ?? null,
     };
   }
 
@@ -125,18 +130,20 @@ export function decideMessage(
       message: waterSoon.message,
       mood: 'thirsty',
       target: { kind: 'zone', zoneId: waterSoon.zoneId },
+      explanation: waterSoon.explanation ?? null,
     };
   }
 
-  // 4. Setup still unfinished.
+  // 4. Setup still unfinished. Item 2: advice comes either way, so this is
+  // the server's ONE next step ("Add the planting date for ..."), not a
+  // claim that advice is waiting on it.
   const setupMissing = insights.find((i) => i.insightType === 'setup_missing');
   if (setupMissing) {
     return {
-      message: `Finish setting up ${nameFor(
-        setupMissing.zoneId
-      )} to get watering advice.`,
+      message: `${nameFor(setupMissing.zoneId)}: ${setupMissing.message}`,
       mood: 'alert',
       target: { kind: 'zone', zoneId: setupMissing.zoneId },
+      explanation: setupMissing.explanation ?? null,
     };
   }
 
@@ -337,6 +344,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
             style={styles.bubble}
           >
             <Text style={styles.bubbleText}>{decision.message}</Text>
+            <WhyLink explanation={decision.explanation} compact onOpen={() => cleanupTimers.current?.()} />
           </Pressable>
 
           <Pressable

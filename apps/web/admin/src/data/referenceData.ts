@@ -54,9 +54,3 @@ export const EVENT_TYPE_OPTIONS = [
   "Schedule edited", "Schedule deleted", "Report generated",
 ] as const;
 
-/** No technician/staff-roster table exists anywhere in the schema - this
-    is a genuine gap, not a query I can point at something real. Kept as a
-    static placeholder list purely so the "assign technician" text field
-    has autocomplete-style suggestions; it is not a source of truth about
-    who your technicians actually are. */
-export const TECHNICIANS = ["Sipho Dlamini", "Pieter Botha", "Nomvula Zulu", "Retha Steyn"] as const;

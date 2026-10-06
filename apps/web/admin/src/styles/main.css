@@ -1726,3 +1726,96 @@ tbody tr:last-child td{border-bottom:none}
 }
 .settings-block .form-foot{ margin-top:14px; }
 .muted.sm{ font-size:12.5px; line-height:1.5; margin:2px 0; }
+
+/* ===================================================================
+   NO LAYOUT JUMP BETWEEN PAGES (item 0b)
+
+   The document is the scroll container. A short skeleton has no scrollbar;
+   the long page that replaces it does. On Windows a classic scrollbar takes
+   ~15 px, so every swap slid the whole console sideways and back - visible as
+   the page "vibrating" when somebody clicked through a few items quickly.
+   Reserving the gutter permanently means the scrollbar can come and go
+   without moving anything.
+   =================================================================== */
+html{ scrollbar-gutter: stable; }
+.sidebar{ scrollbar-gutter: stable; }
+
+/* The skeleton holds the page's height while it loads, so the footer and
+   everything under the content area do not collapse up and then drop back
+   down when the real page arrives. */
+.skeleton-wrap{ min-height: calc(100vh - 140px); }
+
+/* While a page is loading, a second click is the only input that matters;
+   the outgoing page's own buttons must not take one. */
+#content[aria-busy="true"]{ pointer-events: none; }
+
+/* ------------------------------------------------------------------ *
+ * Item 2c: "Why am I seeing this?"
+ * The link sits beside a card or tile, never inside it (a button inside a
+ * button is invalid), so the wrappers keep the grid cell a single column.
+ * ------------------------------------------------------------------ */
+.kpi-item, .attn-item{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+.kpi-item > .card, .attn-item > .attn-card{ flex:1; }
+.why-link{
+  align-self:flex-start; background:none; border:0; padding:4px 2px; cursor:pointer;
+  color:var(--accent); font-size:12px; font-weight:600; text-decoration:underline;
+}
+.why-link:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
+.why-body .why-summary{ font-size:15px; font-weight:600; margin:0 0 12px; }
+.why-body .detail-row small{ display:block; }
+.why-technical p{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; opacity:.85; }
+
+/* Item 4: the Reports page. */
+.report-preview{ width:100%; height:720px; border:1px solid var(--line, #e2e8e4); border-radius:8px; background:#fff; }
+.attn-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.link-btn{ background:none; border:0; padding:4px 0; cursor:pointer; text-align:left; color:inherit; font:inherit; }
+.link-btn:hover b, .link-btn:focus-visible b{ text-decoration:underline; }
+
+/* Item 6: soil cards in the zone rows. Selected = bar + tint + bold, never colour alone. */
+.zone-setup{ border-top:1px solid var(--divider); padding-top:12px; margin-top:12px; }
+/* .drawer-field sets display, which would otherwise beat the hidden attribute. */
+.zone-setup [hidden]{ display:none; }
+.soil-cards{ display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
+.soil-card{
+  display:flex; flex-direction:column; gap:2px; text-align:left;
+  padding:10px 12px; border:1px solid var(--divider); border-radius:8px;
+  background:var(--surface); color:inherit; font:inherit; cursor:pointer;
+}
+.soil-card small{ color:var(--muted, inherit); opacity:.85; }
+.soil-card:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.soil-card.is-selected{ background:var(--surface-2); box-shadow:inset 3px 0 0 var(--brand); }
+.soil-card.is-selected b{ color:var(--brand); }
+.field-note{ display:block; margin-top:4px; opacity:.8; }
+@media (max-width: 600px){ .soil-cards{ grid-template-columns:1fr; } }
+
+/* Item 6b: "Recommended for you" in the register wizard. */
+.recommend-card{ margin-top:8px; padding:10px 12px; border-radius:8px; background:var(--surface-2); box-shadow:inset 3px 0 0 var(--brand); }
+.recommend-card p{ margin:6px 0 0; }
+
+/* Item 6c: the Requests list fits 1366 px - long text wraps, nothing scrolls sideways. */
+.requests-table{ table-layout:auto; width:100%; }
+.requests-table td{ white-space:normal; overflow-wrap:anywhere; vertical-align:top; }
+.row-actions{ display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }
+
+/* Item 6c: "Get a call back" on the landing page. */
+.enquiry-form{ display:grid; gap:12px; max-width:560px; margin-top:16px; }
+.enquiry-form fieldset{ border:1px solid var(--divider); border-radius:8px; padding:10px 12px; display:flex; flex-wrap:wrap; gap:8px 16px; }
+.enquiry-form legend{ padding:0 4px; font-weight:600; }
+.enquiry-form .check{ display:flex; gap:6px; align-items:center; }
+.enquiry-other{ flex-basis:100%; }
+.enquiry-consent{ align-items:flex-start !important; }
+.enquiry-hp{ position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+.enquiry-error{ color:var(--bad, #b42318); margin:0; }
+.enquiry-thanks{ font-weight:600; margin-top:16px; }
+.enquiry [hidden]{ display:none !important; }
+
+/* Item 6c: Requests tabs, and the nav count badge. */
+.req-tabs{ display:flex; gap:4px; border-bottom:1px solid var(--divider); margin:0 0 12px; flex-wrap:wrap; }
+.req-tab{ background:none; border:0; padding:8px 12px; font:inherit; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; }
+.req-tab.active{ color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
+.req-tab:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.nav-badge{ display:inline-block; min-width:18px; padding:0 6px; margin-left:6px; border-radius:9px; background:var(--bad, #b42318); color:#fff; font-size:11px; line-height:18px; text-align:center; font-weight:700; }
+.log-call{ display:grid; gap:12px; }
+.log-call fieldset{ border:1px solid var(--divider); border-radius:8px; padding:10px 12px; display:flex; flex-wrap:wrap; gap:8px 16px; }
+.log-call .check{ display:flex; gap:6px; align-items:center; }
+.log-call [hidden]{ display:none !important; }

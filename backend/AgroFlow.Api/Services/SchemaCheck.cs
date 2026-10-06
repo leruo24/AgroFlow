@@ -111,6 +111,30 @@ public sealed class SchemaCheck
             "select 1 where has_table_privilege('service_role', 'public.admin_audit_log', 'INSERT')",
             "Admin actions are not recorded if the API does not connect as the table's owner."),
 
+        new("0039", "table", "explanation",
+            "select to_regclass('public.explanation')",
+            "Telegram messages go out without a \"Why am I seeing this?\" button."),
+
+        new("0040", "column", "report_schedule.per_zone_pdf",
+            "select 1 from information_schema.columns where table_name = 'report_schedule' and column_name = 'per_zone_pdf'",
+            "Automatic reports cannot be daily, on a chosen weekday or per zone; extra recipients are ignored."),
+
+        new("0041", "column", "alert.handled_by_profile_id",
+            "select 1 from information_schema.columns where table_name = 'alert' and column_name = 'handled_by_profile_id'",
+            "Nobody can claim, take over, resolve or complete alerts, requests or maintenance on the record."),
+
+        new("0042", "table", "soil_feel_check",
+            "select to_regclass('public.soil_feel_check')",
+            "Farmers cannot log \"I watered\" or \"How does the soil feel?\" - farms without a kit get weather-only advice."),
+
+        new("0043", "function", "zone_farmer_edit_guard",
+            "select to_regprocedure('public.zone_farmer_edit_guard()')",
+            "A farmer's own login could change any zone column directly, including the watering thresholds."),
+
+        new("0044", "table", "enquiry",
+            "select to_regclass('public.enquiry')",
+            "The public \"Get a call back\" form cannot take enquiries, and the Enquiries tab is empty."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

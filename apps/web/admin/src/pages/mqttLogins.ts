@@ -58,10 +58,10 @@ export async function mqttLoginsPage(): Promise<string> {
   ${pool.warning ? `<div class="muted" style="margin:0 0 16px">⚠ ${esc(pool.warning)}</div>` : ""}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Free", value: pool.freeCount, icon: Icon.circleCheck })}
-    ${kpiCard({ label: "Assigned to a kit", value: pool.assignedCount, icon: Icon.radio })}
-    ${kpiCard({ label: "Burned", value: pool.burnedCount, icon: Icon.circleX })}
-    ${kpiCard({ label: "Total", value: total, icon: Icon.radio })}
+    ${kpiCard({ label: "Free", value: pool.freeCount, icon: Icon.circleCheck, why: { counts: "broker logins are free", rule: "Logins in the pool not yet handed to a kit.", highlighted: "New kits take one of these when they are claimed.", query: "mqtt_credential_pool: unassigned, not burned" } })}
+    ${kpiCard({ label: "Assigned to a kit", value: pool.assignedCount, icon: Icon.radio, why: { counts: "broker logins are in use", rule: "Logins handed to a kit at claim.", query: "mqtt_credential_pool: assigned" } })}
+    ${kpiCard({ label: "Burned", value: pool.burnedCount, icon: Icon.circleX, why: { counts: "broker logins are burned", rule: "Logins retired and never handed out again.", query: "mqtt_credential_pool: burned" } })}
+    ${kpiCard({ label: "Total", value: total, icon: Icon.radio, why: { counts: "broker logins are in the pool", rule: "Every login in the pool.", query: "mqtt_credential_pool" } })}
   </div>
 
   ${panel(

@@ -1,6 +1,4 @@
-import {
-  router,
-} from 'expo-router';
+import { router } from '@/lib/router';
 
 import {
   useMemo,
@@ -497,6 +495,17 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Item 6c: for someone who is not a farmer on AgroFlow yet. */}
+            <TouchableOpacity
+              accessibilityRole="link"
+              onPress={() => router.push('/enquiry')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.forgotText}>
+                Not a farmer on AgroFlow yet? Ask for a call
+              </Text>
+            </TouchableOpacity>
 
             <Text
               style={

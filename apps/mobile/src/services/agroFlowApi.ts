@@ -1,3 +1,4 @@
+import { singleFlight, writeKey } from '@/lib/singleFlight';
 import {
   supabase,
 } from '@/lib/supabase';
@@ -74,7 +75,23 @@ export type CurrentWeatherResponse = {
   };
 };
 
-async function authorizedRequest<T>(
+/* Every authorised call. READS go straight through; an identical WRITE that
+   is already in flight is shared rather than sent twice - see
+   lib/singleFlight.ts, and "Water now" for why it matters. */
+function authorizedRequest<T>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+
+  if (method === 'GET') return sendAuthorizedRequest<T>(path, init);
+
+  return singleFlight(writeKey(method, path, init?.body), () =>
+    sendAuthorizedRequest<T>(path, init)
+  );
+}
+
+async function sendAuthorizedRequest<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
@@ -148,6 +165,41 @@ async function authorizedRequest<T>(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Item 6c: "Not a farmer on AgroFlow yet? Ask for a call" - no login.
+// ---------------------------------------------------------------------------
+
+export type EnquiryInput = {
+  fullName: string;
+  phone: string;
+  email: string | null;
+  province: string;
+  town: string;
+  farmSizeHa: number | null;
+  crops: string[];
+  cropsOther: string | null;
+  bestTime: 'morning' | 'afternoon' | 'evening';
+  notes: string | null;
+  consent: boolean;
+};
+
+// Single-flight like every write, so a double tap sends one enquiry.
+export function submitEnquiry(input: EnquiryInput): Promise<{ message: string }> {
+  const body = JSON.stringify({ ...input, website: '' });
+  return singleFlight(writeKey('POST', '/api/public/enquiries', body), async () => {
+    const apiBase = resolveApiBase();
+    if (!apiBase) throw new Error('AgroFlow.Api could not be located. Set EXPO_PUBLIC_AGROFLOW_API_BASE.');
+    const response = await fetch(`${apiBase}/api/public/enquiries`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body,
+    });
+    const reply = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+    if (!response.ok) throw new Error(reply.error || `The enquiry could not be sent (${response.status}).`);
+    return { message: reply.message ?? 'Thank you, a representative will call you within 2 working days.' };
+  });
 }
 
 export function fetchFarmerDashboard(farmId?: string) {
@@ -288,7 +340,16 @@ export function confirmPasswordChanged() {
    Telegram connected, or was rate limited. The screen must not try to be more
    helpful than that: telling the farmer "no such account" would tell anyone
    else the same thing about any address they cared to try. */
-export async function requestPasswordReset(
+export function requestPasswordReset(email: string): Promise<string> {
+  // Keyed on the address as typed-and-trimmed: two taps of Send for the same
+  // email are one reset, and one Telegram message, not two.
+  return singleFlight(
+    writeKey('POST', '/api/auth/forgot-password', email.trim().toLowerCase()),
+    () => sendPasswordReset(email)
+  );
+}
+
+async function sendPasswordReset(
   email: string
 ): Promise<string> {
   const apiBase =
@@ -380,10 +441,24 @@ export function createFarmerServiceRequest(
 
 export type ZoneSoilType = 'sandy' | 'loam' | 'clay';
 
+// Item 2c: "Why am I seeing this?", built on the server by the same rule that
+// produced the message. `technical` never reaches a farmer's app.
+export type ExplanationFact = { label: string; value: string; source: string };
+export type Explanation = {
+  summary: string;
+  facts: ExplanationFact[];
+  rule: string;
+  confidence: string;
+  whatWouldChangeIt?: string | null;
+  technical?: string;
+};
+
 export type ZoneInsight = {
   insightType: string;
   severity: 'act_now' | 'heads_up' | 'info';
   message: string;
+  // Optional: rows written before explanations existed have none.
+  explanation?: Explanation | null;
 };
 
 // How far through its season this zone's crop is.
@@ -405,7 +480,103 @@ export function fetchZoneInsights(zoneId: number) {
     day: string;
     insights: ZoneInsight[];
     growth: ZoneGrowth | null;
+    // Item 2, optional: older APIs do not send them.
+    confidence?: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+    nextStep?: { field: string; ask: string } | null;
+    stageAssumed?: boolean | null;
+    confidenceExplanation?: Explanation | null;
   }>(`/api/farmer/zones/${zoneId}/insights`);
+}
+
+// ---------------------------------------------------------------------------
+// Item 6: one card per zone, logging by hand, and finishing setup.
+// ---------------------------------------------------------------------------
+
+export type TodayActionKind = 'water' | 'skip' | 'kit' | 'setup' | 'soon' | 'none';
+
+export type ZoneSetupFacts = {
+  crop: boolean;
+  plantingDate: boolean;
+  soil: boolean;
+  area: boolean;
+  flowRate: boolean;
+  calibrated: boolean;
+  hasKit: boolean;
+};
+
+export type TodayZone = {
+  zoneId: number;
+  name: string;
+  action: { kind: TodayActionKind; text: string };
+  why: Explanation | null;
+  confidence: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+  confidenceExplanation: Explanation | null;
+  nextStep: { field: string; ask: string } | null;
+  setup?: ZoneSetupFacts | null;
+};
+
+export function fetchFarmToday(farmId: string | number) {
+  return authorizedRequest<{ farmId: number; day: string; zones: TodayZone[] }>(
+    `/api/farmer/farms/${encodeURIComponent(String(farmId))}/today`
+  );
+}
+
+// Writes go through authorizedRequest, so a double tap sends one entry.
+export function logManualWatering(zoneId: number, entry: { minutes?: number; litres?: number }) {
+  return authorizedRequest<{ id: number; message: string }>(
+    `/api/farmer/zones/${zoneId}/manual-watering`,
+    { method: 'POST', body: JSON.stringify(entry) }
+  );
+}
+
+export type SoilFeel = 'dry' | 'moist' | 'wet';
+
+export function logSoilFeel(zoneId: number, feel: SoilFeel) {
+  return authorizedRequest<{ id: number; message: string }>(
+    `/api/farmer/zones/${zoneId}/soil-feel`,
+    { method: 'POST', body: JSON.stringify({ feel }) }
+  );
+}
+
+export function saveZoneSetup(
+  zoneId: number,
+  setup: { plantingDate?: string; areaM2?: number; flowRateLpm?: number }
+) {
+  return authorizedRequest<{ message: string }>(
+    `/api/farmer/zones/${zoneId}/setup`,
+    { method: 'PUT', body: JSON.stringify(setup) }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Item 6b: "Recommended for you", and changing the crop.
+// ---------------------------------------------------------------------------
+
+export type RecommendedSettings = {
+  available: boolean;
+  text: string;
+  crop?: string;
+  cropLabel?: string;
+  thresholdPercent?: number;
+  stopPercent?: number;
+  intervalDaysLow?: number | null;
+  intervalDaysHigh?: number | null;
+  minutes?: number | null;
+  confidence?: { level: 'high' | 'medium' | 'low'; reason: string };
+  // "Use these settings" needs the wet/dry setup; applyNote says so.
+  canApply?: boolean;
+  applyNote?: string | null;
+};
+
+export function fetchRecommendedSettings(zoneId: number) {
+  return authorizedRequest<RecommendedSettings>(`/api/farmer/zones/${zoneId}/recommended-settings`);
+}
+
+export function changeZoneCrop(zoneId: number, change: { cropType: string; plantingDate: string | null }) {
+  return authorizedRequest<{ message: string; recommendation: RecommendedSettings }>(
+    `/api/farmer/zones/${zoneId}/crop`,
+    { method: 'PUT', body: JSON.stringify(change) }
+  );
 }
 
 export function dismissZoneInsight(
@@ -532,7 +703,16 @@ export class KitOfflineError extends Error {
 // things the offline screen needs. The auth header work is duplicated
 // deliberately rather than widening the shared helper, which every other
 // call in this file depends on.
-export async function requestZoneWifiChange(
+export function requestZoneWifiChange(zoneId: number): Promise<ChangeWifiResult> {
+  // One command to the kit per intention. Two would put it into setup mode
+  // and then, a moment later, try to put it there again.
+  return singleFlight(
+    writeKey('POST', `/api/farmer/zones/${zoneId}/hardware/change-wifi`),
+    () => sendZoneWifiChange(zoneId)
+  );
+}
+
+async function sendZoneWifiChange(
   zoneId: number
 ): Promise<ChangeWifiResult> {
   const apiBase = resolveApiBase();
@@ -734,7 +914,7 @@ export async function openReportPdf(filePath: string): Promise<void> {
 
 export type AutoReportSummary = {
   enabled: boolean;
-  frequency: 'weekly' | 'monthly' | null;
+  frequency: 'daily' | 'weekly' | 'monthly' | null;
   reportTypes: ReportKind[];
   reportTypeLabels: string[];
   description: string;

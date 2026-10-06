@@ -28,7 +28,14 @@ public record FarmerOnboardingFarmer(
 public record FarmerOnboardingZone(
     string Name,
     double SizeHectares,
-    string CropType
+    string CropType,
+    // Item 6: the setup the advice needs (zone columns from 0017, 0018,
+    // 0027). Optional so older admin builds still register farms.
+    string? SoilType = null,
+    double? AreaM2 = null,
+    DateOnly? PlantingDate = null,
+    double? RootDepthLimitM = null,
+    double? FlowRateLpm = null
 );
 
 public record FarmerOnboardingFarm(
@@ -223,6 +230,12 @@ public static class FarmerOnboardingEndpoints
                     error =
                         $"Zone '{zone.Name}' must have a crop type."
                 });
+            }
+
+            if (ZoneSetupFields.Check(zone.Name, zone.SizeHectares, zone.SoilType, zone.AreaM2,
+                    zone.PlantingDate, zone.RootDepthLimitM, zone.FlowRateLpm, AgroFlow.Business.Fao56EngineController.TodayInSast()) is { } setupProblem)
+            {
+                return Results.BadRequest(new { error = setupProblem });
             }
         }
 
@@ -509,7 +522,13 @@ public static class FarmerOnboardingEndpoints
                     size_value = zone.SizeHectares,
                     size_unit = "ha",
                     location = coordinates.Value.Location,
-                    crop_type = zone.CropType.Trim()
+                    crop_type = zone.CropType.Trim(),
+                    // Item 6: soil defaults to loam exactly as the column does.
+                    soil_type = zone.SoilType?.Trim().ToLowerInvariant() ?? "loam",
+                    area_m2 = zone.AreaM2,
+                    planting_date = zone.PlantingDate?.ToString("yyyy-MM-dd"),
+                    root_depth_limit_m = zone.RootDepthLimitM,
+                    flow_rate_lpm = zone.FlowRateLpm,
                 })
                 .ToList();
 

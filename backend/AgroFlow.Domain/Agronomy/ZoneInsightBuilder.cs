@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Business.Agronomy
 {
@@ -17,6 +18,27 @@ namespace AgroFlow.Business.Agronomy
     // which reports print and farmers never see.
     //
     // There is a test that greps every generated message for the banned words.
+    //
+    // THE ORDER THE RULES ARE CALLED IN (item 2b). Every decision below is a
+    // call into RuleBook/; this file only words the answer.
+    //   1. ConfidenceRules.NextStep      -> setup_missing (one step)
+    //   2. KitRules.IsOffline            -> zone_offline
+    //   3. KitRules.IsStuck              -> sensor_stuck
+    //   4. signals (KitRules.PumpRanNoChange, in the data layer) -> watering_failed
+    //   5. signals (KitRules.IsDhtOffline, in the data layer)    -> dht_offline
+    //   6. WaterRules.RecommendedThreshold + ThresholdTooDry     -> threshold_unsafe
+    //   7. WaterRules.ShouldWaterToday, then AtOrBelowFarmerThreshold
+    //      -> due for water today
+    //   8. WaterRules.SkipForRain        -> skip_rain, else water_now
+    //   9. (a day with no weather)       -> data_gap
+    //  10. WaterRules.WaterSoon          -> water_soon
+    //  11. WaterRules.HotDaysAhead       -> hot_days
+    //  12. CropRules: assumed stage, SeasonComplete, StageFor, SensitiveStage,
+    //      NextStageChange + StageChangeSoon, HarvestSoon
+    //      -> growth_status, season_complete, peak_growth, stage_change, harvest_soon
+    //  13. WaterRules.WasStressed        -> stress_days
+    //  14. VerdictRules.For == TooMuch   -> overwatering
+    //  15. KitRules.IsDrifting           -> sensor_drift
 
     public static class InsightSeverity
     {
@@ -64,6 +86,11 @@ namespace AgroFlow.Business.Agronomy
         public Dictionary<string, object?> Data { get; } = new Dictionary<string, object?>();
 
         public DateOnly ValidFor { get; set; }
+
+        // Item 2c: "Why am I seeing this?", built from the same rule and
+        // inputs as the message. Stored in ai_recommendation.data.explanation
+        // so it can be shown later exactly as it was.
+        public Explanation? Explanation { get; set; }
     }
 
     // Extra signals the engine itself cannot see, because they come from pump
@@ -99,14 +126,16 @@ namespace AgroFlow.Business.Agronomy
 
     public static class ZoneInsightBuilder
     {
-        public const int ZoneOfflineHours = 3;
-        public const int SensorStuckHours = 6;
-        public const int WaterSoonDays = 2;
-        public const int StageChangeWarningDays = 7;
-        public const int HarvestSoonDays = 14;
-        public const double HotDaysEtoMultiple = 1.3;
-        public const double OverwateringMultiple = 1.2;
-        public const double SensorDriftFraction = 0.15;
+        // The thresholds live in RuleBook/ with their reasons; these names are
+        // kept so nothing that read them here breaks.
+        public const int ZoneOfflineHours = KitRules.ZoneOfflineHours;
+        public const int SensorStuckHours = KitRules.SensorStuckHours;
+        public const int WaterSoonDays = WaterRules.WaterSoonDays;
+        public const int StageChangeWarningDays = CropRules.StageChangeWarningDays;
+        public const int HarvestSoonDays = CropRules.HarvestSoonDays;
+        public const double HotDaysEtoMultiple = WaterRules.HotDaysEtoMultiple;
+        public const double OverwateringMultiple = VerdictRules.OverwaterRatio;
+        public const double SensorDriftFraction = KitRules.SensorDriftFraction;
 
         public static List<ZoneInsight> Build(
             ZoneEngineInput input, ZoneEngineResult result, ZoneFaultSignals signals)
@@ -121,20 +150,29 @@ namespace AgroFlow.Business.Agronomy
 
             // ---------------- act_now ----------------------------------------
 
-            // setup_missing: say what to add, in the farmer's words.
+            // setup_missing: ONE next step, not a list (item 2). Only act_now
+            // when there is no crop - otherwise advice still comes, and finishing
+            // setup only improves it, so it is a heads-up. The full list stays
+            // in data for the setup checklist.
             if (result.MissingSetup.Count > 0)
             {
-                var missing = JoinNaturally(result.MissingSetup);
-                insights.Add(Make(input, InsightType.SetupMissing, InsightSeverity.ActNow,
-                    Trim($"Finish setting up {zone}: add {missing}."),
+                var step = result.NextStep;
+                var message = step != null && step.Field != "kit"
+                    ? step.Ask
+                    : $"Finish setting up {zone}: add {JoinNaturally(result.MissingSetup)}.";
+
+                insights.Add(Make(input, InsightType.SetupMissing,
+                    result.Crop == null ? InsightSeverity.ActNow : InsightSeverity.HeadsUp,
+                    Trim(message),
                     "Zone setup fields that the water figures need",
                     today,
-                    ("missing", result.MissingSetup.ToArray())));
+                    ("missing", result.MissingSetup.ToArray()),
+                    ("next_step", step?.Field),
+                    ("confidence", result.Confidence.Key)));
             }
 
             // zone_offline: no reading for 3 hours.
-            if (signals.SinceLastReading.HasValue
-                && signals.SinceLastReading.Value.TotalHours >= ZoneOfflineHours)
+            if (KitRules.IsOffline(signals.SinceLastReading))
             {
                 var at = result.LatestReadingAtUtc.HasValue
                     ? result.LatestReadingAtUtc.Value.AddHours(2).ToString("HH:mm on d MMM", CultureInfo.InvariantCulture)
@@ -143,19 +181,19 @@ namespace AgroFlow.Business.Agronomy
                     Trim($"No data from {zone} since {at}."),
                     "Time since the zone's last soil reading",
                     today,
-                    ("hours_since_last_reading", Math.Round(signals.SinceLastReading.Value.TotalHours, 1))));
+                    ("hours_since_last_reading", Math.Round(signals.SinceLastReading!.Value.TotalHours, 1))));
             }
 
             // sensor_stuck: the same valid reading for 6 hours.
-            if (signals.IdenticalReadingFor.HasValue
-                && signals.IdenticalReadingFor.Value.TotalHours >= SensorStuckHours)
+            if (KitRules.IsStuck(signals.IdenticalReadingFor))
             {
+                var stuckHours = Math.Round(signals.IdenticalReadingFor!.Value.TotalHours, 1);
                 insights.Add(Make(input, InsightType.SensorStuck, InsightSeverity.ActNow,
                     Trim($"{zone} sensor may be faulty or loose. Check it."),
                     "Soil sensor reported an unchanged value for " +
-                    Math.Round(signals.IdenticalReadingFor.Value.TotalHours, 1).ToString(CultureInfo.InvariantCulture) + " hours",
+                    stuckHours.ToString(CultureInfo.InvariantCulture) + " hours",
                     today,
-                    ("identical_for_hours", Math.Round(signals.IdenticalReadingFor.Value.TotalHours, 1)),
+                    ("identical_for_hours", stuckHours),
                     ("reading", result.LatestRawReading)));
             }
 
@@ -182,7 +220,8 @@ namespace AgroFlow.Business.Agronomy
             // threshold_unsafe: the farmer's trigger is drier than FAO-56 allows.
             var recommendedThreshold = RecommendedThreshold(input, result);
             if (recommendedThreshold.HasValue && input.MoistureThreshold.HasValue
-                && IsDrierThan(input.MoistureThreshold.Value, recommendedThreshold.Value, input))
+                && WaterRules.ThresholdTooDry(input.MoistureThreshold.Value, recommendedThreshold.Value,
+                    input.CalibrationWet!.Value, input.CalibrationDry!.Value))
             {
                 var cropLabel = result.Crop != null ? result.Crop.Label.ToLowerInvariant() : "this crop";
                 insights.Add(Make(input, InsightType.ThresholdUnsafe, InsightSeverity.ActNow,
@@ -195,11 +234,13 @@ namespace AgroFlow.Business.Agronomy
 
             var todayRow = result.Days.FirstOrDefault(d => d.Day == today);
             var dueForWater = result.BalanceRan && result.DepletionMm.HasValue && result.RawMm.HasValue
-                              && result.DepletionMm.Value >= result.RawMm.Value;
+                              && WaterRules.ShouldWaterToday(result.DepletionMm.Value, result.RawMm.Value);
 
-            // A reading at or below the farmer's own threshold also means water now.
-            if (!dueForWater && result.RelativeMoisturePercent.HasValue && input.MoistureThreshold.HasValue
-                && result.RelativeMoisturePercent.Value <= input.MoistureThreshold.Value)
+            // A reading at or below the farmer's own threshold also means water now
+            // - but only a fresh one (item 2): yesterday's dry reading says
+            // nothing about today.
+            if (!dueForWater && WaterRules.AtOrBelowFarmerThreshold(
+                    result.RelativeMoisturePercent, input.MoistureThreshold, readingFresh: !result.ReadingStale))
             {
                 dueForWater = true;
             }
@@ -208,7 +249,7 @@ namespace AgroFlow.Business.Agronomy
             // someone to water and to skip watering on the same day.
             var rainToday = todayRow?.RainMm ?? 0.0;
             var etcToday = result.EtcTodayMm;
-            var rainCoversToday = dueForWater && etcToday.HasValue && rainToday >= etcToday.Value;
+            var rainCoversToday = dueForWater && etcToday.HasValue && WaterRules.SkipForRain(rainToday, etcToday.Value);
 
             if (rainCoversToday)
             {
@@ -230,26 +271,58 @@ namespace AgroFlow.Business.Agronomy
                 var minutes = result.RecommendedMinutes;
                 var litres = result.RecommendedLitres;
 
-                string message;
+                var perM2 = result.RecommendedMinutesPerSquareMetre;
+                var depth = result.RecommendedDepthMm;
+
+                // Item 2: always an amount. Whole-zone minutes and litres when
+                // the zone is set up; otherwise per square metre, or as a depth.
+                string amount;
                 if (minutes.HasValue && litres.HasValue)
                 {
-                    message = $"Water {zone} now: about {minutes.Value} min (~{Math.Round(litres.Value):F0} L).";
+                    amount = $"about {minutes.Value} min (~{Math.Round(litres.Value):F0} L)";
                 }
                 else if (litres.HasValue)
                 {
-                    message = $"Water {zone} now: about {Math.Round(litres.Value):F0} L.";
+                    amount = $"about {Math.Round(litres.Value):F0} L";
                 }
                 else
                 {
-                    message = $"Water {zone} now.";
+                    amount = "";
+                }
+
+                // No size: the brief's own sentence, per square metre.
+                var perM2Sentence = "";
+                if (amount.Length == 0 && perM2.HasValue && depth.HasValue)
+                {
+                    perM2Sentence = $" For each square metre, run the pump about {perM2.Value.ToString("0.#", CultureInfo.InvariantCulture)} minutes ({depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} mm).";
+                }
+                else if (amount.Length == 0 && depth.HasValue && depth.Value > 0.0)
+                {
+                    perM2Sentence = $" Give about {depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} mm ({depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} L per square metre).";
+                }
+
+                var message = (amount.Length > 0 ? $"Water {zone} now: {amount}." : $"Water {zone} now.") + perM2Sentence;
+                if (result.ReadingStale)
+                {
+                    var action = (amount.Length > 0 ? $"water {zone} now, {amount}." : $"water {zone} now.") + perM2Sentence;
+                    message = $"Based on the weather ({ConfidenceRules.KitQuiet(result.LatestReadingAtUtc)}): " + action;
+
+                    // Never trim the amount away to fit the date in: the date is
+                    // also in the confidence line, the amount is only here.
+                    if (message.Length > MaxMessageLength) message = "Based on the weather: " + action;
                 }
 
                 insights.Add(Make(input, InsightType.WaterNow, InsightSeverity.ActNow,
                     Trim(message),
-                    "FAO-56 Table 22 + soil sensor: the soil has dried past what this crop can stand",
+                    result.ReadingStale || !result.Setup.Calibrated
+                        ? "FAO-56 Table 22 + weather water balance: the soil has dried past what this crop can stand"
+                        : "FAO-56 Table 22 + soil sensor: the soil has dried past what this crop can stand",
                     today,
                     ("minutes", minutes),
                     ("litres", litres.HasValue ? Math.Round(litres.Value, 1) : (double?)null),
+                    ("minutes_per_m2", perM2),
+                    ("depth_mm", depth),
+                    ("confidence", result.Confidence.Key),
                     ("source", todayRow?.EtoSource)));
             }
 
@@ -267,13 +340,12 @@ namespace AgroFlow.Business.Agronomy
             }
 
             // water_soon: within 2 days, and only when not already due today.
-            if (!dueForWater && result.DaysToNextWatering.HasValue
-                && result.DaysToNextWatering.Value <= WaterSoonDays
+            if (!dueForWater && WaterRules.WaterSoon(result.DaysToNextWatering)
                 && result.NextWateringDate.HasValue)
             {
                 var weekday = result.NextWateringDate.Value.ToString("dddd", CultureInfo.InvariantCulture);
                 insights.Add(Make(input, InsightType.WaterSoon, InsightSeverity.HeadsUp,
-                    Trim($"{zone} will need water in ~{result.DaysToNextWatering.Value} days ({weekday})."),
+                    Trim($"{zone} will need water in ~{result.DaysToNextWatering!.Value} days ({weekday})."),
                     "Weather app forecast projected forward against this crop's water use",
                     today,
                     ("days", result.DaysToNextWatering),
@@ -291,7 +363,7 @@ namespace AgroFlow.Business.Agronomy
                 if (forecastEto.Count > 0)
                 {
                     var peak = forecastEto.Max();
-                    if (peak >= HotDaysEtoMultiple * signals.TrailingSevenDayMeanEto.Value)
+                    if (WaterRules.HotDaysAhead(peak, signals.TrailingSevenDayMeanEto.Value))
                     {
                         insights.Add(Make(input, InsightType.HotDays, InsightSeverity.HeadsUp,
                             Trim($"Hot, dry days ahead. {zone} will need more water than usual."),
@@ -303,6 +375,18 @@ namespace AgroFlow.Business.Agronomy
                 }
             }
 
+            // Item 2: the stage is assumed, so say so - and say nothing about
+            // stage changes or harvest, which would need a real date.
+            if (result.Crop != null && result.StageAssumed)
+            {
+                insights.Add(Make(input, InsightType.GrowthStatus, InsightSeverity.Info,
+                    Trim($"{result.Crop.Label}: {CropRules.AssumedStageLabel} (no planting date yet)."),
+                    "FAO-56 Table 12: the highest crop factor, used when the planting date is unknown",
+                    today,
+                    ("stage", CropRules.AssumedStageLabel),
+                    ("stage_assumed", true)));
+            }
+
             // Crop and stage insights need the season.
             if (result.Crop != null && result.DayOfSeason.HasValue && result.Stage.HasValue)
             {
@@ -311,7 +395,7 @@ namespace AgroFlow.Business.Agronomy
                 var total = crop.TotalDays;
                 var cropLabel = crop.Label;
 
-                if (i > total)
+                if (CropRules.SeasonComplete(crop, i))
                 {
                     insights.Add(Make(input, InsightType.SeasonComplete, InsightSeverity.Info,
                         Trim($"{cropLabel} season is complete. Update the planting date for your next crop."),
@@ -329,7 +413,7 @@ namespace AgroFlow.Business.Agronomy
                         ("stage", Fao56EngineReference.StageLabel(result.Stage.Value))));
 
                     // peak_growth: the stage where a shortage costs the most.
-                    if (result.Stage.Value == SeasonStage.PeakGrowth)
+                    if (CropRules.SensitiveStage(result.Stage.Value))
                     {
                         insights.Add(Make(input, InsightType.PeakGrowth, InsightSeverity.HeadsUp,
                             Trim($"{cropLabel} is at peak growth. Don't let it dry out; shortages now cost the most yield."),
@@ -339,13 +423,11 @@ namespace AgroFlow.Business.Agronomy
                     }
 
                     // stage_change: the next stage inside a week.
-                    var next = NextStageChange(crop, i);
-                    if (next != null && next.Value.DaysUntil <= StageChangeWarningDays && next.Value.DaysUntil > 0)
+                    var next = CropRules.NextStageChange(crop, i);
+                    if (next != null && CropRules.StageChangeSoon(next.Value.DaysUntil))
                     {
-                        var kcNow = SoilWaterBalance.Kc(crop.KcIni, crop.KcMid, crop.KcEnd,
-                            crop.LIniDays, crop.LDevDays, crop.LMidDays, crop.LLateDays, i);
-                        var kcThen = SoilWaterBalance.Kc(crop.KcIni, crop.KcMid, crop.KcEnd,
-                            crop.LIniDays, crop.LDevDays, crop.LMidDays, crop.LLateDays, i + next.Value.DaysUntil);
+                        var kcNow = CropRules.KcFor(crop, i);
+                        var kcThen = CropRules.KcFor(crop, i + next.Value.DaysUntil);
 
                         var direction = kcThen >= kcNow ? "rise" : "drop";
                         var stageLabel = Fao56EngineReference.StageLabel(next.Value.Stage);
@@ -357,9 +439,10 @@ namespace AgroFlow.Business.Agronomy
                     }
 
                     // harvest_soon.
-                    var daysToEnd = total - i;
-                    if (daysToEnd <= HarvestSoonDays && daysToEnd >= 0)
+                    var harvestIn = CropRules.HarvestSoon(crop, i);
+                    if (harvestIn.HasValue)
                     {
+                        var daysToEnd = harvestIn.Value;
                         insights.Add(Make(input, InsightType.HarvestSoon, InsightSeverity.HeadsUp,
                             Trim($"About {daysToEnd} days to harvest. {cropLabel} needs less water from now."),
                             "FAO-56 Table 11 season length and the falling late-season crop factor",
@@ -371,7 +454,7 @@ namespace AgroFlow.Business.Agronomy
 
             // stress_days: any day in the last 7 where the crop was drawing hard.
             var recentStress = result.Days
-                .Where(d => !d.IsForecast && d.Ks.HasValue && d.Ks.Value < 1.0
+                .Where(d => !d.IsForecast && d.Ks.HasValue && WaterRules.WasStressed(d.Ks.Value)
                             && d.Day > today.AddDays(-7) && d.Day <= today)
                 .ToList();
 
@@ -390,8 +473,8 @@ namespace AgroFlow.Business.Agronomy
                 .Where(d => !d.IsForecast && d.EtcMm.HasValue && d.Day > today.AddDays(-7) && d.Day <= today)
                 .Sum(d => d.EtcMm!.Value);
 
-            if (signals.SevenDayIrrigationMm.HasValue && sevenDayEtc > 0.0
-                && signals.SevenDayIrrigationMm.Value > OverwateringMultiple * sevenDayEtc)
+            if (signals.SevenDayIrrigationMm.HasValue
+                && VerdictRules.For(signals.SevenDayIrrigationMm.Value, sevenDayEtc) == WateringVerdict.TooMuch)
             {
                 var ratio = signals.SevenDayIrrigationMm.Value / sevenDayEtc;
                 insights.Add(Make(input, InsightType.Overwatering, InsightSeverity.HeadsUp,
@@ -404,24 +487,22 @@ namespace AgroFlow.Business.Agronomy
             }
 
             // sensor_drift: the wettest point after watering has moved.
-            if (input.CalibrationWet.HasValue && input.CalibrationDry.HasValue
-                && signals.SevenDayMinimumReading.HasValue)
+            if (KitRules.IsDrifting(signals.SevenDayMinimumReading, input.CalibrationWet, input.CalibrationDry))
             {
-                var span = Math.Abs(input.CalibrationWet.Value - input.CalibrationDry.Value);
-                if (span > 0.0)
-                {
-                    var drift = Math.Abs(signals.SevenDayMinimumReading.Value - input.CalibrationWet.Value);
-                    if (drift > SensorDriftFraction * span)
-                    {
-                        insights.Add(Make(input, InsightType.SensorDrift, InsightSeverity.HeadsUp,
-                            Trim($"{zone} sensor readings are drifting. Re-do the wet/dry setup."),
-                            "The zone's wettest reading this week against its saved wet setting - a resistive probe drifts as it corrodes",
-                            today,
-                            ("seven_day_minimum", signals.SevenDayMinimumReading),
-                            ("calibration_wet", input.CalibrationWet),
-                            ("drift", Math.Round(drift, 1))));
-                    }
-                }
+                var drift = Math.Abs(signals.SevenDayMinimumReading!.Value - input.CalibrationWet!.Value);
+                insights.Add(Make(input, InsightType.SensorDrift, InsightSeverity.HeadsUp,
+                    Trim($"{zone} sensor readings are drifting. Re-do the wet/dry setup."),
+                    "The zone's wettest reading this week against its saved wet setting - a resistive probe drifts as it corrodes",
+                    today,
+                    ("seven_day_minimum", signals.SevenDayMinimumReading),
+                    ("calibration_wet", input.CalibrationWet),
+                    ("drift", Math.Round(drift, 1))));
+            }
+
+            // Item 2c: every insight carries its own explanation.
+            foreach (var insight in insights)
+            {
+                insight.Explanation = Explanations.For(insight, input, result, signals);
             }
 
             return insights;
@@ -437,40 +518,9 @@ namespace AgroFlow.Business.Agronomy
             if (result.Crop == null) return null;
             if (!input.CalibrationWet.HasValue || !input.CalibrationDry.HasValue) return null;
 
-            var pr = result.Crop.DepletionFractionP * result.Soil.PFactor;
-            if (pr < SoilWaterBalance.MinDepletionFraction) pr = SoilWaterBalance.MinDepletionFraction;
-            if (pr > SoilWaterBalance.MaxDepletionFraction) pr = SoilWaterBalance.MaxDepletionFraction;
-
-            var wet = input.CalibrationWet.Value;
-            var dry = input.CalibrationDry.Value;
-            return wet - pr * (wet - dry);
-        }
-
-        // "Drier than recommended" depends on which way the probe reads: with a
-        // resistive probe wired so that wet is the LOWER raw number, a threshold
-        // drier than recommended is a HIGHER number.
-        private static bool IsDrierThan(double threshold, double recommended, ZoneEngineInput input)
-        {
-            if (!input.CalibrationWet.HasValue || !input.CalibrationDry.HasValue) return false;
-            var wetIsLower = input.CalibrationWet.Value < input.CalibrationDry.Value;
-            return wetIsLower ? threshold > recommended : threshold < recommended;
-        }
-
-        private static (SeasonStage Stage, int DaysUntil)? NextStageChange(Fao56EngineCrop crop, int dayOfSeason)
-        {
-            var boundaries = new[]
-            {
-                (Stage: SeasonStage.Growing, StartsAt: crop.LIniDays + 1),
-                (Stage: SeasonStage.PeakGrowth, StartsAt: crop.LIniDays + crop.LDevDays + 1),
-                (Stage: SeasonStage.NearingHarvest, StartsAt: crop.LIniDays + crop.LDevDays + crop.LMidDays + 1),
-            };
-
-            foreach (var b in boundaries)
-            {
-                if (b.StartsAt > dayOfSeason) return (b.Stage, b.StartsAt - dayOfSeason);
-            }
-
-            return null;
+            return WaterRules.RecommendedThreshold(
+                result.Crop.DepletionFractionP, result.Soil.PFactor,
+                input.CalibrationWet.Value, input.CalibrationDry.Value);
         }
 
         private static ZoneInsight Make(

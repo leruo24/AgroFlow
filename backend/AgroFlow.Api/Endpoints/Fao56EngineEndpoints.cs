@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgroFlow.Business;
 using AgroFlow.Business.Agronomy;
+using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Api.Endpoints;
 
@@ -132,6 +133,8 @@ public static class Fao56EngineEndpoints
                 insightType = i.InsightType,
                 severity = i.Severity,
                 message = i.Message,
+                // Item 2c: admins see the full explanation, technical part included.
+                explanation = i.Explanation,
             }),
         });
     }
@@ -193,6 +196,7 @@ public static class Fao56EngineEndpoints
 
         var today = Fao56EngineController.TodayInSast();
         var insights = engine.Data.GetInsights(zoneId, today, includeDismissed: false);
+        var advice = TryRunAdvice(engine, zoneId, today);
 
         return Results.Ok(new
         {
@@ -203,6 +207,11 @@ public static class Fao56EngineEndpoints
                 insightType = i.InsightType,
                 severity = i.Severity,
                 message = i.Message,
+
+                // ADDITIVE (item 2c): the explanation stored with the insight,
+                // exactly as it was when written. Null for rows written before
+                // explanations existed. Farmers never get the technical part.
+                explanation = StoredExplanation(i, includeTechnical: false),
             }),
 
             // ADDITIVE: the growth summary, so one call fills both the
@@ -220,7 +229,60 @@ public static class Fao56EngineEndpoints
             // empty bar - an empty bar reads as "the season has not started",
             // which is a claim the app cannot make.
             growth = BuildGrowthSummary(engine, zoneId, today),
+
+            // ADDITIVE (item 2): how sure today's advice is, and the ONE
+            // step that would improve it. Null if the engine could not run;
+            // older app builds ignore both fields.
+            confidence = advice?.Confidence is { } c ? new { level = c.Key, reason = c.Reason } : null,
+            nextStep = advice?.NextStep is { } s ? new { field = s.Field, ask = s.Ask } : null,
+            stageAssumed = advice?.StageAssumed,
+
+            // ADDITIVE (item 2c): "Why am I seeing this?" for the confidence
+            // badge, from the same setup state ConfidenceRules judged.
+            confidenceExplanation = advice is null ? null : WithoutTechnical(Explanations.Confidence(advice)),
         });
+    }
+
+    // Farmers never get the technical line; it is for admins and appendices.
+    private static Explanation WithoutTechnical(Explanation e)
+    {
+        e.Technical = string.Empty;
+        return e;
+    }
+
+    // Item 2c: the explanation saved in ai_recommendation.data, or null.
+    internal static System.Text.Json.Nodes.JsonObject? StoredExplanation(ZoneInsight insight, bool includeTechnical)
+    {
+        if (!insight.Data.TryGetValue("raw", out var raw) || raw is not string json) return null;
+
+        try
+        {
+            var node = System.Text.Json.Nodes.JsonNode.Parse(json) as System.Text.Json.Nodes.JsonObject;
+            if (node?["explanation"] is not System.Text.Json.Nodes.JsonObject explanation) return null;
+
+            var copy = (System.Text.Json.Nodes.JsonObject)explanation.DeepClone();
+            if (!includeTechnical) copy.Remove("technical");
+            return copy;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    // Item 2: a read-only engine run for the confidence badge. Never persists;
+    // a failure leaves the insights themselves untouched.
+    private static ZoneEngineResult? TryRunAdvice(Fao56EngineController engine, long zoneId, DateOnly today)
+    {
+        try
+        {
+            var zone = engine.Data.GetZone(zoneId);
+            return zone is null ? null : engine.RunZone(zone, today, persist: false);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private sealed record GrowthSummary(

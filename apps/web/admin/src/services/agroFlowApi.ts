@@ -7,6 +7,7 @@
  * check below stays as a defensive fallback rather than assuming that.
  */
 
+import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 
 const API_BASE = import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "";
@@ -19,7 +20,7 @@ async function postAuthorized<T = void>(path: string, body: unknown): Promise<T>
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -108,6 +109,12 @@ export async function onboardFarmer(input: {
       name: string;
       sizeHectares: number;
       cropType: string;
+      /* Item 6: optional so the API still takes older payloads. */
+      soilType?: string;
+      areaM2?: number | null;
+      plantingDate?: string | null;
+      flowRateLpm?: number | null;
+      rootDepthLimitM?: number | null;
     }[];
   };
 }): Promise<FarmerOnboardedResult> {
@@ -190,6 +197,12 @@ export async function registerFarm(input: {
       name: string;
       sizeHectares: number;
       cropType: string;
+      /* Item 6: optional so the API still takes older payloads. */
+      soilType?: string;
+      areaM2?: number | null;
+      plantingDate?: string | null;
+      flowRateLpm?: number | null;
+      rootDepthLimitM?: number | null;
     }[];
   };
 }): Promise<void> {
@@ -210,7 +223,7 @@ export async function getFarmers(): Promise<FarmerOption[]> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(
+  const response = await navigationAwareFetch(
     `${API_BASE}/api/users/farmers`,
     {
       method: "GET",
@@ -253,7 +266,7 @@ export async function deleteFarmerUser(id: string): Promise<void> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(
+  const response = await navigationAwareFetch(
     `${API_BASE}/api/users/${id}`,
     {
       method: "DELETE",
@@ -295,7 +308,7 @@ export async function deleteFarm(id: number): Promise<void> {
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(
+  const response = await navigationAwareFetch(
     `${API_BASE}/api/farms/${id}`,
     {
       method: "DELETE",
@@ -349,7 +362,7 @@ async function reportFetch(path: string): Promise<Response> {
   const token = data.session?.access_token;
   if (!token) throw new Error("Not signed in.");
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw await reportError(response);
@@ -361,6 +374,12 @@ export type ReportZone = { zoneId: number; name: string; cropType: string | null
 
 export async function getReportFarms(): Promise<ReportFarm[]> {
   return (await reportFetch("/api/farms")).json() as Promise<ReportFarm[]>;
+}
+
+/* Item 4: the report PDF as a blob, for the on-screen Preview - the same
+   file the PDF button downloads, so the two cannot differ. */
+export async function fetchReportPdfBlob(path: string): Promise<Blob> {
+  return (await reportFetch(`/api/farmer/reports/${path}`)).blob();
 }
 
 export async function getReportZones(farmId: number): Promise<ReportZone[]> {
@@ -509,7 +528,7 @@ async function authorizedJson<T>(
     throw new Error("Not signed in.");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
@@ -646,12 +665,22 @@ export function addMqttLogins(pasted: string): Promise<AddMqttLoginsResult> {
 export function updateServiceRequestStatusThroughApi(
   id: number,
   status: "pending" | "scheduled" | "completed",
+  note?: string,
 ): Promise<{ id: number; status: string; message: string | null }> {
   return authorizedJson<{ id: number; status: string; message: string | null }>(
     `/api/admin/requests/${id}/status`,
     "PUT",
-    { status },
+    note ? { status, note } : { status },
   );
+}
+
+/* Item 6c: zones added to an existing farm (a "new zone" request). */
+export function addZonesToFarm(
+  farmId: number,
+  zones: { name: string; sizeHectares: number; cropType: string; soilType?: string; areaM2?: number | null;
+           plantingDate?: string | null; flowRateLpm?: number | null; rootDepthLimitM?: number | null }[],
+): Promise<{ message: string }> {
+  return authorizedJson(`/api/farms/${farmId}/zones`, "POST", { zones });
 }
 
 /* ---------------- Enrollment codes ---------------- */
@@ -692,14 +721,26 @@ export function createEnrollmentCode(input: {
 
 /* ---------------- Automatic reports (step 4) ---------------- */
 
+export type ReportFrequency = "daily" | "weekly" | "monthly";
+
 export type ReportScheduleDto = {
   farmId: number;
   enabled: boolean;
-  frequency: "weekly" | "monthly";
+  frequency: ReportFrequency;
   reportTypes: string[];
   zoneIds: number[] | null;
   lastRunAt: string | null;
   description: string;
+  // Item 4 - optional, so an older API still type-checks.
+  dayOfWeek?: number;
+  perZonePdf?: boolean;
+  sendToHandler?: boolean;
+  adminChatEnabled?: boolean;
+  lastSentAt?: string | null;
+  nextSendAt?: string | null;
+  turnedOffBy?: string | null;
+  turnedOffAt?: string | null;
+  optionsAvailable?: boolean;
 };
 
 export function getReportSchedule(farmId: number): Promise<ReportScheduleDto> {
@@ -717,9 +758,13 @@ export function saveReportSchedule(
   farmId: number,
   input: {
     enabled: boolean;
-    frequency: "weekly" | "monthly";
+    frequency: ReportFrequency;
     reportTypes: string[];
     zoneIds: number[] | null;
+    dayOfWeek?: number;
+    perZonePdf?: boolean;
+    sendToHandler?: boolean;
+    adminChatEnabled?: boolean;
   },
 ): Promise<ReportScheduleDto> {
   return authorizedJson<ReportScheduleDto>(
@@ -727,6 +772,175 @@ export function saveReportSchedule(
     "PUT",
     input,
   );
+}
+
+/* ---------------- Handling (item 5) ----------------
+   Who is handling an item is always the caller: these send what was done,
+   never who did it - the API takes the actor from the login. */
+
+export type HandlingKind = "requests" | "alerts" | "maintenance";
+
+export type HandlingState = {
+  id: string;
+  handledBy: string | null;
+  handledByName: string | null;
+  claimedAt: string | null;
+  resolvedBy: string | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  escalatedAt: string | null;
+};
+
+/* Item 6: the same per-zone "today" the farmer's Home screen shows. */
+export type FarmTodayZone = {
+  zoneId: number;
+  name: string;
+  action: { kind: string; text: string };
+  why: unknown;
+  confidence: { level: "high" | "medium" | "low"; reason: string } | null;
+  confidenceExplanation: unknown;
+  nextStep: { field: string; ask: string } | null;
+};
+
+export function getFarmToday(farmId: number): Promise<{ farmId: number; day: string; zones: FarmTodayZone[] }> {
+  return authorizedJson(`/api/farmer/farms/${farmId}/today`, "GET");
+}
+
+/* Item 6b: "Recommended for you". */
+export type RecommendedSettings = {
+  available: boolean;
+  text: string;
+  cropLabel?: string;
+  thresholdPercent?: number;
+  confidence?: { level: "high" | "medium" | "low"; reason: string };
+  canApply?: boolean;
+  applyNote?: string | null;
+};
+
+export function getRecommendedSettings(zoneId: number): Promise<RecommendedSettings> {
+  return authorizedJson(`/api/farmer/zones/${zoneId}/recommended-settings`, "GET");
+}
+
+export function previewRecommendedSettings(input: {
+  cropType: string; soilType: string; areaM2: number | null; flowRateLpm: number | null;
+  rootDepthLimitM: number | null; plantingDate: string | null; location: string;
+}): Promise<RecommendedSettings> {
+  return authorizedJson("/api/admin/recommended-settings/preview", "POST", input);
+}
+
+/* "Use these settings": the existing Reset to recommended, which saves the same level. */
+export function useRecommendedSettings(zoneId: number): Promise<{ message: string }> {
+  return authorizedJson(`/api/farmer/zones/${zoneId}/reset-recommended`, "POST", {});
+}
+
+/* ---------------- Item 6c: public enquiries ---------------- */
+
+export type Enquiry = {
+  id: number;
+  fullName: string | null;
+  phone: string | null;
+  email: string | null;
+  province: string;
+  town: string | null;
+  farmSizeHa: number | null;
+  crops: string[];
+  cropsOther: string | null;
+  bestTime: "morning" | "afternoon" | "evening";
+  notes: string | null;
+  createdAt: string;
+  status: "new" | "open" | "won" | "lost" | "closed";
+  handledBy: string | null;
+  handledByName: string | null;
+  claimedAt: string | null;
+  callbackAt: string | null;
+  noAnswerCount: number;
+  outcome: string | null;
+  reason: string | null;
+  reasonOther: string | null;
+  farmerProfileId: string | null;
+  anonymisedAt: string | null;
+  firstCalledAt: string | null;
+  closedAt: string | null;
+  callCount: number;
+};
+
+export type EnquiryCall = {
+  calledAt: string; callerName: string; outcome: string; reason: string | null;
+  reasonOther: string | null; note: string | null; callbackAt: string | null;
+};
+
+export function getEnquiries(): Promise<Enquiry[]> {
+  return authorizedJson("/api/admin/enquiries", "GET");
+}
+
+export function getEnquirySummary(): Promise<{ waiting: number; callbacksDue: number }> {
+  return authorizedJson("/api/admin/enquiries/summary", "GET");
+}
+
+export function getEnquiryCalls(id: number): Promise<EnquiryCall[]> {
+  return authorizedJson(`/api/admin/enquiries/${id}/calls`, "GET");
+}
+
+export function claimEnquiry(id: number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/claim`, "POST", {});
+}
+
+export function takeOverEnquiry(id: number, reason: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/take-over`, "POST", { reason });
+}
+
+export function logEnquiryCall(id: number, call: {
+  outcome: string; reason?: string | null; reasonOther?: string | null; note?: string | null; callbackAt?: string | null;
+}): Promise<{ message: string; suggestClosing: boolean }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/calls`, "POST", call);
+}
+
+export function closeEnquiry(id: number, note?: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/close`, "POST", { note: note ?? null });
+}
+
+export function markEnquiryOnboarded(id: number, farmerProfileId: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/onboarded`, "POST", { farmerProfileId });
+}
+
+export function anonymiseEnquiry(id: number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/anonymise`, "POST", {});
+}
+
+export function getHandling(kind: HandlingKind): Promise<HandlingState[]> {
+  return authorizedJson<HandlingState[]>(`/api/admin/handling/${kind}`, "GET");
+}
+
+export function claimItem(kind: HandlingKind, id: string | number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/claim`, "POST", {});
+}
+
+export function takeOverItem(kind: HandlingKind, id: string | number, reason: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/take-over`, "POST", { reason });
+}
+
+export function releaseItem(kind: HandlingKind, id: string | number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/release`, "POST", {});
+}
+
+export function itemAction(
+  kind: HandlingKind, id: string | number, action: string, note?: string, date?: string,
+): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/handling/${kind}/${id}/action`, "POST", { action, note, date });
+}
+
+/* A new maintenance job, booked by - and handled by - the caller. */
+export function createMaintenance(input: {
+  hardwareId?: number | null; farmId?: number | null; description: string; date: string;
+}): Promise<{ id: number; message: string }> {
+  return authorizedJson("/api/admin/handling/maintenance", "POST", input);
+}
+
+/* Item 4: "Send test now" - to the calling admin's own Telegram only. */
+export function sendReportScheduleTest(
+  farmId: number,
+): Promise<{ sent: number; failed: number; skipped: number; message: string }> {
+  return authorizedJson(`/api/admin/farms/${farmId}/report-schedule/test`, "POST", {});
 }
 
 /* ---------------- Archive (step 6) ----------------
@@ -776,7 +990,7 @@ export type RunAdviceResult = {
   /** Named missing fields - the half that makes this useful during setup. */
   setupMissing: string[];
   limitations: string[];
-  insights: { insightType: string; severity: string; message: string }[];
+  insights: { insightType: string; severity: string; message: string; explanation?: unknown }[];
 };
 
 export function runAdviceNow(zoneId: number): Promise<RunAdviceResult> {

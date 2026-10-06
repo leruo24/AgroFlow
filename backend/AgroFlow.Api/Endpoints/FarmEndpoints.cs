@@ -113,7 +113,14 @@ public record RegisterFarmDetails(
 public record RegisterFarmZone(
     string Name,
     double SizeHectares,
-    string CropType
+    string CropType,
+    // Item 6: the setup the advice needs (zone columns from 0017, 0018,
+    // 0027). Optional so older admin builds still register farms.
+    string? SoilType = null,
+    double? AreaM2 = null,
+    DateOnly? PlantingDate = null,
+    double? RootDepthLimitM = null,
+    double? FlowRateLpm = null
 );
 
 private static async Task<IResult> RegisterFarmAsync(
@@ -219,6 +226,12 @@ private static async Task<IResult> RegisterFarmAsync(
                 message =
                     $"Zone '{zone.Name}' must have a crop type."
             });
+        }
+
+        if (ZoneSetupFields.Check(zone.Name, zone.SizeHectares, zone.SoilType, zone.AreaM2,
+                zone.PlantingDate, zone.RootDepthLimitM, zone.FlowRateLpm, AgroFlow.Business.Fao56EngineController.TodayInSast()) is { } setupProblem)
+        {
+            return Results.BadRequest(new { message = setupProblem });
         }
     }
 
@@ -355,7 +368,12 @@ private static async Task<IResult> RegisterFarmAsync(
                 size_value,
                 size_unit,
                 location,
-                crop_type
+                crop_type,
+                soil_type,
+                area_m2,
+                planting_date,
+                root_depth_limit_m,
+                flow_rate_lpm
             )
             values (
                 $1,
@@ -363,7 +381,12 @@ private static async Task<IResult> RegisterFarmAsync(
                 $3,
                 'ha',
                 $4,
-                $5
+                $5,
+                coalesce($6, 'loam'),
+                $7,
+                $8,
+                $9,
+                $10
             )
             """;
 
@@ -384,6 +407,16 @@ private static async Task<IResult> RegisterFarmAsync(
                 request.Farm.Location.Trim());
             zoneCommand.Parameters.AddWithValue(
                 zone.CropType.Trim());
+            zoneCommand.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Text,
+                (object?)zone.SoilType?.Trim().ToLowerInvariant() ?? DBNull.Value);
+            zoneCommand.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Numeric,
+                zone.AreaM2 is { } area ? (object)(decimal)area : DBNull.Value);
+            zoneCommand.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Date,
+                zone.PlantingDate is { } planted ? (object)planted : DBNull.Value);
+            zoneCommand.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Numeric,
+                zone.RootDepthLimitM is { } depth ? (object)(decimal)depth : DBNull.Value);
+            zoneCommand.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Real,
+                zone.FlowRateLpm is { } flow ? (object)(float)flow : DBNull.Value);
 
             await zoneCommand.ExecuteNonQueryAsync();
         }

@@ -44,6 +44,21 @@ internal sealed class WaterUsageReportModel
     public int? NextWateringMinutes { get; init; }
     public double? NextWateringLitres { get; init; }
 
+    /* ---- Item 3: what the action report needs from the engine ------- */
+
+    /// Every insight for the zone, not just the four Advice lines - the
+    /// "This week, do this" list picks from all of them.
+    public IReadOnlyList<ZoneInsight> Insights { get; init; } = Array.Empty<ZoneInsight>();
+
+    /// The engine run behind the figures, for confidence, the next setup
+    /// step, the forecast and the technical appendix. Null when the zone has
+    /// no engine row (its columns missing) - the report then says so.
+    public ZoneEngineInput? EngineInput { get; init; }
+    public ZoneEngineResult? Engine { get; init; }
+
+    /// True once the wet/dry setup is done: the soil chart is drawn only then.
+    public bool Calibrated { get; init; }
+
     public double HealthyLowPercent { get; init; } = 60;
     public double HealthyHighPercent { get; init; } = 100;
 
@@ -126,7 +141,34 @@ internal sealed class WaterUsageReportModel
             Date.ToDateTime(TimeOnly.MinValue).ToString("ddd d MMM", CultureInfo.InvariantCulture);
     }
 
-    public sealed record AdviceLine(string Message, string Source);
+    // Item 2c: the insight's own explanation, for the "Why:" line.
+    public sealed record AdviceLine(string Message, string Source, AgroFlow.Business.Agronomy.RuleBook.Explanation? Why = null);
+
+    // Item 2b/2c: the period's verdict comes from VerdictRules - not from a
+    // band hidden in the PDF - and carries its own explanation. Cached, so
+    // the PDF's "Why:" line and its appendix entry are the same object.
+    private AgroFlow.Business.Agronomy.RuleBook.Explanation? _verdictWhy;
+    private bool _verdictBuilt;
+
+    public AgroFlow.Business.Agronomy.RuleBook.WateringVerdict? Verdict =>
+        TotalLitres.HasValue && TotalNeedLitres.HasValue
+            ? AgroFlow.Business.Agronomy.RuleBook.VerdictRules.For(TotalLitres.Value, TotalNeedLitres.Value)
+            : null;
+
+    public AgroFlow.Business.Agronomy.RuleBook.Explanation? VerdictWhy
+    {
+        get
+        {
+            if (!_verdictBuilt)
+            {
+                _verdictBuilt = true;
+                _verdictWhy = TotalLitres.HasValue && TotalNeedLitres.HasValue
+                    ? AgroFlow.Business.Agronomy.RuleBook.Explanations.Verdict(TotalLitres.Value, TotalNeedLitres.Value, CropLabel, "this period")
+                    : null;
+            }
+            return _verdictWhy;
+        }
+    }
 }
 
 /// Builds the model. All reads; nothing here writes.
@@ -185,6 +227,11 @@ internal static class WaterUsageReportBuilder
             farmName = reader.IsDBNull(7) ? "Farm" : reader.GetString(7);
         }
 
+        // Item 6b: a past period keeps the crop that was growing then.
+        var cropChanges = await CropHistory.ReadAsync(connection, zoneId, ct);
+        var (cropThen, _) = CropHistory.AsOf(cropType, null, cropChanges, to);
+        cropType = cropThen;
+
         /* ---- 2. Pump runs per day ------------------------------------- */
         // Grouped in SAST, not UTC. A run at 01:30 local belongs to that
         // morning; grouped in UTC it lands on the previous day and the chart
@@ -192,14 +239,20 @@ internal static class WaterUsageReportBuilder
         const string eventSql = """
             select (started_at at time zone 'Africa/Johannesburg')::date as day,
                    count(*),
-                   coalesce(sum(runtime_seconds), 0)
+                   coalesce(sum(runtime_seconds), 0),
+                   -- Item 6: waterings the farmer logged by hand (read
+                   -- through jsonb so a database without 0042 still works).
+                   count(*) filter (where (to_jsonb(irrigation_event) ->> 'logged_by_profile_id') is not null),
+                   coalesce(sum(estimated_litres) filter (
+                       where (to_jsonb(irrigation_event) ->> 'logged_by_profile_id') is not null
+                         and coalesce(runtime_seconds, 0) = 0), 0)
               from irrigation_event
              where zone_id = $1
                and (started_at at time zone 'Africa/Johannesburg')::date between $2 and $3
              group by 1
             """;
 
-        var runsByDay = new Dictionary<DateOnly, (int Runs, long Seconds)>();
+        var runsByDay = new Dictionary<DateOnly, (int Runs, long Seconds, int ByHand, double HandLitres)>();
 
         await using (var cmd = new NpgsqlCommand(eventSql, connection))
         {
@@ -211,7 +264,7 @@ internal static class WaterUsageReportBuilder
             while (await reader.ReadAsync(ct))
             {
                 runsByDay[reader.GetFieldValue<DateOnly>(0)] =
-                    ((int)reader.GetInt64(1), reader.GetInt64(2));
+                    ((int)reader.GetInt64(1), reader.GetInt64(2), (int)reader.GetInt64(3), Convert.ToDouble(reader.GetValue(4)));
             }
         }
 
@@ -298,6 +351,7 @@ internal static class WaterUsageReportBuilder
         // about a period the report does not cover.
         var engineZone = engine.Data.GetZone(zoneId);
         ZoneEngineResult? engineResult = null;
+        ZoneEngineInput? engineInput = null;
         var weatherByDay = new Dictionary<DateOnly, ZoneWeatherDay>();
         var insights = new List<ZoneInsight>();
 
@@ -306,7 +360,15 @@ internal static class WaterUsageReportBuilder
             var today = Fao56EngineController.TodayInSast();
             var anchor = to > today ? today : to;
 
+            // The crop and planting date as they were on the anchor day.
+            if (cropChanges.Count > 0)
+            {
+                (engineZone.CropType, engineZone.PlantingDate) =
+                    CropHistory.AsOf(engineZone.CropType, engineZone.PlantingDate, cropChanges, anchor);
+            }
+
             var input = engine.BuildInput(engineZone, anchor);
+            engineInput = input;
             foreach (var w in input.Weather) weatherByDay[w.Date] = w;
 
             engineResult = Fao56Engine.Run(input);
@@ -334,6 +396,10 @@ internal static class WaterUsageReportBuilder
             // The formula from migration 0018, and the only place litres are
             // ever derived. Null when the zone has no flow rate, never 0.
             double? litres = flowRate.HasValue ? minutes * flowRate.Value : null;
+
+            // A hand-logged watering given in litres, not minutes, adds its
+            // litres as the farmer gave them.
+            if (runs.HandLitres > 0) litres = (litres ?? 0) + runs.HandLitres;
 
             balanceByDay.TryGetValue(date, out var balance);
 
@@ -368,7 +434,7 @@ internal static class WaterUsageReportBuilder
                 weather?.RhMeanPct,
                 tub.Humidity ?? weather?.DhtRhMeanPct,
                 balance?.RainMm ?? weather?.RainMm,
-                DayNote(runs.Runs, litres, needLitres, balance?.RainMm ?? weather?.RainMm, avgMoisture)));
+                HandPrefix(runs.ByHand) + DayNote(runs.Runs, litres, needLitres, balance?.RainMm ?? weather?.RainMm, avgMoisture)));
         }
 
         /* ---- 8. The moisture series, positioned by actual time --------- */
@@ -396,7 +462,7 @@ internal static class WaterUsageReportBuilder
         var advice = insights
             .OrderBy(i => i.Severity == InsightSeverity.ActNow ? 0 : 1)
             .Take(4)
-            .Select(i => new WaterUsageReportModel.AdviceLine(i.Message, i.Source))
+            .Select(i => new WaterUsageReportModel.AdviceLine(i.Message, i.Source, i.Explanation))
             .ToList();
 
         /* ---- 10. The crop and its stage -------------------------------- */
@@ -413,6 +479,10 @@ internal static class WaterUsageReportBuilder
             FarmName = farmName,
             ZoneName = zoneName,
             CropLabel = crop?.Label,
+            Insights = insights,
+            EngineInput = engineInput,
+            Engine = engineResult,
+            Calibrated = calibrationWet.HasValue && calibrationDry.HasValue,
             From = from,
             To = to,
             GeneratedAtSast = DateTimeOffset.UtcNow.ToOffset(Sast),
@@ -431,6 +501,14 @@ internal static class WaterUsageReportBuilder
     /// The one-line note in the daily table. Deliberately plain, and never a
     /// judgement the data does not support: with no need figure to compare
     /// against, it reports what happened rather than whether it was right.
+    // Item 6: entries typed in by the farmer are labelled as such.
+    internal static string HandPrefix(int byHand) => byHand switch
+    {
+        0 => string.Empty,
+        1 => "Watered by hand (logged); ",
+        _ => $"{byHand} waterings logged by hand; ",
+    };
+
     private static string DayNote(
         int runs, double? litres, double? need, double? rain, double? moisture)
     {

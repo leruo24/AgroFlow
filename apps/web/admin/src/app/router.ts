@@ -12,7 +12,10 @@ import {
   irrigationPage, reportsPage, activityPage, settingsPage, settingsTabBody, SETTINGS_TABS,
 } from "@/pages/analytics";
 import { skeletonPage } from "@/ui/components";
+import { errorState } from "@/ui/patterns";
 import { animateIn, swapContent } from "@/lib/animate";
+import { beginNavigation, isCurrentNavigation, endNavigation } from "@/lib/navigation";
+import { beginPanelIntent, closeDrawer } from "@/lib/drawer";
 import { esc } from "@/lib/format";
 import { Icon } from "@/lib/icons";
 
@@ -87,16 +90,47 @@ export function setAfterRender(fn: () => void): void {
   afterRender = fn;
 }
 
+/* Renders a page. Called ONLY by the hashchange listener (bootRouter) and by
+ * refresh() - never by a click handler directly. See navigate() below.
+ *
+ * THE TWO RULES THAT FIX ITEM 0b
+ *
+ * 1. A NAVIGATION THAT HAS BEEN SUPERSEDED STOPS. Every await below is
+ *    followed by a check that this is still the newest navigation. A page
+ *    that answers after the admin has already clicked elsewhere is dropped,
+ *    not painted over the page they moved to. Its outstanding reads are
+ *    cancelled too (lib/navigation.ts).
+ *
+ * 2. RENDERING NEVER WRITES location.hash. Only a deliberate navigation does
+ *    (navigate(), the address bar, back/forward). This was the loop: a stale
+ *    page finished, wrote its own hash, which fired hashchange, which started
+ *    a navigation to a page nobody wanted - eight clicks produced seventy-five
+ *    hash changes in the test that found it. Where the address needs
+ *    correcting (a redirect, an unknown page), history.replaceState does it
+ *    without firing anything. */
 export async function go(pageId: string, opts: PageOptions = {}): Promise<void> {
   // An old route is forwarded, not dropped. Falling through to the
   // dashboard would lose the admin's place without telling them why.
   const redirected = REDIRECTS[pageId];
   if (redirected) {
-    location.hash = redirected;
-    return;
+    history.replaceState(null, "", `#${redirected}`);
+    return go(redirected, opts);
   }
 
   const id: PageId = isPageId(pageId) ? pageId : "dashboard";
+  if (id !== pageId) history.replaceState(null, "", `#${id}`);
+
+  const token = beginNavigation();
+
+  // A panel still loading from the page being LEFT must not open on top of
+  // the page being arrived at. Only on a real change of page: refresh()
+  // re-renders the same page after an action, and must leave alone whatever
+  // the admin has open on it.
+  if (id !== appState.activePage) {
+    beginPanelIntent();
+    closeDrawer();
+  }
+
   appState.activePage = id;
   appState.pageOptions = opts;
 
@@ -104,35 +138,90 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
   const title = document.getElementById("headerTitle");
   if (!content) return;
 
+  // The sidebar and the title change on the click, not when the page
+  // arrives. Feedback that waits for the network reads as a missed click,
+  // and a missed click is what makes people click again.
+  setNavigationChrome(id, title);
+
+  content.setAttribute("aria-busy", "true");
   content.innerHTML = skeletonPage();
 
-  const html = await PAGES[id](opts);
-  await swapContent(content, html);
-
-  // Pages reachable by link but not in the sidebar still need a header.
-  const OFF_NAV_TITLES: Partial<Record<PageId, string>> = {
-    onboarding: "Set up a farmer",
-    mqttLogins: "MQTT logins",
-  };
-
-  if (title) {
-    title.textContent =
-      NAV.find((n) => n.id === id)?.label ?? OFF_NAV_TITLES[id] ?? "Home";
+  /* A page that throws gets an error state with a Retry, never an endless
+     skeleton - and never a content area left marked busy, which would make
+     it unclickable. Most pages already catch their own failures through
+     withErrorState; this is for the ones that do not. */
+  let html: string;
+  try {
+    html = await PAGES[id](opts);
+  } catch (error) {
+    if (!isCurrentNavigation(token)) return;
+    console.error(`[admin] ${id} failed to render:`, error);
+    html = errorState({
+      title: "This page could not be loaded",
+      detail: error instanceof Error ? error.message : "The server did not answer. Check your connection and try again.",
+    });
   }
+  if (!isCurrentNavigation(token)) return;
 
-  document.querySelectorAll<HTMLButtonElement>("#nav button").forEach((b) => {
-    b.classList.toggle("active", b.dataset["page"] === id);
-  });
+  await swapContent(content, html, () => isCurrentNavigation(token));
+  if (!isCurrentNavigation(token)) return;
 
-  if (location.hash !== `#${id}`) location.hash = id;
+  content.removeAttribute("aria-busy");
+
+  // For tests and for anyone debugging a report: which page is actually on
+  // screen, as opposed to which one was last asked for.
+  content.dataset["page"] = id;
+
+  endNavigation(token);
 
   animateIn(content);
   afterRender?.();
 
   if (id === "settings") {
-    renderSettingsTab("General");
+    renderSettingsTab("My account");
     positionTabUnderline();
   }
+}
+
+// Pages reachable by link but not in the sidebar still need a header.
+const OFF_NAV_TITLES: Partial<Record<PageId, string>> = {
+  onboarding: "Set up a farmer",
+  mqttLogins: "MQTT logins",
+};
+
+function setNavigationChrome(id: PageId, title: HTMLElement | null): void {
+  if (title) {
+    title.textContent = NAV.find((n) => n.id === id)?.label ?? OFF_NAV_TITLES[id] ?? "Home";
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("#nav button").forEach((b) => {
+    const active = b.dataset["page"] === id;
+    b.classList.toggle("active", active);
+    if (active) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
+}
+
+/** A deliberate navigation: a click, a button, a link.
+ *
+ * It only changes the hash. The hashchange listener does the rendering, so
+ * there is exactly one path into go() for a user's navigation - two paths is
+ * how every click used to render twice.
+ *
+ * Asking for the page you are already on does nothing. It used to re-render
+ * it, and five clicks on the current item produced ten content swaps. */
+export function navigate(pageId: string): void {
+  if (location.hash === `#${pageId}`) return;
+  location.hash = pageId;
+}
+
+/** Go to a page AND show its current filters, even if it is the page you are
+ *  already on. For the "Needs attention" cards and their like, which set a
+ *  filter and then navigate: navigate() alone does nothing on the current
+ *  page, so the new filter would be set and never shown. */
+export function showPage(pageId: string): void {
+  if (location.hash === `#${pageId}`) void refresh();
+  else navigate(pageId);
 }
 
 /** Re-renders the current page in place (used after filter changes). */
@@ -181,9 +270,12 @@ export function initNav(): void {
   nav.innerHTML = NAV.map(
     (n) => `<button data-page="${esc(n.id)}"><span class="nav-ico">${n.icon}</span>${esc(n.label)}</button>`,
   ).join("");
+  // One delegated listener on the nav, for every button in it. The nav
+  // element is created fresh with each signed-in shell (app/shell.ts), so
+  // this cannot accumulate across sign-ins.
   nav.addEventListener("click", (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-page]");
-    if (btn?.dataset["page"]) void go(btn.dataset["page"]);
+    if (btn?.dataset["page"]) navigate(btn.dataset["page"]);
   });
 }
 

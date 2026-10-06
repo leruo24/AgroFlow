@@ -187,7 +187,7 @@ public static class AuditLogEndpoints
                 reader.GetFieldValue<DateTimeOffset>(1).ToString("o"),
                 actorName,
                 action,
-                Summarise(actorName, action, entityType, entityId, farmName),
+                Summarise(actorName, action, entityType, entityId, farmName, details),
                 entityType,
                 entityId,
                 reader.IsDBNull(6) ? null : reader.GetInt64(6),
@@ -252,9 +252,46 @@ public static class AuditLogEndpoints
     /// Built here rather than in the console so that the page, the CSV export
     /// and anything added later all describe an action the same way - the
     /// alternative is three slightly different vocabularies for one log.
-    private static string Summarise(
-        string actor, string action, string entityType, string? entityId, string? farmName)
+    // Item 6b: "Crop changed from Citrus to Potato by Thandi" - the farmer's
+    // own words for it, so an officer reading the farm's activity knows why
+    // the advice changed.
+    private static string CropChanged(string actor, string? details, string? farmName)
     {
+        string? from = null, to = null, planted = null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(string.IsNullOrWhiteSpace(details) ? "{}" : details);
+            var root = doc.RootElement;
+            string? Get(string name) =>
+                root.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+            from = Get("fromLabel") ?? Get("from");
+            to = Get("toLabel") ?? Get("to");
+            planted = Get("toPlanting");
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Unreadable details still give a sentence.
+        }
+
+        var where = farmName is null ? "" : $" at {farmName}";
+        if (from != null && to != null && from != to) return $"Crop changed from {from} to {to} by {actor}{where}";
+        if (to != null && from == null) return $"Crop set to {to} by {actor}{where}";
+        if (planted != null) return $"Planting date changed to {planted} by {actor}{where}";
+        return $"Crop or planting date changed by {actor}{where}";
+    }
+
+    private static string Thing(string entityType) => entityType switch
+    {
+        "service_request" => "request",
+        "maintenance" => "maintenance job",
+        _ => entityType,
+    };
+
+    internal static string Summarise(
+        string actor, string action, string entityType, string? entityId, string? farmName, string? details = null)
+    {
+        if (action == AuditActions.ZoneCropChanged) return CropChanged(actor, details, farmName);
+
         var where = farmName is null ? "" : $" at {farmName}";
         var what = entityId is null ? entityType : $"{entityType} {entityId}";
 
@@ -283,12 +320,32 @@ public static class AuditLogEndpoints
             AuditActions.UserPasswordReset => $"{actor} reset a farmer's password",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",
+            // Item 6c: public enquiries.
+            "enquiry.claimed" => $"{actor} took on enquiry {entityId}",
+            "enquiry.taken_over" => $"{actor} took over enquiry {entityId}",
+            "enquiry.call_logged" => $"{actor} logged a call on enquiry {entityId}",
+            "enquiry.closed" => $"{actor} closed enquiry {entityId}",
+            "enquiry.onboarded" => $"{actor} onboarded the farmer from enquiry {entityId}",
+            "enquiry.anonymised" => $"{actor} deleted the personal details on enquiry {entityId}",
+            AuditActions.ZonesAdded => $"{actor} added zones to farm {farmName ?? entityId}",
             AuditActions.ZoneAdviceRun => $"{actor} ran the advice engine on zone {entityId}{where}",
 
             AuditActions.EnrollmentCodeCreated => $"{actor} created an enrollment code{where}",
             AuditActions.MqttPoolAdded => $"{actor} added MQTT logins to the pool",
             AuditActions.ReportScheduleChanged => $"{actor} changed automatic reports{where}",
             AuditActions.TelegramCodeIssued => $"{actor} issued a Telegram link code",
+
+            // Item 5: handling and the actions that close an item.
+            "handling.claimed" => $"{actor} took on {Thing(entityType)} {entityId}{where}",
+            "handling.taken_over" => $"{actor} took over {Thing(entityType)} {entityId}{where}",
+            "handling.released" => $"{actor} let go of {Thing(entityType)} {entityId}{where}",
+            "alert.closed" => $"{actor} closed alert {entityId}{where}",
+            "alert.reopened" => $"{actor} reopened alert {entityId}{where}",
+            "maintenance.created" => $"{actor} booked maintenance job {entityId}{where}",
+            "maintenance.scheduled" => $"{actor} scheduled maintenance job {entityId}{where}",
+            "maintenance.completed" => $"{actor} completed maintenance job {entityId}{where}",
+            "maintenance.note_added" => $"{actor} added a note to maintenance job {entityId}{where}",
+            "service_request.note_added" => $"{actor} added a note to request {entityId}{where}",
 
             // An action added later still reads as a sentence rather than
             // vanishing from the page.

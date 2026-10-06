@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Data;
 using System.Linq;
 using AgroFlow.Business.Agronomy;
+using AgroFlow.Business.Agronomy.RuleBook;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -220,9 +221,15 @@ namespace AgroFlow.Data
             if (!flowRateLpm.HasValue || flowRateLpm.Value <= 0.0) return result;
             if (!areaM2.HasValue || areaM2.Value <= 0.0) return result;
 
+            // Item 6: a watering logged by hand with litres and no pump time
+            // counts its litres; everything else is pump time x flow rate.
+            // Read through jsonb so a database without 0042 counts as before.
             const string sql =
                 "select (e.started_at at time zone 'Africa/Johannesburg')::date as day, " +
-                "       sum(e.runtime_seconds) as runtime_seconds " +
+                "       sum(e.runtime_seconds) as runtime_seconds, " +
+                "       coalesce(sum(case when (to_jsonb(e) ->> 'logged_by_profile_id') is not null " +
+                "                          and coalesce(e.runtime_seconds, 0) = 0 " +
+                "                     then e.estimated_litres end), 0) as hand_litres " +
                 "from irrigation_event e " +
                 "where e.zone_id = $1 " +
                 "  and e.started_at >= $2::date::timestamp at time zone 'Africa/Johannesburg' " +
@@ -241,14 +248,88 @@ namespace AgroFlow.Data
                     while (reader.Read())
                     {
                         var day = reader.GetFieldValue<DateOnly>(0);
-                        var runtimeSeconds = Convert.ToDouble(reader.GetValue(1));
-                        var litres = runtimeSeconds / 60.0 * flowRateLpm.Value;
+                        var runtimeSeconds = reader.IsDBNull(1) ? 0.0 : Convert.ToDouble(reader.GetValue(1));
+                        var handLitres = Convert.ToDouble(reader.GetValue(2));
+                        var litres = runtimeSeconds / 60.0 * flowRateLpm.Value + handLitres;
                         result[day] = litres / areaM2.Value;
                     }
                 }
             }
 
             return result;
+        }
+
+        // Item 2: the longest single pump run per day, for zones whose waterings
+        // cannot be measured in mm (no flow rate or no size). The engine treats
+        // a long enough run as a full watering (WaterRules.WateringResetsBalance).
+        public Dictionary<DateOnly, double> GetLongestRunSecondsByDay(long zoneId, DateOnly from, DateOnly to)
+        {
+            var result = new Dictionary<DateOnly, double>();
+
+            var sql =
+                // Item 6: a watering the farmer logged by hand is a real
+                // watering however briefly they timed it (or if they gave
+                // litres instead of minutes) - it counts as at least the
+                // two-minute minimum.
+                "select (e.started_at at time zone 'Africa/Johannesburg')::date as day, " +
+                "       max(case when (to_jsonb(e) ->> 'logged_by_profile_id') is not null " +
+                "                then greatest(coalesce(e.runtime_seconds, 0), " + WaterRules.FullWateringMinimumSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + ") " +
+                "                else e.runtime_seconds end) as runtime_seconds " +
+                "from irrigation_event e " +
+                "where e.zone_id = $1 " +
+                "  and (e.runtime_seconds is not null or (to_jsonb(e) ->> 'logged_by_profile_id') is not null) " +
+                "  and e.started_at >= $2::date::timestamp at time zone 'Africa/Johannesburg' " +
+                "  and e.started_at <  ($3::date + 1)::timestamp at time zone 'Africa/Johannesburg' " +
+                "group by 1";
+
+            using (var connection = Open())
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.AddWithValue(zoneId);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, to);
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        result[reader.GetFieldValue<DateOnly>(0)] = Convert.ToDouble(reader.GetValue(1));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Item 6: the farmer's own "How does the soil feel?" checks. Empty if
+        // migration 0042 is not applied - the advice then simply has none.
+        public List<ZoneSoilFeelCheck> GetSoilFeelChecks(long zoneId, DateOnly from)
+        {
+            var checks = new List<ZoneSoilFeelCheck>();
+            try
+            {
+                using (var connection = Open())
+                using (var cmd = new NpgsqlCommand(
+                    "select checked_at, feel from soil_feel_check " +
+                    "where zone_id = $1 and checked_at >= $2::date::timestamp at time zone 'Africa/Johannesburg' " +
+                    "order by checked_at", connection))
+                {
+                    cmd.Parameters.AddWithValue(zoneId);
+                    cmd.Parameters.AddWithValue(NpgsqlDbType.Date, from);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            checks.Add(new ZoneSoilFeelCheck { CheckedAtUtc = reader.GetDateTime(0), Feel = reader.GetString(1) });
+                        }
+                    }
+                }
+            }
+            catch (PostgresException)
+            {
+                // Table not there yet.
+            }
+            return checks;
         }
 
         // Total irrigation depth over a window, for the overwatering check.
@@ -454,27 +535,12 @@ namespace AgroFlow.Data
             if (recent.Count > 0)
             {
                 signals.SinceLastReading = nowUtc - recent[0].At;
+                signals.IdenticalReadingFor = KitRules.IdenticalFor(recent);
 
-                // Walk back while the value is identical to the newest one.
-                var newest = recent[0].Value;
-                var oldestIdentical = recent[0].At;
-                for (var i = 1; i < recent.Count; i++)
-                {
-                    if (Math.Abs(recent[i].Value - newest) > 1e-9) break;
-                    oldestIdentical = recent[i].At;
-                }
-                signals.IdenticalReadingFor = recent[0].At - oldestIdentical;
-
-                // Wettest reading over the last 7 days, for sensor_drift. Which
-                // extreme is "wettest" depends on which way the probe reads.
+                // Wettest reading over the last 7 days, for sensor_drift.
                 var weekAgo = nowUtc.AddDays(-7);
                 var week = recent.Where(r => r.At >= weekAgo).Select(r => r.Value).ToList();
-                if (week.Count > 0 && zone.CalibrationWet.HasValue && zone.CalibrationDry.HasValue)
-                {
-                    signals.SevenDayMinimumReading = zone.CalibrationWet.Value < zone.CalibrationDry.Value
-                        ? week.Min()
-                        : week.Max();
-                }
+                signals.SevenDayMinimumReading = KitRules.Wettest(week, zone.CalibrationWet, zone.CalibrationDry);
             }
 
             // DHT11: is the board reporting soil readings but no valid
@@ -490,8 +556,9 @@ namespace AgroFlow.Data
             return signals;
         }
 
-        public const int DhtOfflineWindowHours = 2;
-        public const int DhtBackOnlineReadingCount = 3;
+        // The thresholds live in RuleBook/KitRules.cs with their reasons.
+        public const int DhtOfflineWindowHours = KitRules.DhtOfflineWindowHours;
+        public const int DhtBackOnlineReadingCount = KitRules.DhtBackOnlineReadingCount;
 
         // A zone is DHT offline when soil readings are still arriving but none of
         // the last two hours' readings carries a valid DHT11 temperature or
@@ -538,43 +605,17 @@ namespace AgroFlow.Data
                 }
             }
 
-            var validRecent = dht
-                .Where(d => d.At >= since && IsValidDhtValue(d.Type, d.Value))
-                .ToList();
-
-            if (validRecent.Count > 0)
-            {
-                // Back online needs 3 consecutive valid readings, so a single good
-                // reading in a flapping sensor does not clear the fault.
-                var consecutive = 0;
-                foreach (var d in dht)
-                {
-                    if (IsValidDhtValue(d.Type, d.Value)) consecutive++;
-                    else break;
-                }
-                if (consecutive >= DhtBackOnlineReadingCount) return false;
-            }
-
-            var lastValid = dht.FirstOrDefault(d => IsValidDhtValue(d.Type, d.Value));
-            offlineSinceUtc = lastValid.At == default ? (DateTime?)null : lastValid.At;
-
-            return true;
+            return KitRules.IsDhtOffline(soilStillReporting: true, dht, nowUtc, out offlineSinceUtc);
         }
 
-        // Spec 3b plausibility: temperature -10..60 C, humidity 0..100 %. NaN is
-        // what a DHT11 timeout or checksum failure looks like once it reaches a
-        // real column.
+        // Spec 3b plausibility - the rule is KitRules.IsValidDhtValue.
         public static bool IsValidDhtValue(string sensorType, double value)
         {
-            if (double.IsNaN(value) || double.IsInfinity(value)) return false;
-
-            if (sensorType == "Temperature") return value >= -10.0 && value <= 60.0;
-            if (sensorType == "Humidity") return value >= 0.0 && value <= 100.0;
-            return false;
+            return KitRules.IsValidDhtValue(sensorType, value);
         }
 
-        public const int WateringFailedMinRuntimeSeconds = 120;
-        public const int WateringFailedWindowMinutes = 30;
+        public const int WateringFailedMinRuntimeSeconds = (int)KitRules.PumpCheckMinimumSeconds;
+        public const int WateringFailedWindowMinutes = KitRules.PumpCheckWindowMinutes;
 
         private bool DidWateringFail(EngineZoneRow zone, DateTime nowUtc, out DateTime? failedAtUtc)
         {
@@ -649,23 +690,46 @@ namespace AgroFlow.Data
 
             // No readings on one side of the run: that is a data gap, not a proven
             // pump failure. Do not accuse the hardware on missing evidence.
-            if (!before.HasValue || after.Count == 0) return false;
-
             var wetIsLower = zone.CalibrationWet.HasValue && zone.CalibrationDry.HasValue
                              && zone.CalibrationWet.Value < zone.CalibrationDry.Value;
 
             // An uncalibrated zone still gets this check - spec section 8 says the
             // sensor is used to confirm the soil got wetter even without
-            // calibration. The firmware currently reports a percentage, where
-            // higher is wetter, which is the default assumption.
-            var movedTowardWet = wetIsLower
-                ? after.Min() < before.Value
-                : after.Max() > before.Value;
-
-            if (movedTowardWet) return false;
+            // calibration. The rule itself is KitRules.PumpRanNoChange.
+            if (!KitRules.PumpRanNoChange(startedAt, runtimeSeconds, nowUtc, before, after, wetIsLower)) return false;
 
             failedAtUtc = startedAt;
             return true;
+        }
+
+        // Item 6b: the climate behind "Recommended for you". The last 30 days
+        // of measured ETo when there are at least RecommendationRules
+        // .MinHistoryDays of them; otherwise the forecast; otherwise whatever
+        // history there is; otherwise nothing.
+        public (double? MeanEto, string? Basis) GetRecommendationEto(long farmId, DateOnly today)
+        {
+            const string sql =
+                "select count(*) filter (where not is_forecast and date between $2 and $3), " +
+                "       avg(eto_mm) filter (where not is_forecast and date between $2 and $3), " +
+                "       avg(eto_mm) filter (where is_forecast and date >= $4) " +
+                "from weather_daily where farm_id = $1 and eto_mm is not null";
+
+            using (var connection = Open())
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.AddWithValue(farmId);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, today.AddDays(-30));
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, today.AddDays(-1));
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, today);
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (!reader.Read()) return (null, null);
+                    var days = reader.GetInt64(0);
+                    double? history = reader.IsDBNull(1) ? (double?)null : Convert.ToDouble(reader.GetValue(1));
+                    double? forecast = reader.IsDBNull(2) ? (double?)null : Convert.ToDouble(reader.GetValue(2));
+                    return RecommendationRules.PickEto(days, history, forecast);
+                }
+            }
         }
 
         // Trailing mean ETo over the days before today, for the hot_days check.
@@ -828,15 +892,34 @@ namespace AgroFlow.Data
                 ". System is using weather app data. Needs a site visit.";
 
             const string sql =
-                "insert into alert (zone_id, severity, message, status) values ($1, $2, $3, 'Open')";
+                "insert into alert (zone_id, severity, message, status) values ($1, $2, $3, 'Open') returning id";
 
             using (var connection = Open())
-            using (var cmd = new NpgsqlCommand(sql, connection))
             {
-                cmd.Parameters.AddWithValue(zoneId);
-                cmd.Parameters.AddWithValue("Warning");
-                cmd.Parameters.AddWithValue(message);
-                cmd.ExecuteNonQuery();
+                long alertId;
+                using (var cmd = new NpgsqlCommand(sql, connection))
+                {
+                    cmd.Parameters.AddWithValue(zoneId);
+                    cmd.Parameters.AddWithValue("Warning");
+                    cmd.Parameters.AddWithValue(message);
+                    alertId = Convert.ToInt64(cmd.ExecuteScalar());
+                }
+
+                // Item 2c: the callout's "Why?". A missing explanation table
+                // (migration 0039) never stops the callout itself.
+                try
+                {
+                    using var why = new NpgsqlCommand(
+                        "insert into explanation (farm_id, zone_id, alert_id, kind, explanation) " +
+                        "select z.farm_id, z.id, $2, 'alert_dht', $3::jsonb from zone z where z.id = $1", connection);
+                    why.Parameters.AddWithValue(zoneId);
+                    why.Parameters.AddWithValue(alertId);
+                    why.Parameters.AddWithValue(System.Text.Json.JsonSerializer.Serialize(Explanations.DhtCallout(offlineSinceUtc)));
+                    why.ExecuteNonQuery();
+                }
+                catch (PostgresException)
+                {
+                }
             }
         }
 

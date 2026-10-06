@@ -24,18 +24,40 @@ public sealed class TelegramNotificationService : INotificationService
     private readonly TelegramClient _client;
     private readonly NpgsqlDataSource _dataSource;
     private readonly ApkOptions _apkOptions;
+    private readonly IExplanationStore _explanations;
+    private readonly WeatherAlertOptions _weatherOptions;
+    private readonly DeviceMonitorOptions _deviceOptions;
     private readonly ILogger<TelegramNotificationService> _logger;
 
     public TelegramNotificationService(
         TelegramClient client,
         NpgsqlDataSource dataSource,
         IOptions<ApkOptions> apkOptions,
+        IExplanationStore explanations,
+        IOptions<WeatherAlertOptions> weatherOptions,
+        IOptions<DeviceMonitorOptions> deviceOptions,
         ILogger<TelegramNotificationService> logger)
     {
         _client = client;
         _dataSource = dataSource;
         _apkOptions = apkOptions.Value;
+        _explanations = explanations;
+        _weatherOptions = weatherOptions.Value;
+        _deviceOptions = deviceOptions.Value;
         _logger = logger;
+    }
+
+    // Item 2c: every alert ends with a short "Why: ..." line and a "Why am I
+    // seeing this?" button. The explanation is saved first so the button can
+    // point at it; if it cannot be saved, the alert still goes, with the
+    // Why line but no button.
+    private async Task<(string Message, long? WhyId)> WithWhyAsync(
+        string message, long farmId, long? zoneId, string kind,
+        AgroFlow.Business.Agronomy.RuleBook.Explanation explanation,
+        CancellationToken cancellationToken)
+    {
+        var id = await _explanations.SaveAsync(farmId, zoneId, kind, explanation, cancellationToken);
+        return (message + NewLine + NewLine + "Why: " + explanation.Summary, id);
     }
 
     // ------------------------------------------------------------------
@@ -172,13 +194,18 @@ public sealed class TelegramNotificationService : INotificationService
                 "",
                 $"Farm: {zone.FarmName}",
                 $"Zone: {zone.ZoneName}",
-                $"Soil moisture: {moisture:0.#}%",
+                // Item 2: never a % - the reading may be from a sensor whose
+                // wet/dry setup has not been done.
+                $"Soil sensor reading: {moisture:0.#}",
                 "",
                 cause,
                 "",
                 action);
 
-            await BroadcastToFarmAsync(zone.FarmId, message, alertsOnly: true, cancellationToken);
+            var (withWhy, whyId) = await WithWhyAsync(message, zone.FarmId, zoneId, "zone_critical",
+                AlertExplanations.ZoneCritical(zone.ZoneName, moisture, reason), cancellationToken);
+
+            await BroadcastToFarmAsync(zone.FarmId, withWhy, alertsOnly: true, cancellationToken, whyId);
         }
         catch (Exception ex)
         {
@@ -245,7 +272,11 @@ public sealed class TelegramNotificationService : INotificationService
                 },
             };
 
-            await BroadcastToFarmAsync(farmId, Compose(lines), alertsOnly: true, cancellationToken);
+            var (withWhy, whyId) = await WithWhyAsync(Compose(lines), farmId, null,
+                "weather_" + notification.Kind.ToString().ToLowerInvariant(),
+                AlertExplanations.Weather(notification, _weatherOptions), cancellationToken);
+
+            await BroadcastToFarmAsync(farmId, withWhy, alertsOnly: true, cancellationToken, whyId);
         }
         catch (Exception ex)
         {
@@ -357,7 +388,11 @@ public sealed class TelegramNotificationService : INotificationService
                 },
             };
 
-            await BroadcastToFarmAsync(farmId, Compose(lines), alertsOnly: true, cancellationToken);
+            var (withWhy, whyId) = await WithWhyAsync(Compose(lines), farmId, null,
+                "system_" + notification.Kind.ToString().ToLowerInvariant(),
+                AlertExplanations.SystemFailure(notification, _deviceOptions), cancellationToken);
+
+            await BroadcastToFarmAsync(farmId, withWhy, alertsOnly: true, cancellationToken, whyId);
         }
         catch (Exception ex)
         {
@@ -456,6 +491,33 @@ public sealed class TelegramNotificationService : INotificationService
         catch (Exception ex)
         {
             LogSwallowed(ex, $"farm-request-{notification.Stage}", profileId.ToString());
+        }
+    }
+
+    // Item 6c: the same recipients as a farm request - every admin with a
+    // linked chat - for any work-queue notice. Never throws.
+    public async Task NotifyAdminsAsync(string message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var chatIds = new List<long>();
+            await using (var connection = await _dataSource.OpenConnectionAsync(cancellationToken))
+            {
+                await using var command = new NpgsqlCommand(
+                    "select distinct p.telegram_chat_id from profile p " +
+                    "where p.role = 'admin' and p.telegram_chat_id is not null", connection);
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken)) chatIds.Add(reader.GetInt64(0));
+            }
+
+            foreach (var chatId in chatIds)
+            {
+                await _client.SendMessageAsync(chatId, message, cancellationToken);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not send an admin notice on Telegram.");
         }
     }
 
@@ -565,7 +627,8 @@ public sealed class TelegramNotificationService : INotificationService
         long farmId,
         string message,
         bool alertsOnly,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        long? whyExplanationId = null)
     {
         const string sql =
             """
@@ -607,7 +670,7 @@ public sealed class TelegramNotificationService : INotificationService
         // and risk 429s.
         foreach (var chatId in chatIds)
         {
-            await _client.SendMessageAsync(chatId, message, cancellationToken);
+            await _client.SendMessageAsync(chatId, message, whyExplanationId, cancellationToken);
         }
     }
 

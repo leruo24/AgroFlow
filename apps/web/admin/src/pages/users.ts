@@ -56,17 +56,18 @@ export async function usersPage(): Promise<string> {
      <button class="btn ghost" data-act="invite-farmer">+ Invite Farmer</button>`)}
 
   <div class="grid kpis four">
-    ${kpiCard({ label: "Total Users", value: total, icon: Icon.users })}
-    ${kpiCard({ label: "New Users", value: recent, trend: { dir: "up", text: "since 1 June" }, icon: Icon.sparkles })}
-    ${kpiCard({ label: "Active Users", value: active, icon: Icon.circleCheck })}
+    ${kpiCard({ label: "Total Users", value: total, icon: Icon.users, why: { counts: "accounts are listed", rule: "Every account in the list.", query: "users" } })}
+    ${kpiCard({ label: "New Users", value: recent, trend: { dir: "up", text: "since 1 June" }, icon: Icon.sparkles, why: { counts: "accounts joined on or after 1 June 2026", rule: "Accounts whose join date is 1 June 2026 or later. The date is fixed, not a rolling window.", query: "user.dateJoined >= 2026-06-01" } })}
+    ${kpiCard({ label: "Active Users", value: active, icon: Icon.circleCheck, why: { counts: "accounts are active", rule: "Accounts whose status is Active.", query: "user.status = Active" } })}
     ${unlinked > 0
       ? kpiCard({
           label: "Not Receiving Alerts",
           value: unlinked,
           trend: { dir: "down", text: "Telegram not connected" },
           icon: Icon.userX,
+          why: { counts: "accounts have not connected Telegram", rule: "Accounts with no Telegram chat linked.", highlighted: "They get no alerts at all.", query: "profile.telegram_chat_id is null", clears: "Connecting Telegram from the app or with a link code." },
         })
-      : kpiCard({ label: "Disabled Users", value: disabled, icon: Icon.userX })}
+      : kpiCard({ label: "Disabled Users", value: disabled, icon: Icon.userX, why: { counts: "accounts are disabled", rule: "Accounts whose status is Disabled.", query: "user.status = Disabled" } })}
   </div>
 
   ${filterBar({

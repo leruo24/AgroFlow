@@ -111,19 +111,21 @@ export async function farmsPage(): Promise<string> {
   )}
 
   <div class="grid kpis five">
-    ${kpiCard({ label: "Total Farms", value: total, icon: Icon.tractor })}
+    ${kpiCard({ label: "Total Farms", value: total, icon: Icon.tractor, why: { counts: "farms are listed", rule: "Every farm in the list. Archived farms are left out unless \"Show archived\" is on.", query: "farm (archived = status Inactive, hidden by default)" } })}
     ${kpiCard({
       label: "New Farms",
       value: recent,
       trend: { dir: "up", text: "since 1 May" },
       icon: Icon.sparkles,
+      why: { counts: "farms were registered on or after 1 May 2026", rule: "Farms whose registration date is 1 May 2026 or later. The date is fixed, not a rolling window.", query: "farm.registered >= 2026-05-01" },
     })}
-    ${kpiCard({ label: "Active Farms", value: active, icon: Icon.circleCheck })}
-    ${kpiCard({ label: "Inactive Farms", value: inactive, icon: Icon.moon })}
+    ${kpiCard({ label: "Active Farms", value: active, icon: Icon.circleCheck, why: { counts: "farms are active", rule: "Farms whose status is Active.", query: "farm.status = Active" } })}
+    ${kpiCard({ label: "Inactive Farms", value: inactive, icon: Icon.moon, why: { counts: "farms are inactive", rule: "Farms whose status is Inactive - which is also how an archived farm is marked.", query: "farm.status = Inactive" } })}
     ${kpiCard({
       label: "Pending Approval",
       value: pending,
       icon: Icon.hourglass,
+      why: { counts: "farms are waiting for approval", rule: "Farms whose status is Pending Approval.", highlighted: "A farmer is waiting for these to be approved.", query: "farm.status = Pending Approval" },
     })}
   </div>
 
