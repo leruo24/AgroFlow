@@ -320,6 +320,13 @@ public static class AuditLogEndpoints
             AuditActions.UserPasswordReset => $"{actor} reset a farmer's password",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",
+            // Item 6c: public enquiries.
+            "enquiry.claimed" => $"{actor} took on enquiry {entityId}",
+            "enquiry.taken_over" => $"{actor} took over enquiry {entityId}",
+            "enquiry.call_logged" => $"{actor} logged a call on enquiry {entityId}",
+            "enquiry.closed" => $"{actor} closed enquiry {entityId}",
+            "enquiry.onboarded" => $"{actor} onboarded the farmer from enquiry {entityId}",
+            "enquiry.anonymised" => $"{actor} deleted the personal details on enquiry {entityId}",
             AuditActions.ZonesAdded => $"{actor} added zones to farm {farmName ?? entityId}",
             AuditActions.ZoneAdviceRun => $"{actor} ran the advice engine on zone {entityId}{where}",
 

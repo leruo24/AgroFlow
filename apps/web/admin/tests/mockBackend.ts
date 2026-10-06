@@ -76,6 +76,7 @@ function defaultApiResponse(method: string, path: string): unknown {
       : [];
   }
   if (path === "/api/admin/platform-config") return { groups: [] };
+  if (path === "/api/admin/enquiries/summary") return { waiting: 0, callbacksDue: 0 };
   if (path === "/api/telegram/me") return { linked: false, alertsEnabled: true };
   if (path.startsWith("/api/admin/farms/") && path.endsWith("/report-schedule")) {
     return { farmId: 1, enabled: false, frequency: "weekly", reportTypes: ["water_usage"], zoneIds: null };

@@ -433,6 +433,7 @@ app.MapZoneSetupEndpoints();
 app.MapRecommendationEndpoints();
 app.MapFarmZoneEndpoints();
 app.MapEnquiryEndpoints();
+app.MapEnquiryAdminEndpoints();
 app.MapMqttPoolEndpoints();
 app.MapPasswordResetEndpoints();
 

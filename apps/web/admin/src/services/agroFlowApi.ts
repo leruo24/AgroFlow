@@ -833,6 +833,80 @@ export function useRecommendedSettings(zoneId: number): Promise<{ message: strin
   return authorizedJson(`/api/farmer/zones/${zoneId}/reset-recommended`, "POST", {});
 }
 
+/* ---------------- Item 6c: public enquiries ---------------- */
+
+export type Enquiry = {
+  id: number;
+  fullName: string | null;
+  phone: string | null;
+  email: string | null;
+  province: string;
+  town: string | null;
+  farmSizeHa: number | null;
+  crops: string[];
+  cropsOther: string | null;
+  bestTime: "morning" | "afternoon" | "evening";
+  notes: string | null;
+  createdAt: string;
+  status: "new" | "open" | "won" | "lost" | "closed";
+  handledBy: string | null;
+  handledByName: string | null;
+  claimedAt: string | null;
+  callbackAt: string | null;
+  noAnswerCount: number;
+  outcome: string | null;
+  reason: string | null;
+  reasonOther: string | null;
+  farmerProfileId: string | null;
+  anonymisedAt: string | null;
+  firstCalledAt: string | null;
+  closedAt: string | null;
+  callCount: number;
+};
+
+export type EnquiryCall = {
+  calledAt: string; callerName: string; outcome: string; reason: string | null;
+  reasonOther: string | null; note: string | null; callbackAt: string | null;
+};
+
+export function getEnquiries(): Promise<Enquiry[]> {
+  return authorizedJson("/api/admin/enquiries", "GET");
+}
+
+export function getEnquirySummary(): Promise<{ waiting: number; callbacksDue: number }> {
+  return authorizedJson("/api/admin/enquiries/summary", "GET");
+}
+
+export function getEnquiryCalls(id: number): Promise<EnquiryCall[]> {
+  return authorizedJson(`/api/admin/enquiries/${id}/calls`, "GET");
+}
+
+export function claimEnquiry(id: number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/claim`, "POST", {});
+}
+
+export function takeOverEnquiry(id: number, reason: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/take-over`, "POST", { reason });
+}
+
+export function logEnquiryCall(id: number, call: {
+  outcome: string; reason?: string | null; reasonOther?: string | null; note?: string | null; callbackAt?: string | null;
+}): Promise<{ message: string; suggestClosing: boolean }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/calls`, "POST", call);
+}
+
+export function closeEnquiry(id: number, note?: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/close`, "POST", { note: note ?? null });
+}
+
+export function markEnquiryOnboarded(id: number, farmerProfileId: string): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/onboarded`, "POST", { farmerProfileId });
+}
+
+export function anonymiseEnquiry(id: number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/enquiries/${id}/anonymise`, "POST", {});
+}
+
 export function getHandling(kind: HandlingKind): Promise<HandlingState[]> {
   return authorizedJson<HandlingState[]>(`/api/admin/handling/${kind}`, "GET");
 }

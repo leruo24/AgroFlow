@@ -15,7 +15,7 @@ what is next.
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
 | 6 | done | 77b9533, be80a1a | Apply migration 0042 | 6b |
 | 6b | done | f079cde | Apply migration 0043 | 6c |
-| 6c | in progress | b8cf3a2 (part 1), part 2 (this commit) | Apply migration 0044; part 3: Enquiries tab; part 4: enquiry report | 6c part 3 |
+| 6c | in progress | b8cf3a2, 6c4982b, part 3 (this commit) | Apply migration 0044; part 4: enquiry report | 6c part 4 |
 
 ---
 
@@ -689,3 +689,39 @@ the admin message, the limiter, and the route itself without a database -
 honeypot thanked, bad form 400, sixth in an hour 429; call-log rules).
 Mobile jest 44 → 47. Admin Playwright 29 → 32 (`enquiry-form.spec.ts`:
 sent and thanked, nothing sent without consent, the server's refusal shown).
+
+
+### Part 3: the Enquiries tab
+
+- **Requests** now has two tabs: *Farm and zone requests* and *Enquiries*,
+  each with a count. The sidebar's Requests entry shows a badge for
+  enquiries needing a person (nobody has them, or a call-back is due), and
+  Home's *Needs attention* has **Call-backs due** and **Enquiries waiting for
+  a call** (each with its Why).
+- The flow: **[I'll handle this]** (or Take over, with a reason) →
+  **[Log call]** with outcome buttons:
+  - *Wants AgroFlow* → **[Start onboarding]** opens the onboarding wizard
+    filled in from the enquiry (name, email, phone, town and province, farm
+    size); finishing it links the new farmer and completes the enquiry
+    (status won).
+  - *Call back later* → a date and time (must be in the future); it shows on
+    Home when due.
+  - *No answer* → counted; after 3 the row offers **Close**.
+  - *Not interested* → a reason is required (the eight in the brief), and
+    words for Other; the enquiry ends (lost).
+  Every call is a row in `enquiry_call` with the caller from the login, the
+  time, outcome, reason and note; the side panel shows them all.
+- **[Delete personal details]** on an ended enquiry (lost or closed) blanks
+  name, phone, email and notes (and call notes) and keeps province, town,
+  crops, outcome and reason. Audit-logged; refused while the enquiry is
+  still being worked.
+- Routes: `/api/admin/enquiries` (list, summary, calls, claim, take-over,
+  calls, close, onboarded, anonymise), admin-only, 409 "needs migration
+  0044" until it is applied; every action audit-logged with a sentence.
+
+Tests: backend 954 → 962 (what each call does, including the third no
+answer; when anonymising is allowed; no actor in any body). Admin Playwright
+32 → 37 (`enquiries.spec.ts`: badge and Home cards lead to the tab; claim;
+Not interested needs a reason and words for Other, and sends no actor;
+call-back needs a time; Close after three; Delete personal details;
+onboarding prefilled and completing the enquiry).

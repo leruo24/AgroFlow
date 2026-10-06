@@ -1,5 +1,6 @@
 import { countExplanation } from "@/lib/why";
 import { api, getFarmsNeedingSetup, getMqttPoolHealth, getFailedReportCount } from "@/data/api";
+import { getEnquirySummary } from "@/services/agroFlowApi";
 import { esc, fmtInt, fmtPct, fmtPct2, fmtDateTimeSast } from "@/lib/format";
 import {
   badge, kpiCard, panel, barChart, lineChart, donut, table,
@@ -42,6 +43,10 @@ async function renderDashboard(): Promise<string> {
     getMqttPoolHealth().catch(() => null),
     getFailedReportCount().catch(() => 0),
   ]);
+  // Item 6c: people waiting for a call, and call-backs that are due.
+  const enquiries = await getEnquirySummary().catch(() => null);
+  const enquiriesWaiting = Number(enquiries?.waiting) || 0;
+  const callbacksDue = Number(enquiries?.callbacksDue) || 0;
 
   const openAlerts = alerts.filter((a) => !["Resolved", "Closed"].includes(a.status));
 
@@ -73,6 +78,24 @@ async function renderDashboard(): Promise<string> {
       tone: "bad",
       icon: Icon.inbox,
       why: countExplanation({ label: "New requests waiting", what: "new farm or zone requests have had no reply yet", count: newRequests.length, counted: "service requests", rule: "A request counts here while its status is still pending.", whyHighlighted: "First in the queue: a farmer is waiting on a person.", clears: "Scheduling, completing or closing a request takes it off this count.", query: "service_request where status = pending" }),
+    },
+    {
+      title: "Call-backs due",
+      count: callbacksDue,
+      body: "You promised to call these people back - it is time.",
+      act: "go-enquiries",
+      tone: "bad",
+      icon: Icon.inbox,
+      why: countExplanation({ label: "Call-backs due", what: "enquiries have a call-back time that has passed", count: callbacksDue, counted: "enquiries", rule: "An enquiry counts here while it is open and the call-back time someone logged has come.", whyHighlighted: "Someone was told we would call them at this time.", clears: "Logging the call.", query: "enquiry where status = open and callback_at <= now()" }),
+    },
+    {
+      title: "Enquiries waiting for a call",
+      count: enquiriesWaiting,
+      body: "People interested in AgroFlow that nobody has taken on yet.",
+      act: "go-enquiries",
+      tone: "warn",
+      icon: Icon.inbox,
+      why: countExplanation({ label: "Enquiries waiting for a call", what: "enquiries nobody has taken on", count: enquiriesWaiting, counted: "enquiries", rule: "An enquiry counts here until an admin presses I'll handle this.", whyHighlighted: "They were promised a call within 2 working days.", clears: "Taking it on (I'll handle this).", query: "enquiry where status = new" }),
     },
     {
       title: "Open critical alerts",

@@ -1,6 +1,7 @@
 import { getAdminProfile } from "@/app/auth";
 import { handlingCell } from "@/ui/patterns";
-import { getHandling } from "@/services/agroFlowApi";
+import { getHandling, getEnquiries, type Enquiry } from "@/services/agroFlowApi";
+import { enquiriesTable, isCallbackDue } from "@/pages/enquiries";
 import { api } from "@/data/api";
 import { badge, pageHeader, panel, resultCount } from "@/ui/components";
 import { esc, fmtDateTimeSast } from "@/lib/format";
@@ -123,9 +124,53 @@ function requestRow(request: ServiceRequest, myId: string | undefined): string {
   `;
 }
 
+/* Item 6c: two tabs - the farmers' own requests, and enquiries from people
+   who are not on AgroFlow yet. Remembered for the session, not stored. */
+let activeTab: "requests" | "enquiries" = "requests";
+
+export function setRequestsTab(tab: string): void {
+  activeTab = tab === "enquiries" ? "enquiries" : "requests";
+}
+
+/* What needs a person on the Enquiries tab: nobody has it yet, or a
+   call-back is due. The same count as the sidebar badge. */
+export function enquiriesNeedingAction(rows: Enquiry[], now = Date.now()): number {
+  return rows.filter((e) => e.status === "new" || isCallbackDue(e, now)).length;
+}
+
 export async function requestsPage(): Promise<string> {
   try {
-    const requests = await api.getServiceRequests();
+    const [requests, enquiries] = await Promise.all([
+      api.getServiceRequests(),
+      // Allowed to fail: without migration 0044 there are simply none.
+      getEnquiries().catch(() => [] as Enquiry[]),
+    ]);
+    const myId = getAdminProfile()?.id;
+    const pending = requests.filter((r) => r.status === "pending").length;
+    const needing = enquiriesNeedingAction(enquiries);
+
+    const tabs = `<div class="req-tabs" role="tablist" aria-label="Requests">
+      <button type="button" role="tab" class="req-tab${activeTab === "requests" ? " active" : ""}"
+        aria-selected="${activeTab === "requests"}" data-act="requests-tab" data-tab="requests">
+        Farm and zone requests${pending ? ` <span class="nav-badge">${pending}</span>` : ""}
+      </button>
+      <button type="button" role="tab" class="req-tab${activeTab === "enquiries" ? " active" : ""}"
+        aria-selected="${activeTab === "enquiries"}" data-act="requests-tab" data-tab="enquiries">
+        Enquiries${needing ? ` <span class="nav-badge">${needing}</span>` : ""}
+      </button>
+    </div>`;
+
+    if (activeTab === "enquiries") {
+      return `
+        ${pageHeader("Requests", "Farmers' requests, and people asking about AgroFlow.")}
+        ${tabs}
+        ${panel(
+          "Enquiries",
+          `${enquiries.length} enquir${enquiries.length === 1 ? "y" : "ies"} - from the website and the app's login screen`,
+          resultCount(enquiries.length, enquiries.length, "enquiries"),
+          enquiriesTable(enquiries, myId),
+        )}`;
+    }
 
     // Item 5: who is handling each request (from the API; nothing if 0041
     // is not applied, which is true - nobody can have claimed one).
@@ -139,10 +184,8 @@ export async function requestsPage(): Promise<string> {
     }
 
     return `
-      ${pageHeader(
-        "Farm Requests",
-        "Review farmer requests for new farms and irrigation zones.",
-      )}
+      ${pageHeader("Requests", "Farmers' requests, and people asking about AgroFlow.")}
+      ${tabs}
 
       ${panel(
         "Service requests",
@@ -165,7 +208,7 @@ export async function requestsPage(): Promise<string> {
               <tbody>
                 ${
                   requests.length
-                    ? requests.map((r) => requestRow(r, getAdminProfile()?.id)).join("")
+                    ? requests.map((r) => requestRow(r, myId)).join("")
                     : `
                       <tr>
                         <td colspan="7" class="muted">
@@ -184,10 +227,7 @@ export async function requestsPage(): Promise<string> {
     console.error("Failed to load farm requests:", error);
 
     return `
-      ${pageHeader(
-        "Farm Requests",
-        "Review farmer requests for new farms and irrigation zones.",
-      )}
+      ${pageHeader("Requests", "Farmers' requests, and people asking about AgroFlow.")}
 
       ${panel(
         "Unable to load requests",

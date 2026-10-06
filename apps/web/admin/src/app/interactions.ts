@@ -49,7 +49,8 @@ import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml, rememberReportFarm } from "@/pages/analytics";
-import { requestActions } from "@/pages/requests";
+import { requestActions, setRequestsTab } from "@/pages/requests";
+import { callHistory, enquiryActions, enquiryStatus, cropsText, logCallHtml, readLogCall, syncLogCall } from "@/pages/enquiries";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
 import { navigate, showPage, refresh, renderSettingsTab, positionTabUnderline, appState, onSettingsTabRendered } from "@/app/router";
@@ -64,7 +65,7 @@ import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtm
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
 import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -1340,6 +1341,16 @@ case "delete-user": {
        job. */
     handoverProfileId = result.profileId;
 
+    // Item 6c: onboarding started from an enquiry completes it and links
+    // the new farmer. A failure here leaves the enquiry open, and says so.
+    if (onboardingFromEnquiry) {
+      const enquiryId = onboardingFromEnquiry.id;
+      onboardingFromEnquiry = null;
+      await markEnquiryOnboarded(enquiryId, result.profileId)
+        .then((r) => toast(r.message, "success"))
+        .catch((e: unknown) => toast(e instanceof Error ? `The enquiry is still open: ${e.message}` : "The enquiry is still open.", "warn"));
+    }
+
     await renderHandover(result);
 
     return void goToOnboardingStep(3);
@@ -2073,6 +2084,128 @@ case "delete-user": {
 
     case "go-mqtt-logins":
       return void navigate("mqttLogins");
+
+    /* Item 6c: the two tabs on Requests. */
+    case "requests-tab":
+      setRequestsTab(el.dataset["tab"] ?? "requests");
+      return void refresh();
+
+    case "go-enquiries":
+      setRequestsTab("enquiries");
+      return void showPage("requests");
+
+    case "enquiry-claim":
+      try {
+        toast((await claimEnquiry(Number(idAttr))).message, "success");
+      } catch (e) {
+        toast(e instanceof Error ? e.message : "Could not take this on.", "warn");
+      }
+      return void refresh();
+
+    case "enquiry-take-over": {
+      const who = el.dataset["handler"] ?? "another admin";
+      return openDrawer({
+        title: "Take over",
+        subtitle: `${who} is handling this enquiry. Your name and theirs, and your reason, go on the record.`,
+        fields: [{ label: "Why are you taking this over?", value: "", editable: true, name: "reason" }],
+        confirmLabel: "Take over",
+        onConfirm: (v) => {
+          void takeOverEnquiry(Number(idAttr), v["reason"] ?? "")
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not take this over", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
+
+    case "enquiry-log-call": {
+      const enquiryId = Number(idAttr);
+      return openDrawer({
+        title: "Log call",
+        subtitle: "Every call is kept, with your name and the time.",
+        bodyHtml: logCallHtml(),
+        confirmLabel: "Log call",
+        onOpen: () => {
+          const box = document.querySelector<HTMLElement>(".log-call");
+          box?.addEventListener("change", () => syncLogCall(box));
+        },
+        onConfirm: () => {
+          const box = document.querySelector<HTMLElement>(".log-call");
+          if (!box) return;
+          const { call, problem } = readLogCall(box);
+          if (problem) {
+            toast(problem, "warn");
+            return false;
+          }
+          void logEnquiryCall(enquiryId, call)
+            .then((r) => { toast(r.message, r.suggestClosing ? "warn" : "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not log the call", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+    }
+
+    case "enquiry-close":
+      return openDrawer({
+        title: "Close this enquiry",
+        subtitle: "For an enquiry nobody can reach. It stays in the report.",
+        fields: [{ label: "Note (optional)", value: "", editable: true, name: "note" }],
+        confirmLabel: "Close",
+        onConfirm: (v) => {
+          void closeEnquiry(Number(idAttr), (v["note"] ?? "").trim() || undefined)
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not close the enquiry", e instanceof Error ? e.message : "Not saved."));
+        },
+      });
+
+    case "enquiry-anonymise":
+      return openDrawer({
+        title: "Delete personal details",
+        subtitle: "Their name, phone number, email and notes are removed for good. Province, crops, outcome and reason stay, for the statistics. This is recorded.",
+        confirmLabel: "Delete personal details",
+        onConfirm: () => {
+          void anonymiseEnquiry(Number(idAttr))
+            .then((r) => { toast(r.message, "success"); void refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not delete the details", e instanceof Error ? e.message : "Nothing was changed."));
+        },
+      });
+
+    case "enquiry-onboard": {
+      const enquiry = (await getEnquiries()).find((e) => String(e.id) === idAttr);
+      if (!enquiry) return void toast("That enquiry could not be found.", "warn");
+      onboardingFromEnquiry = enquiry;
+      onboardingPrefilled = false;
+      return void navigate("onboarding");
+    }
+
+    case "view-enquiry": {
+      const intent = currentPanelIntent();
+      const [enquiries, calls] = await Promise.all([getEnquiries(), getEnquiryCalls(Number(idAttr)).catch(() => [])]);
+      const e = enquiries.find((x) => String(x.id) === idAttr);
+      if (!e) return void toast("That enquiry could not be found.", "warn");
+      const myId = getAdminProfile()?.id;
+      return openDrawer({
+        intent,
+        title: e.fullName ?? "Enquiry (details deleted)",
+        subtitle: [e.town, e.province].filter(Boolean).join(", "),
+        wide: true,
+        bodyHtml: `
+          <div class="drawer-section"><h6>What they told us</h6>
+            ${detailList([
+              ["Phone", e.phone ? `<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>` : "Deleted"],
+              ["Email", esc(e.email ?? (e.anonymisedAt ? "Deleted" : "Not given"))],
+              ["Crops", esc(cropsText(e))],
+              ["Farm size", e.farmSizeHa != null ? `${e.farmSizeHa} ha` : "Not given"],
+              ["Best time to call", esc(e.bestTime)],
+              ["Notes", esc(e.notes ?? "None")],
+              ["Received", esc(fmtDateTimeSast(e.createdAt))],
+            ])}
+          </div>
+          <div class="drawer-section"><h6>Status</h6>${enquiryStatus(e)}</div>
+          <div class="drawer-section"><h6>Next</h6>${enquiryActions(e, myId)}</div>
+          <div class="drawer-section"><h6>Calls</h6>${callHistory(calls)}</div>`,
+        confirmLabel: "Close",
+        onConfirm: () => undefined,
+      });
+    }
 
     /* Item 6c: [Mark complete], with an optional note. */
     case "request-complete": {
@@ -3690,6 +3823,48 @@ function bindDelegatedClicks(): void {
   });
 }
 
+/* Item 6c: onboarding launched from an enquiry starts filled in from it. */
+let onboardingFromEnquiry: Enquiry | null = null;
+let onboardingPrefilled = false;
+
+function prefillOnboardingFromEnquiry(): void {
+  const e = onboardingFromEnquiry;
+  if (!e || onboardingPrefilled) return;
+  const set = (field: string, value: string | number | null): void => {
+    const el = document.querySelector<HTMLInputElement>(`[data-field="${field}"]`);
+    if (el && value !== null && value !== "") el.value = String(value);
+  };
+  if (!document.querySelector('[data-field="fullName"]')) return;
+  set("fullName", e.fullName);
+  set("email", e.email);
+  set("phone", e.phone);
+  set("location", [e.town, e.province].filter(Boolean).join(", "));
+  set("farmSize", e.farmSizeHa);
+  onboardingPrefilled = true;
+  toast("Filled in from the enquiry. Finishing onboarding completes it.", "info");
+}
+
+/* Item 6c: the Requests entry in the sidebar shows how many enquiries need a
+   person - nobody has them yet, or a call-back is due. */
+async function refreshEnquiryBadge(): Promise<void> {
+  const button = document.querySelector<HTMLElement>('#nav button[data-page="requests"]');
+  if (!button) return;
+  const summary = await getEnquirySummary().catch(() => null);
+  const count = (Number(summary?.waiting) || 0) + (Number(summary?.callbacksDue) || 0);
+  let badgeEl = button.querySelector<HTMLElement>(".nav-badge");
+  if (count <= 0) {
+    badgeEl?.remove();
+    return;
+  }
+  if (!badgeEl) {
+    badgeEl = document.createElement("span");
+    badgeEl.className = "nav-badge";
+    button.appendChild(badgeEl);
+  }
+  badgeEl.textContent = String(count);
+  badgeEl.setAttribute("aria-label", `${count} enquir${count === 1 ? "y" : "ies"} need a call`);
+}
+
 export function wirePageInteractions(): void {
   // The drawer calls this after it writes its HTML - see lib/drawer.ts.
   window.agroflowBindDrawerPickers = wirePickers;
@@ -3703,6 +3878,8 @@ export function wirePageInteractions(): void {
   wireFilters();
   wireLiveReports();
  wireOnboardingZones();
+  prefillOnboardingFromEnquiry();
+  void refreshEnquiryBadge();
   wirePickers();
   wireWizards();
 

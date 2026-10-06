@@ -153,4 +153,51 @@ public class EnquiryTests
         Assert.False(EnquiryRules.SuggestClosing(2));
         Assert.True(EnquiryRules.SuggestClosing(3));
     }
+
+    [Fact]
+    public void What_each_call_does_to_the_enquiry()
+    {
+        var when = DateTimeOffset.UtcNow.AddDays(1);
+
+        var wants = EnquiryAdminEndpoints.EffectOf("wants", 0, null);
+        Assert.Equal("open", wants.Status);
+        Assert.Contains("start onboarding", wants.Message);
+
+        var later = EnquiryAdminEndpoints.EffectOf("callback", 1, when);
+        Assert.Equal(when, later.CallbackAt);
+        Assert.Equal(1, later.NoAnswerCount);
+
+        var first = EnquiryAdminEndpoints.EffectOf("no_answer", 0, null);
+        Assert.Equal(1, first.NoAnswerCount);
+        Assert.False(first.SuggestClosing);
+        var third = EnquiryAdminEndpoints.EffectOf("no_answer", 2, null);
+        Assert.Equal(3, third.NoAnswerCount);
+        Assert.True(third.SuggestClosing);
+
+        var no = EnquiryAdminEndpoints.EffectOf("not_interested", 0, null);
+        Assert.Equal("lost", no.Status);
+    }
+
+    [Theory]
+    [InlineData("lost", false, true)]
+    [InlineData("closed", false, true)]
+    [InlineData("open", false, false)]   // still being worked: details are still needed
+    [InlineData("won", false, false)]    // now a farmer with an account
+    [InlineData("new", false, false)]
+    [InlineData("lost", true, false)]    // already done
+    public void Personal_details_are_deleted_only_once_an_enquiry_has_ended(string status, bool alreadyAnonymised, bool allowed)
+    {
+        Assert.Equal(allowed, EnquiryAdminEndpoints.CanAnonymise(status, alreadyAnonymised ? DateTimeOffset.UtcNow : null));
+    }
+
+    [Fact]
+    public void No_admin_enquiry_body_carries_an_actor()
+    {
+        foreach (var t in new[] { typeof(EnquiryTakeOverBody), typeof(EnquiryCallBody), typeof(EnquiryCloseBody) })
+        {
+            Assert.DoesNotContain(t.GetProperties(), p =>
+                p.Name.Contains("Caller", StringComparison.Ordinal) || p.Name.Contains("Actor", StringComparison.Ordinal)
+                || p.Name.Contains("Handler", StringComparison.Ordinal) || p.Name.EndsWith("By", StringComparison.Ordinal));
+        }
+    }
 }

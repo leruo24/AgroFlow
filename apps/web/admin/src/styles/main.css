@@ -1808,3 +1808,14 @@ html{ scrollbar-gutter: stable; }
 .enquiry-error{ color:var(--bad, #b42318); margin:0; }
 .enquiry-thanks{ font-weight:600; margin-top:16px; }
 .enquiry [hidden]{ display:none !important; }
+
+/* Item 6c: Requests tabs, and the nav count badge. */
+.req-tabs{ display:flex; gap:4px; border-bottom:1px solid var(--divider); margin:0 0 12px; flex-wrap:wrap; }
+.req-tab{ background:none; border:0; padding:8px 12px; font:inherit; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; }
+.req-tab.active{ color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
+.req-tab:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.nav-badge{ display:inline-block; min-width:18px; padding:0 6px; margin-left:6px; border-radius:9px; background:var(--bad, #b42318); color:#fff; font-size:11px; line-height:18px; text-align:center; font-weight:700; }
+.log-call{ display:grid; gap:12px; }
+.log-call fieldset{ border:1px solid var(--divider); border-radius:8px; padding:10px 12px; display:flex; flex-wrap:wrap; gap:8px 16px; }
+.log-call .check{ display:flex; gap:6px; align-items:center; }
+.log-call [hidden]{ display:none !important; }

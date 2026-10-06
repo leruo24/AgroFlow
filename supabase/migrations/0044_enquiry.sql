@@ -9,7 +9,8 @@
 -- ENQUIRY_CALL
 -- Every call an admin logs - who, when, how it went, why not, and the note.
 -- APPEND-ONLY: no update or delete policy for anyone, so the history shows
--- every attempt.
+-- every attempt. The one change the API ever makes to a call row is
+-- blanking its note when the person's details are deleted (below).
 --
 -- PRIVACY (POPIA)
 -- consent_at records that the person agreed to be contacted and to these
