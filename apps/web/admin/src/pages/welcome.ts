@@ -24,6 +24,7 @@
 
 import { Icon } from "@/lib/icons";
 import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
+import { initHardwareShowcase } from "@/features/hardware3d";
 
 /* Download links come from configuration so the page can ship before the
    files exist. Each one is HIDDEN ENTIRELY when its variable is unset -
@@ -102,6 +103,94 @@ export const WELCOME_HTML = `
         </p>
       </section>
 
+      <section class="hardware-showcase" aria-labelledby="hardwareHeading" data-hardware-showcase>
+        <header class="hardware-intro">
+          <p class="hardware-eyebrow">From prototype to field controller</p>
+          <h2 id="hardwareHeading" class="hardware-heading">Inside AgroFlow</h2>
+          <p class="hardware-lede">
+            Explore a productised view of the hardware behind each AgroFlow irrigation zone.
+          </p>
+        </header>
+
+        <div class="hardware-story">
+          <div class="hardware-story-copy">
+            <article class="hardware-stage is-active" data-hardware-stage="0">
+              <span class="hardware-stage-number">01</span>
+              <h3>Built for the field</h3>
+              <p>A protected field unit brings sensing, connectivity and irrigation control together close to the crop.</p>
+            </article>
+
+            <article class="hardware-stage" data-hardware-stage="1">
+              <span class="hardware-stage-number">02</span>
+              <h3>Weatherproof connections</h3>
+              <p>Waterproof cable glands organise the soil sensor, DHT11, pump output and power connections at the enclosure edge.</p>
+            </article>
+
+            <article class="hardware-stage" data-hardware-stage="2">
+              <span class="hardware-stage-number">03</span>
+              <h3>Open the controller</h3>
+              <p>Lift the removable lid to reveal the ESP32, relay board, sensor interface, terminal connections and clean cable routing.</p>
+            </article>
+
+            <article class="hardware-stage" data-hardware-stage="3">
+              <span class="hardware-stage-number">04</span>
+              <h3>Sense</h3>
+              <p>The soil probe and DHT11 measure field conditions. The ESP32 reads those sensors and reports their measurements to the AgroFlow platform.</p>
+            </article>
+
+            <article class="hardware-stage" data-hardware-stage="4">
+              <span class="hardware-stage-number">05</span>
+              <h3>Act</h3>
+              <p>Irrigation decisions are sent to the field controller, which uses its relay module to switch the connected pump output.</p>
+            </article>
+
+            <article class="hardware-stage hardware-stage-final" data-hardware-stage="5">
+              <span class="hardware-stage-number">06</span>
+              <h3>From field conditions to irrigation action.</h3>
+              <p>One connected unit closes the loop between the crop zone, the AgroFlow platform and controlled watering.</p>
+            </article>
+          </div>
+
+          <div class="hardware-viewer-column">
+            <div class="hardware-viewer" data-hardware-viewer aria-busy="true">
+              <div class="hardware-fallback" data-hardware-fallback role="img"
+                   aria-label="AgroFlow field controller flow diagram">
+                <div class="hardware-fallback-unit" aria-hidden="true">
+                  <span>AgroFlow</span>
+                  <i></i><i></i><i></i><i></i>
+                </div>
+                <strong>AgroFlow Field Controller</strong>
+                <span>Sensors <b aria-hidden="true">&rarr;</b> ESP32 <b aria-hidden="true">&rarr;</b> Relay <b aria-hidden="true">&rarr;</b> Pump</span>
+              </div>
+
+              <div class="hardware-canvas" data-hardware-canvas></div>
+
+              <div class="hardware-hotspots" aria-label="Hardware components">
+                <button type="button" data-hardware-hotspot="esp32" aria-controls="hardwareComponentInfo">ESP32 Controller</button>
+                <button type="button" data-hardware-hotspot="soil" aria-controls="hardwareComponentInfo">Soil Moisture Sensor</button>
+                <button type="button" data-hardware-hotspot="dht" aria-controls="hardwareComponentInfo">DHT11 Sensor</button>
+                <button type="button" data-hardware-hotspot="relay" aria-controls="hardwareComponentInfo">Relay Module</button>
+                <button type="button" data-hardware-hotspot="pump" aria-controls="hardwareComponentInfo">Pump Output</button>
+                <button type="button" data-hardware-hotspot="power" aria-controls="hardwareComponentInfo">Power Input</button>
+              </div>
+
+              <div class="hardware-viewer-footer">
+                <div class="hardware-component-info" id="hardwareComponentInfo" aria-live="polite">
+                  <strong>Explore the controller</strong>
+                  <span>Select a component marker to learn what it does.</span>
+                </div>
+                <div class="hardware-controls" aria-label="3D view controls">
+                  <button type="button" data-hardware-rotate="left" aria-label="Rotate product left">&#8634;</button>
+                  <button type="button" data-hardware-reset aria-label="Reset product view">Reset view</button>
+                  <button type="button" data-hardware-rotate="right" aria-label="Rotate product right">&#8635;</button>
+                </div>
+              </div>
+            </div>
+            <p class="hardware-caption">Interactive product visualisation based on the AgroFlow working prototype.</p>
+          </div>
+        </div>
+      </section>
+
       <section class="landing-section" aria-labelledby="howHeading">
         <h2 id="howHeading" class="landing-h2">How it works</h2>
         <ol class="landing-steps">
@@ -165,4 +254,5 @@ export function wireWelcome(root: HTMLElement, onLogin: () => void): void {
   root.querySelectorAll<HTMLButtonElement>("#welcomeLogin, #welcomeLoginBottom")
     .forEach((button) => button.addEventListener("click", onLogin));
   wireEnquiry(root);
+  initHardwareShowcase(root);
 }
