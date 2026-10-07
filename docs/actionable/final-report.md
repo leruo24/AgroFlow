@@ -1,7 +1,7 @@
 # Final report - the actionable-advice brief (MASTER-PROMPT)
 
 Part 1 (items 0b → 6c) is merged into `dev` (c16bfaf). Part 2 (the full test
-pass) is on `test/full-proof`, merged into `dev` as {{PART2_MERGE}}. The
+pass) is on `test/full-proof`, merged into `dev` with `--no-ff` (the merge commit following bf4bbad on `dev`). The
 detailed per-item record - what was wrong, what changed, tests, decisions -
 is [progress.md](progress.md); the plan with every acceptance criterion is
 [plan.md](plan.md). Evidence for Part 2 is [docs/test-evidence/](../test-evidence/README.md).
@@ -22,7 +22,7 @@ is [progress.md](progress.md); the plan with every acceptance criterion is
 | 6b - recommended settings; changing the crop | done | f079cde | Card numbers equal the RuleBook calculation (tested for potato/loam/0.2 m²/1.5 L/min/ETo 5); Use these settings = Reset to recommended; crop change recorded and denied on another farmer's zone (403); past reports keep the old crop; 0043 limits direct farmer zone edits. |
 | 6c - requests and enquiries | done | b8cf3a2, 6c4982b, 2d7a988, 77e392a | I'll handle this → Mark complete (note); wizards prefilled from a request complete it; public form with server checks, per-IP limit and honeypot; Telegram notice; Enquiries tab with outcomes, reasons, call-backs on Home, onboarding link, anonymise; Enquiries & sales follow-up report (counts tested against hand-worked data). |
 | Land Part 1 | done | c16bfaf | `--no-ff` merge into `dev`, all checks green on the merged tree, pushed. |
-| Part 2 - full test pass | done | 791215c … {{PART2_LAST}} | Rule book table-driven over every crop × soil × stage; API contract and permissions on the real route table; adversarial sweep; admin robustness and coherence; mobile screens; firmware contract. **Ten bugs found and fixed** ([bugs-found.md](../test-evidence/bugs-found.md)). |
+| Part 2 - full test pass | done | 791215c … bf4bbad | Rule book table-driven over every crop × soil × stage; API contract and permissions on the real route table; adversarial sweep; admin robustness and coherence; mobile screens; firmware contract. **Ten bugs found and fixed** ([bugs-found.md](../test-evidence/bugs-found.md)). |
 
 ## 2. Migrations to apply, in order
 

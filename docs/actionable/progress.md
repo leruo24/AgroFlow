@@ -17,7 +17,7 @@ what is next.
 | 6b | done | f079cde | Apply migration 0043 | 6c |
 | 6c | done | b8cf3a2, 6c4982b, 2d7a988, 77e392a | Apply migration 0044 | Land Part 1 |
 | Land Part 1 | done | c16bfaf (merge into dev, pushed) | — | Part 2 |
-| Part 2 | in progress | `test/full-proof` | see Part 2 below | 7 |
+| Part 2 | done | `test/full-proof` (791215c … bf4bbad), merged into `dev` | Apply migrations 0039-0044 | — |
 
 ---
 
@@ -774,7 +774,7 @@ Playwright 38 passed.
 | 5 | 6ae08c6 | Admin robustness (every page empty / failing / three widths), splash with the video blocked, a farmer kept out, Home counts = list counts, keyboard-only wizard. Bugs 8-9; coherence fixes. |
 | 6 | 66184d3 | Mobile screens with their real code. Bug 10. |
 | 7 | 97fb728 | Firmware contract against the server (no mismatch; not compiled - no arduino-cli). |
-| 8 | (this commit) | Evidence: TRX, Playwright HTML report, jest output, FAO-56 examples, route list, README, traceability, bug log, coherence review; final report. |
+| 8 | bf4bbad | Evidence: TRX, Playwright HTML report, jest output, FAO-56 examples, route list, README, traceability, bug log, coherence review; final report. |
 
 Two small test-only changes to production code, both behaviour-neutral: the
 admin filter's role lookup is an injectable `IProfileRoles` (the API
