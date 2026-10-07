@@ -15,6 +15,7 @@ public static class FarmEndpoints
 
         group.MapGet("", GetFarmsAsync);
         group.MapPost("/register", RegisterFarmAsync);
+        group.MapPut("/{id:long}/location", UpdateFarmLocationAsync);
         group.MapDelete("/{id:long}", DeleteFarmAsync);
 
         // Archive / restore. Deliberately next to Delete so the difference is
@@ -123,6 +124,29 @@ public record RegisterFarmZone(
     double? FlowRateLpm = null
 );
 
+public record UpdateFarmLocationRequest(string? Location, double Latitude, double Longitude);
+
+private static async Task<IResult> UpdateFarmLocationAsync(
+    long id, UpdateFarmLocationRequest request, NpgsqlDataSource dataSource)
+{
+    if (!ValidCoordinates(request.Latitude, request.Longitude))
+        return Results.BadRequest(new { message = "Latitude must be -90 to 90 and longitude -180 to 180." });
+    var location = string.IsNullOrWhiteSpace(request.Location)
+        ? $"Coordinates: {request.Latitude:0.#####}, {request.Longitude:0.#####}"
+        : request.Location.Trim();
+    await using var connection = await dataSource.OpenConnectionAsync();
+    await using var command = new NpgsqlCommand(
+        "update farm set location = $2, latitude = $3, longitude = $4, updated_at = now() where farm_id = $1",
+        connection);
+    command.Parameters.AddWithValue(id);
+    command.Parameters.AddWithValue(location);
+    command.Parameters.AddWithValue(request.Latitude);
+    command.Parameters.AddWithValue(request.Longitude);
+    return await command.ExecuteNonQueryAsync() == 1
+        ? Results.Ok(new { farmId = id, location, request.Latitude, request.Longitude })
+        : Results.NotFound(new { message = "No such farm." });
+}
+
 private static async Task<IResult> RegisterFarmAsync(
     RegisterFarmRequest request,
     NpgsqlDataSource dataSource,
@@ -155,13 +179,21 @@ private static async Task<IResult> RegisterFarmAsync(
         });
     }
 
-    if (string.IsNullOrWhiteSpace(request.Farm.Location))
+    var hasCoordinates = ValidCoordinates(request.Farm.Latitude, request.Farm.Longitude);
+    if ((request.Farm.Latitude.HasValue || request.Farm.Longitude.HasValue) && !hasCoordinates)
     {
         return Results.BadRequest(new
         {
-            message = "Farm location is required."
+            message = "Provide both latitude (-90 to 90) and longitude (-180 to 180)."
         });
     }
+
+    if (string.IsNullOrWhiteSpace(request.Farm.Location) && !hasCoordinates)
+        return Results.BadRequest(new { message = "Search for a farm location or provide precise coordinates." });
+
+    var farmLocation = string.IsNullOrWhiteSpace(request.Farm.Location)
+        ? $"Coordinates: {request.Farm.Latitude:0.#####}, {request.Farm.Longitude:0.#####}"
+        : request.Farm.Location.Trim();
 
     if (request.Farm.SizeHectares <= 0)
     {
@@ -308,7 +340,7 @@ private static async Task<IResult> RegisterFarmAsync(
             request.Farm.FarmName.Trim());
 
         farmCommand.Parameters.AddWithValue(
-            request.Farm.Location.Trim());
+            farmLocation);
 
         farmCommand.Parameters.AddWithValue(
             request.Farm.SizeHectares);
@@ -404,7 +436,7 @@ private static async Task<IResult> RegisterFarmAsync(
             zoneCommand.Parameters.AddWithValue(
                 zone.SizeHectares);
             zoneCommand.Parameters.AddWithValue(
-                request.Farm.Location.Trim());
+                farmLocation);
             zoneCommand.Parameters.AddWithValue(
                 zone.CropType.Trim());
             zoneCommand.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Text,
@@ -468,7 +500,9 @@ private static async Task<IResult> RegisterFarmAsync(
                 f.location,
                 f.total_area,
                 f.status,
-                f.updated_at
+                f.updated_at,
+                f.latitude,
+                f.longitude
             from farm f
             left join profile p
                 on p.id = f.owner_id
@@ -516,7 +550,9 @@ private static async Task<IResult> RegisterFarmAsync(
                     : reader.GetString(6),
                 updated_at = reader.IsDBNull(7)
                     ? (DateTime?)null
-                    : reader.GetDateTime(7)
+                    : reader.GetDateTime(7),
+                latitude = reader.IsDBNull(8) ? (double?)null : reader.GetDouble(8),
+                longitude = reader.IsDBNull(9) ? (double?)null : reader.GetDouble(9)
             });
         }
 
@@ -654,4 +690,7 @@ private static async Task<IResult> RegisterFarmAsync(
                 "The farm could not be deleted.");
         }
     }
+
+    private static bool ValidCoordinates(double? latitude, double? longitude) =>
+        latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180;
 }

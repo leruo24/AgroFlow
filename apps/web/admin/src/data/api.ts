@@ -376,6 +376,8 @@ export const api = {
     total_area: number;
     status: string | null;
     updated_at: string | null;
+    latitude: number | null;
+    longitude: number | null;
   };
 
   // Archived farms are excluded by the API unless asked for. The toggle is
@@ -394,6 +396,9 @@ export const api = {
       name: f.name,
       owner: f.owner_name ?? "Unassigned",
       ownerId: f.owner_id,
+      location: f.location,
+      latitude: Number.isFinite(f.latitude) ? f.latitude : null,
+      longitude: Number.isFinite(f.longitude) ? f.longitude : null,
       province,
       region,
       health: "Attention Required",
