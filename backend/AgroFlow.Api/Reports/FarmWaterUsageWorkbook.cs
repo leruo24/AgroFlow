@@ -218,9 +218,9 @@ internal static class FarmWaterUsageWorkbook
             Cell.Of("Crop water need (L)", XlsxStyle.TableHeader),
             Cell.Of("Avg soil moisture (%)", XlsxStyle.TableHeader),
             Cell.Of("Area max temp (°C)", XlsxStyle.TableHeader),
-            Cell.Of("Tub max temp (°C)", XlsxStyle.TableHeader),
+            Cell.Of("Local max temp (°C)", XlsxStyle.TableHeader),
             Cell.Of("Area humidity (%)", XlsxStyle.TableHeader),
-            Cell.Of("Tub humidity (%)", XlsxStyle.TableHeader),
+            Cell.Of("Local humidity (%)", XlsxStyle.TableHeader),
             Cell.Of("Rain (mm)", XlsxStyle.TableHeader),
             Cell.Of("Note", XlsxStyle.TableHeader));
 
@@ -240,9 +240,9 @@ internal static class FarmWaterUsageWorkbook
                 Cell.Maybe(d.NeedLitres, XlsxStyle.TwoDecimals),
                 Cell.Maybe(d.AvgMoisturePercent, XlsxStyle.OneDecimal),
                 Cell.Maybe(d.AreaMaxC, XlsxStyle.OneDecimal),
-                Cell.Maybe(d.TubMaxC, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.LocalMaxC, XlsxStyle.OneDecimal),
                 Cell.Maybe(d.AreaHumidity, XlsxStyle.OneDecimal),
-                Cell.Maybe(d.TubHumidity, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.LocalHumidity, XlsxStyle.OneDecimal),
                 Cell.Maybe(d.RainMm, XlsxStyle.OneDecimal),
                 Cell.Of(d.Note));
         }
@@ -281,20 +281,20 @@ internal static class FarmWaterUsageWorkbook
             ColumnWidths = new[] { 16.0, 14.0, 14.0, 15.0, 17.0, 16.0, 15.0, 13.0 },
         };
 
-        sheet.Add(Cell.Of("Weather: area forecast vs in the tubs", XlsxStyle.Title));
+        sheet.Add(Cell.Of("Weather: area forecast vs conditions at the crop", XlsxStyle.Title));
         sheet.Add(Cell.Of(
             "Area = the weather app (Open-Meteo), which is the same for the whole farm. " +
-            "Tubs = the DHT11 sensors, averaged across the zones that reported.",
+            "Local = AgroFlow DHT11 sensors, averaged across the irrigation zones that reported.",
             XlsxStyle.Note));
         sheet.AddBlank();
 
         sheet.Add(
             Cell.Of("Date", XlsxStyle.TableHeader),
             Cell.Of("Area max °C", XlsxStyle.TableHeader),
-            Cell.Of("Tubs max °C", XlsxStyle.TableHeader),
+            Cell.Of("Local max °C", XlsxStyle.TableHeader),
             Cell.Of("Difference °C", XlsxStyle.TableHeader),
             Cell.Of("Area humidity %", XlsxStyle.TableHeader),
-            Cell.Of("Tubs humidity %", XlsxStyle.TableHeader),
+            Cell.Of("Local humidity %", XlsxStyle.TableHeader),
             Cell.Of("Difference %", XlsxStyle.TableHeader),
             Cell.Of("Rain (mm)", XlsxStyle.TableHeader));
 
@@ -309,10 +309,10 @@ internal static class FarmWaterUsageWorkbook
             sheet.Add(
                 Cell.Of(d.LongLabel),
                 Cell.Maybe(d.AreaMaxC, XlsxStyle.OneDecimal),
-                Cell.Maybe(farm.TubTempOn(d.Date), XlsxStyle.OneDecimal),
+                Cell.Maybe(farm.LocalTempOn(d.Date), XlsxStyle.OneDecimal),
                 Cell.Calc($"IFERROR(C{row}-B{row},\"\")", XlsxStyle.OneDecimal),
                 Cell.Maybe(d.AreaHumidity, XlsxStyle.OneDecimal),
-                Cell.Maybe(farm.TubHumidityOn(d.Date), XlsxStyle.OneDecimal),
+                Cell.Maybe(farm.LocalHumidityOn(d.Date), XlsxStyle.OneDecimal),
                 Cell.Calc($"IFERROR(F{row}-E{row},\"\")", XlsxStyle.OneDecimal),
                 Cell.Maybe(d.RainMm, XlsxStyle.OneDecimal));
         }

@@ -235,7 +235,7 @@ void checkDurationDeadline() {
   }
 }
 
-// Applies to EVERY cycle, server-started or not: a lost "stop" command can't flood the tub.
+// Applies to EVERY cycle, server-started or not: a lost "stop" command can't flood the zone.
 void checkSafetyCap() {
   if (pumpRunning && millis() - pumpStartMillis >= SAFETY_MAX_RUN_MS) {
     Serial.println("SAFETY: max run time reached, stopping pump");

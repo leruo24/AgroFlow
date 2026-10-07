@@ -155,7 +155,7 @@ namespace AgroFlow.Business.Agronomy
                 result.Limitations.Add(
                     "No weather-app temperature for " + Iso(inputs.Date) +
                     ", so the zone's own temperature sensor readings were used instead. " +
-                    "FAO-56 defines this calculation for open-field weather, not for conditions inside a tub, so the figure is less reliable.");
+                    "FAO-56 defines this calculation for standard weather-station conditions, not a zone's local crop microclimate, so the figure is less reliable.");
             }
             else
             {
@@ -296,7 +296,7 @@ namespace AgroFlow.Business.Agronomy
             result.EtoMm = eto;
 
             // The headline source is the weakest link in the chain: a day whose
-            // temperature came from the tub is a dht11_fallback day regardless of
+            // temperature came from the local zone sensor is a dht11_fallback day regardless of
             // where the wind came from.
             result.EtoSource = result.TemperatureSource == EtoSources.Dht11Fallback
                 ? EtoSources.Dht11Fallback

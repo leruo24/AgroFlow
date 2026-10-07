@@ -621,7 +621,7 @@ public static class ReportEndpoints
             });
         }
 
-        // Spec 9c: the last 7 observed days, area against tub.
+        // Spec 9c: the last 7 observed days, area against local field readings.
         var weatherComparison = await ReadWeatherComparisonAsync(
             connection, farmId.Value, today.AddDays(-7), today);
 
@@ -1096,7 +1096,7 @@ public static class ReportEndpoints
     private static double? Round1(double? value) =>
         value is { } v ? Math.Round(v, 1) : (double?)null;
 
-    // Spec 9c: the weather app beside the tub sensor, from the report_daily_weather
+    // Spec 9c: the weather app beside local zone sensors, from report_daily_weather
     // view. Observed days only - a forecast has nothing measured to compare to.
     //
     // Returns an empty list rather than throwing when the view does not exist yet
@@ -1166,7 +1166,7 @@ public static class ReportEndpoints
     }
 
     private const string WeatherComparisonCaption =
-        "The weather app shows conditions for the area. The DHT11 sensor sits in the tub, so it shows conditions right at the plants. Differences are normal.";
+        "The weather app shows conditions for the wider area. AgroFlow's DHT11 is installed in an irrigation zone, so it measures the local conditions around the crop. Differences are normal.";
 
     private static double? Litres(long runtimeSeconds, float? flowRateLpm)
     {

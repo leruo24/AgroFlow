@@ -134,7 +134,7 @@ test("Add the zone adds it to the farm, prefilled, and completes the request", a
   await expect(page.locator("body")).toContainText("Choose how big zone 1 is.");
   await expect(box.locator('[data-field="zone_name_0"]')).toHaveValue("Tub 2");
 
-  await box.locator('[data-field="zone_area_preset_0"]').selectOption("tub");
+  await box.locator('[data-field="zone_area_preset_0"]').selectOption("small");
   await page.locator("[data-drawer-confirm]").click();
 
   await expect.poll(() => writes.map((w) => `${w.method} ${w.path}`)).toEqual([

@@ -10,7 +10,7 @@ namespace AgroFlow.Api.Reports;
 //   1. This week, do this        1-5 actions: when, how much, how sure, why
 //   2. How your farm did          the period in boxes, one verdict per zone
 //   3. Three questions            needed vs given / healthy soil / what's coming
-//   4. Area weather vs at plants  only days the tub sensor reported
+//   4. Area weather vs at plants  only days a local field sensor reported
 //   5. Improve your advice        one setup step per zone, grouped
 //   6. Technical appendix         ALL the jargon, and nowhere else
 //
@@ -27,7 +27,7 @@ internal enum ReportKind
 }
 
 internal sealed record ReportAction(
-    string Lead,            // bold: "Water Tub 1 today (Wed 7 Oct)"
+    string Lead,            // bold: "Water North Plot today (Wed 7 Oct)"
     string Detail,          // ": about 12 minutes (about 18 L)."
     string Zone,
     ConfidenceLevel Confidence,
@@ -48,7 +48,7 @@ internal sealed record ChartAnswer(string Question, string Answer);
 
 internal sealed record ForecastCard(string Day, string MaxTemp, string Rain, string Action);
 
-internal sealed record WeatherRow(string Day, string AreaMax, string TubMax, string AreaHumidity, string TubHumidity);
+internal sealed record WeatherRow(string Day, string AreaMax, string LocalMax, string AreaHumidity, string LocalHumidity);
 
 internal sealed record AppendixFact(string Label, string Value, string Source);
 
@@ -143,8 +143,8 @@ internal static class ActionReport
             ForecastLine = forecastLine,
             WeatherRows = weather,
             WeatherLine = weather.Count == 0
-                ? "Your tub sensor sent no readings in this period, so only the area forecast was used."
-                : "Only the days your tub sensor reported are shown.",
+                ? "The local field sensors sent no readings in this period, so only the area forecast was used."
+                : "Only days with readings from a sensor in an irrigation zone are shown.",
             ImproveSteps = ImproveSteps(zones),
             Appendix = zones.Select(Appendix).ToList(),
             SharedNotes = SharedNotes(zones),
@@ -417,26 +417,26 @@ internal static class ActionReport
     }
 
     /* ---------------------------------------------------------------- *
-     * 4. Area weather vs at your plants - tub days only
+     * 4. Area weather vs at your plants - local sensor days only
      * ---------------------------------------------------------------- */
 
     public static List<WeatherRow> WeatherRows(IReadOnlyList<WaterUsageReportModel> zones)
     {
-        // One row per day the tub reported, across zones (the first zone that
-        // reported that day). Days with no tub data carry no comparison and
+        // One row per day a local sensor reported, across zones (the first zone
+        // that reported that day). Days without local data carry no comparison and
         // are not printed at all - the old table was mostly "Sensor offline".
         return zones
             .SelectMany(z => z.Days)
-            .Where(d => d.TubMaxC.HasValue || d.TubHumidity.HasValue)
+            .Where(d => d.LocalMaxC.HasValue || d.LocalHumidity.HasValue)
             .GroupBy(d => d.Date)
             .OrderBy(g => g.Key)
             .Select(g => g.First())
             .Select(d => new WeatherRow(
                 ReportPeriod.Day(d.Date),
                 d.AreaMaxC is { } a ? $"{N(Math.Round(a, 1))} °C" : "-",
-                d.TubMaxC is { } t ? $"{N(Math.Round(t, 1))} °C" : "-",
+                d.LocalMaxC is { } t ? $"{N(Math.Round(t, 1))} °C" : "-",
                 d.AreaHumidity is { } ah ? $"{N(Math.Round(ah))}%" : "-",
-                d.TubHumidity is { } th ? $"{N(Math.Round(th))}%" : "-"))
+                d.LocalHumidity is { } th ? $"{N(Math.Round(th))}%" : "-"))
             .ToList();
     }
 
@@ -447,7 +447,7 @@ internal static class ActionReport
     public static List<string> ImproveSteps(IReadOnlyList<WaterUsageReportModel> zones)
     {
         // Grouped by the step itself, so the same sentence is never printed
-        // once per zone: "Tub 1 and Tub 2: Add the planting date ...".
+        // once per zone: "North Plot and East Plot: Add the planting date ...".
         return zones
             .Where(z => z.Engine?.NextStep != null)
             .GroupBy(z => z.Engine!.NextStep!.Ask)
@@ -486,7 +486,7 @@ internal static class ActionReport
     public static readonly IReadOnlyList<string> Assumptions = new[]
     {
         "Litres are estimated as pump running time x the zone's flow rate. There is no flow meter on any AgroFlow kit.",
-        "Reference evapotranspiration (ETo) is FAO-56 Penman-Monteith (Eq. 6, p. 24) from the weather app. Solar radiation is always estimated from the day's temperature range (Eq. 50, p. 60); missing humidity is estimated from the temperatures (Eq. 64, p. 124); missing temperatures come from the tub's own sensor.",
+        "Reference evapotranspiration (ETo) is FAO-56 Penman-Monteith (Eq. 6, p. 24) from the weather app. Solar radiation is always estimated from the day's temperature range (Eq. 50, p. 60); missing humidity is estimated from the temperatures (Eq. 64, p. 124); missing temperatures come from a local field sensor.",
         "Crop water need is ETc = Kc x ETo (Eq. 58, p. 103), with Kc from Table 12 joined by Eq. 66 (p. 132).",
         "The daily soil water balance is FAO-56 Eq. 85 (p. 170); stress days are days with Ks < 1 (Eq. 84, p. 169).",
         "Watering is advised when the root-zone depletion reaches RAW (p. 171): Dr >= RAW.",

@@ -38,9 +38,9 @@ public class DesignedReportRenderSmokeTests
         var need = new double?[] { 1.5, 1.6, 1.3, 1.8, 1.4, 1.7, 1.7 };
         var moisture = new double?[] { 78, 74, 81, 66, 72, 70, 73 };
         var areaC = new double?[] { 24, 26, 22, 27, 25, 28, 27 };
-        var tubC = new double?[] { 26.0, 28.2, 23.8, 29.3, 27.0, 30.4, 29.0 };
+        var localC = new double?[] { 26.0, 28.2, 23.8, 29.3, 27.0, 30.4, 29.0 };
         var areaRh = new double?[] { 55, 50, 62, 48, 52, 45, 47 };
-        var tubRh = new double?[] { 63, 58, 69, 57, 60, 53, 55 };
+        var localRh = new double?[] { 63, 58, 69, 57, 60, 53, 55 };
         var rain = new double?[] { 0, 0, 3.2, 0, 0, 0, 0 };
 
         var days = new List<WaterUsageReportModel.DayLine>();
@@ -60,9 +60,9 @@ public class DesignedReportRenderSmokeTests
                 gap ? null : need[i],
                 gap ? null : moisture[i],
                 gap ? null : areaC[i],
-                gap ? null : tubC[i],
+                gap ? null : localC[i],
                 gap ? null : areaRh[i],
-                gap ? null : tubRh[i],
+                gap ? null : localRh[i],
                 rain[i],
                 "Watering about right"));
         }

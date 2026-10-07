@@ -12,7 +12,7 @@ const FARMS = [
 const REC = {
   available: true,
   cropLabel: "Potato",
-  text: "Based on your climate in Mafikeng and since you want to grow potato on loam soil, we recommend: water when the soil reaches about 65% (relative), stop at 100%; expect to water about every 2–3 days in October, about 9 minutes each time for a 0.2 m² tub.",
+  text: "Based on your climate in Mafikeng and since you want to grow potato on loam soil, we recommend: water when the soil reaches about 65% (relative), stop at 100%; expect to water about every 2–3 days in October, about 9 minutes each time for this 0.2 m² irrigation zone.",
   thresholdPercent: 65,
   confidence: { level: "medium", reason: "Medium: the planting date is missing, so peak growth is assumed." },
   canApply: true,

@@ -189,6 +189,6 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         }
 
         private static string AreaWords(double m2) =>
-            m2 < 1 ? "a " + m2.ToString("0.##", Inv) + " m² tub" : m2.ToString("0.##", Inv) + " m²";
+            "this " + m2.ToString("0.##", Inv) + " m² irrigation zone";
     }
 }

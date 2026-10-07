@@ -202,14 +202,14 @@ public class ActionReportTests
     {
         var c = Compose(7, Zone("Tub 1", Setup.NoKit, 7));
         Assert.Empty(c.WeatherRows);
-        Assert.Equal("Your tub sensor sent no readings in this period, so only the area forecast was used.", c.WeatherLine);
+        Assert.Equal("The local field sensors sent no readings in this period, so only the area forecast was used.", c.WeatherLine);
     }
 
     [Fact]
     public void WithTubData_OnlyTheDaysItReportedAreShown()
     {
         var z = Zone("Tub 1", Setup.Full, 7);
-        var gappy = z.Days.Select((d, i) => i % 2 == 0 ? d : d with { TubMaxC = null, TubHumidity = null }).ToList();
+        var gappy = z.Days.Select((d, i) => i % 2 == 0 ? d : d with { LocalMaxC = null, LocalHumidity = null }).ToList();
         var model = new WaterUsageReportModel
         {
             FarmName = z.FarmName, ZoneName = z.ZoneName, From = z.From, To = z.To, GeneratedAtSast = z.GeneratedAtSast,

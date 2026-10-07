@@ -141,7 +141,7 @@ public class Fao56EngineDataRulesTests
         Assert.True(result.Incomplete);
         Assert.Contains(result.Limitations, l => l.Contains("temperature sensor readings were used instead"));
 
-        _out .WriteLine($"     ETo {result.EtoMm:F2} mm from the tub sensor, source {result.EtoSource}");
+        _out .WriteLine($"     ETo {result.EtoMm:F2} mm from the local field sensor, source {result.EtoSource}");
     }
 
     [Fact]

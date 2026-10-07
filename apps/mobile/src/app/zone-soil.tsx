@@ -3,7 +3,7 @@
 // Soil texture decides how much water the soil can hold and therefore how often
 // a zone needs watering, so it is worth asking the farmer rather than assuming.
 // Three large cards, plain words, loam pre-selected because it is the most common
-// garden soil and the documented assumption for the demo tubs.
+// garden soil and the documented fallback when the farmer is not sure.
 //
 // ICONS: each card carries its soil icon, rendered with react-native-svg by
 // components/SoilIcon.tsx from the artwork in assets/soil/soil_*.svg. The

@@ -301,9 +301,9 @@ internal static class ActionReportPdf
             {
                 ReportShell.BodyCell(table, w.Day, ReportShell.Stripe);
                 ReportShell.BodyCell(table, w.AreaMax, ReportShell.Stripe);
-                ReportShell.BodyCell(table, w.TubMax, ReportShell.Stripe);
+                ReportShell.BodyCell(table, w.LocalMax, ReportShell.Stripe);
                 ReportShell.BodyCell(table, w.AreaHumidity, ReportShell.Stripe);
-                ReportShell.BodyCell(table, w.TubHumidity, ReportShell.Stripe);
+                ReportShell.BodyCell(table, w.LocalHumidity, ReportShell.Stripe);
             }
         });
         ReportShell.ChartNote(col, content.WeatherLine);

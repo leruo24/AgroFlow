@@ -60,24 +60,24 @@ internal sealed class FarmWaterUsageReport
     ///
     /// weather_daily is keyed on the FARM, so the area forecast is identical
     /// on every zone's rows - reading it from one of them is not an
-    /// approximation. The in-the-tub figures do differ per zone, which is why
+    /// approximation. The local field readings do differ per zone, which is why
     /// the farm-level comparison averages them below rather than picking one.
     public IReadOnlyList<WaterUsageReportModel.DayLine> WeatherDays =>
         Zones.Count == 0 ? Array.Empty<WaterUsageReportModel.DayLine>() : Zones[0].Days;
 
     public double? AvgAreaTempC => Avg(Zones.Select(z => z.AvgAreaTempC));
     public double? AvgAreaHumidity => Avg(Zones.Select(z => z.AvgAreaHumidity));
-    public double? AvgTubTempC => Avg(Zones.Select(z => z.AvgTubTempC));
-    public double? AvgTubHumidity => Avg(Zones.Select(z => z.AvgTubHumidity));
+    public double? AvgLocalTempC => Avg(Zones.Select(z => z.AvgLocalTempC));
+    public double? AvgLocalHumidity => Avg(Zones.Select(z => z.AvgLocalHumidity));
 
-    /// The farm's tub temperature for one day, averaged across whichever
+    /// The farm's local field temperature for one day, averaged across whichever
     /// zones reported it. A zone whose sensor was down simply does not
     /// contribute, rather than pulling the average toward zero.
-    public double? TubTempOn(DateOnly date) =>
-        Avg(Zones.Select(z => z.Days.FirstOrDefault(d => d.Date == date)?.TubMaxC));
+    public double? LocalTempOn(DateOnly date) =>
+        Avg(Zones.Select(z => z.Days.FirstOrDefault(d => d.Date == date)?.LocalMaxC));
 
-    public double? TubHumidityOn(DateOnly date) =>
-        Avg(Zones.Select(z => z.Days.FirstOrDefault(d => d.Date == date)?.TubHumidity));
+    public double? LocalHumidityOn(DateOnly date) =>
+        Avg(Zones.Select(z => z.Days.FirstOrDefault(d => d.Date == date)?.LocalHumidity));
 
     private static double? Avg(IEnumerable<double?> values)
     {

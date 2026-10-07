@@ -145,7 +145,7 @@ test("Start onboarding fills the onboarding form from the enquiry, and finishing
   await page.locator("[data-zone-count]").fill("1");
   await page.locator('[data-field="zone_name_0"]').fill("Tub 1");
   await page.locator('[data-field="zone_crop_0"]').selectOption("potato");
-  await page.locator('[data-field="zone_area_preset_0"]').selectOption("tub");
+  await page.locator('[data-field="zone_area_preset_0"]').selectOption("small");
   await page.locator('[data-act="onboarding-submit"]').click();
 
   await expect.poll(() => writes.map((w) => w.path)).toEqual(

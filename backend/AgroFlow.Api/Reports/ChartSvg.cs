@@ -392,7 +392,7 @@ internal static class ChartSvg
     }
 
     /* ------------------------------------------------------------------ *
-     * Page 3 — area forecast vs in the tub
+     * Page 3 — area forecast vs local field conditions
      * ------------------------------------------------------------------ */
 
     /// Two lines with round markers, for comparing a forecast against a
@@ -483,7 +483,7 @@ internal static class ChartSvg
         }
 
         Series(seriesA, ReportTheme.WeatherArea);
-        Series(seriesB, ReportTheme.WeatherTub);
+        Series(seriesB, ReportTheme.WeatherLocal);
 
         // Legend in the top padding.
         sb.Append(CultureInfo.InvariantCulture,
@@ -496,9 +496,9 @@ internal static class ChartSvg
 
         sb.Append(CultureInfo.InvariantCulture,
             $"<line x1=\"{N(plotLeft + 210)}\" y1=\"7\" x2=\"{N(plotLeft + 226)}\" y2=\"7\" " +
-            $"stroke=\"{ReportTheme.WeatherTub}\" stroke-width=\"1.3\"/>");
+            $"stroke=\"{ReportTheme.WeatherLocal}\" stroke-width=\"1.3\"/>");
         sb.Append(CultureInfo.InvariantCulture,
-            $"<circle cx=\"{N(plotLeft + 218)}\" cy=\"7\" r=\"2.4\" fill=\"{ReportTheme.WeatherTub}\"/>");
+            $"<circle cx=\"{N(plotLeft + 218)}\" cy=\"7\" r=\"2.4\" fill=\"{ReportTheme.WeatherLocal}\"/>");
         sb.Append(CultureInfo.InvariantCulture,
             $"<text x=\"{N(plotLeft + 231)}\" y=\"10\" font-size=\"8\" fill=\"{ReportTheme.Ink}\">{E(labelB)}</text>");
 

@@ -34,11 +34,11 @@ internal static class ReportTheme
     public const string BandFill = "#E7F3F9";
 
     /// The area forecast line. Grey because it is the reference series; the
-    /// tub sensor is the one being compared against it.
+    /// local field sensor is the one being compared against it.
     public const string WeatherArea = "#96A39C";
 
-    /// The in-the-tub sensor line.
-    public const string WeatherTub = "#D4A017";
+    /// The local field sensor line.
+    public const string WeatherLocal = "#D4A017";
 
     /// KPI tiles, table stripes, the glossary box.
     public const string Surface = "#F2F5F3";

@@ -43,7 +43,8 @@ public class RecommendationTests
 
         Assert.StartsWith("Based on your climate in Mafikeng and since you want to grow potato on loam soil, we recommend:", r.Text);
         Assert.Contains($"water when the soil reaches about {r.ThresholdPercent}% (relative), stop at 100%", r.Text);
-        Assert.Contains($"in October, about {r.Minutes} minutes each time for a 0.2 m² tub.", r.Text);
+        Assert.Contains($"in October, about {r.Minutes} minutes each time for this 0.2 m² irrigation zone.", r.Text);
+        Assert.DoesNotContain("tub", r.Text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -60,13 +61,13 @@ public class RecommendationTests
     }
 
     [Fact]
-    public void A_tub_caps_the_root_depth_so_it_holds_less_and_is_watered_more_often()
+    public void A_shallow_root_zone_holds_less_and_is_watered_more_often()
     {
         var open = Potato();
-        var tub = Potato(depthLimit: 0.2);
-        Assert.Equal(0.2, tub.RootDepthM);
-        Assert.True(tub.TawMm < open.TawMm);
-        Assert.True(tub.IntervalDaysHigh <= open.IntervalDaysHigh);
+        var shallow = Potato(depthLimit: 0.2);
+        Assert.Equal(0.2, shallow.RootDepthM);
+        Assert.True(shallow.TawMm < open.TawMm);
+        Assert.True(shallow.IntervalDaysHigh <= open.IntervalDaysHigh);
     }
 
     [Fact]

@@ -103,9 +103,9 @@ namespace AgroFlow.Business.Agronomy
         // -------------------------------------------------------------------
         // Rooting depth
         // -------------------------------------------------------------------
-        // The Table 22 figure, capped by whatever the tub or bed physically
-        // allows (spec section 6.6). A 1.0 m maize root zone in a 0.3 m tub would
-        // otherwise claim three times the water the tub can hold.
+        // The Table 22 figure, capped by any physical root-zone boundary
+        // (spec section 6.6). A 1.0 m maize root zone in 0.3 m of available
+        // soil would otherwise claim more water than the root zone can hold.
         public static double EffectiveRootDepthM(double tableRootDepthM, double? rootDepthLimitM)
         {
             if (!rootDepthLimitM.HasValue) return tableRootDepthM;
