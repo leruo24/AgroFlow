@@ -3,6 +3,7 @@
    (see app/router.ts): outside the authenticated app shell entirely. */
 
 import { signIn } from "@/app/auth";
+import { plainError } from "@/lib/plainError";
 
 export const LOGIN_HTML = `
   <div class="auth-screen">
@@ -78,7 +79,7 @@ export function wireLogin(root: HTMLElement): void {
 
     void signIn(email, password)
       .catch((err: unknown) => {
-        showError(err instanceof Error ? err.message : "Sign-in failed.");
+        showError(plainError(err, "Sign-in failed."));
       })
       .finally(() => {
         submitBtn.disabled = false;

@@ -32,13 +32,10 @@ export interface PageOptions {
 export type PageRenderer = (opts?: PageOptions) => Promise<string>;
 
 export type SettingsTab =
-  /* Three, down from five. "General", "Notifications", "Platform Defaults"
-     and "Security" held about twenty fields between them and not one was
-     read by anything - there is no settings table in this schema. See
-     settingsTabBody. */
-  | "My account"
-  | "Platform thresholds"
-  | "Backup & Recovery";
+  /* One. "Platform thresholds" and "Backup & Recovery" were removed in the
+     admin polish (item 6): neither was something an admin could act on here.
+     See settingsTabBody. */
+  "My account";
 
 /* -------------------------------- UI bits ---------------------------------- */
 
@@ -154,6 +151,10 @@ export interface ServiceRequest extends Handling {
   farmerId: string;
   farmerName: string;
   farmerEmail: string;
+  /* Admin polish, item 2: shown when there is no name or email. */
+  farmerPhone?: string;
+  /* No name, email or phone on the profile: farmerName is "Request #id". */
+  farmerUnidentified?: boolean;
   farmId: number | null;
   farmName: string | null;
   requestType: ServiceRequestType;

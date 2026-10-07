@@ -23,6 +23,7 @@ import { esc, fmtDateTimeSast } from "@/lib/format";
 import type { Handling } from "@/types/models";
 import { Icon } from "@/lib/icons";
 import { isAbort } from "@/lib/navigation";
+import { plainError } from "@/lib/plainError";
 
 /* ------------------------------------------------------------------ *
  * Empty states
@@ -68,7 +69,7 @@ export function errorState(opts: {
       <span class="error-state-ico" aria-hidden="true">${Icon.circleX}</span>
       <div class="error-state-body">
         <h4>${esc(opts.title)}</h4>
-        <p>${esc(opts.detail ?? "Something went wrong loading this page.")}</p>
+        <p>${esc(plainError(opts.detail ?? "", "Something went wrong loading this page."))}</p>
       </div>
       ${opts.retryAct
         ? `<button class="btn ghost" data-act="${esc(opts.retryAct)}"${
@@ -97,10 +98,7 @@ export async function withErrorState(
 
     return errorState({
       title: `${title} could not be loaded`,
-      detail:
-        error instanceof Error
-          ? error.message
-          : "The server did not answer. Check your connection and try again.",
+      detail: plainError(error, "The server did not answer. Check your connection and try again."),
     });
   }
 }

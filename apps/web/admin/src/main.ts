@@ -13,7 +13,7 @@ import "@/styles/main.css";
 import { SHELL_HTML } from "@/app/shell";
 import { initNav, bootRouter, setAfterRender } from "@/app/router";
 import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/interactions";
-import { initAuth, onAuthChange, isAdminAuthenticated } from "@/app/auth";
+import { initAuth, onAuthChange, isAdminAuthenticated, signOut } from "@/app/auth";
 import { LOGIN_HTML, wireLogin } from "@/pages/login";
 import { WELCOME_HTML, wireWelcome } from "@/pages/welcome";
 import { startHealthPolling, stopHealthPolling } from "@/app/health";
@@ -118,6 +118,19 @@ function render(state: ViewState): void {
   });
   initNav();
   initHeader();
+  // Log out, in the sidebar footer and the avatar menu (admin polish, item 4):
+  // ends the Supabase session, then the landing page with a clean address.
+  // onAuthChange below renders it; replaceState drops the old #page without
+  // firing hashchange, so nothing renders twice.
+  root.querySelectorAll<HTMLButtonElement>("[data-logout]").forEach((button) =>
+    button.addEventListener("click", () => {
+      document.getElementById("avatarMenu")?.classList.remove("open");
+      void signOut().then(() => {
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+        if (shownState !== "welcome") render(currentState());
+      });
+    }),
+  );
   bootRouter();
   updateHeaderIdentity();
 

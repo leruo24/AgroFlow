@@ -84,3 +84,26 @@ and Restore.
 | # | File | Adds |
 |---|---|---|
 | 0045 | `0045_dismissal.sql` | `dismissal`; `ai_recommendation.dismissed_by_profile_id` |
+
+## Progress and limits (as built)
+
+- Item 1 committed separately (`admin-polish 1`); items 2-8 in one commit
+  after it. Backend, admin Playwright and mobile jest were run on each.
+- Critical computed items (Home cards, health checks) come back when their
+  condition changes because the admin page closes a dismissal whose
+  `condition_key` no longer matches (`/condition-cleared`, recorded as
+  "AgroFlow (the condition cleared)"). Limit: this needs an admin to have the
+  page open while the condition is clear. If a kit goes offline, recovers and
+  goes offline again with the same signature while nobody looks, the second
+  time stays hidden until Restore. Alerts and insights are rows/dates, so a
+  recurrence is a new item and always shows.
+- Item 6: the `GET /api/admin/platform-config` endpoint stays (baseline
+  route); only the Settings tab that showed it is gone. The rapid-click
+  Settings test now races the single tab instead of three.
+- Item 7 covers the admin console (every request goes through
+  `navigationAwareFetch`; error cards, toasts, modals, the login, map and
+  enquiry forms pass text through `plainError`). The mobile app's error
+  wording was not part of this item and is unchanged.
+- Item 8: CORS was applied as "AdminFrontend" (the second registration,
+  without :5174) and then the default policy; now one policy `AgroFlowWeb`.
+  Error answers keep the header (CorsTests: 401, 500, 503).

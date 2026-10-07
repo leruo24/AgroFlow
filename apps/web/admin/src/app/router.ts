@@ -18,6 +18,7 @@ import { beginNavigation, isCurrentNavigation, endNavigation } from "@/lib/navig
 import { beginPanelIntent, closeDrawer } from "@/lib/drawer";
 import { esc } from "@/lib/format";
 import { Icon } from "@/lib/icons";
+import { plainError } from "@/lib/plainError";
 
 /* The sidebar, in the order an admin actually works.
  *
@@ -158,7 +159,7 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
     console.error(`[admin] ${id} failed to render:`, error);
     html = errorState({
       title: "This page could not be loaded",
-      detail: error instanceof Error ? error.message : "The server did not answer. Check your connection and try again.",
+      detail: plainError(error, "The server did not answer. Check your connection and try again."),
     });
   }
   if (!isCurrentNavigation(token)) return;

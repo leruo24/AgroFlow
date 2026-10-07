@@ -433,7 +433,7 @@ export const api = {
     const [{ data: farmers, error: farmerError }, { data: farmRows, error: farmError }] =
       await Promise.all([
         farmerIds.length
-          ? supabase.from("profile").select("id, name, email").in("id", farmerIds)
+          ? supabase.from("profile").select("id, name, email, phone").in("id", farmerIds)
           : Promise.resolve({ data: [], error: null }),
         farmIds.length
           ? supabase.from("farm").select("farm_id, name").in("farm_id", farmIds)
@@ -467,7 +467,7 @@ export const api = {
     }
 
     const farmerMap = new Map(
-      (farmers ?? []).map((farmer: { id: string; name: string; email: string }) => [
+      (farmers ?? []).map((farmer: { id: string; name: string | null; email: string | null; phone: string | null }) => [
         farmer.id,
         farmer,
       ])
@@ -482,13 +482,20 @@ export const api = {
 
     return rows.map((row) => {
       const farmer = farmerMap.get(row.farmer_id);
+      const name = farmer?.name?.trim() || "";
+      const email = farmer?.email?.trim() || "";
+      const phone = farmer?.phone?.trim() || "";
 
       return {
         id: row.id,
         farmerId: row.farmer_id,
-        // Item 6c: the email when there is no name - never "(no name on file)".
-        farmerName: farmer?.name || farmer?.email || "Farmer without a name or email",
-        farmerEmail: farmer?.email || "",
+        // Admin polish, item 2: the name, else the email, else the phone. With
+        // none of them the request is named by its id and flagged, so an admin
+        // can see it needs chasing - never "Farmer without a name or email".
+        farmerName: name || email || phone || `Request #${row.id}`,
+        farmerEmail: email,
+        farmerPhone: phone,
+        farmerUnidentified: !name && !email && !phone,
         farmId: row.farm_id,
         farmName: row.farm_id === null ? null : farmMap.get(row.farm_id) ?? null,
         requestType: row.request_type,

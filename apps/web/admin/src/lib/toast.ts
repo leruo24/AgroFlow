@@ -2,6 +2,7 @@
 
 import { prefersReducedMotion } from "@/lib/animate";
 import { Icon } from "@/lib/icons";
+import { plainError } from "@/lib/plainError";
 
 export type ToastKind = "success" | "info" | "warn" | "error";
 
@@ -30,9 +31,10 @@ export function toast(message: string, kind: ToastKind = "info", ms = 3200): voi
   const node = document.createElement("div");
   node.className = `toast toast-${kind}`;
   node.innerHTML = `<span class="toast-ico">${ICONS[kind]}</span><span class="toast-msg"></span>`;
-  // textContent avoids any HTML injection from message strings.
+  // textContent avoids any HTML injection from message strings; plainError
+  // turns a browser's "Failed to fetch" into a sentence (admin polish, item 7).
   const msgEl = node.querySelector<HTMLElement>(".toast-msg");
-  if (msgEl) msgEl.textContent = message;
+  if (msgEl) msgEl.textContent = kind === "error" || kind === "warn" ? plainError(message) : message;
 
   host.appendChild(node);
   requestAnimationFrame(() => node.classList.add("in"));

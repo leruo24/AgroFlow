@@ -93,6 +93,7 @@ public class ApiContractTests : IClassFixture<ApiHost>
     {
         "GET /api/devices/firmware-check",
         "GET /api/devices/mqtt-credentials",
+        "GET /api/public/ping",
         "POST /api/auth/forgot-password",
         "POST /api/devices/claim",
         "POST /api/devices/commands/{id}/executed",

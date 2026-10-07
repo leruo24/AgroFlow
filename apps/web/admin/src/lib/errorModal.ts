@@ -1,3 +1,5 @@
+import { plainError } from "@/lib/plainError";
+
 let errorModalHost: HTMLElement | null = null;
 
 function ensureErrorModal(): HTMLElement {
@@ -73,11 +75,12 @@ export function showErrorModal(
     modal.querySelector<HTMLElement>("#errorModalMessage");
 
   if (titleElement) {
-    titleElement.textContent = title;
+    // Some callers pass the error as the title: clean it too.
+    titleElement.textContent = plainError(title);
   }
 
   if (messageElement) {
-    messageElement.textContent = message;
+    messageElement.textContent = plainError(message);
   }
 
   modal.classList.add("open");

@@ -37,7 +37,6 @@ import {
   getActivityLog,
   getEntityTimeline,
   KIT_TYPES,
-  getPlatformConfig,
   updateMyProfile,
   getMyTelegramStatus,
   requestMyTelegramCode,
@@ -50,7 +49,7 @@ import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml, rememberReportFarm } from "@/pages/analytics";
-import { requestActions, setRequestsTab } from "@/pages/requests";
+import { requestActions, setRequestsTab, setRequestFilter } from "@/pages/requests";
 import { callHistory, enquiryActions, enquiryStatus, cropsText, logCallHtml, readLogCall, syncLogCall } from "@/pages/enquiries";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
@@ -65,7 +64,8 @@ import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } fro
 import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
-import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
+import { plainError } from "@/lib/plainError";
+import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
 import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
@@ -2157,6 +2157,11 @@ case "delete-user": {
       setRequestsTab(el.dataset["tab"] ?? "requests");
       return void refresh();
 
+    // Admin polish, item 2: Open / Completed / All.
+    case "requests-filter":
+      setRequestFilter(el.dataset["filter"] ?? "all");
+      return void refresh();
+
     case "go-enquiries":
       setRequestsTab("enquiries");
       return void showPage("requests");
@@ -2661,9 +2666,6 @@ case "delete-user": {
     case "go-settings-account":
       return void refreshMyTelegramStatus();
 
-    case "go-settings-thresholds":
-      return void loadPlatformThresholds();
-
     case "save-my-profile": {
       const v = collectFields();
       const name = (v["myName"] ?? "").trim();
@@ -2874,29 +2876,6 @@ export async function refreshMyTelegramStatus(): Promise<void> {
   }
 }
 
-export async function loadPlatformThresholds(): Promise<void> {
-  const host = document.getElementById("platformThresholds");
-  if (!host) return;
-
-  try {
-    const { groups } = await getPlatformConfig();
-
-    host.innerHTML = groups.map((group) => `
-      <div class="settings-block">
-        <h4>${esc(group.title)}</h4>
-        ${detailList(group.values.map((v) => [v.label, esc(v.value)] as [string, string]))}
-        ${group.values.map((v) => `<p class="muted sm">${esc(v.label)}: ${esc(v.explains)}</p>`).join("")}
-        <p class="muted">Set in: ${esc(group.setIn)}. Changing one needs a restart of the API.</p>
-      </div>`).join("");
-  } catch (error) {
-    host.innerHTML = errorState({
-      title: "The platform thresholds could not be read",
-      detail: error instanceof Error ? error.message : "The server did not answer.",
-      retryAct: "go-settings-thresholds",
-    });
-  }
-}
-
 /* The comparison table's rows, read back out of the DOM.
  *
  * Reading the rendered table rather than recomputing is deliberate: the
@@ -2993,7 +2972,7 @@ async function renderQr(
 function showHandoverNotice(message: string): void {
   const box = document.getElementById("handoverNotice");
   if (!box) return;
-  box.textContent = message;
+  box.textContent = plainError(message);
   box.style.display = "block";
 }
 
@@ -3007,7 +2986,7 @@ function clearHandoverNotice(): void {
 function showOnboardingError(message: string): void {
   const box = document.getElementById("onboardingError");
   if (!box) return;
-  box.textContent = message;
+  box.textContent = plainError(message);
   box.style.display = "block";
 }
 
@@ -3939,7 +3918,6 @@ export function wirePageInteractions(): void {
   // And the router calls this after a Settings tab renders.
   onSettingsTabRendered((tab) => {
     if (tab === "My account") void refreshMyTelegramStatus();
-    if (tab === "Platform thresholds") void loadPlatformThresholds();
   });
 
   wireFilters();
@@ -4026,12 +4004,8 @@ export function initHeader(): void {
     });
   }
 
-  document.getElementById("logoutBtn")?.addEventListener("click", () => {
-    menu.classList.remove("open");
-    void signOut().then(() => toast("Signed out.", "info"));
-    // Rendering the login screen again is main.ts's job, driven by
-    // app/auth.ts's onAuthChange - not this click handler.
-  });
+  // Log out (#logoutBtn here and the sidebar's) is wired in main.ts, which
+  // owns what is shown after it: the landing page (admin polish, item 4).
 
   updateHeaderIdentity();
 }

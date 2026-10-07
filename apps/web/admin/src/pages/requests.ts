@@ -6,6 +6,7 @@ import { api } from "@/data/api";
 import { badge, pageHeader, panel, resultCount } from "@/ui/components";
 import { esc, fmtDateTimeSast } from "@/lib/format";
 import type { ServiceRequest, ServiceRequestStatus } from "@/types/models";
+import { plainError } from "@/lib/plainError";
 
 function formatRequestType(type: ServiceRequest["requestType"]): string {
   return type === "new_farm" ? "New farm" : "New zone";
@@ -105,11 +106,12 @@ function requestRow(request: ServiceRequest, myId: string | undefined): string {
         <a href="#" class="cell-link" data-act="view-request" data-id="${request.id}">
           <strong>${esc(request.farmerName)}</strong>
         </a>
-        ${
-          request.farmerEmail && request.farmerEmail !== request.farmerName
-            ? `<div class="muted">${esc(request.farmerEmail)}</div>`
-            : ""
-        }
+        ${[request.farmerEmail, request.farmerPhone]
+          .filter((v): v is string => !!v && v !== request.farmerName)
+          .map((v) => `<div class="muted">${esc(v)}</div>`).join("")}
+        ${request.farmerUnidentified
+          ? `<div>${badge("No name, email or phone on file", "warn")}</div>`
+          : ""}
       </td>
       <td>
         ${badge(formatRequestType(request.requestType), "neutral")}
@@ -130,6 +132,39 @@ let activeTab: "requests" | "enquiries" = "requests";
 
 export function setRequestsTab(tab: string): void {
   activeTab = tab === "enquiries" ? "enquiries" : "requests";
+}
+
+/* Admin polish, item 2: Open requests first, then Completed, and a filter
+   for either or both. Open is anything not completed (pending or scheduled).
+   Remembered for the session, like the tab. */
+export type RequestFilter = "open" | "completed" | "all";
+let requestFilter: RequestFilter = "all";
+
+export function setRequestFilter(value: string): void {
+  requestFilter = value === "open" || value === "completed" ? value : "all";
+}
+
+function requestGroups(requests: ServiceRequest[], myId: string | undefined): string {
+  const open = requests.filter((r) => r.status !== "completed");
+  const done = requests.filter((r) => r.status === "completed");
+  const group = (label: string, key: string, rows: ServiceRequest[], empty: string): string => `
+    <tr class="req-group" data-group="${key}"><th colspan="7">${esc(label)} (${rows.length})</th></tr>
+    ${rows.length
+      ? rows.map((r) => requestRow(r, myId)).join("")
+      : `<tr><td colspan="7" class="muted">${esc(empty)}</td></tr>`}`;
+
+  return [
+    requestFilter !== "completed" ? group("Open", "open", open, "No open requests.") : "",
+    requestFilter !== "open" ? group("Completed", "completed", done, "No completed requests yet.") : "",
+  ].join("");
+}
+
+function requestFilterBar(): string {
+  const options: [RequestFilter, string][] = [["open", "Open"], ["completed", "Completed"], ["all", "All"]];
+  return `<div class="seg-group" role="group" aria-label="Show requests">
+    ${options.map(([value, label]) => `<button type="button" class="seg${requestFilter === value ? " active" : ""}"
+      aria-pressed="${requestFilter === value}" data-act="requests-filter" data-filter="${value}">${label}</button>`).join("")}
+  </div>`;
 }
 
 /* What needs a person on the Enquiries tab: nobody has it yet, or a
@@ -192,6 +227,7 @@ export async function requestsPage(): Promise<string> {
         `${requests.length} request${requests.length === 1 ? "" : "s"} submitted`,
         resultCount(requests.length, requests.length, "requests"),
         `
+          ${requestFilterBar()}
           <div class="table-wrap">
             <table class="requests-table">
               <thead>
@@ -208,7 +244,7 @@ export async function requestsPage(): Promise<string> {
               <tbody>
                 ${
                   requests.length
-                    ? requests.map((r) => requestRow(r, myId)).join("")
+                    ? requestGroups(requests, myId)
                     : `
                       <tr>
                         <td colspan="7" class="muted">
@@ -231,7 +267,7 @@ export async function requestsPage(): Promise<string> {
 
       ${errorState({
         title: "Requests could not be loaded",
-        detail: error instanceof Error ? error.message : "The request list could not be retrieved.",
+        detail: plainError(error, "The request list could not be retrieved."),
       })}
     `;
   }

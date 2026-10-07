@@ -3,6 +3,7 @@ import { esc, fmtDate } from "@/lib/format";
 import { badge, kpiCard, pageHeader, panel, resultCount, table } from "@/ui/components";
 import { Icon } from "@/lib/icons";
 import { getMqttLogins } from "@/services/agroFlowApi";
+import { plainError } from "@/lib/plainError";
 
 /* ============================== MQTT LOGINS ==============================
 
@@ -38,7 +39,7 @@ export async function mqttLoginsPage(): Promise<string> {
       ${errorState({
         title: "The MQTT login pool could not be loaded",
         // Part 2: the same error panel, with Retry, as every other page.
-        detail: `${error instanceof Error ? error.message : "The login list could not be retrieved."} ` +
+        detail: `${plainError(error, "The login list could not be retrieved.")} ` +
           "If this keeps happening, check that Mqtt__PoolEncryptionKey is set on the server - " +
           "pooled passwords are encrypted at rest, so the pool cannot be read without it.",
       })}

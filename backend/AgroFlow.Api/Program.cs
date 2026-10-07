@@ -11,16 +11,6 @@ using Npgsql;
 using QuestPDF.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AdminFrontend", policy =>
-    {
-        policy
-            .WithOrigins("http://localhost:5174", "http://localhost:5173")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
 
 // The Windows Event Log provider can throw AccessDenied for an ordinary
 // developer account while a background service is reporting a recoverable
@@ -106,33 +96,12 @@ builder.Services
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpClient();
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AdminFrontend", policy =>
-    {
-        policy
-            .WithOrigins("http://localhost:5173", "http://localhost:8081")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
 
-// Expo web runs on a separate origin from the API. Accept local browser
-// origins during development and explicitly configured origins in deployment.
+// Admin polish, item 8: ONE CORS policy - Cors:AllowedOrigins (Railway:
+// Cors__AllowedOrigins__0..N) plus the local dev origins, and any loopback
+// origin in Development. See Services/CorsSetup.cs and the README.
 // Authentication and the device API key remain required for actual requests.
-var allowedWebOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? Array.Empty<string>();
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
-    policy.SetIsOriginAllowed(origin =>
-    {
-        if (allowedWebOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase)) return true;
-        return builder.Environment.IsDevelopment()
-            && Uri.TryCreate(origin, UriKind.Absolute, out var uri)
-            && uri.IsLoopback
-            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
-    })
-    .AllowAnyHeader()
-    .AllowAnyMethod()));
+builder.Services.AddAgroFlowCors(builder.Configuration, builder.Environment);
 
 // TODO: set Mqtt:Host/Port/Username/Password in appsettings.json to your
 // HiveMQ Cloud cluster credentials (HiveMQ Cloud console -> your cluster ->
@@ -356,9 +325,11 @@ app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
     });
 }));
 
-app.UseCors("AdminFrontend");
-
-app.UseCors();
+// Applied once, before the gates and the endpoints. The CORS middleware
+// writes its headers as the response starts, so a 401, 403, 500 or 503 -
+// even one the exception handler above writes - carries them too, and the
+// browser shows the API's sentence (CorsTests).
+app.UseCors(CorsSetup.PolicyName);
 
 // Device shared-secret gate - skipped for the admin (JWT-authenticated)
 // routes below, which use app.UseAuthentication()/UseAuthorization() instead.

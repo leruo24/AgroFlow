@@ -133,8 +133,18 @@ export async function signIn(email: string, password: string): Promise<void> {
   notify();
 }
 
+/* Log out (admin polish, item 4). supabase-js keeps the stored session when
+   its call to the server fails (offline, server down), so a failed global
+   sign-out falls back to a local one: pressing Log out must always end the
+   session on this computer. */
 export async function signOut(): Promise<void> {
-  await supabase.auth.signOut();
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  } catch (error) {
+    console.warn("Supabase sign-out did not reach the server; signing out on this computer only.", error);
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+  }
   session = null;
   profile = null;
   notify();
