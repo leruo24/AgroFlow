@@ -154,6 +154,11 @@ async function boot(): Promise<void> {
     if (isAdminAuthenticated()) return;
     const next = currentState();
     if (next !== shownState) render(next);
+    else if (next === "welcome" && window.location.hash === "#enquire") {
+      // Public anchor navigation deliberately does not rebuild the landing
+      // page. Expand the collapsed contact form on same-document navigation.
+      document.getElementById("enquiryOpen")?.click();
+    }
   });
 
   onAuthChange(() => {
