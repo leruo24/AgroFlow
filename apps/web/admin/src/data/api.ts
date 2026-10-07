@@ -45,6 +45,7 @@ import {
   getMqttLogins,
   getAdminHardware,
   updateServiceRequestStatusThroughApi,
+  errorMessage,
   type AdminHardwareRow,
 } from "@/services/agroFlowApi";
 
@@ -122,8 +123,7 @@ async function getAuthorized<T>(path: string): Promise<T> {
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed (${response.status}).`);
+    throw new Error(errorMessage(await response.text(), response.status));
   }
 
   return response.json() as Promise<T>;

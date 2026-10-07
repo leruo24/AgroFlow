@@ -19,11 +19,9 @@ public class AdminOnlyFilter : IEndpointFilter
             return Results.Unauthorized();
         }
 
-        var dataSource = context.HttpContext.RequestServices.GetRequiredService<NpgsqlDataSource>();
-        await using var connection = await dataSource.OpenConnectionAsync();
-        await using var cmd = new NpgsqlCommand("select role from profile where id = $1", connection);
-        cmd.Parameters.AddWithValue(userGuid);
-        var role = await cmd.ExecuteScalarAsync() as string;
+        var services = context.HttpContext.RequestServices;
+        var roles = services.GetService<IProfileRoles>() ?? new DbProfileRoles(services.GetRequiredService<NpgsqlDataSource>());
+        var role = await roles.RoleOfAsync(userGuid, context.HttpContext.RequestAborted);
 
         if (role != "admin")
         {
@@ -31,5 +29,27 @@ public class AdminOnlyFilter : IEndpointFilter
         }
 
         return await next(context);
+    }
+}
+
+// Who has which role, from the profile table. An interface only so the API's
+// own contract tests can play a farmer without a database (Part 2); the API
+// registers the database one, and the filter falls back to it regardless.
+public interface IProfileRoles
+{
+    Task<string?> RoleOfAsync(Guid profileId, CancellationToken ct);
+}
+
+public sealed class DbProfileRoles : IProfileRoles
+{
+    private readonly NpgsqlDataSource _dataSource;
+    public DbProfileRoles(NpgsqlDataSource dataSource) => _dataSource = dataSource;
+
+    public async Task<string?> RoleOfAsync(Guid profileId, CancellationToken ct)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand("select role from profile where id = $1", connection);
+        cmd.Parameters.AddWithValue(profileId);
+        return await cmd.ExecuteScalarAsync(ct) as string;
     }
 }

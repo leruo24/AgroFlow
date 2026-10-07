@@ -46,37 +46,49 @@ public static class EnquiryEndpoints
 
         if (EnquiryRules.Check(form) is { } problem) return Results.BadRequest(new { error = problem });
 
-        await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using (var exists = new NpgsqlCommand("select to_regclass('public.enquiry') is not null", connection))
+        // Part 2: with the database out of reach the person gets a sentence,
+        // not a bare 500 (DependencyFailureTests).
+        var crops = form.Crops!.Distinct().ToArray();
+        try
         {
-            if (await exists.ExecuteScalarAsync(ct) is not true)
+            await using var connection = await dataSource.OpenConnectionAsync(ct);
+            await using (var exists = new NpgsqlCommand("select to_regclass('public.enquiry') is not null", connection))
             {
-                logger.LogError("An enquiry arrived but migration 0044 (enquiry) is not applied.");
-                return Results.Json(
-                    new { error = "We could not take your enquiry right now. Please try again later." },
-                    statusCode: StatusCodes.Status503ServiceUnavailable);
+                if (await exists.ExecuteScalarAsync(ct) is not true)
+                {
+                    logger.LogError("An enquiry arrived but migration 0044 (enquiry) is not applied.");
+                    return Results.Json(
+                        new { error = "We could not take your enquiry right now. Please try again later." },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+            }
+
+            await using (var cmd = new NpgsqlCommand(
+                """
+                insert into enquiry (full_name, phone, email, province, town, farm_size_ha, crops, crops_other,
+                                     best_time, notes, consent_at)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+                """, connection))
+            {
+                cmd.Parameters.AddWithValue(form.FullName!.Trim());
+                cmd.Parameters.AddWithValue(EnquiryRules.NormalisePhone(form.Phone)!);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Text, string.IsNullOrWhiteSpace(form.Email) ? DBNull.Value : form.Email.Trim());
+                cmd.Parameters.AddWithValue(form.Province!);
+                cmd.Parameters.AddWithValue(form.Town!.Trim());
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Numeric, form.FarmSizeHa is { } ha ? (object)(decimal)ha : DBNull.Value);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Array | NpgsqlDbType.Text, crops);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Text, string.IsNullOrWhiteSpace(form.CropsOther) ? DBNull.Value : form.CropsOther.Trim());
+                cmd.Parameters.AddWithValue(form.BestTime!);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Text, string.IsNullOrWhiteSpace(form.Notes) ? DBNull.Value : form.Notes.Trim());
+                await cmd.ExecuteNonQueryAsync(ct);
             }
         }
-
-        var crops = form.Crops!.Distinct().ToArray();
-        await using (var cmd = new NpgsqlCommand(
-            """
-            insert into enquiry (full_name, phone, email, province, town, farm_size_ha, crops, crops_other,
-                                 best_time, notes, consent_at)
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
-            """, connection))
+        catch (NpgsqlException ex)
         {
-            cmd.Parameters.AddWithValue(form.FullName!.Trim());
-            cmd.Parameters.AddWithValue(EnquiryRules.NormalisePhone(form.Phone)!);
-            cmd.Parameters.AddWithValue(NpgsqlDbType.Text, string.IsNullOrWhiteSpace(form.Email) ? DBNull.Value : form.Email.Trim());
-            cmd.Parameters.AddWithValue(form.Province!);
-            cmd.Parameters.AddWithValue(form.Town!.Trim());
-            cmd.Parameters.AddWithValue(NpgsqlDbType.Numeric, form.FarmSizeHa is { } ha ? (object)(decimal)ha : DBNull.Value);
-            cmd.Parameters.AddWithValue(NpgsqlDbType.Array | NpgsqlDbType.Text, crops);
-            cmd.Parameters.AddWithValue(NpgsqlDbType.Text, string.IsNullOrWhiteSpace(form.CropsOther) ? DBNull.Value : form.CropsOther.Trim());
-            cmd.Parameters.AddWithValue(form.BestTime!);
-            cmd.Parameters.AddWithValue(NpgsqlDbType.Text, string.IsNullOrWhiteSpace(form.Notes) ? DBNull.Value : form.Notes.Trim());
-            await cmd.ExecuteNonQueryAsync(ct);
+            logger.LogError(ex, "An enquiry could not be saved: the database could not be reached.");
+            return Results.Json(
+                new { error = "We could not take your enquiry right now. Please try again later." },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
         await notifications.NotifyAdminsAsync(

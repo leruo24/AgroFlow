@@ -15,7 +15,9 @@ what is next.
 | 5 | done | 5e067d0 | Apply migration 0041 | 6 |
 | 6 | done | 77b9533, be80a1a | Apply migration 0042 | 6b |
 | 6b | done | f079cde | Apply migration 0043 | 6c |
-| 6c | done | b8cf3a2, 6c4982b, 2d7a988, part 4 (this commit) | Apply migration 0044 | Land Part 1, then Part 2 |
+| 6c | done | b8cf3a2, 6c4982b, 2d7a988, 77e392a | Apply migration 0044 | Land Part 1 |
+| Land Part 1 | done | c16bfaf (merge into dev, pushed) | — | Part 2 |
+| Part 2 | done | `test/full-proof` (791215c … bf4bbad), merged into `dev` | Apply migrations 0039-0044 | — |
 
 ---
 
@@ -752,3 +754,30 @@ chart was wrong and the code right, corrected in the test; "Do this next";
 filters; working days skip weekends; the PDF and workbook render; filter
 parsing). Admin Playwright 37 → 38 (the download carries period, province
 and handler).
+
+## Landing Part 1
+
+`feat/actionable` merged into `dev` with `--no-ff` (c16bfaf) and pushed.
+`dev` had gained commits meanwhile (presentation, showcase and
+walkthrough-video folders only - no overlap); the merge was clean. On the
+merged tree: backend 972 passed, mobile jest 47 passed, admin build and
+Playwright 38 passed.
+
+## Part 2 - full test pass (`test/full-proof`)
+
+| Step | Commit | What |
+|---|---|---|
+| 1 | 791215c | Rule book table-driven over every crop × soil × stage at the boundaries; every RuleBook method called by a test (a guard for new rules). |
+| 2 | 3e8405b | The real API hosted in memory (`ApiHost`, nothing live reachable): all 73 baseline routes present, only known routes open, 401 without login everywhere, 403 for a farmer on all 53 admin routes. Hostile text through PDFs, workbooks, charts, CSV and the console. Bugs 1-4. |
+| 3 | 2df17fc | Data edges, SAST midnight, month/year ends, af-ZA, 100k readings, sensor limits; dependency failures through the real host. Bugs 5-7. |
+| 4 | 4f8fa3a | Security and concurrency guards asserted where the SQL is: ownership on every farmer route, skip-locked claims, send-once ledger, append-only audit, JWT settings, legacy key switch. |
+| 5 | 6ae08c6 | Admin robustness (every page empty / failing / three widths), splash with the video blocked, a farmer kept out, Home counts = list counts, keyboard-only wizard. Bugs 8-9; coherence fixes. |
+| 6 | 66184d3 | Mobile screens with their real code. Bug 10. |
+| 7 | 97fb728 | Firmware contract against the server (no mismatch; not compiled - no arduino-cli). |
+| 8 | bf4bbad | Evidence: TRX, Playwright HTML report, jest output, FAO-56 examples, route list, README, traceability, bug log, coherence review; final report. |
+
+Two small test-only changes to production code, both behaviour-neutral: the
+admin filter's role lookup is an injectable `IProfileRoles` (the API
+registers the database one, and the filter falls back to it), and
+`public partial class Program {}` lets the tests host the real API.
+`Microsoft.AspNetCore.Mvc.Testing` was added to the **test** project only.

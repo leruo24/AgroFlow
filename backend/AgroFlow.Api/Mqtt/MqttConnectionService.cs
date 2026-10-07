@@ -46,6 +46,12 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 
     public bool IsConnected => _client is { IsConnected: true };
 
+    // Part 2: since when the broker has been out of reach (from start-up until
+    // the first connection, and from each drop until the next), so health can
+    // tell a blip from a broker that is gone.
+    private DateTimeOffset? _disconnectedSinceUtc = DateTimeOffset.UtcNow;
+    public DateTimeOffset? DisconnectedSinceUtc => IsConnected ? null : _disconnectedSinceUtc;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -116,6 +122,7 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
             {
                 await _client!.ConnectAsync(_options, ct);
                 await _client.SubscribeAsync(MqttTopics.SensorTopicFilter, cancellationToken: ct);
+                _disconnectedSinceUtc = null;
                 _logger.LogInformation("MQTT connected, subscribed to {Topic}", MqttTopics.SensorTopicFilter);
 
                 // Announce only once the subscription is actually in place, so
@@ -143,6 +150,7 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 
     private Task OnDisconnectedAsync(MqttClientDisconnectedEventArgs args)
     {
+        _disconnectedSinceUtc ??= DateTimeOffset.UtcNow;
         _logger.LogWarning("MQTT disconnected ({Reason}); the connection loop will retry.", args.Reason);
         return Task.CompletedTask;
     }

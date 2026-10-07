@@ -5,6 +5,8 @@
    bot fills in the hidden "website" field. The checks here are only so a
    person is told at once; the server's word is final and is shown as-is. */
 
+import { ZONE_CROPS } from "@/data/referenceData";
+
 const API_BASE = (import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "").trim();
 
 const PROVINCES = [
@@ -12,15 +14,8 @@ const PROVINCES = [
   "Mpumalanga", "North West", "Northern Cape", "Western Cape",
 ];
 
-const CROPS: { value: string; label: string }[] = [
-  { value: "potato", label: "Potato" },
-  { value: "tomato", label: "Tomato" },
-  { value: "citrus", label: "Citrus" },
-  { value: "leafy_veg", label: "Leafy vegetables" },
-  { value: "maize", label: "Maize" },
-  { value: "dry_beans", label: "Dry beans" },
-  { value: "other", label: "Other" },
-];
+// The engine's crops (the same list as zones), plus Other.
+const CROPS: { value: string; label: string }[] = [...ZONE_CROPS, { value: "other", label: "Other" }];
 
 export const CONSENT_TEXT =
   "I agree that AgroFlow may contact me about this enquiry and store these details for that purpose.";

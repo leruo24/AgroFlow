@@ -6,6 +6,23 @@ import {
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+/* The sentence to show for a refused or failed call (Part 2). The API sends
+   its sentence as `error` or `message` in JSON; this used to show the raw
+   body, so the farmer read {"error":"..."} on screen. */
+export function errorMessage(text: string, fallback: string): string {
+  try {
+    const problem = JSON.parse(text) as Record<string, unknown>;
+    for (const key of ['error', 'message', 'detail', 'title']) {
+      const value = problem?.[key];
+      if (typeof value === 'string' && value.trim()) return value;
+    }
+    return fallback;   // JSON with no sentence in it: never show it raw
+  } catch {
+    // Not JSON: the text itself, if there is any.
+  }
+  return text.trim() || fallback;
+}
+
 function resolveApiBase() {
   const configuredBase =
     process.env.EXPO_PUBLIC_AGROFLOW_API_BASE
@@ -146,12 +163,8 @@ async function sendAuthorizedRequest<T>(
   if (
     !response.ok
   ) {
-    const message =
-      await response.text();
-
     throw new Error(
-      message ||
-        `AgroFlow API request failed (${response.status}).`
+      errorMessage(await response.text(), `AgroFlow API request failed (${response.status}).`)
     );
   }
 
@@ -757,10 +770,8 @@ async function sendZoneWifiChange(
   }
 
   if (!response.ok) {
-    const text = await response.text();
-
     throw new Error(
-      text || `Could not ask your kit to change WiFi (${response.status}).`
+      errorMessage(await response.text(), `Could not ask your kit to change WiFi (${response.status}).`)
     );
   }
 

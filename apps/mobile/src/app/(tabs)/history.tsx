@@ -1,3 +1,4 @@
+import { formatSast } from '@/lib/sastTime';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bell, Clock3, Lightbulb } from 'lucide-react-native';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -143,7 +144,7 @@ export default function HistoryScreen() {
                   <Text style={styles.caption}>{item.zone} · {item.source} · {item.type}</Text>
                   <Text style={styles.caption}>
                     {Number.isFinite(Date.parse(item.timestamp))
-                      ? new Date(item.timestamp).toLocaleString()
+                      ? formatSast(item.timestamp)
                       : 'Time unavailable'}
                   </Text>
                 </View>
@@ -210,7 +211,7 @@ export default function HistoryScreen() {
                       item.zoneName ?? 'Zone',
                       item.kind === 'alert' ? 'Alert' : 'Advice',
                       Number.isFinite(Date.parse(item.timestamp))
-                        ? new Date(item.timestamp).toLocaleString()
+                        ? formatSast(item.timestamp)
                         : 'Time unavailable',
                     ].join(' · ')}
                   </Text>

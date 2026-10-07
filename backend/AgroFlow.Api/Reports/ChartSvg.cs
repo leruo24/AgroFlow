@@ -42,7 +42,7 @@ internal static class ChartSvg
     /// renders a blank box rather than throwing, so it would have shipped.
     private static string E(string? text)
     {
-        return (text ?? string.Empty)
+        return ReportText.Clean(text)
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;")

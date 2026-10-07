@@ -56,3 +56,19 @@ describe('the form checks', () => {
     expect(enquiryProblem({ ...input, province: '' })).toBe('Please choose your province.');
   });
 });
+
+describe('errors from the API', () => {
+  let original: typeof fetch;
+  beforeEach(() => { original = globalThis.fetch; });
+  afterEach(() => { globalThis.fetch = original; });
+
+  it('reads the sentence out of the JSON, never shows the raw body', () => {
+    // Imported lazily so the module mocks above apply.
+    const { errorMessage } = jest.requireActual('../agroFlowApi') as typeof import('../agroFlowApi');
+    expect(errorMessage('{"error":"Zone not found."}', 'x')).toBe('Zone not found.');
+    expect(errorMessage('{"message":"Saved."}', 'x')).toBe('Saved.');
+    expect(errorMessage('plain words', 'x')).toBe('plain words');
+    expect(errorMessage('', 'fallback')).toBe('fallback');
+    expect(errorMessage('{"other":1}', 'fallback')).toBe('fallback');
+  });
+});

@@ -135,7 +135,7 @@ internal static class XlsxWriter
     /// workbook as corrupt rather than skipping that one cell.
     private static string E(string? text)
     {
-        return (text ?? string.Empty)
+        return ReportText.Clean(text)
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;")
