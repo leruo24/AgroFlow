@@ -4,12 +4,20 @@ import { AlertCircle, Info, Lightbulb } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { createZoneInsightsStyles } from '@/styles/zoneInsightsStyles';
 import {
-  dismissZoneInsight,
+  dismissNotification,
+  fetchDismissals,
   fetchZoneInsights,
+  restoreNotification,
+  type Dismissal,
   type Explanation,
   type ZoneInsight,
 } from '@/services/agroFlowApi';
 import { WhyLink } from '@/components/WhySheet';
+import { DismissButton, DismissNoteSheet, UndoBar, ViewSwitch } from '@/components/DismissControls';
+import { dismissedLine, insightKey, type DismissView } from '@/lib/dismissals';
+import { todayInSast } from '@/services/insightsService';
+import { formatSast } from '@/lib/sastTime';
+import { useAgroFlow } from '@/context/AgroFlowContext';
 
 // Item 2: how sure the advice is, and the ONE thing that would improve it.
 type Confidence = {
@@ -92,22 +100,58 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
     );
   }, [insights]);
 
+  // Admin polish, item 1: × to dismiss (recorded, never deleted), Undo for
+  // 5 s, an optional note for "act now" advice, and this zone's dismissed
+  // advice under Dismissed with Restore.
+  const { farm } = useAgroFlow();
+  const [view, setView] = useState<DismissView>('active');
+  const [dismissals, setDismissals] = useState<Dismissal[]>([]);
+  const [undo, setUndo] = useState<{ id: number; insight: ZoneInsight } | null>(null);
+  const [asking, setAsking] = useState<ZoneInsight | null>(null);
+
+  const loadDismissals = useCallback(() => {
+    if (!farm) return;
+    fetchDismissals(farm.id)
+      .then((rows) => setDismissals(rows.filter((d) => d.kind === 'insight' && d.itemKey.startsWith(`${zoneId}:`))))
+      .catch(() => setDismissals([]));
+  }, [farm, zoneId]);
+  useEffect(loadDismissals, [loadDismissals]);
+
   const dismiss = useCallback(
-    (insight: ZoneInsight) => {
+    (insight: ZoneInsight, note: string | null) => {
       setInsights((current) =>
         current.filter((i) => i.insightType !== insight.insightType)
       );
 
-      dismissZoneInsight(zoneId, insight.insightType).catch(() => {
-        // Put it back: a failed dismiss must not silently hide advice.
-        setInsights((current) =>
-          current.some((i) => i.insightType === insight.insightType)
-            ? current
-            : [...current, insight]
-        );
-      });
+      dismissNotification('insight', insightKey(zoneId, insight.insightType, todayInSast()), note)
+        .then((r) => { setUndo({ id: r.id, insight }); loadDismissals(); })
+        .catch(() => {
+          // Put it back: a failed dismiss must not silently hide advice.
+          setInsights((current) =>
+            current.some((i) => i.insightType === insight.insightType)
+              ? current
+              : [...current, insight]
+          );
+        });
     },
-    [zoneId]
+    [zoneId, loadDismissals]
+  );
+
+  const restore = useCallback(
+    (id: number, insight?: ZoneInsight) => {
+      restoreNotification(id)
+        .then(() => {
+          if (insight) {
+            setInsights((current) =>
+              current.some((i) => i.insightType === insight.insightType) ? current : [...current, insight]);
+          } else {
+            fetchZoneInsights(zoneId).then((r) => setInsights(r.insights ?? [])).catch(() => undefined);
+          }
+          loadDismissals();
+        })
+        .catch(() => undefined);
+    },
+    [zoneId, loadDismissals]
   );
 
   if (loading) {
@@ -147,7 +191,14 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
         </View>
       )}
 
-      {ordered.length === 0 ? (
+      <ViewSwitch value={view} onChange={setView} />
+      <UndoBar
+        message={undo ? 'Advice dismissed.' : null}
+        onUndo={() => undo && restore(undo.id, undo.insight)}
+        onDone={() => setUndo(null)}
+      />
+
+      {view === 'dismissed' ? null : ordered.length === 0 ? (
         <Text style={styles.empty}>
           {failed
             ? 'Advice is not available right now.'
@@ -171,11 +222,8 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
                 : styles.severityInfo;
 
           return (
-            <Pressable
+            <View
               key={insight.insightType}
-              accessibilityRole="button"
-              accessibilityLabel={`${insight.message} Tap to dismiss.`}
-              onPress={() => dismiss(insight)}
               style={[styles.row, index > 0 && styles.rowDivider]}
             >
               <View style={[styles.severityBar, barStyle]} />
@@ -183,12 +231,46 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
               <View style={styles.rowBody}>
                 <Text style={styles.message}>{insight.message}</Text>
                 <WhyLink explanation={insight.explanation} compact />
-                <Text style={styles.dismissHint}>Tap to dismiss</Text>
               </View>
-            </Pressable>
+              <DismissButton
+                label={insight.message}
+                onPress={() => (insight.severity === 'act_now' ? setAsking(insight) : dismiss(insight, null))}
+              />
+            </View>
           );
         })
       )}
+
+      {view !== 'active' && (
+        <View style={styles.rowDivider}>
+          <Text style={styles.title}>Dismissed</Text>
+          {dismissals.length === 0 ? (
+            <Text style={styles.empty}>No advice has been dismissed for this zone.</Text>
+          ) : (
+            dismissals.map((d) => (
+              <View key={d.id} style={styles.row} testID={`dismissed-insight-${d.id}`}>
+                <View style={styles.rowBody}>
+                  <Text style={styles.message}>{d.title}</Text>
+                  <Text style={styles.dismissHint}>{dismissedLine(d, formatSast)}</Text>
+                  {d.note ? <Text style={styles.dismissHint}>Note: {d.note}</Text> : null}
+                  {!d.restoredAt && (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Restore ${d.title}`} onPress={() => restore(d.id)}>
+                      <Text style={styles.confidenceBadge}>Restore</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      )}
+
+      <DismissNoteSheet
+        title={asking?.message ?? ''}
+        visible={asking !== null}
+        onCancel={() => setAsking(null)}
+        onConfirm={(note) => { if (asking) dismiss(asking, note); setAsking(null); }}
+      />
     </View>
   );
 }

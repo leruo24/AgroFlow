@@ -214,6 +214,10 @@ builder.Services.AddSingleton<FarmRequestNotifier>();
 // Singleton because it holds only the data source, like the other
 // writers here.
 builder.Services.AddSingleton<AuditLog>();
+builder.Services.AddSingleton<IAuditWriter>(sp => sp.GetRequiredService<AuditLog>());
+// Admin polish: dismiss and history for notifications.
+builder.Services.AddSingleton<IDismissalStore, DbDismissalStore>();
+builder.Services.AddSingleton<DismissalService>();
 builder.Services.AddSingleton<SchemaCheck>();
 
 // "Why am I seeing this?" for Telegram (item 2c, migration 0039): the
@@ -464,6 +468,7 @@ app.MapFarmZoneEndpoints();
 app.MapEnquiryEndpoints();
 app.MapEnquiryAdminEndpoints();
 app.MapEnquiryReportEndpoints();
+app.MapDismissalEndpoints();
 app.MapMqttPoolEndpoints();
 app.MapPasswordResetEndpoints();
 

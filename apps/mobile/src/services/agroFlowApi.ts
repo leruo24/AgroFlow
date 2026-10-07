@@ -592,6 +592,40 @@ export function changeZoneCrop(zoneId: number, change: { cropType: string; plant
   );
 }
 
+// ---------------------------------------------------------------------------
+// Admin polish, item 1: dismiss and history. Who and when come from the login.
+// ---------------------------------------------------------------------------
+
+export type Dismissal = {
+  id: number;
+  kind: 'alert' | 'insight';
+  itemKey: string;
+  farmId: number | null;
+  title: string;
+  raisedAt: string | null;
+  critical: boolean;
+  dismissedByName: string;
+  dismissedAt: string;
+  note: string | null;
+  restoredByName: string | null;
+  restoredAt: string | null;
+};
+
+export function fetchDismissals(farmId: string | number) {
+  return authorizedRequest<Dismissal[]>(`/api/farmer/dismissals?farmId=${encodeURIComponent(String(farmId))}`);
+}
+
+export function dismissNotification(kind: 'alert' | 'insight', itemKey: string, note: string | null = null) {
+  return authorizedRequest<{ id: number; message: string }>('/api/farmer/dismissals', {
+    method: 'POST',
+    body: JSON.stringify({ kind, itemKey, note }),
+  });
+}
+
+export function restoreNotification(id: number) {
+  return authorizedRequest<{ id: number; message: string }>(`/api/farmer/dismissals/${id}/restore`, { method: 'POST' });
+}
+
 export function dismissZoneInsight(
   zoneId: number,
   insightType: string

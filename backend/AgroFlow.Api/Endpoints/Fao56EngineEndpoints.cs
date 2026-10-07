@@ -325,14 +325,20 @@ public static class Fao56EngineEndpoints
     // Dismissing is a farmer write, so it goes through RLS from the app rather
     // than here. This endpoint exists only so the app has one path for it when it
     // is already holding an API token.
-    private static IResult DismissInsight(
-        string insightType, long zoneId, ClaimsPrincipal user, Fao56EngineController engine)
+    // Admin polish: this used to DELETE the insight row. It now dismisses it
+    // like every other notification - recorded, never deleted, restorable.
+    // The route and its answer are unchanged for older apps.
+    private static async Task<IResult> DismissInsight(
+        string insightType, long zoneId, ClaimsPrincipal user, Fao56EngineController engine,
+        AgroFlow.Api.Services.DismissalService dismissals, CancellationToken ct)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         if (!engine.Data.CanAccessZone(userId, zoneId, out _)) return Results.NotFound(new { error = "Zone not found." });
 
-        engine.Data.ClearInsight(zoneId, insightType, Fao56EngineController.TodayInSast());
-        return Results.Ok(new { message = "Dismissed." });
+        var key = AgroFlow.Api.Services.DismissalService.InsightKey(zoneId, insightType, Fao56EngineController.TodayInSast());
+        var outcome = await dismissals.FarmerDismissAsync(user,
+            new AgroFlow.Api.Services.DismissRequest("insight", key, null, null, false, null, null), ct);
+        return outcome.Status == 200 ? Results.Ok(new { message = "Dismissed." }) : outcome.ToResult();
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>

@@ -1,6 +1,7 @@
 import { countExplanation } from "@/lib/why";
 import { api, getFarmsNeedingSetup, getMqttPoolHealth, getFailedReportCount } from "@/data/api";
-import { getEnquirySummary } from "@/services/agroFlowApi";
+import { getEnquirySummary, getAdminDismissals, clearDismissalCondition } from "@/services/agroFlowApi";
+import { clearedConditions, viewOf, viewToggle } from "@/lib/dismiss";
 import { esc, fmtInt, fmtPct, fmtPct2, fmtDateTimeSast } from "@/lib/format";
 import {
   badge, kpiCard, panel, barChart, lineChart, donut, table,
@@ -45,6 +46,10 @@ async function renderDashboard(): Promise<string> {
   ]);
   // Item 6c: people waiting for a call, and call-backs that are due.
   const enquiries = await getEnquirySummary().catch(() => null);
+  // Admin polish: dismissed cards leave the queue (and come back when what
+  // they count changes, for the critical ones).
+  const dismissals = await getAdminDismissals().catch(() => []);
+  const ids = (xs: { id: string | number }[]): string => xs.map((x) => String(x.id)).sort().join(",");
   const enquiriesWaiting = Number(enquiries?.waiting) || 0;
   const callbacksDue = Number(enquiries?.callbacksDue) || 0;
 
@@ -75,12 +80,15 @@ async function renderDashboard(): Promise<string> {
       count: newRequests.length,
       body: "Farmers waiting to hear back about a new farm or zone.",
       act: "go-requests-pending",
+      conditionKey: `requests:${ids(newRequests)}`,
       tone: "bad",
       icon: Icon.inbox,
       why: countExplanation({ label: "New requests waiting", what: "new farm or zone requests have had no reply yet", count: newRequests.length, counted: "service requests", rule: "A request counts here while its status is still pending.", whyHighlighted: "First in the queue: a farmer is waiting on a person.", clears: "Completing the request (Mark complete, or saving the wizard it opens) takes it off this count.", query: "service_request where status = pending" }),
     },
     {
       title: "Call-backs due",
+      conditionKey: `callbacks:${callbacksDue}`,
+      key: "callbacks-due",
       count: callbacksDue,
       body: "You promised to call these people back - it is time.",
       act: "go-enquiries",
@@ -90,6 +98,8 @@ async function renderDashboard(): Promise<string> {
     },
     {
       title: "Enquiries waiting for a call",
+      conditionKey: `enquiries:${enquiriesWaiting}`,
+      key: "enquiries-waiting",
       count: enquiriesWaiting,
       body: "People interested in AgroFlow that nobody has taken on yet.",
       act: "go-enquiries",
@@ -102,6 +112,7 @@ async function renderDashboard(): Promise<string> {
       count: criticalAlerts.length,
       body: "Zones or equipment needing attention now.",
       act: "go-alerts-critical",
+      conditionKey: `alerts:${ids(criticalAlerts)}`,
       tone: "bad",
       icon: Icon.triangleAlert,
       why: countExplanation({ label: "Open critical alerts", what: "open alerts are marked Critical or High", count: criticalAlerts.length, counted: "alerts", rule: "An alert counts here while it is open (not Resolved or Closed) and its priority is Critical or High.", whyHighlighted: "A crop or a piece of equipment may need attention now.", clears: "Resolving the alert removes it.", query: "alert: status not in (Resolved, Closed) and priority in (Critical, High)" }),
@@ -111,6 +122,7 @@ async function renderDashboard(): Promise<string> {
       count: kitsNeedingHelp.length,
       body: "Not reporting. The farm may be watering blind.",
       act: "go-kits-offline",
+      conditionKey: `kits:${kitsNeedingHelp.map((h) => `${h.id}=${h.status}`).sort().join(",")}`,
       tone: "warn",
       icon: Icon.radio,
       why: countExplanation({ label: "Kits offline or faulty", what: "kits are Offline or Fault", count: kitsNeedingHelp.length, counted: "kits", rule: "The equipment monitor marks a kit Offline when it has sent nothing for its offline window, and Fault when a fault was recorded.", whyHighlighted: "A farm with a quiet kit may be watering blind.", clears: "The kit sending readings again, or a technician clearing the fault.", query: "hardware.status in (Offline, Fault) - set by DeviceStatusMonitorService" }),
@@ -122,6 +134,7 @@ async function renderDashboard(): Promise<string> {
       // only less certain - so this no longer says the engine cannot advise.
       body: "No planting date, area, flow rate or location - advice is less certain until added.",
       act: "go-zones-setup",
+      conditionKey: `zones:${zonesNeedingSetup.length}`,
       tone: "warn",
       icon: Icon.sprout,
       why: countExplanation({ label: "Zones missing setup", what: "zones are missing part of their setup", count: zonesNeedingSetup.length, counted: "zones", rule: "A zone counts when it has no crop, planting date, area or flow rate, or its farm has no location.", whyHighlighted: "Advice for these zones is less certain until the missing detail is added.", clears: "Filling in the missing detail on the zone or the farm.", query: "zone: crop_type, planting_date, area_m2 or flow_rate_lpm null; or farm latitude/longitude null" }),
@@ -131,6 +144,7 @@ async function renderDashboard(): Promise<string> {
       count: kpis.farmersNotReceivingAlerts,
       body: "They get no alerts at all until they connect.",
       act: "go-users-no-telegram",
+      conditionKey: `farmers:${kpis.farmersNotReceivingAlerts}`,
       tone: "warn",
       icon: Icon.userX,
       why: countExplanation({ label: "Farmers without Telegram", what: "farmers have not connected Telegram", count: kpis.farmersNotReceivingAlerts, counted: "farmer accounts", rule: "A farmer counts here when no Telegram chat is linked to their account.", whyHighlighted: "They get no frost, heat or equipment alerts at all.", clears: "The farmer connecting Telegram from the app or with a link code.", query: "profile.telegram_chat_id is null (farmers)" }),
@@ -143,6 +157,7 @@ async function renderDashboard(): Promise<string> {
         ? `Only ${mqttPool.freeCount} free. New kits will fall back to the shared login.`
         : "",
       act: "go-mqtt-logins",
+      conditionKey: `mqtt:${mqttPool?.freeCount ?? 0}`,
       tone: "info",
       icon: Icon.wifi,
       why: countExplanation({ label: "MQTT logins running low", what: "free MQTT logins are left", count: mqttPool?.runningLow ? Math.max(mqttPool.freeCount, 1) : 0, counted: "MQTT login pool", rule: "Shown when the pool of unassigned broker logins is running low.", whyHighlighted: "New kits fall back to the shared login when none are free.", clears: "Adding logins to the pool on the MQTT logins page.", query: "mqtt_credential_pool: unassigned, not burned" }),
@@ -152,11 +167,20 @@ async function renderDashboard(): Promise<string> {
       count: failedReports,
       body: "A farmer asked for a report and it could not be made.",
       act: "go-reports-failed",
+      conditionKey: `failed:${failedReports}`,
       tone: "info",
       icon: Icon.barChart,
       why: countExplanation({ label: "Failed reports", what: "requested reports could not be made", count: failedReports, counted: "report requests", rule: "A report request counts here when its status is failed.", whyHighlighted: "A farmer asked for a report and did not get it.", clears: "Re-running the report from the Reports page.", query: "report_request where status = failed" }),
     },
   ];
+
+  // Admin polish: a dismissed critical card whose condition has gone (count
+  // zero, or a different set behind it) is closed, so if it happens again
+  // it shows again. Recorded as AgroFlow, never deleted.
+  const showing = new Map(attention.filter((c) => c.count > 0).map((c) => [c.key ?? c.act, c.conditionKey ?? ""]));
+  for (const d of clearedConditions(dismissals, "attention", showing)) {
+    void clearDismissalCondition(d.id).catch(() => undefined);
+  }
 
   return `
   ${pageHeader("Home", "What needs attention today, across every farm.",
@@ -164,8 +188,11 @@ async function renderDashboard(): Promise<string> {
      <button class="btn ghost" data-act="export-dashboard-pdf">Export PDF</button>`)}
 
   <section class="attn-section" aria-labelledby="attnHeading">
-    <h3 id="attnHeading" class="section-heading">Needs attention</h3>
-    ${attentionQueue(attention)}
+    <div class="section-heading-row">
+      <h3 id="attnHeading" class="section-heading">Needs attention</h3>
+      ${viewToggle("attention")}
+    </div>
+    ${attentionQueue(attention, dismissals, viewOf("attention"))}
   </section>
 
   <h3 class="section-heading">At a glance</h3>

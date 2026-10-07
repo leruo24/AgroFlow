@@ -135,6 +135,10 @@ public sealed class SchemaCheck
             "select to_regclass('public.enquiry')",
             "The public \"Get a call back\" form cannot take enquiries, and the Enquiries tab is empty."),
 
+        new("0045", "table", "dismissal",
+            "select to_regclass('public.dismissal')",
+            "Notifications cannot be dismissed or restored, and there is no notification history."),
+
         // Not a migration, but applied by hand in the same way and just as
         // invisible when missed: the private bucket report PDFs are stored in.
         new("storage", "bucket", "reports",

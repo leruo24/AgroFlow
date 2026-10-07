@@ -59,6 +59,10 @@ jest.mock('@/services/agroFlowApi', () => ({
   openReportPdf: jest.fn(() => Promise.resolve()),
   stopAutoReports: jest.fn(),
   fetchForecast: jest.fn(),
+  // Admin polish: the Alerts screen reads this farm's dismissals.
+  fetchDismissals: jest.fn(() => Promise.resolve([])),
+  dismissNotification: jest.fn(),
+  restoreNotification: jest.fn(),
 }));
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
