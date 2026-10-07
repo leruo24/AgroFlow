@@ -102,7 +102,7 @@ for (const where of ["sidebar", "avatar menu"] as const) {
       await page.locator("#avatarMenu").getByRole("button", { name: "Log out" }).click();
     }
 
-    await expect(page.getByRole("heading", { name: /AgroFlow: smart irrigation/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible();
     await expect(page.locator("#appShell")).toHaveCount(0);
     expect(new URL(page.url()).hash).toBe("");
     expect(await page.evaluate(() => window.localStorage.getItem("sb-testproject-auth-token"))).toBeNull();
@@ -117,20 +117,20 @@ test("Log out still ends the session on this computer when Supabase cannot be re
   await page.route(`${FAKE_SUPABASE}/auth/v1/logout**`, (route) => route.abort("internetdisconnected"));
 
   await page.locator(".sidebar").getByRole("button", { name: "Log out" }).click();
-  await expect(page.getByRole("heading", { name: /AgroFlow: smart irrigation/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible();
   expect(await page.evaluate(() => window.localStorage.getItem("sb-testproject-auth-token"))).toBeNull();
 });
 
 /* ---------------------------- 5. Landing page ---------------------------- */
 
-test("the landing page has no 'Who made this' section and keeps Admin login", async ({ page }) => {
+test("the landing page has no 'Who made this' section and keeps the Admin console entry", async ({ page }) => {
   await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /AgroFlow: smart irrigation/ })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("Who made this")).toHaveCount(0);
   await expect(page.locator("#creditsHeading")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Admin login" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Admin console" }).first()).toBeVisible();
 });
 
 /* ------------------------------ 6. Settings ------------------------------ */

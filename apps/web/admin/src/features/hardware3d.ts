@@ -41,7 +41,7 @@ interface StoryFrame {
 const COMPONENT_COPY: Record<ComponentKey, { title: string; body: string }> = {
   esp32: {
     title: "ESP32 Controller",
-    body: "Reads connected sensors, maintains device connectivity and executes commands sent to the irrigation node.",
+    body: "Reads connected sensors, communicates with AgroFlow and executes irrigation commands.",
   },
   soil: {
     title: "Soil Moisture Sensor",
@@ -49,7 +49,7 @@ const COMPONENT_COPY: Record<ComponentKey, { title: string; body: string }> = {
   },
   dht: {
     title: "DHT11 Sensor",
-    body: "Measures the temperature and humidity around the crop zone.",
+    body: "Measures local temperature and humidity around the crop.",
   },
   relay: {
     title: "Relay Module",
@@ -57,7 +57,7 @@ const COMPONENT_COPY: Record<ComponentKey, { title: string; body: string }> = {
   },
   pump: {
     title: "Pump Output",
-    body: "Connects the relay-controlled output to the irrigation pump circuit.",
+    body: "Carries the irrigation command to the connected pump.",
   },
   power: {
     title: "Power Input",
@@ -212,6 +212,18 @@ function buildHardwareModel(THREE: ThreeModule): HardwareModel {
   const wireYellow = new THREE.MeshStandardMaterial({ color: 0xd6ad43, roughness: 0.75 });
   const wireGreen = new THREE.MeshStandardMaterial({ color: 0x43a074, roughness: 0.75 });
   const wireDark = new THREE.MeshStandardMaterial({ color: 0x283632, roughness: 0.8 });
+  const postMaterial = new THREE.MeshStandardMaterial({ color: 0x69746f, roughness: 0.62, metalness: 0.48 });
+  const soilMaterial = new THREE.MeshStandardMaterial({ color: 0x7f4329, roughness: 1, metalness: 0 });
+
+  // A galvanised field stake and mounting plate keep the enclosure physically
+  // grounded. The lower stake and probe both pass through the soil line.
+  addBox(THREE, root, [0.42, 7.2, 0.38], [0, -1.55, -0.78], postMaterial);
+  addBox(THREE, root, [4.55, 0.34, 0.22], [0, 1.35, -0.49], postMaterial);
+  addBox(THREE, root, [4.55, 0.34, 0.22], [0, -1.35, -0.49], postMaterial);
+  const soilMound = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 5.2, 0.55, 48), soilMaterial);
+  soilMound.position.set(0, -3.95, -0.70);
+  soilMound.scale.z = 0.45;
+  root.add(soilMound);
 
   const body = new THREE.Mesh(roundedPanelGeometry(THREE, 5.55, 4.1, 0.74, 0.28), offWhite);
   root.add(body);
@@ -306,6 +318,14 @@ function buildHardwareModel(THREE: ThreeModule): HardwareModel {
   pumpSocket.rotation.z = Math.PI / 2;
   pumpOutput.add(pumpSocket);
   addCable(THREE, root, [new THREE.Vector3(0.6, -2.43, 0.03), new THREE.Vector3(1.9, -2.55, 0.05), new THREE.Vector3(3.30, -2.55, 0.05)], wireGreen, 0.06);
+  // The controller output continues into a field irrigation hose at ground
+  // level, rather than ending as an unexplained floating socket.
+  addCable(THREE, root, [
+    new THREE.Vector3(3.62, -2.55, -0.02),
+    new THREE.Vector3(4.05, -3.15, -0.18),
+    new THREE.Vector3(4.20, -3.65, -0.62),
+    new THREE.Vector3(5.65, -3.78, -0.85),
+  ], rubber, 0.105);
 
   const powerInput = new THREE.Group();
   powerInput.position.set(2.10, -3.34, 0.04);
@@ -435,32 +455,24 @@ function createScene(THREE: ThreeModule, width: number, height: number): {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const hemisphere = new THREE.HemisphereLight(0xf7fffb, 0x49625a, 2.0);
   scene.add(hemisphere);
   const key = new THREE.DirectionalLight(0xffffff, 3.2);
   key.position.set(-4, 6, 7);
+  key.castShadow = true;
   scene.add(key);
   const fill = new THREE.DirectionalLight(0x8edddf, 1.25);
   fill.position.set(5, 1, 5);
   scene.add(fill);
 
-  const backdrop = new THREE.Mesh(
-    new THREE.CircleGeometry(5.2, 48),
-    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.045, depthWrite: false }),
-  );
-  backdrop.position.set(0, -0.15, -0.75);
-  backdrop.scale.y = 0.88;
-  scene.add(backdrop);
-
-  const platform = new THREE.Mesh(
-    new THREE.CylinderGeometry(3.8, 4.1, 0.16, 48),
-    new THREE.MeshStandardMaterial({ color: 0xb7cac1, roughness: 0.95, transparent: true, opacity: 0.26 }),
-  );
-  platform.position.set(0, -4.05, -0.35);
-  scene.add(platform);
-
   const model = buildHardwareModel(THREE);
+  model.root.traverse((object) => {
+    const mesh = object as Mesh;
+    if (mesh.isMesh) mesh.castShadow = true;
+  });
   scene.add(model.root);
   return { scene, camera, renderer, model };
 }

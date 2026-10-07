@@ -20,7 +20,7 @@ test("public hardware story is usable and does not block the rest of the landing
   await page.goto("/");
   await page.locator("#agroflow-splash").waitFor({ state: "detached", timeout: 15_000 });
 
-  await expect(page.getByRole("heading", { name: "Inside AgroFlow" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: "The AgroFlow field controller" })).toBeVisible({ timeout: 15_000 });
   const viewer = page.locator("[data-hardware-viewer]");
   await expect(viewer).toBeVisible();
   await expect(page.locator("[data-hardware-fallback]:visible, [data-hardware-canvas] canvas:visible").first()).toBeVisible();
@@ -40,7 +40,7 @@ test("public hardware story is usable and does not block the rest of the landing
   await expect(page.getByRole("button", { name: "Reset product view" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Rotate product right" })).toBeAttached();
 
-  await page.getByRole("heading", { name: "Open the controller" }).scrollIntoViewIfNeeded();
+  await page.getByRole("heading", { name: "Inside AgroFlow" }).scrollIntoViewIfNeeded();
   const stickyBox = await viewer.boundingBox();
   expect(stickyBox).not.toBeNull();
   expect(stickyBox!.y).toBeGreaterThanOrEqual(20);
@@ -53,7 +53,7 @@ test("public hardware story is usable and does not block the rest of the landing
   );
   expect(hasHorizontalOverflow).toBe(false);
 
-  await page.getByRole("button", { name: "Admin login" }).first().click();
+  await page.getByRole("button", { name: "Admin console" }).first().click();
   await expect(page).toHaveURL(/#\/login$/);
   await expect(page.getByRole("heading", { name: "AgroFlow" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

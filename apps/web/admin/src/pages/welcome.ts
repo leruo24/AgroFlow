@@ -18,9 +18,9 @@
    untouched, so a visitor who already has a valid admin session never sees
    this page at all - render() sends them straight to the dashboard.
 
-   NO IMAGES AND NO CDN: the background is inline SVG and CSS gradients, so it
-   works on GitHub Pages under any base path and needs no network beyond the
-   bundle itself. */
+   The public structure and light navy/green identity preserve Phili's website
+   direction, adapted into this existing Vite entry so public and admin remain
+   distinct without introducing a second deployment. */
 
 import { Icon } from "@/lib/icons";
 import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
@@ -89,24 +89,41 @@ export const WELCOME_HTML = `
         <img class="landing-logo" src="brand/agroflow-icon-192.png" alt="" width="40" height="40" />
         <span class="landing-wordmark">AgroFlow</span>
       </div>
-      <button type="button" class="btn landing-login-top" id="welcomeLogin">Admin login</button>
+      <nav class="landing-nav" aria-label="Public website">
+        <a href="#solutions">Solutions</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#technology">Technology</a>
+        <a href="#about">About</a>
+        <a href="#enquire">Contact</a>
+      </nav>
+      <button type="button" class="btn landing-login-top" id="welcomeLogin">Admin console</button>
     </header>
 
     <main class="landing-main">
       <section class="landing-hero">
+        <p class="landing-eyebrow">Connected irrigation · practical farm decisions</p>
         <h1 class="landing-headline">
-          AgroFlow: smart irrigation for South African farmers
+          A smarter way to manage water on your farm.
         </h1>
         <p class="landing-sub">
-          Sensors in the soil, weather from the sky, and simple advice that tells farmers
-          exactly when and how much to water.
+          AgroFlow brings field conditions, crop needs and irrigation action into one
+          clear experience for South African farmers.
         </p>
+        <div class="landing-hero-actions">
+          <a class="btn" href="#enquire">Talk to AgroFlow</a>
+          <a class="landing-text-link" href="#how-it-works">See how it works <span aria-hidden="true">→</span></a>
+        </div>
+        <ul class="landing-proof" aria-label="AgroFlow system overview">
+          <li><b>Field</b><span>Soil and crop conditions</span></li>
+          <li><b>Platform</b><span>FAO-56-informed advice</span></li>
+          <li><b>Irrigation</b><span>Controlled pump output</span></li>
+        </ul>
       </section>
 
       <section class="hardware-showcase" aria-labelledby="hardwareHeading" data-hardware-showcase>
         <header class="hardware-intro">
           <p class="hardware-eyebrow">From prototype to field controller</p>
-          <h2 id="hardwareHeading" class="hardware-heading">Inside AgroFlow</h2>
+          <h2 id="hardwareHeading" class="hardware-heading">The AgroFlow field controller</h2>
           <p class="hardware-lede">
             Explore a productised view of the hardware behind each AgroFlow irrigation zone.
           </p>
@@ -122,14 +139,14 @@ export const WELCOME_HTML = `
 
             <article class="hardware-stage" data-hardware-stage="1">
               <span class="hardware-stage-number">02</span>
-              <h3>Weatherproof connections</h3>
-              <p>Waterproof cable glands organise the soil sensor, DHT11, pump output and power connections at the enclosure edge.</p>
+              <h3>Connected to the crop</h3>
+              <p>The soil probe enters the root zone, the DHT11 measures the crop microclimate, and protected connections carry power and the pump output.</p>
             </article>
 
             <article class="hardware-stage" data-hardware-stage="2">
               <span class="hardware-stage-number">03</span>
-              <h3>Open the controller</h3>
-              <p>Lift the removable lid to reveal the ESP32, relay board, sensor interface, terminal connections and clean cable routing.</p>
+              <h3>Inside AgroFlow</h3>
+              <p>Remove the junction-box lid to reveal the ESP32, relay board, sensor interface, terminal connections and organised wiring.</p>
             </article>
 
             <article class="hardware-stage" data-hardware-stage="3">
@@ -152,7 +169,7 @@ export const WELCOME_HTML = `
           </div>
 
           <div class="hardware-viewer-column">
-            <div class="hardware-viewer" data-hardware-viewer aria-busy="true">
+            <div class="hardware-viewer" data-hardware-viewer aria-busy="true" style="--hardware-field:url('media/agroflow-field-backdrop.jpg')">
               <div class="hardware-fallback" data-hardware-fallback role="img"
                    aria-label="AgroFlow field controller flow diagram">
                 <div class="hardware-fallback-unit" aria-hidden="true">
@@ -191,7 +208,8 @@ export const WELCOME_HTML = `
         </div>
       </section>
 
-      <section class="landing-section" aria-labelledby="howHeading">
+      <section class="landing-section public-band" id="how-it-works" aria-labelledby="howHeading">
+        <p class="landing-eyebrow">How it works</p>
         <h2 id="howHeading" class="landing-h2">How it works</h2>
         <ol class="landing-steps">
           ${STEPS.map((s, i) => `
@@ -205,8 +223,9 @@ export const WELCOME_HTML = `
         </ol>
       </section>
 
-      <section class="landing-section" aria-labelledby="featuresHeading">
-        <h2 id="featuresHeading" class="landing-h2">What it does</h2>
+      <section class="landing-section" id="solutions" aria-labelledby="featuresHeading">
+        <p class="landing-eyebrow">Solutions</p>
+        <h2 id="featuresHeading" class="landing-h2">One connected view of every irrigation zone</h2>
         <ul class="landing-features">
           ${FEATURES.map((f) => `
             <li class="landing-feature">
@@ -217,6 +236,27 @@ export const WELCOME_HTML = `
               </div>
             </li>`).join("")}
         </ul>
+      </section>
+
+      <section class="landing-section public-technology" id="technology" aria-labelledby="technologyHeading">
+        <div>
+          <p class="landing-eyebrow">Technology</p>
+          <h2 id="technologyHeading" class="landing-h2">From field sensing to a controlled irrigation output.</h2>
+          <p class="landing-step-body">The working prototype uses an ESP32 controller, a capacitive soil-moisture probe, a DHT11 temperature and humidity sensor, and a relay output for a connected pump. The node communicates with the AgroFlow API over Wi-Fi.</p>
+        </div>
+        <ol class="technology-flow" aria-label="AgroFlow technical flow">
+          <li><b>Sense</b><span>Soil moisture and crop-zone temperature and humidity</span></li>
+          <li><b>Decide</b><span>Farm coordinates, weather and FAO-56 crop-water calculations</span></li>
+          <li><b>Act</b><span>ESP32 and relay switch the configured pump output within safety limits</span></li>
+        </ol>
+      </section>
+
+      <section class="landing-section public-about" id="about" aria-labelledby="aboutHeading">
+        <div>
+          <p class="landing-eyebrow">About AgroFlow</p>
+          <h2 id="aboutHeading" class="landing-h2">Built around the realities of water, distance and field work.</h2>
+        </div>
+        <p>AgroFlow is a connected smart-irrigation project that helps a farmer understand conditions in each crop zone, make informed watering decisions and keep a clear record of what happened. The current system combines field hardware, a farmer application, an administration console and backend services—without claiming sensors or gateways the prototype does not use.</p>
       </section>
 
       ${ANDROID_APK_URL || WEB_APP_URL ? `
@@ -242,9 +282,10 @@ export const WELCOME_HTML = `
       ${ENQUIRY_SECTION_HTML}
 
       <div class="landing-cta">
-        <button type="button" class="btn landing-login" id="welcomeLoginBottom">Admin login</button>
+        <button type="button" class="btn landing-login" id="welcomeLoginBottom">Open admin console</button>
       </div>
     </main>
+    <footer class="landing-footer"><span>AgroFlow</span><span>Smart irrigation for real growing areas.</span></footer>
   </div>`;
 
 /* onLogin is called by BOTH login buttons - the one in the header and the one

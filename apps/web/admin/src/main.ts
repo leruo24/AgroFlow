@@ -152,7 +152,8 @@ async function boot(): Promise<void> {
   // re-renders only when the current state would actually change.
   window.addEventListener("hashchange", () => {
     if (isAdminAuthenticated()) return;
-    render(currentState());
+    const next = currentState();
+    if (next !== shownState) render(next);
   });
 
   onAuthChange(() => {
