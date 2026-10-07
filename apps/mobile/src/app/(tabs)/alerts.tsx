@@ -1,3 +1,4 @@
+import { formatSast } from '@/lib/sastTime';
 import { router } from '@/lib/router';
 import { AlertCircle, Bell, ChevronRight } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -46,7 +47,7 @@ export default function AlertsScreen() {
           <View style={styles.rowTop}><Icon size={21} color={severe ? colors.error : colors.textSecondary} strokeWidth={1.7} /><Text style={styles.title}>{alert.title}</Text>{!alert.read && <Text style={styles.buttonText}>Unread</Text>}{alert.zoneId && <ChevronRight size={19} color={colors.textSecondary} />}</View>
           <Text style={styles.body}>{alert.message}</Text>
           <WhyLink explanation={why[alert.id]} compact />
-          <Text style={styles.caption}>{[alert.zone, Number.isFinite(Date.parse(alert.timestamp)) ? new Date(alert.timestamp).toLocaleString() : 'Time unavailable'].filter(Boolean).join(' · ')}</Text>
+          <Text style={styles.caption}>{[alert.zone, formatSast(alert.timestamp) ?? 'Time unavailable'].filter(Boolean).join(' · ')}</Text>
         </TouchableOpacity>;
       })}
   </ScrollView></SafeAreaView>;
