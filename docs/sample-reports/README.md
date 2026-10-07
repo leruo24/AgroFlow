@@ -32,7 +32,8 @@ seven made-up enquiries (one outside the period), written by
 `AGROFLOW_WRITE_SAMPLES=1 dotnet test --filter EnquiryReport`. No real
 person's details: the report never reads names, phone numbers or emails.
 
-What to look for: "Do this next" first (call-backs due today, enquiries past
-the promised 2 working days, three unanswered calls, the top reason for
-"no"); then the five figures, and one chart per question, each heading kept
+What to look for: "Do this next" first - only counts from the data: overdue
+call-backs, enquiries not called yet (and how many are past the promised 2
+working days), and the most common reason for "no" as a plain statistic;
+then the five figures, and one chart per question, each heading kept
 on the page with its chart.

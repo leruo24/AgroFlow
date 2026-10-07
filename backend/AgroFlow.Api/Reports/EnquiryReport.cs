@@ -104,21 +104,17 @@ internal static class EnquiryReport
 
         var called = rows.Where(e => e.FirstCalledAt.HasValue).ToList();
         var won = rows.Count(e => e.Status == "won");
-        var today = DateOnly.FromDateTime(now.ToOffset(Sast).Date);
+        bool InFilters(EnquiryFact e) =>
+            (province is null || e.Province == province) && (handler is null || e.HandlerId == handler);
 
-        // "Due" means its day has come (SAST), so this morning's list includes
-        // this afternoon's call-backs. Across ALL enquiries, not the period:
-        // a call-back promised last month is still owed today.
-        var dueToday = allEnquiries.Count(e =>
-            e.Status == "open" && e.CallbackAt is { } cb && DateOnly.FromDateTime(cb.ToOffset(Sast).Date) <= today
-            && (province is null || e.Province == province) && (handler is null || e.HandlerId == handler));
+        // Across ALL enquiries, not only the period: a call-back promised last
+        // month is still owed, and an enquiry from last week still waits.
+        // Overdue: the call-back time someone logged has passed.
+        var overdue = allEnquiries.Count(e =>
+            e.Status == "open" && e.CallbackAt is { } cb && cb <= now && InFilters(e));
 
-        var waitingTooLong = allEnquiries.Count(e =>
-            e.Status is "new" or "open" && e.FirstCalledAt is null
-            && WorkingDaysBetween(e.CreatedAt, now) >= PromisedWorkingDays
-            && (province is null || e.Province == province) && (handler is null || e.HandlerId == handler));
-
-        var unreachable = rows.Count(e => e.Status == "open" && e.NoAnswerCount >= EnquiryRules.NoAnswerLimit);
+        var uncalled = allEnquiries.Where(e => e.Status is "new" or "open" && e.FirstCalledAt is null && InFilters(e)).ToList();
+        var pastPromise = uncalled.Count(e => WorkingDaysBetween(e.CreatedAt, now) >= PromisedWorkingDays);
 
         var outcomes = OutcomeLabels.Select(kv => new Count(kv.Value, rows.Count(e => e.Outcome == kv.Key))).ToList();
         outcomes.Insert(0, new Count("Not called yet", rows.Count(e => e.FirstCalledAt is null)));
@@ -147,20 +143,22 @@ internal static class EnquiryReport
             .Select(g => new Count(g.Key, g.Count()))
             .OrderByDescending(c => c.Value).ThenBy(c => c.Label, StringComparer.Ordinal).ToList();
 
+        // "Do this next": counts from the data and nothing else - no advice
+        // about products or options (follow-up: an invented suggestion was
+        // removed). Three kinds of line, each only when its count is not zero.
         var next = new List<string>();
-        if (dueToday > 0) next.Add($"{dueToday} call-back{(dueToday == 1 ? " is" : "s are")} due today.");
-        if (waitingTooLong > 0)
-            next.Add($"{waitingTooLong} enquir{(waitingTooLong == 1 ? "y is" : "ies are")} older than {PromisedWorkingDays} working days with no call - the form promised one by now.");
-        if (unreachable > 0)
-            next.Add($"{unreachable} enquir{(unreachable == 1 ? "y has" : "ies have")} had no answer {EnquiryRules.NoAnswerLimit} times: try a different time of day, or close {(unreachable == 1 ? "it" : "them")}.");
+        if (overdue > 0)
+            next.Add($"{overdue} call-back{(overdue == 1 ? " is" : "s are")} overdue.");
+        if (uncalled.Count > 0)
+            next.Add($"{uncalled.Count} enquir{(uncalled.Count == 1 ? "y has" : "ies have")} not been called yet"
+                     + (pastPromise > 0 ? $"; {pastPromise} of them {(pastPromise == 1 ? "is" : "are")} past the {PromisedWorkingDays} working days the form promises." : "."));
         if (reasons.Count > 0)
         {
             var top = reasons[0];
-            var key = EnquiryRules.Reasons.First(kv => kv.Value == top.Label).Key;
-            var hint = key == "no_internet" ? ": consider the offline kit option" : "";
-            next.Add($"The top reason for \"no\" is {char.ToLowerInvariant(top.Label[0]) + top.Label[1..]} ({top.Value} of {lost.Count}){hint}.");
+            var pct = (int)Math.Round(100.0 * top.Value / lost.Count, MidpointRounding.AwayFromZero);
+            next.Add($"Most common reason for \"no\": {top.Label} - {top.Value} of {lost.Count} ({pct}%).");
         }
-        if (next.Count == 0) next.Add("Nothing is waiting: every enquiry has been called and no call-back is due.");
+        if (next.Count == 0) next.Add("No call-backs are overdue and every enquiry has been called.");
 
         var filters = new List<string> { $"{from.ToString("d MMM yyyy", Inv)} – {to.ToString("d MMM yyyy", Inv)}" };
         if (province != null) filters.Add(province);
@@ -177,7 +175,7 @@ internal static class EnquiryReport
             ConversionPercent = rows.Count == 0 ? null : Math.Round(100.0 * won / rows.Count, 1),
             AverageHoursToFirstCall = called.Count == 0 ? null
                 : Math.Round(called.Average(e => (e.FirstCalledAt!.Value - e.CreatedAt).TotalHours), 1),
-            OverdueCallbacks = dueToday,
+            OverdueCallbacks = overdue,
             Outcomes = outcomes,
             Reasons = reasons,
             OtherReasons = otherTexts,

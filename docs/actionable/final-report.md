@@ -53,9 +53,12 @@ which are missing.
 |---|---|---|
 | `Telegram__AdminGroupChatId` | Item 4: a copy of automatic reports and delivery alerts to an admin group chat | Optional |
 
-No other configuration was added. Item 2c's Telegram "Why" button needs the
-webhook to receive `callback_query` updates (`allowed_updates`), noted in
-progress.md.
+No other configuration was added. The Telegram "Why am I seeing this?"
+button needs no webhook: the existing polling service asks for
+`callback_query` updates, answers each tap with `answerCallbackQuery`, and
+sends the plain explanation only to a chat linked to the farm it belongs to
+(tested end to end in `TelegramPollingWhyTests`). Polling must be on
+(`Telegram__EnablePolling`) on exactly one instance, as before.
 
 ## 4. Mobile: EAS Update or a new APK?
 
@@ -107,5 +110,7 @@ What FAO-56 cannot answer, kept out of the app until a source is found
 - `expo-doctor`: 20/21; seven Expo packages are a patch behind SDK 57, as
   they were before this work. Left alone (production packages are out of
   scope); upgrading them would need a new APK - see the evidence README §9.
-- "Consider the offline kit option" in the enquiry report is the brief's own
-  example wording; confirm such an option exists before relying on it.
+- The enquiry report's "Do this next" is counts from the data only (overdue
+  call-backs, uncalled enquiries, the most common reason for "no"); the
+  brief's example suggestion of an "offline kit option" was removed, as no
+  such option exists (follow-up, `fix/followups`).

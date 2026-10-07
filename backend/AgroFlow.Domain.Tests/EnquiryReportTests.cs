@@ -85,14 +85,13 @@ public class EnquiryReportTests
         var c = EnquiryReport.Compose(Enquiries, Calls, From, To, Now, null, null, null);
         Assert.Equal(new[]
         {
-            "1 call-back is due today.",
-            "1 enquiry is older than 2 working days with no call - the form promised one by now.",
-            "1 enquiry has had no answer 3 times: try a different time of day, or close it.",
-            "The top reason for \"no\" is no reliable internet or WiFi (1 of 2): consider the offline kit option.",
+            "1 call-back is overdue.",
+            "1 enquiry has not been called yet; 1 of them is past the 2 working days the form promises.",
+            "Most common reason for \"no\": No reliable internet or WiFi - 1 of 2 (50%).",
         }, c.DoThisNext);
 
         var quiet = EnquiryReport.Compose(new List<EnquiryFact>(), new List<EnquiryCallFact>(), From, To, Now, null, null, null);
-        Assert.Equal(new[] { "Nothing is waiting: every enquiry has been called and no call-back is due." }, quiet.DoThisNext);
+        Assert.Equal(new[] { "No call-backs are overdue and every enquiry has been called." }, quiet.DoThisNext);
         Assert.Null(quiet.ConversionPercent);
         Assert.Null(quiet.AverageHoursToFirstCall);
     }
@@ -166,4 +165,37 @@ public class EnquiryReportTests
         System.IO.File.WriteAllBytes(System.IO.Path.Combine(folder, "enquiries-follow-up.pdf"), EnquiryReportPdf.Build(c, Now));
         System.IO.File.WriteAllBytes(System.IO.Path.Combine(folder, "enquiries-follow-up.xlsx"), EnquiryReportPdf.Workbook(c));
     }
+
+    [Fact]
+    public void Do_this_next_is_only_counts_from_the_data_never_advice()
+    {
+        // A call-back later today is not overdue yet; an enquiry from this
+        // morning is uncalled but inside the promise.
+        var rows = new List<EnquiryFact>
+        {
+            new(20, At(10, 7, 8), "Gauteng", "new", null, null, null, null, null, null, null, 0, null),
+            new(21, At(10, 6, 9), "Gauteng", "open", "callback", null, null, A, "Leruo", At(10, 6, 10), At(10, 7, 15), 0, null),
+            new(22, At(10, 1, 9), "Gauteng", "lost", "not_interested", "too_expensive", null, A, "Leruo", At(10, 1, 11), null, 0, null),
+            new(23, At(10, 1, 9), "Gauteng", "lost", "not_interested", "too_expensive", null, A, "Leruo", At(10, 1, 11), null, 0, null),
+            new(24, At(10, 1, 9), "Gauteng", "lost", "not_interested", "no_internet", null, A, "Leruo", At(10, 1, 11), null, 0, null),
+        };
+        var c = EnquiryReport.Compose(rows, new List<EnquiryCallFact>(), From, To, Now, null, null, null);
+
+        Assert.Equal(0, c.OverdueCallbacks);
+        Assert.Equal(new[]
+        {
+            "1 enquiry has not been called yet.",
+            "Most common reason for \"no\": Too expensive - 2 of 3 (67%).",
+        }, c.DoThisNext);
+
+        // Never a suggestion about products or options - only what the data says.
+        foreach (var line in c.DoThisNext.Concat(Content().DoThisNext))
+        {
+            Assert.DoesNotContain("consider", line, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("option", line, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("kit", line, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private static EnquiryReportContent Content() => EnquiryReport.Compose(Enquiries, Calls, From, To, Now, null, null, null);
 }

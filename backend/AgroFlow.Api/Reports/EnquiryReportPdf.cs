@@ -12,7 +12,7 @@ internal static class EnquiryReportPdf
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     public const string FooterNote =
-        "Counts are for enquiries received in the period. Call-backs due and enquiries waiting are as of today.";
+        "Counts are for enquiries received in the period. Overdue call-backs and uncalled enquiries are as of when the report was made.";
 
     public static string HoursText(double? hours) => hours switch
     {
@@ -55,7 +55,7 @@ internal static class EnquiryReportPdf
                     Figure(row, c.BecameFarmers.ToString(Inv) +
                         (c.ConversionPercent is { } p ? $" ({p.ToString("0.#", Inv)}%)" : ""), "became farmers");
                     Figure(row, HoursText(c.AverageHoursToFirstCall), "average time to first call");
-                    Figure(row, c.OverdueCallbacks.ToString(Inv), "call-backs due");
+                    Figure(row, c.OverdueCallbacks.ToString(Inv), "call-backs overdue");
                 });
 
                 Bars(col, "Outcomes", c.Outcomes, "enquiries");
@@ -157,7 +157,7 @@ internal static class EnquiryReportPdf
         summary.Add(XlsxWriter.Cell.Of("Became farmers"), XlsxWriter.Cell.Of(c.BecameFarmers));
         summary.Add(XlsxWriter.Cell.Of("Conversion rate (%)"), XlsxWriter.Cell.Maybe(c.ConversionPercent, XlsxStyle.OneDecimal));
         summary.Add(XlsxWriter.Cell.Of("Average hours to first call"), XlsxWriter.Cell.Maybe(c.AverageHoursToFirstCall, XlsxStyle.OneDecimal));
-        summary.Add(XlsxWriter.Cell.Of("Call-backs due"), XlsxWriter.Cell.Of(c.OverdueCallbacks));
+        summary.Add(XlsxWriter.Cell.Of("Call-backs overdue"), XlsxWriter.Cell.Of(c.OverdueCallbacks));
         summary.AddBlank();
         summary.Add(XlsxWriter.Cell.Of(FooterNote, XlsxStyle.Note));
 

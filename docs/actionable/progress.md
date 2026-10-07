@@ -780,4 +780,25 @@ Two small test-only changes to production code, both behaviour-neutral: the
 admin filter's role lookup is an injectable `IProfileRoles` (the API
 registers the database one, and the filter falls back to it), and
 `public partial class Program {}` lets the tests host the real API.
-`Microsoft.AspNetCore.Mvc.Testing` was added to the **test** project only.
+`Microsoft.AspNetCore.Mvc.Testing` was added to the **test** project only.
+
+## Follow-ups (`fix/followups`)
+
+1. **Telegram "Why am I seeing this?" without a webhook.** Already wired in
+   item 2c: `getUpdates` asks for `callback_query`, `TelegramPollingService`
+   routes a tap to `TelegramWhyHandler`, which always answers it
+   (`answerCallbackQuery`) and sends the plain explanation (never the
+   technical line) only to a chat linked to the explanation's farm. What was
+   missing was proof of the whole path: `TelegramPollingWhyTests` pushes real
+   Telegram-shaped updates through the polling service with the real client
+   and records every Bot API call (owner chat: answer then explanation;
+   any other chat: answer only, nothing sent; unknown or chat-less taps:
+   answered). Removing the ownership check fails it - checked.
+2. **Enquiry report "Do this next" from data only.** The "consider the
+   offline kit option" suggestion is gone (no such option exists), and so is
+   the advice line about three unanswered calls. The lines are now only:
+   overdue call-backs (call-back time passed), enquiries not called yet (and
+   how many are past the promised 2 working days), and the most common reason
+   for "no" as a statistic ("Too expensive - 2 of 3 (67%)"). The figure on the
+   report is now "call-backs overdue" (it used to count call-backs later
+   today too). Tests updated and added; sample report regenerated.
