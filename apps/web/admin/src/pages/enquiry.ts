@@ -6,6 +6,7 @@
    person is told at once; the server's word is final and is shown as-is. */
 
 import { ZONE_CROPS } from "@/data/referenceData";
+import { isRawNetworkError, networkFailureFor, plainError } from "@/lib/plainError";
 
 const API_BASE = (import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "").trim();
 
@@ -145,11 +146,13 @@ export function wireEnquiry(root: HTMLElement): void {
     const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (submit) submit.disabled = true;
 
-    void fetch(`${API_BASE}/api/public/enquiries`, {
+    const url = `${API_BASE}/api/public/enquiries`;
+    void fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     })
+      .catch(async (err: unknown) => { throw isRawNetworkError(err) ? await networkFailureFor(url, err) : err; })
       .then(async (res) => {
         const reply = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
         if (!res.ok) throw new Error(reply.error || "We could not send your enquiry. Please try again.");
@@ -158,8 +161,11 @@ export function wireEnquiry(root: HTMLElement): void {
         thanks.hidden = false;
       })
       .catch((err: unknown) => {
-        error.textContent = err instanceof Error ? err.message : "We could not send your enquiry. Please try again.";
+        // Admin polish, item 7: plain words, and everything typed stays in
+        // the form - the button becomes Retry and sends it again.
+        error.textContent = plainError(err, "We could not send your enquiry. Please try again.");
         error.hidden = false;
+        if (submit) submit.textContent = "Retry";
       })
       .finally(() => {
         sending = false;

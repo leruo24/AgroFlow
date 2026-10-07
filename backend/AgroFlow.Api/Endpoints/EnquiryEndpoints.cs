@@ -20,6 +20,12 @@ public static class EnquiryEndpoints
     public static void MapEnquiryEndpoints(this WebApplication app)
     {
         app.MapPost("/api/public/enquiries", SubmitAsync).AllowAnonymous();
+
+        // Admin polish, item 7: "is the server there?" for the admin's error
+        // messages. When a request fails, the admin asks this (a different
+        // path); if it answers, a browser extension probably blocked the first
+        // request. No login, no database, and it says nothing but "ok".
+        app.MapGet("/api/public/ping", () => Results.Ok(new { ok = true })).AllowAnonymous();
     }
 
     private static async Task<IResult> SubmitAsync(

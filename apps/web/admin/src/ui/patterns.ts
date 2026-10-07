@@ -17,11 +17,13 @@
  * this app.
  */
 
+import { dismissButton, hiddenBy, historyList, type Dismissal, type DismissView } from "@/lib/dismiss";
 import { whyLink, type Explanation } from "@/lib/why";
 import { esc, fmtDateTimeSast } from "@/lib/format";
 import type { Handling } from "@/types/models";
 import { Icon } from "@/lib/icons";
 import { isAbort } from "@/lib/navigation";
+import { plainError } from "@/lib/plainError";
 
 /* ------------------------------------------------------------------ *
  * Empty states
@@ -67,7 +69,7 @@ export function errorState(opts: {
       <span class="error-state-ico" aria-hidden="true">${Icon.circleX}</span>
       <div class="error-state-body">
         <h4>${esc(opts.title)}</h4>
-        <p>${esc(opts.detail ?? "Something went wrong loading this page.")}</p>
+        <p>${esc(plainError(opts.detail ?? "", "Something went wrong loading this page."))}</p>
       </div>
       ${opts.retryAct
         ? `<button class="btn ghost" data-act="${esc(opts.retryAct)}"${
@@ -96,10 +98,7 @@ export async function withErrorState(
 
     return errorState({
       title: `${title} could not be loaded`,
-      detail:
-        error instanceof Error
-          ? error.message
-          : "The server did not answer. Check your connection and try again.",
+      detail: plainError(error, "The server did not answer. Check your connection and try again."),
     });
   }
 }
@@ -396,6 +395,11 @@ export type AttentionCard = {
   icon?: string;
   /* Item 2c: what the count counts and why it is in the queue. */
   why?: Explanation;
+  /* Admin polish: what the count is made of (ids). A dismissed critical card
+     comes back when this changes - the condition happened again. */
+  conditionKey?: string;
+  /* Its own name for dismissing, when two cards open the same page. */
+  key?: string;
 };
 
 /* Home's action queue.
@@ -422,12 +426,22 @@ export function attentionCard(c: AttentionCard): string {
 /* The card plus its "Why am I seeing this?" link, side by side rather than
    nested - a button inside a button is invalid HTML. */
 function attentionItem(c: AttentionCard): string {
-  const link = whyLink(c.why);
-  return link ? `<div class="attn-item">${attentionCard(c)}${link}</div>` : attentionCard(c);
+  // Admin polish: each card can be dismissed (×), beside it like the Why link.
+  const dismiss = dismissButton({
+    kind: "attention", key: c.key ?? c.act, title: `${c.title}: ${c.count}`, critical: c.tone === "bad", conditionKey: c.conditionKey ?? null,
+  });
+  return `<div class="attn-item">${attentionCard(c)}${whyLink(c.why)}${dismiss}</div>`;
 }
 
-export function attentionQueue(cards: AttentionCard[]): string {
-  const live = cards.filter((c) => c.count > 0);
+/* Admin polish: Active / Dismissed / All. Dismissed cards leave the queue but
+   are listed in its history with Restore. */
+export function attentionQueue(cards: AttentionCard[], dismissals: Dismissal[] = [], view: DismissView = "active"): string {
+  const live = cards.filter((c) => c.count > 0
+    && !hiddenBy(dismissals, "attention", c.key ?? c.act, c.tone === "bad", c.conditionKey));
+  const history = view === "active" ? "" : `
+    <h4 class="sub-heading">Dismissed</h4>
+    ${historyList(dismissals, "attention", "No attention card has been dismissed.")}`;
+  if (view === "dismissed") return history;
 
   if (live.length === 0) {
     return `
@@ -437,10 +451,10 @@ export function attentionQueue(cards: AttentionCard[]): string {
           <b>Nothing needs attention</b>
           <p class="muted">No waiting requests, open critical alerts, offline kits or failed reports.</p>
         </div>
-      </div>`;
+      </div>${history}`;
   }
 
-  return `<div class="attn-grid">${live.map(attentionItem).join("")}</div>`;
+  return `<div class="attn-grid">${live.map(attentionItem).join("")}</div>${history}`;
 }
 
 /* ------------------------------------------------------------------ *

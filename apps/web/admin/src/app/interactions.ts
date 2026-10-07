@@ -1,7 +1,8 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
 import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms, findAttentionGroup } from "@/data/api";
-import { toast } from "@/lib/toast";
+import { toast, toastWithUndo } from "@/lib/toast";
+import { setView as setDismissView } from "@/lib/dismiss";
 import { openDrawer, closeDrawer, beginPanelIntent, currentPanelIntent } from "@/lib/drawer";
 import {
   createFarmer,
@@ -36,7 +37,6 @@ import {
   getActivityLog,
   getEntityTimeline,
   KIT_TYPES,
-  getPlatformConfig,
   updateMyProfile,
   getMyTelegramStatus,
   requestMyTelegramCode,
@@ -49,7 +49,7 @@ import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
 import { timelineHtml, rememberReportFarm } from "@/pages/analytics";
-import { requestActions, setRequestsTab } from "@/pages/requests";
+import { requestActions, setRequestsTab, setRequestFilter } from "@/pages/requests";
 import { callHistory, enquiryActions, enquiryStatus, cropsText, logCallHtml, readLogCall, syncLogCall } from "@/pages/enquiries";
 import { requestTimeline, formatCrop } from "@/pages/requests";
 import { toCSV } from "@/lib/csv";
@@ -64,8 +64,9 @@ import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } fro
 import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { telegramState } from "@/pages/users";
-import { signOut, getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { plainError } from "@/lib/plainError";
+import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
+import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -2085,6 +2086,50 @@ case "delete-user": {
     case "go-mqtt-logins":
       return void navigate("mqttLogins");
 
+    /* Admin polish, item 1: dismiss a notification. Critical ones ask for an
+       optional note first. Undo (5 s) restores it; both steps are recorded. */
+    case "dismiss-item": {
+      const d = el.dataset;
+      const critical = d["critical"] === "1";
+      const send = (note: string | null): void => {
+        void dismissNotification({
+          kind: d["kind"] ?? "", itemKey: d["key"] ?? "", title: d["title"] ?? "",
+          raisedAt: d["raised"] || null, critical, conditionKey: d["condition"] || null, note,
+        })
+          .then((r) => {
+            toastWithUndo("Dismissed. It is under Dismissed if you need it back.", () => {
+              void restoreDismissal(r.id)
+                .then(() => { toast("Restored.", "success"); void refresh(); })
+                .catch((e: unknown) => showErrorModal("Could not undo", e instanceof Error ? e.message : "Try Restore under Dismissed."));
+            });
+            void refresh();
+          })
+          .catch((e: unknown) => showErrorModal("Could not dismiss", e instanceof Error ? e.message : "Nothing was changed."));
+      };
+      if (!critical) return void send(null);
+      return openDrawer({
+        title: "Dismiss this?",
+        subtitle: "It is critical. It comes back if it happens again.",
+        fields: [{ label: "Note (optional)", value: "", editable: true, name: "note" }],
+        confirmLabel: "Dismiss",
+        onConfirm: (v) => send((v["note"] ?? "").trim() || null),
+      });
+    }
+
+    case "restore-dismissal": {
+      try {
+        await restoreDismissal(Number(idAttr));
+        toast("Restored.", "success");
+      } catch (e) {
+        showErrorModal("Could not restore", e instanceof Error ? e.message : "Nothing was changed.");
+      }
+      return void refresh();
+    }
+
+    case "dismiss-view":
+      setDismissView(el.dataset["surface"] ?? "", el.dataset["view"] ?? "active");
+      return void refresh();
+
     /* Item 6c: the Enquiries & sales follow-up report. */
     case "enquiry-report": {
       const val = (sel: string): string =>
@@ -2110,6 +2155,11 @@ case "delete-user": {
     /* Item 6c: the two tabs on Requests. */
     case "requests-tab":
       setRequestsTab(el.dataset["tab"] ?? "requests");
+      return void refresh();
+
+    // Admin polish, item 2: Open / Completed / All.
+    case "requests-filter":
+      setRequestFilter(el.dataset["filter"] ?? "all");
       return void refresh();
 
     case "go-enquiries":
@@ -2616,9 +2666,6 @@ case "delete-user": {
     case "go-settings-account":
       return void refreshMyTelegramStatus();
 
-    case "go-settings-thresholds":
-      return void loadPlatformThresholds();
-
     case "save-my-profile": {
       const v = collectFields();
       const name = (v["myName"] ?? "").trim();
@@ -2829,29 +2876,6 @@ export async function refreshMyTelegramStatus(): Promise<void> {
   }
 }
 
-export async function loadPlatformThresholds(): Promise<void> {
-  const host = document.getElementById("platformThresholds");
-  if (!host) return;
-
-  try {
-    const { groups } = await getPlatformConfig();
-
-    host.innerHTML = groups.map((group) => `
-      <div class="settings-block">
-        <h4>${esc(group.title)}</h4>
-        ${detailList(group.values.map((v) => [v.label, esc(v.value)] as [string, string]))}
-        ${group.values.map((v) => `<p class="muted sm">${esc(v.label)}: ${esc(v.explains)}</p>`).join("")}
-        <p class="muted">Set in: ${esc(group.setIn)}. Changing one needs a restart of the API.</p>
-      </div>`).join("");
-  } catch (error) {
-    host.innerHTML = errorState({
-      title: "The platform thresholds could not be read",
-      detail: error instanceof Error ? error.message : "The server did not answer.",
-      retryAct: "go-settings-thresholds",
-    });
-  }
-}
-
 /* The comparison table's rows, read back out of the DOM.
  *
  * Reading the rendered table rather than recomputing is deliberate: the
@@ -2948,7 +2972,7 @@ async function renderQr(
 function showHandoverNotice(message: string): void {
   const box = document.getElementById("handoverNotice");
   if (!box) return;
-  box.textContent = message;
+  box.textContent = plainError(message);
   box.style.display = "block";
 }
 
@@ -2962,7 +2986,7 @@ function clearHandoverNotice(): void {
 function showOnboardingError(message: string): void {
   const box = document.getElementById("onboardingError");
   if (!box) return;
-  box.textContent = message;
+  box.textContent = plainError(message);
   box.style.display = "block";
 }
 
@@ -3894,7 +3918,6 @@ export function wirePageInteractions(): void {
   // And the router calls this after a Settings tab renders.
   onSettingsTabRendered((tab) => {
     if (tab === "My account") void refreshMyTelegramStatus();
-    if (tab === "Platform thresholds") void loadPlatformThresholds();
   });
 
   wireFilters();
@@ -3981,12 +4004,8 @@ export function initHeader(): void {
     });
   }
 
-  document.getElementById("logoutBtn")?.addEventListener("click", () => {
-    menu.classList.remove("open");
-    void signOut().then(() => toast("Signed out.", "info"));
-    // Rendering the login screen again is main.ts's job, driven by
-    // app/auth.ts's onAuthChange - not this click handler.
-  });
+  // Log out (#logoutBtn here and the sidebar's) is wired in main.ts, which
+  // owns what is shown after it: the landing page (admin polish, item 4).
 
   updateHeaderIdentity();
 }

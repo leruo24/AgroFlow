@@ -18,6 +18,8 @@
  * connection that cannot fetch a tile server.
  */
 
+import { plainError } from "@/lib/plainError";
+
 const LEAFLET_VERSION = "1.9.4";
 const LEAFLET_CSS = `https://cdnjs.cloudflare.com/ajax/libs/leaflet/${LEAFLET_VERSION}/leaflet.min.css`;
 const LEAFLET_JS = `https://cdnjs.cloudflare.com/ajax/libs/leaflet/${LEAFLET_VERSION}/leaflet.min.js`;
@@ -184,7 +186,7 @@ export async function mountLocationPicker(
     L = await loadLeaflet();
   } catch (error) {
     canvas.hidden = true;
-    say(error instanceof Error ? error.message : "The map could not be loaded.");
+    say(plainError(error, "The map could not be loaded."));
     return { destroy: () => undefined };
   }
 

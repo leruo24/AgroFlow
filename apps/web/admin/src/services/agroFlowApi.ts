@@ -851,6 +851,28 @@ export function anonymiseEnquiry(id: number): Promise<{ message: string }> {
   return authorizedJson(`/api/admin/enquiries/${id}/anonymise`, "POST", {});
 }
 
+/* ---------------- Admin polish: dismiss and history ---------------- */
+
+export function getAdminDismissals(): Promise<import("@/lib/dismiss").Dismissal[]> {
+  return authorizedJson("/api/admin/dismissals", "GET");
+}
+
+export function dismissNotification(input: {
+  kind: string; itemKey: string; title: string; raisedAt: string | null; critical: boolean;
+  conditionKey: string | null; note: string | null;
+}): Promise<{ id: number; message: string }> {
+  return authorizedJson("/api/admin/dismissals", "POST", input);
+}
+
+/* A critical item's condition has gone: close its dismissal so a recurrence shows. */
+export function clearDismissalCondition(id: number): Promise<{ id: number; message: string }> {
+  return authorizedJson(`/api/admin/dismissals/${id}/condition-cleared`, "POST", {});
+}
+
+export function restoreDismissal(id: number): Promise<{ id: number; message: string }> {
+  return authorizedJson(`/api/admin/dismissals/${id}/restore`, "POST", {});
+}
+
 export function getHandling(kind: HandlingKind): Promise<HandlingState[]> {
   return authorizedJson<HandlingState[]>(`/api/admin/handling/${kind}`, "GET");
 }

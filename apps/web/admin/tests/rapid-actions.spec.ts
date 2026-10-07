@@ -76,23 +76,26 @@ test("leaving a page while its panel is loading does not open the panel on the n
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("settings tabs: the last tab clicked is the one shown", async ({ page }) => {
+/* Admin polish, item 6 left Settings with one tab (My account), so there is
+   no longer a tab to race against. What can still race is the same tab
+   re-rendered while its Telegram status is in flight: the last render must
+   end up filled, once, with no error. */
+test("settings: clicking My account repeatedly settles on one filled panel", async ({ page }) => {
   const errors = captureErrors(page);
   await mockBackend(page, { seed: 11 });
 
   await page.goto("/#settings");
-  await expect(page.locator(".tab[data-tab]")).toHaveCount(3);
+  await expect(page.locator(".tab[data-tab]")).toHaveCount(1);
   await settled(page);
 
-  for (const tab of ["Platform thresholds", "Backup & Recovery", "My account", "Platform thresholds", "Backup & Recovery"]) {
-    await page.locator(`.tab[data-tab="${tab}"]`).click({ delay: 0 });
+  for (let i = 0; i < 5; i++) {
+    await page.locator('.tab[data-tab="My account"]').click({ delay: 0 });
   }
   await settled(page);
 
-  expect(await textNow(page, ".tab.active")).toBe("Backup & Recovery");
-  expect(await textNow(page, "#settingsTabBody")).toContain("Supabase");
-  // The thresholds panel's late answer must not have been written anywhere.
-  await expect(page.locator("#platformThresholds")).toHaveCount(0);
+  expect(await textNow(page, ".tab.active")).toBe("My account");
+  await expect(page.locator("#myTelegramStatus")).toHaveCount(1);
+  await expect(page.locator("#myTelegramStatus")).not.toContainText("Checking…");
   expect(errors, errors.join("\n")).toEqual([]);
 });
 

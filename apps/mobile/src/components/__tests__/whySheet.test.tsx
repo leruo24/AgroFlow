@@ -30,6 +30,9 @@ jest.mock('lucide-react-native', () =>
   new Proxy({}, { get: (_target, name) => (name === '__esModule' ? false : () => null) })
 );
 
+// The insights card reads the farm (for its dismissed-advice history).
+jest.mock('@/context/AgroFlowContext', () => ({ useAgroFlow: () => ({ farm: null }) }));
+
 jest.mock('@/services/agroFlowApi', () => ({
   fetchZoneInsights: jest.fn(),
   dismissZoneInsight: jest.fn(() => Promise.resolve({ message: 'ok' })),

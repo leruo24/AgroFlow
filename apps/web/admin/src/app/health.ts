@@ -10,6 +10,8 @@
  * that lies once is never trusted again.
  */
 
+import { clearedConditions, dismissButton, hiddenBy, historyList, viewOf, viewToggle, type Dismissal } from "@/lib/dismiss";
+import { getAdminDismissals, clearDismissalCondition } from "@/services/agroFlowApi";
 import { esc, fmtAgo } from "@/lib/format";
 import { getPlatformHealth, type HealthResponse, type HealthCheck } from "@/services/agroFlowApi";
 
@@ -27,6 +29,10 @@ const TONE: Record<string, { cls: string; word: string }> = {
  * ------------------------------------------------------------------ */
 
 export async function healthPanelHtml(): Promise<string> {
+  // Admin polish: warnings can be dismissed; dismissed ones leave the grid
+  // and are listed under Dismissed.
+  const dismissals = await getAdminDismissals().catch(() => [] as Dismissal[]);
+  const view = viewOf("health");
   try {
     cached = await getPlatformHealth();
   } catch (error) {
@@ -39,10 +45,20 @@ export async function healthPanelHtml(): Promise<string> {
       </div>`);
   }
 
+  // A check that is OK again (or changed) closes its critical dismissal, so a
+  // repeat shows again.
+  const warnings = new Map(cached.checks.filter((c) => c.status !== "ok").map((c) => [c.key, c.status]));
+  for (const d of clearedConditions(dismissals, "health", warnings)) {
+    void clearDismissalCondition(d.id).catch(() => undefined);
+  }
+
+  const visible = cached.checks.filter((c) =>
+    c.status === "ok" || !hiddenBy(dismissals, "health", c.key, c.status === "down", c.status));
+  const history = view === "active" ? "" : `<h4 class="sub-heading">Dismissed</h4>${historyList(dismissals, "health", "No health warning has been dismissed.")}`;
+
   return panelShell(`
-    <div class="health-grid">
-      ${cached.checks.map(healthCard).join("")}
-    </div>
+    ${view === "dismissed" ? "" : `<div class="health-grid">${visible.map(healthCard).join("")}</div>`}
+    ${history}
     <p class="health-foot muted">
       Checked ${esc(fmtAgo(cached.checkedAt))}. Refreshes every minute.
     </p>`);
@@ -56,7 +72,7 @@ function panelShell(body: string): string {
           <h3>System health</h3>
           <p class="muted">The six things that have to work for a farm to be watered.</p>
         </div>
-        <button class="btn ghost sm" data-act="refresh-health">Refresh</button>
+        <div class="row-actions">${viewToggle("health")}<button class="btn ghost sm" data-act="refresh-health">Refresh</button></div>
       </div>
       <div class="panel-body">${body}</div>
     </section>`;
@@ -70,6 +86,7 @@ function healthCard(c: HealthCheck): string {
       <div class="health-top">
         <span class="dot-r dot-${tone}${c.status === "down" ? " dot-throb" : ""}"></span>
         <b>${esc(c.name)}</b>
+        ${c.status === "ok" ? "" : dismissButton({ kind: "health", key: c.key, title: `${c.name}: ${c.detail}`, critical: c.status === "down", conditionKey: c.status })}
       </div>
       <div class="health-status">${esc(c.detail)}</div>
     </div>`;

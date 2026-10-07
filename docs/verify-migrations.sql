@@ -181,6 +181,9 @@ select
     -- 0044: public enquiries and the append-only call log.
     (select count(*) from pg_class where relname = 'enquiry_call' and relkind = 'r')       as m0044_enquiry,
 
+    -- 0045: dismiss and history for notifications.
+    (select count(*) from pg_class where relname = 'dismissal' and relkind = 'r')          as m0045_dismissal,
+
     -- Not a migration, but applied by hand the same way and just as invisible
     -- when missed: the private bucket generated report PDFs are stored in.
     (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;

@@ -1,3 +1,5 @@
+import { dismissButton, hiddenBy, historyList, viewOf, viewToggle, type Dismissal } from "@/lib/dismiss";
+import { getAdminDismissals } from "@/services/agroFlowApi";
 import { api } from "@/data/api";
 import { getAdminProfile } from "@/app/auth";
 import { handlingCell } from "@/ui/patterns";
@@ -121,11 +123,17 @@ export async function hardwarePage(): Promise<string> {
 /* =========================== OPERATIONS CENTRE =========================== */
 
 export async function alertsPage(): Promise<string> {
-  const alerts = await api.getAlerts();
+  const [alerts, dismissals] = await Promise.all([
+    api.getAlerts(),
+    // Admin polish: dismissed alerts leave the queue but stay in its history.
+    getAdminDismissals().catch(() => [] as Dismissal[]),
+  ]);
+  const view = viewOf("alerts");
+  const isCritical = (p: string): boolean => p === "Critical" || p === "High";
   const me = getAdminProfile()?.id;
   const f = getFilter("alerts");
 
-  const filtered = applyFilters(alerts, f, {
+  const filtered = applyFilters(alerts.filter((a) => !hiddenBy(dismissals, "alert", String(a.id), isCritical(a.priority), null)), f, {
     search: (a) => `${a.id} ${a.title} ${a.farm ?? ""} ${a.user ?? ""} ${a.category}`,
     date: (a) => a.raised,
     farm: (a) => a.farm ?? "",
@@ -166,8 +174,8 @@ export async function alertsPage(): Promise<string> {
   })}
 
   ${panel("Alert Queue", "New → In progress (somebody is handling it) → Resolved. Every step is recorded with who did it.",
-    resultCount(filtered.length, alerts.length, "alerts"),
-    table(["ID", "Raised (SAST)", "Category", "Alert", "Farm", "Farmer", "Handled by", "Priority", "Status", "Actions"],
+    `${viewToggle("alerts")} ${resultCount(filtered.length, alerts.length, "alerts")}`,
+    (view === "dismissed" ? "" : table(["ID", "Raised (SAST)", "Category", "Alert", "Farm", "Farmer", "Handled by", "Priority", "Status", "Actions"],
       filtered, (a) => [
         `<span class="mono">${esc(a.id)}</span>`,
         // fmtDateTimeSast, not the raw column: this cell used to render
@@ -188,8 +196,10 @@ export async function alertsPage(): Promise<string> {
             ? `<a href="#" data-act="reopen-alert" data-id="${esc(a.id)}">Reopen</a>`
             : `<a href="#" data-act="resolve-alert" data-id="${esc(a.id)}">Resolve</a>
                <a href="#" data-act="close-alert" data-id="${esc(a.id)}">Close</a>`}
+          ${dismissButton({ kind: "alert", key: String(a.id), title: a.title, raisedAt: a.raised, critical: isCritical(a.priority) })}
         </span>`,
-      ], "No alerts match the current filters."))}
+      ], "No alerts match the current filters."))
+    + (view === "active" ? "" : `<h4 class="sub-heading">Dismissed</h4>${historyList(dismissals, "alert", "No alert has been dismissed.")}`))}
   `;
 }
 

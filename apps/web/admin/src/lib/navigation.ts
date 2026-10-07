@@ -18,10 +18,12 @@
  * navigation so the reads a superseded page started are cancelled rather than
  * left to finish and be thrown away.
  *
- * It imports nothing, on purpose. The router writes to it and the data layer
+ * It imports only lib/plainError (which imports nothing), on purpose. The router writes to it and the data layer
  * reads from it, and the router already imports every page - if this lived in
  * the router, the data layer importing it would close a loop.
  */
+
+import { isRawNetworkError, networkFailureFor } from "@/lib/plainError";
 
 let token = 0;
 let controller: AbortController | null = null;
@@ -96,7 +98,13 @@ export async function navigationAwareFetch(
     // would sign the admin out.
     !url.includes("/auth/v1/");
 
-  if (!tieToNavigation) return fetch(input, init);
+  if (!tieToNavigation) {
+    try {
+      return await fetch(input, init);
+    } catch (error) {
+      throw await plainFailure(url, error);
+    }
+  }
 
   const signal = controller!.signal;
 
@@ -122,8 +130,14 @@ export async function navigationAwareFetch(
     });
   } catch (error) {
     if (signal.aborted) return new Promise<Response>(() => undefined);
-    throw error;
+    throw await plainFailure(url, error);
   }
+}
+
+/* Admin polish, item 7: a request that never completed becomes a
+   NetworkFailure in plain words; anything else (an abort) passes through. */
+async function plainFailure(url: string, error: unknown): Promise<unknown> {
+  return isRawNetworkError(error) ? networkFailureFor(url, error) : error;
 }
 
 /** For error handlers: was this a cancelled navigation, not a real failure? */

@@ -10,7 +10,8 @@ import { Icon } from "@/lib/icons";
 export const SHELL_HTML = `
   <div class="app" id="appShell">
     <aside class="sidebar" id="sidebar">
-      <div class="brand">
+      <!-- The logo and name go Home (admin polish, item 3). -->
+      <a class="brand" id="brandHome" href="#dashboard" aria-label="AgroFlow Administration - go to Home">
         <!-- Relative path: the site is served from a sub-path on GitHub
              Pages, not a domain root. alt is empty because the wordmark
              beside it already says "AgroFlow" - a screen reader should not
@@ -20,7 +21,7 @@ export const SHELL_HTML = `
           <h1>AgroFlow</h1>
           <div class="sub">Administration</div>
         </div>
-      </div>
+      </a>
       <nav class="nav" id="nav"></nav>
       <!-- Driven by GET /api/admin/health, refreshed every 60 s (see
            app/health.ts). Starts as "Checking…" rather than an assumed
@@ -33,6 +34,8 @@ export const SHELL_HTML = `
           <i class="dot dot-unknown"></i>Checking…
         </span>
       </button>
+      <!-- Always visible (item 4); the avatar menu has the same button. -->
+      <button class="side-logout" data-logout type="button">Log out</button>
     </aside>
 
     <div class="main">
@@ -52,7 +55,7 @@ export const SHELL_HTML = `
             </div>
             <a href="#settings">Profile</a>
             <a href="#settings">Settings</a>
-            <button id="logoutBtn">Sign out</button>
+            <button id="logoutBtn" data-logout type="button">Log out</button>
           </div>
         </div>
       </header>

@@ -488,20 +488,15 @@ export function timelineHtml(rows: AuditRow[], emptyText: string): string {
 
 /* ================================ SETTINGS =============================== */
 
-/* Three tabs, down from five.
- *
- * "General", "Notifications", "Platform Defaults" and "Security" are gone
- * entirely. Between them they held about twenty fields, and not one was read
- * by anything - no settings table exists in this schema. Removing them is the
- * honest half of item 2; the other half is that the thresholds which ARE real
- * were invisible, and now are not. */
-export const SETTINGS_TABS: SettingsTab[] = [
-  "My account", "Platform thresholds", "Backup & Recovery",
-];
+/* Only "My account" (admin polish, item 6). "Platform thresholds" showed
+ * values that can only be changed in the API's configuration, and "Backup &
+ * Recovery" described the Supabase dashboard; neither was something to do
+ * here. The thresholds endpoint itself stays for anything else that reads it. */
+export const SETTINGS_TABS: SettingsTab[] = ["My account"];
 
 export async function settingsPage(): Promise<string> {
   return `
-  ${pageHeader("Settings", "Platform configuration, access policy and data retention.")}
+  ${pageHeader("Settings", "Your details, password and Telegram.")}
   ${panel("Configuration", "", "", `
     <div class="tabs" role="tablist">
       ${SETTINGS_TABS.map((t, i) =>
@@ -564,39 +559,5 @@ export function settingsTabBody(tab: SettingsTab): string {
         </div>
       </div>`;
     }
-
-    case "Platform thresholds":
-      // Filled by loadPlatformThresholds() once the tab renders - these come
-      // from the API, which reads the same configuration the services do, so
-      // the page cannot drift from what is actually running.
-      return `<div id="platformThresholds"><p class="muted">Loading…</p></div>`;
-
-    /* This tab used to state a last cloud backup time, a last local backup
-       time, a retention policy and "82% of 500 GB", with a meter drawn from
-       that 82 - all of it invented. None of those numbers came from anywhere;
-       there is no backup system in this project to report on, and no local
-       storage to be 82% full. Three buttons underneath claimed to start a
-       backup, restore one and download an archive, and did none of it.
-
-       Fabricated facts are worse than a gap: somebody could have read that
-       line and concluded the data was safe. What follows is what is actually
-       true about where AgroFlow's data lives. */
-    case "Backup & Recovery":
-      return `<div class="detail-list">
-        <div class="detail-row"><span>Where the data lives</span><b>Supabase Postgres</b></div>
-        <div class="detail-row"><span>Who backs it up</span><b>Supabase, on the project's plan</b></div>
-        <div class="detail-row"><span>Managed from</span><b>The Supabase dashboard, not here</b></div>
-      </div>
-      <p class="muted">
-        Backups and point-in-time recovery are part of the Supabase project and are configured in
-        the Supabase dashboard under Database → Backups. AgroFlow holds no separate copy of the
-        data and has nothing of its own to back up or restore, so there is nothing to start from
-        this page.
-      </p>
-      <p class="muted">
-        Two things in AgroFlow are deliberately never deleted and so need no backup of their own:
-        archiving a farm hides it and keeps every row (migration 0036), and the administrator
-        activity log cannot be updated or deleted at all (migration 0037).
-      </p>`;
   }
 }

@@ -35,13 +35,6 @@ import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
 const ANDROID_APK_URL = (import.meta.env["VITE_DOWNLOADS_ANDROID_APK_URL"] ?? "").trim();
 const WEB_APP_URL = (import.meta.env["VITE_DOWNLOADS_WEB_APP_URL"] ?? "").trim();
 
-const TEAM = [
-  "Lubaelihle Msuku",
-  "Leruo Matlhatsi",
-  "Olwethu Nkabinde",
-  "Philisile Tyobeka",
-];
-
 const STEPS: { title: string; body: string }[] = [
   {
     title: "Sensors measure the soil",
@@ -158,16 +151,6 @@ export const WELCOME_HTML = `
       </section>` : ""}
 
       ${ENQUIRY_SECTION_HTML}
-
-      <section class="landing-section landing-credits" aria-labelledby="creditsHeading">
-        <h2 id="creditsHeading" class="landing-h2">Who made this</h2>
-        <p class="landing-credit-line">
-          Team 2 — ${TEAM.map(escapeHtml).join(", ")}
-        </p>
-        <p class="landing-credit-line landing-muted">
-          INF3003W, University of Cape Town, in partnership with the Mafikeng Cisco Edge Centre.
-        </p>
-      </section>
 
       <div class="landing-cta">
         <button type="button" class="btn landing-login" id="welcomeLoginBottom">Admin login</button>

@@ -59,7 +59,7 @@ public static class AuditActions
 /// That is a deliberate trade: completeness of the log is sacrificed to
 /// availability of the action, and a dropped row is logged loudly at Error so
 /// it is visible rather than silent.
-public sealed class AuditLog
+public sealed class AuditLog : IAuditWriter
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly ILogger<AuditLog> _logger;
