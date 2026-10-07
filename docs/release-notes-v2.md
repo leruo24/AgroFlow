@@ -20,7 +20,7 @@ page of numbers:
 - **Your soil moisture across the week**, with the healthy range shaded and a
   mark wherever the pump ran.
 - **Advice for the week ahead**, and where each piece of it came from.
-- **The weather for your area against the sensor in your tub**, which is
+- **The weather for your area against the local field sensor**, which is
   usually warmer and more humid — that is normal, and the report says so.
 
 Pick a single zone and you get that zone in detail. Pick "All zones" and you

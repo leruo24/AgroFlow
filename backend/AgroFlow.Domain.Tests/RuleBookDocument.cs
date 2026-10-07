@@ -63,7 +63,8 @@ public static class RuleBookDocument
     private static readonly DateOnly Today = new DateOnly(2026, 10, 6);
 
     // The worked example every table uses, so the numbers can be checked by
-    // hand: maize in a 0.3 m deep tub of 1.5 m², a 1.5 L/min drip line, and a
+    // hand: maize in a 1.5 m² plot with a 0.3 m usable root zone, a
+    // 1.5 L/min drip line, and a
     // 5 mm/day crop water use.
     private const string ExampleCrop = "maize";
     private const double ExampleRootLimitM = 0.3;
@@ -99,8 +100,9 @@ public static class RuleBookDocument
         L("row (a different planting season) - both are published FAO-56 values, and the reason is");
         L("written at the top of `Fao56EngineReference.cs`. No advice on this page comes from it.");
         L("");
-        L("**Worked example** used in every table: maize in a " + N(ExampleRootLimitM) + " m deep tub of " + N(ExampleAreaM2) +
-          " m², a " + N(ExampleFlowLpm) + " L/min drip line, crop water use " + N(ExampleNeedMm) + " mm/day.");
+        L("**Worked example** used in every table: maize in a " + N(ExampleAreaM2) +
+          " m² plot with a " + N(ExampleRootLimitM) + " m usable root zone, a " +
+          N(ExampleFlowLpm) + " L/min drip line, crop water use " + N(ExampleNeedMm) + " mm/day.");
         L("");
         L("## The order the rules run in");
         L("");
@@ -190,11 +192,11 @@ public static class RuleBookDocument
     private static (string Action, string Sentence) Decide(
         Fao56EngineCrop crop, SoilWaterHolding soil, double depletion, double raw, double rainMm)
     {
-        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "Tub 1", CropType = crop.Key, Today = Today };
+        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "North Plot", CropType = crop.Key, Today = Today };
         var result = new ZoneEngineResult
         {
             ZoneId = 1,
-            ZoneName = "Tub 1",
+            ZoneName = "North Plot",
             Crop = crop,
             Soil = soil.Soil,
             BalanceRan = true,
@@ -386,8 +388,8 @@ public static class RuleBookDocument
         L("| Problem | Rule | → Farmer sentence |");
         L("|---|---|---|");
 
-        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "Tub 1", Today = Today, CalibrationWet = 1200, CalibrationDry = 3000 };
-        var result = new ZoneEngineResult { ZoneId = 1, ZoneName = "Tub 1", LatestReadingAtUtc = new DateTime(2026, 10, 6, 6, 0, 0, DateTimeKind.Utc) };
+        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "North Plot", Today = Today, CalibrationWet = 1200, CalibrationDry = 3000 };
+        var result = new ZoneEngineResult { ZoneId = 1, ZoneName = "North Plot", LatestReadingAtUtc = new DateTime(2026, 10, 6, 6, 0, 0, DateTimeKind.Utc) };
 
         string Sentence(ZoneFaultSignals s, string type) =>
             ZoneInsightBuilder.Build(input, result, s).First(i => i.InsightType == type).Message;

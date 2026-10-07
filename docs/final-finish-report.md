@@ -187,7 +187,7 @@ single-zone report.** A farmer who pulls both documents must not find them
 disagreeing about the same zone.
 
 **A zone with no flow rate does not void the farm.** It is left out of the
-total and *named* — "Tub 2 has no flow rate on file, so it is not in the
+total and *named* — "North Plot has no flow rate on file, so it is not in the
 farm's water total" — because a total quietly missing a zone is the kind of
 error somebody acts on without knowing they are acting on it.
 

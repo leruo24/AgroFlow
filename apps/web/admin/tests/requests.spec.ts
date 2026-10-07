@@ -110,7 +110,8 @@ test("Set up the farm opens the wizard prefilled from the request, and saving it
   await wiz.locator("[data-wizard-next]").click();
 
   await expect(wiz.locator('[data-field="zone_crop_0"]')).toHaveValue("potato");
-  await wiz.locator('[data-field="zone_area_preset_0"]').selectOption("bed");
+  await wiz.locator('[data-field="zone_area_preset_0"]').selectOption("field");
+  await wiz.locator('[data-field="zone_area_m2_0"]').fill("200");
   await wiz.locator("[data-wizard-next]").click();
   await wiz.locator("[data-wizard-confirm]").click();
 

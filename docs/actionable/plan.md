@@ -271,7 +271,7 @@ types), `Endpoints/ReportEndpoints.cs` (moisture and schedule move onto the
 shared model), `ReportShell.cs`, `ChartSvg.cs` (weekly bars, day-card row).
 
 **Design:** order — This week, do this → How your farm did → three
-question-charts → Area vs at your plants (only days with tub data) → Improve
+question-charts → Area vs at your plants (only days with local sensor data) → Improve
 your advice → Technical appendix (all jargon lives only here). Period wording
 from the real period length. Shared notes printed once at farm level. Tables
 never split a row; headers repeat.
@@ -281,7 +281,7 @@ never split a row; headers repeat.
       much, a confidence badge and a "Why:" line.
 - [ ] No "this week" in a 30-day report (test across 7/14/30-day periods).
 - [ ] Periods over 14 days chart weekly, not daily.
-- [ ] The weather comparison is omitted when there is no tub data, replaced by
+- [ ] The weather comparison is omitted when there is no local sensor data, replaced by
       one sentence.
 - [ ] No ISO timestamps; no jargon outside the appendix (scanned test over the
       rendered farmer text).

@@ -12,7 +12,7 @@ Each major feature, and the tests that prove it. Backend tests are classes in
 | **Actionable insights** | `IrrigationAdvisorTests`, `ExplanationTests` (every insight type), `ManualLoggingTests` (TodayRules), `AdviceNeverBlockedTests` | `setup.spec.ts` (farm drawer: today's action) | `todayCard.test.tsx` |
 | **"Why am I seeing this?"** | `ExplanationTests`, `TelegramWhyTests`, `ReportWhyTests` | `why.spec.ts` | `whySheet.test.tsx` |
 | **Confidence and graceful degradation** | `AdviceNeverBlockedTests`, `ManualLoggingTests` (manual check named, never High), `EdgeCaseTests` (unknown crop, any planting date, sensor limits), `DependencyFailureTests` | `robustness.spec.ts` (every page empty / failing) | `todayCard.test.tsx`, `screens.test.tsx` |
-| **Recommended settings** | `RecommendationTests` (potato / loam / 0.2 m² / 1.5 L/min / ETo 5; equals Reset; tub cap; climate source) | `recommend.spec.ts` | `recommendedCard.test.tsx` |
+| **Recommended settings** | `RecommendationTests` (potato / loam / 0.2 m² / 1.5 L/min / ETo 5; equals Reset; root-zone cap; climate source) | `recommend.spec.ts` | `recommendedCard.test.tsx` |
 | **The farmer changing the crop** | `RecommendationTests` (checks, 403 for another farmer's zone, activity sentence, past reports keep the old crop), `EdgeCaseTests` (crop lists agree) | | `recommendedCard.test.tsx` (date stepper) |
 | Manual logging ("I watered", soil feel) | `ManualLoggingTests`, `EdgeCaseTests` (SAST midnight) | | `todayCard.test.tsx` |
 | Finish setup / registration wizard | `ManualLoggingTests` (ZoneSetupFields) | `setup.spec.ts`, `keyboard.spec.ts` | `screens.test.tsx` (500 mL bottle helper) |
