@@ -1,0 +1,35 @@
+== tsc --noEmit
+tsc exit 0
+== npx expo-doctor
+env: load .env
+env: export EXPO_PUBLIC_AGROFLOW_API_BASE EXPO_PUBLIC_AGROFLOW_API_PORT EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY EXPO_PUBLIC_SUPABASE_URL
+Running 21 checks on your project...
+20/21 checks passed. 1 checks failed. Possible issues detected:
+Use the --verbose flag to see more details about passed checks.
+
+✖ Check that packages match versions required by installed Expo SDK
+
+🔧 Patch version mismatches
+package             expected  found    
+@expo/ui            ~57.0.22  57.0.21  
+expo                ~57.0.27  57.0.26  
+expo-constants      ~57.0.21  57.0.20  
+expo-linking        ~57.0.12  57.0.11  
+expo-notifications  ~57.0.22  57.0.21  
+expo-router         ~57.0.25  57.0.24  
+expo-updates        ~57.0.25  57.0.24  
+
+Changelogs:
+- expo-constants → https://github.com/expo/expo/blob/sdk-57/packages/expo-constants/CHANGELOG.md
+- expo-linking → https://github.com/expo/expo/blob/sdk-57/packages/expo-linking/CHANGELOG.md
+- expo-notifications → https://github.com/expo/expo/blob/sdk-57/packages/expo-notifications/CHANGELOG.md
+- expo-router → https://github.com/expo/expo/blob/sdk-57/packages/expo-router/CHANGELOG.md
+- expo-updates → https://github.com/expo/expo/blob/sdk-57/packages/expo-updates/CHANGELOG.md
+
+7 packages out of date.
+Advice:
+Use 'npx expo install --check' to review and upgrade your dependencies.
+To ignore specific packages, add them to "expo.install.exclude" in package.json. Learn more: https://expo.fyi/dependency-validation
+
+1 check failed, indicating possible issues with the project.
+expo-doctor exit 1

@@ -1,0 +1,110 @@
+npm notice run agroflow-mobile-app@1.0.0 npx
+npm notice run jest --verbose --no-color
+PASS src/lib/__tests__/singleFlight.test.ts
+  singleFlight
+    √ an identical write already in flight is shared, not repeated (51 ms)
+    √ different writes both go (1 ms)
+    √ the same write repeated AFTER the first finished goes through again (1 ms)
+    √ a failed write is forgotten, so a retry is a real retry (29 ms)
+    √ writeKey tells methods, paths and bodies apart (2 ms)
+
+PASS src/lib/__tests__/router.test.ts
+  guarded router
+    √ a double tap pushes one screen, not two (46 ms)
+    √ first tap wins when two different buttons are tapped together (4 ms)
+    √ a double tap on back pops one screen, not two (2 ms)
+    √ a deliberate second tap after the transition still works (3 ms)
+    √ push, navigate and back share one lock (2 ms)
+    √ replace is never held back - it is how sign-in and sign-out redirect (2 ms)
+    √ canGoBack is passed straight through (1 ms)
+
+PASS src/lib/__tests__/setupHelpers.test.ts
+  Finish setup arithmetic (item 6)
+    √ turns seconds to fill a 500 mL bottle into litres a minute (36 ms)
+    √ turns "about N weeks ago" into a date (3 ms)
+  History lines (item 6)
+    √ labels a watering logged by hand and never calls it a pump run (3 ms)
+    √ leaves kit events as they were (2 ms)
+
+PASS src/lib/__tests__/moistureDisplay.test.ts
+  soil readings on screen
+    √ is a sensor reading, with no %, before the wet/dry setup (44 ms)
+    √ is a percentage once set up
+    √ says so when the sensor is offline (1 ms)
+    √ matches the backend formula, including a probe that reads lower when wet (3 ms)
+    √ never averages a sensor number with a percentage (1 ms)
+
+PASS src/services/__tests__/enquiry.test.ts (5.819 s)
+  submitEnquiry
+    √ sends no login, an empty honeypot, and one request for a double tap (278 ms)
+    √ shows the server's own reason (5 ms)
+  the form checks
+    √ needs a name, an SA phone, province, town, a crop and the consent (2 ms)
+  errors from the API
+    √ reads the sentence out of the JSON, never shows the raw body (2 ms)
+
+PASS src/services/__tests__/doubleSubmit.test.ts (5.976 s)
+  double submits reach the server once
+    √ "Water now" tapped twice sends ONE pump command (297 ms)
+    √ start and stop are different commands, and both are sent (40 ms)
+    √ Save tapped twice saves once (44 ms)
+    √ "Make me this report" tapped twice queues one report (46 ms)
+    √ reads are never merged - two screens may each want fresh data (32 ms)
+
+PASS src/components/__tests__/recommendedCard.test.tsx (7.362 s)
+  RecommendedCard
+    √ shows the sentence and saves through Reset to recommended (144 ms)
+    √ explains instead of saving when the sensor is not set up (10 ms)
+    √ Keep my own hides the card (9 ms)
+    √ fetches when not given one, and shows nothing without a crop (4 ms)
+  planting date stepper
+    √ moves by days and never past today (2 ms)
+
+PASS src/components/__tests__/todayCard.test.tsx (9.508 s)
+  TodayCard
+    √ shows the one action, the confidence badge and Finish setup (47 ms)
+    √ has no Finish setup when nothing is missing (11 ms)
+    √ logs a watering by hand and refreshes the card (162 ms)
+    √ logs how the soil feels (48 ms)
+
+PASS src/components/__tests__/screens.test.tsx (9.949 s)
+  Finish setup
+    √ shows what is done and what is not, with the confidence (62 ms)
+    √ works out litres a minute from the 500 mL bottle and saves it (101 ms)
+    √ saves the planting date from "about how many weeks ago" (75 ms)
+  Login
+    √ offers "Ask for a call" to someone not on AgroFlow yet (55 ms)
+  Reports
+    √ lists each report with its status, and opens a ready one (46 ms)
+    √ asks for a report for the farm (83 ms)
+  Forecast
+    √ shows each day with its advice, and the source (55 ms)
+  Alerts history
+    √ lists alerts newest first, in SAST, and marks one read when opened (35 ms)
+    √ says so when there are none (23 ms)
+  Help
+    √ opens the help for the page (16 ms)
+  SAST times
+    √ is South African time whatever the phone says (1 ms)
+
+PASS src/components/__tests__/whySheet.test.tsx (16.434 s)
+  WhyLink and WhySheet
+    √ opens a sheet with summary, facts, rule, confidence and what would change it (481 ms)
+    √ never shows the technical line to a farmer (18 ms)
+    √ renders nothing when there is no explanation - no generic text (11 ms)
+    √ tells a self-hiding host (Drip) that the sheet opened (15 ms)
+  explanations read from Supabase
+    √ keeps the plain parts and drops technical (2 ms)
+    √ treats anything malformed as no explanation (1 ms)
+  Drip
+    √ carries the explanation of the insight it chose
+    √ has no explanation for "all good" - there is nothing to explain (1 ms)
+  ZoneInsightsCard
+    √ puts a Why link under every insight that has an explanation, and on the confidence badge (52 ms)
+
+Test Suites: 10 passed, 10 total
+Tests:       59 passed, 59 total
+Snapshots:   0 total
+Time:        19.67 s, estimated 95 s
+Ran all test suites.
+jest exit 0

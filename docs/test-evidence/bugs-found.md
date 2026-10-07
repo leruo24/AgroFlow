@@ -1,9 +1,13 @@
 # Bugs found in the Part 2 test pass
 
 Every bug the Part 2 sweep found: what a person would have seen, why, the
-fix, and the test that now stops it coming back. The fix commit is the
-`part 2 (n)` commit named in the last column's file history; each row names
-it once committed.
+fix, and the test that now stops it coming back. Ten in all; every one was
+found by a test written in this pass (or, for bug 1, by reading the request
+pipeline while writing one), fixed, and is now guarded.
+
+Fix commits on `test/full-proof`: bugs 1-4 **3e8405b** (part 2 (2)); 5-7
+**2df17fc** (part 2 (3)); 8-9 **6ae08c6** (part 2 (5)); 10 **66184d3**
+(part 2 (6)).
 
 | # | Symptom | Root cause | Fix | Guarding test |
 |---|---|---|---|---|

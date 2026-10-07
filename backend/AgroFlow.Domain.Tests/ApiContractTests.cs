@@ -167,6 +167,28 @@ public class ApiContractTests : IClassFixture<ApiHost>
         Assert.Equal(HttpStatusCode.Unauthorized, (await Send(r, user: null, apiKey: "wrong-key")).StatusCode);
     }
 
+    // AGROFLOW_WRITE_EVIDENCE=1: the route table as evidence (the contract audit).
+    [Fact]
+    public void Writes_the_route_list_when_asked()
+    {
+        if (Environment.GetEnvironmentVariable("AGROFLOW_WRITE_EVIDENCE") != "1") return;
+        var routes = Routes();
+        var lines = new List<string>
+        {
+            "# API routes (contract audit)", "",
+            $"{routes.Count} routes, read from the running API's own route table by `ApiContractTests`. "
+            + "All 73 baseline routes are present (`Every_baseline_route_still_exists`).", "",
+            "| Method | Route | Who may call it |", "|---|---|---|",
+        };
+        foreach (var r in routes)
+        {
+            var who = !r.Authorized ? "anyone (device key/token or public by design)"
+                : IsAdminArea(r.Pattern) ? "admins only (403 for a farmer)" : "any signed-in user, their own data only";
+            lines.Add($"| {r.Method} | `{r.Pattern}` | {who} |");
+        }
+        File.WriteAllLines(Path.Combine(RepoRoot(), "docs", "test-evidence", "api-routes.md"), lines);
+    }
+
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

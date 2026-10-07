@@ -762,3 +762,22 @@ and handler).
 walkthrough-video folders only - no overlap); the merge was clean. On the
 merged tree: backend 972 passed, mobile jest 47 passed, admin build and
 Playwright 38 passed.
+
+## Part 2 - full test pass (`test/full-proof`)
+
+| Step | Commit | What |
+|---|---|---|
+| 1 | 791215c | Rule book table-driven over every crop × soil × stage at the boundaries; every RuleBook method called by a test (a guard for new rules). |
+| 2 | 3e8405b | The real API hosted in memory (`ApiHost`, nothing live reachable): all 73 baseline routes present, only known routes open, 401 without login everywhere, 403 for a farmer on all 53 admin routes. Hostile text through PDFs, workbooks, charts, CSV and the console. Bugs 1-4. |
+| 3 | 2df17fc | Data edges, SAST midnight, month/year ends, af-ZA, 100k readings, sensor limits; dependency failures through the real host. Bugs 5-7. |
+| 4 | 4f8fa3a | Security and concurrency guards asserted where the SQL is: ownership on every farmer route, skip-locked claims, send-once ledger, append-only audit, JWT settings, legacy key switch. |
+| 5 | 6ae08c6 | Admin robustness (every page empty / failing / three widths), splash with the video blocked, a farmer kept out, Home counts = list counts, keyboard-only wizard. Bugs 8-9; coherence fixes. |
+| 6 | 66184d3 | Mobile screens with their real code. Bug 10. |
+| 7 | 97fb728 | Firmware contract against the server (no mismatch; not compiled - no arduino-cli). |
+| 8 | (this commit) | Evidence: TRX, Playwright HTML report, jest output, FAO-56 examples, route list, README, traceability, bug log, coherence review; final report. |
+
+Two small test-only changes to production code, both behaviour-neutral: the
+admin filter's role lookup is an injectable `IProfileRoles` (the API
+registers the database one, and the filter falls back to it), and
+`public partial class Program {}` lets the tests host the real API.
+`Microsoft.AspNetCore.Mvc.Testing` was added to the **test** project only.

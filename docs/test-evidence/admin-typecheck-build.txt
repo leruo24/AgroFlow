@@ -1,0 +1,11 @@
+== tsc --noEmit
+exit 1
+== npm run build
+[2mdist/[22m[35massets/index-DYgbP2zG.css  [39m[1m[2m   51.45 kB[22m[1m[22m[2m │ gzip:  10.67 kB[22m
+[2mdist/[22m[36massets/index-Dgfj0JHR.js   [39m[1m[33m1,441.71 kB[39m[22m[2m │ gzip: 412.86 kB[22m[2m │ map: 4,252.63 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 17.93s[39m
