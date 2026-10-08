@@ -1,0 +1,58 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  #c13-ph { position: absolute; left: 1236px; top: 91px; }
+  #c13-card { position: absolute; left: 96px; top: 260px; width: 560px; padding: 18px; }
+  #c13-card img { width: 100%; display: block; }
+  #c13-pts { position: absolute; left: 700px; top: 270px; width: 470px; }
+  .c13-p { margin-bottom: 18px; padding: 16px 20px; }
+  .c13-p .k { font-weight: 700; font-size: 14px; letter-spacing: .14em; color: #14838c; }
+  .c13-p .m { margin-top: 6px; font-weight: 700; font-size: 23px; color: #253126; line-height: 1.3; }
+  #c13-big { position: absolute; left: 96px; top: 760px; }
+  #c13-big .chip { font-size: 24px; padding: 16px 26px; }
+  #c13-help { position: absolute; left: 96px; top: 850px; width: 1060px; font-weight: 600; font-size: 24px; color: #253126; line-height: 1.4; }
+</style>
+<div id="root" data-composition-id="c13" data-width="1920" data-height="1080">
+  <div id="c13-in" class="layer">
+    <div class="cap" id="c13-cap"><div class="k">Validation · incomplete setup</div><div class="t">Advice is never blocked. What’s missing is named.</div></div>
+    <div class="card" id="c13-card"><img src="assets/v3/m-card-maize.png" alt="" /></div>
+    <div id="c13-pts">
+      <div class="card c13-p" id="c13-p1"><div class="k">STILL ADVISES</div><div class="m">About 900 L, in litres only</div></div>
+      <div class="card c13-p" id="c13-p2"><div class="k">CONFIDENCE</div><div class="m">Medium: the pump’s flow rate is missing</div></div>
+      <div class="card c13-p" id="c13-p3"><div class="k">ONE NEXT STEP</div><div class="m">Add the pump’s flow rate to get watering times in minutes.</div></div>
+    </div>
+    <div id="c13-big"><div class="chip warn">Add flow rate to see runtime</div></div>
+    <div id="c13-help">Finish setup measures it simply: time how many seconds the tap or pump takes to fill a 500 mL bottle.</div>
+
+    <div id="c13-ph" class="phone"><div class="pscreen"><div class="pcam">
+      <img id="c13-clip1" class="clip" src="assets/v3/m-home-maize.png" alt="" data-start="0" data-duration="10.2" />
+      <img id="c13-clip2" class="clip" src="assets/v3/m-finish-flow.png" alt="" data-start="10.2" data-duration="5.15" />
+      <div class="spot" id="c13-s1" style="left:12px;top:318px;width:380px;height:240px;"></div>
+      <div class="spot" id="c13-s2" style="left:12px;top:584px;width:380px;height:200px;"></div>
+    </div></div></div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out";
+  tl.fromTo("#c13-cap", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, 0.2);
+  tl.fromTo("#c13-ph", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 0.1);
+  tl.to("#c13-s1", { opacity: 1, duration: 0.4 }, 4.6);
+  tl.fromTo("#c13-card", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 4.8);
+  tl.fromTo("#c13-p1", { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: E3 }, 7.0);
+  tl.fromTo("#c13-p2", { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: E3 }, 8.7);
+  tl.fromTo("#c13-p3", { opacity: 0, x: 16 }, { opacity: 1, x: 0, duration: 0.45, ease: E3 }, 10.0);
+  tl.to("#c13-s1", { opacity: 0, duration: 0.2 }, 10.0);
+  tl.to("#c13-s2", { opacity: 1, duration: 0.4 }, 10.5);
+  tl.fromTo("#c13-big", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: E3 }, 10.4);
+  tl.fromTo("#c13-help", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: E3 }, 11.1);
+  tl.to("#c13-in", { opacity: 0, duration: 0.5, ease: "power2.in" }, 14.8);
+  window.__timelines["c13"] = tl;
+})();
+</script>
+</template>
+</body></html>

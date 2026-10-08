@@ -1,0 +1,90 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  #c10-ph { position: absolute; left: 1236px; top: 91px; }
+  #c10-chart { position: absolute; left: 96px; top: 250px; width: 1060px; height: 640px; padding: 26px 28px; }
+  #c10-chart .h { font-weight: 700; font-size: 15px; letter-spacing: .16em; color: #14838c; }
+  #c10-chart .t { margin-top: 4px; font-weight: 700; font-size: 24px; color: #253126; }
+  .c10-plan { position: absolute; top: 520px; width: 140px; text-align: center; font-weight: 700; font-size: 15px; line-height: 1.25; color: #253126; }
+  .c10-plan.go { color: #8c2f28; }
+  #c10-roll { position: absolute; left: 96px; top: 912px; width: 1060px; font-weight: 600; font-size: 24px; color: #184d35; }
+  #c10-reset { position: absolute; left: 96px; top: 960px; }
+</style>
+<div id="root" data-composition-id="c10" data-width="1920" data-height="1080">
+  <div id="c10-in" class="layer">
+    <div class="cap" id="c10-cap"><div class="k">Next 7 days</div><div class="t">What is likely this week, not only today.</div></div>
+    <div class="card" id="c10-chart">
+      <div class="h">ROLLING PROJECTION · TOMATO FIELD · AFTER TODAY'S 1,500 L</div>
+      <div class="t">Root-zone depletion, day by day (mm)</div>
+      <!-- chart area: x 28..1032 (7 cols of 143), baseline y 470 (local), 7.6 px per mm -->
+      <svg style="position:absolute;left:0;top:0" width="1060" height="640" viewBox="0 0 1060 640">
+        <line x1="28" y1="470" x2="1032" y2="470" stroke="#c9d3cb" stroke-width="2"/>
+        <g id="c10-bars" fill="#c9a77f">
+          <rect class="c10-b" x="58"  width="84" y="470" height="0" rx="6"/>
+          <rect class="c10-b" x="201" width="84" y="470" height="0" rx="6"/>
+          <rect class="c10-b" x="344" width="84" y="470" height="0" rx="6"/>
+          <rect class="c10-b" x="487" width="84" y="470" height="0" rx="6"/>
+          <rect class="c10-b" x="630" width="84" y="470" height="0" rx="6"/>
+          <rect class="c10-b" x="773" width="84" y="470" height="0" rx="6"/>
+          <rect class="c10-b" x="916" width="84" y="470" height="0" rx="6"/>
+        </g>
+        <!-- watering point (RAW) per day -->
+        <g id="c10-raw" stroke="#b9473e" stroke-width="4" stroke-dasharray="8 6">
+          <line x1="48" x2="152" y1="230.6" y2="230.6"/><line x1="191" x2="295" y1="235.9" y2="235.9"/><line x1="334" x2="438" y1="244.3" y2="244.3"/>
+          <line x1="477" x2="581" y1="231.4" y2="231.4"/><line x1="620" x2="724" y1="220.7" y2="220.7"/><line x1="763" x2="867" y1="229.8" y2="229.8"/><line x1="906" x2="1010" y1="239.7" y2="239.7"/>
+        </g>
+        <text id="c10-rawlab" x="28" y="112" font-size="15" font-weight="700" fill="#8c2f28" text-anchor="start">- - - red dashes: watering point (RAW) for each day</text>
+        <g font-size="18" font-weight="700" fill="#4b5a4d" text-anchor="middle">
+          <text x="100" y="500">TODAY</text><text x="243" y="500">FRI</text><text x="386" y="500">SAT</text><text x="529" y="500">SUN</text><text x="672" y="500">MON</text><text x="815" y="500">TUE</text><text x="958" y="500">WED</text>
+        </g>
+        <g id="c10-vals" font-size="16" font-weight="700" text-anchor="middle">
+          <text x="100" y="424.0" fill="#253126">5</text><text x="243" y="406.6" fill="#3d2b1f">11.5</text><text x="386" y="354.2" fill="#3d2b1f">18.4</text><text x="529" y="305.5" fill="#3d2b1f">24.8</text><text x="672" y="260.7" fill="#3d2b1f">30.7</text><text x="815" y="212.0" fill="#3d2b1f">37.1</text><text x="958" y="161.9" fill="#3d2b1f">43.7</text>
+        </g>
+      </svg>
+      <div class="c10-plan" style="left:30px">Watered<br/>1,500 L logged</div>
+      <div class="c10-plan" style="left:173px">No irrigation</div>
+      <div class="c10-plan" style="left:316px">No irrigation</div>
+      <div class="c10-plan" style="left:459px">No irrigation</div>
+      <div class="c10-plan" style="left:602px">Monitor<br/>near the point</div>
+      <div class="c10-plan go" id="c10-tue" style="left:745px">Irrigation likely</div>
+      <div class="c10-plan" style="left:888px;color:#637064">(after Tue)</div>
+    </div>
+    <div id="c10-roll">The balance carries over: each morning the window moves on one day.</div>
+    <div id="c10-reset" class="chip soft">Continuous daily water balance · no weekly reset</div>
+
+    <div id="c10-ph" class="phone"><div class="pscreen"><div class="pcam">
+      <img id="c10-clip1" class="clip" src="assets/v3/m-week-A.png" alt="" data-start="0" data-duration="19.15" />
+      <div class="spot" id="c10-spot" style="left:12px;top:384px;width:380px;height:490px;"></div>
+    </div></div></div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out";
+  const D = [5.0, 11.5, 18.4, 24.8, 30.7, 37.1, 43.7];
+  tl.fromTo("#c10-ph", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 0.1);
+  tl.fromTo("#c10-cap", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 0.4);
+  tl.to("#c10-spot", { opacity: 1, duration: 0.4 }, 2.2);
+  tl.to("#c10-spot", { opacity: 0, duration: 0.3 }, 5.2);
+  tl.fromTo("#c10-chart", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 5.4);
+  tl.set(["#c10-raw", "#c10-rawlab", "#c10-vals text", ".c10-plan"], { opacity: 0 }, 0);
+  document.querySelectorAll("#c10-bars .c10-b").forEach((b, i) => {
+    tl.to(b, { attr: { y: 470 - D[i] * 7.6, height: D[i] * 7.6 }, duration: 0.5, ease: E3 }, 6.1 + i * 0.55);
+    tl.to(`#c10-vals text:nth-child(${i + 1})`, { opacity: 1, duration: 0.3 }, 6.4 + i * 0.55);
+  });
+  tl.to(["#c10-raw", "#c10-rawlab"], { opacity: 1, duration: 0.5 }, 8.6);
+  tl.to(".c10-plan", { opacity: 1, duration: 0.35, stagger: 0.12 }, 9.6);
+  tl.to(".c10-b:nth-child(6)", { attr: { fill: "#b9473e" }, duration: 0.4 }, 11.0);
+  tl.fromTo("#c10-tue", { scale: 1 }, { scale: 1.12, duration: 0.3, yoyo: true, repeat: 1, transformOrigin: "50% 50%" }, 11.1);
+  tl.fromTo("#c10-roll", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 13.7);
+  tl.fromTo("#c10-reset", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 16.0);
+  tl.to("#c10-in", { opacity: 0, duration: 0.5, ease: "power2.in" }, 18.6);
+  window.__timelines["c10"] = tl;
+})();
+</script>
+</template>
+</body></html>

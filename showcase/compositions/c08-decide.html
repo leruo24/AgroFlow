@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  #c08-ph { position: absolute; left: 1236px; top: 91px; }
+  #c08-big { position: absolute; left: 96px; top: 96px; width: 1060px; font-weight: 700; font-size: 60px; line-height: 1.08; letter-spacing: -.01em; color: #184d35; }
+  #c08-big span { color: #14838c; }
+  #c08-cmp { position: absolute; left: 96px; top: 330px; width: 1040px; display: flex; gap: 20px; }
+  .c08-c { flex: 1; padding: 24px 26px; }
+  .c08-c .l { font-weight: 700; font-size: 15px; letter-spacing: .14em; color: #4b5a4d; text-transform: uppercase; }
+  .c08-c .v { margin-top: 8px; font-weight: 700; font-size: 46px; color: #253126; }
+  .c08-c .s { margin-top: 4px; font-weight: 600; font-size: 20px; color: #637064; }
+  #c08-bal { position: absolute; left: 96px; top: 540px; width: 1040px; padding: 24px 26px; }
+  #c08-bal .l { font-weight: 700; font-size: 15px; letter-spacing: .14em; color: #14838c; }
+  #c08-bal .v { margin-top: 8px; font-weight: 700; font-size: 32px; color: #253126; }
+  #c08-bal .s { margin-top: 8px; font-weight: 600; font-size: 22px; color: #184d35; }
+  #c08-feel { position: absolute; left: 96px; top: 740px; width: 1040px; font-weight: 600; font-size: 26px; color: #253126; line-height: 1.4; }
+  #c08-ctl { position: absolute; left: 96px; top: 870px; display: flex; gap: 12px; flex-wrap: wrap; width: 1060px; }
+  #c08-ctl .chip { font-size: 15px; }
+</style>
+<div id="root" data-composition-id="c08" data-width="1920" data-height="1080">
+  <div id="c08-in" class="layer">
+    <div id="c08-big"><div id="c08-b1">AgroFlow recommends.</div><div id="c08-b2"><span>The farmer decides.</span></div></div>
+    <div id="c08-cmp">
+      <div class="card c08-c" id="c08-c1"><div class="l">AgroFlow suggested</div><div class="v">1,750 L</div><div class="s">35 mm · about 70 min</div></div>
+      <div class="card c08-c" id="c08-c2" style="border:2px solid #168f99"><div class="l">The farmer applied</div><div class="v">1,500 L</div><div class="s">30 mm on 50 m² · recorded with “I watered”</div></div>
+    </div>
+    <div class="card" id="c08-bal"><div class="l">WHAT ACTUALLY HAPPENED IS WHAT COUNTS</div><div class="v">Depletion 35 mm − 30 mm applied = 5 mm</div><div class="s">Today’s advice now: No watering needed today</div></div>
+    <div id="c08-feel">A hand check (“How does the soil feel?” · dry / moist / wet) corrects the estimate too.</div>
+    <div id="c08-ctl">
+      <div class="chip soft">I watered · minutes or litres</div>
+      <div class="chip soft">How does the soil feel?</div>
+      <div class="chip soft">Start a run (kit zones)</div>
+      <div class="chip soft">Dismiss, with a note</div>
+    </div>
+
+    <div id="c08-ph" class="phone"><div class="pscreen"><div class="pcam">
+      <img id="c08-clip1" class="clip" src="assets/v3/m-home.png" alt="" data-start="0" data-duration="2.05" />
+      <video id="c08-v1" class="clip" src="assets/v3/mv-watered.mp4" muted playsinline data-start="2" data-duration="8.2"></video>
+      <img id="c08-clip2" class="clip" src="assets/v3/m-home-after.png" alt="" data-start="10.15" data-duration="2.7" />
+      <img id="c08-clip3" class="clip" src="assets/v3/m-feel-sheet.png" alt="" data-start="12.8" data-duration="4.18" />
+      <div class="tap" id="c08-t1" style="left:76px;top:705px"></div>
+      <div class="tap" id="c08-t2" style="left:202px;top:762px"></div>
+      <div class="tap" id="c08-t3" style="left:202px;top:827px"></div>
+    </div></div></div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out";
+  const tap = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+  tl.fromTo("#c08-b1", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 0.3);
+  tl.fromTo("#c08-b2", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 1.5);
+  tl.fromTo("#c08-c1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 2.8);
+  tl.fromTo("#c08-c2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 3.6);
+  tap("#c08-t1", 3.04); tap("#c08-t2", 5.47); tap("#c08-t3", 7.44);
+  tl.fromTo("#c08-bal", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 7.9);
+  tl.fromTo("#c08-feel", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 12.8);
+  tl.fromTo("#c08-ctl > div", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: E3, stagger: 0.15 }, 14.0);
+  tl.to("#c08-in", { opacity: 0, duration: 0.5, ease: "power2.in" }, 16.45);
+  window.__timelines["c08"] = tl;
+})();
+</script>
+</template>
+</body></html>

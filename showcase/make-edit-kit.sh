@@ -5,7 +5,7 @@
 # three tracks at 0:00 and edit freely: cut, re-time, mute or replace the voice, add music.
 set -euo pipefail
 cd "$(dirname "$0")"
-SRC=renders/INF3003W_Team2_ShowcaseDemo_2026.mp4
+SRC=renders/AgroFlow_Showcase_Walkthrough_Final.mp4
 OUT=renders/edit-kit
 mkdir -p "$OUT"
 DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$SRC")

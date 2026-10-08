@@ -100,3 +100,63 @@ enquiry form with call outcomes and reasons, POPIA consent/erasure, hand logging
 Additional quirks seen in v2 capture: Drip greets before zones load after a fresh sign-in
 (reproduced); admin Requests prints sizes in "ha" though the farmer form states no unit;
 admin Reports "Platform Availability" is hard-coded 0 and the growth charts are empty.
+
+---
+
+# v3 audit (2026-10-08) — the walkthrough remake
+
+Branch `dev` at `54387ad` (fast-forwarded from `origin/dev`). The v2 notes above describe the
+Oct 6 code; the features listed as "not found" there were all built since (actionable-advice
+brief, `docs/actionable/final-report.md`) and are now shown.
+
+## Run status (v3)
+
+| Component | Ran? | How |
+|---|---|---|
+| Farmer app (`apps/mobile`, Expo SDK 57) | Yes, unmodified | `npx expo start --web --port 8098`, captured by `capture/v3/mobile.mjs` at 390×844 @2× |
+| Admin console + public landing page (`apps/web/admin`) | Yes, unmodified | `npx vite --port 5173`, captured by `capture/v3/admin.mjs` at 1440×810 @2× |
+| AgroFlow.Api, Supabase, HiveMQ, ESP32 | No (no credentials or hardware here) | Network calls answered with `capture/v3/demo.mjs`; hardware shown as a labelled illustration |
+
+## Shown in v3, and where it lives
+
+| Feature | Code | Scene |
+|---|---|---|
+| Home "Today" card per zone: one action, amount, confidence, I watered, soil feel, Finish setup | `apps/mobile/src/components/TodayCard.tsx`; `RuleBook/TodayRules.cs` | 5, 8, 12, 13 |
+| Amount = depletion × area; minutes = litres ÷ flow, rounded up | `SoilWaterBalance.IrrigationLitres/IrrigationMinutes` | 5 |
+| FAO-56 balance: ETo, Kc, ETc, TAW, RAW (p adjusted), Dr; water when Dr ≥ RAW | `Fao56Engine.cs`, `SoilWaterBalance.cs`, `WaterRules.ShouldWaterToday` | 6 |
+| Rain skips only if it covers today's crop use | `WaterRules.SkipForRain`, `ZoneInsightBuilder` | 7, 11 |
+| "Why am I seeing this?" (mobile sheet; admin sheet with the technical line) | `WhySheet.tsx`, `RuleBook/Explanations.cs`, `apps/web/admin/src/lib/why.ts` | 7 |
+| Confidence High/Medium/Low and the one next step | `RuleBook/ConfidenceRules.cs` | 5, 13 |
+| Logging what actually happened ("I watered", minutes or litres) | `ManualLogSheet.tsx`, `ManualLogEndpoints.cs` | 8 |
+| Soil feel check corrects the balance | `Fao56Engine` (soil feel), `WaterRules.SoilFeelDepletion` | 8, 12 |
+| Manual run, 1–60 min validation, confirmation, command path | `app/zone/[id].tsx`, command dispatch + MQTT, firmware relay | 9 |
+| Firmware: 30 s reports, 5-min cap, offline fallback (10 min, ≤ 60 s runs, 5 min rest) | `AgroFlowIrrigationNode.ino` constants | 3, 9 |
+| Week ahead: day 0 = engine, later days = rain-only outlook | `ForecastEndpoints.cs`, `ForecastOutlook.cs`, `app/forecast.tsx` | 10, 11 |
+| Forward projection of the balance to the next watering day | `Fao56Engine` ("Project forward to the next watering") | 10, 11 (chart = visualisation of it) |
+| Heavy-rain alert (> 20 mm/day) on Telegram, with a Why button | `WeatherAlertService.cs`, `TelegramNotificationService.cs`, `AlertExplanations.Weather` | 12 |
+| Kit/sensor checks: offline 3 h, stuck 6 h, drift, pump ran but soil not wetter | `RuleBook/KitRules.cs`, `TodayRules` | 12 |
+| Admin: landing page, Home, Requests, farm detail with each zone's Today, Run advice now, Kits, Alerts, Maintenance, Reports, Activity | `apps/web/admin/src/pages/*`, `app/interactions.ts` | 14 |
+
+## Asked for in the brief but not in the code — not shown
+
+| Brief item | Finding | What the video does instead |
+|---|---|---|
+| Realistic Three.js 3D field controller | No `three` dependency or WebGL code on any branch | Labelled 2D illustration of the real components (scene 3) |
+| "Experience AgroFlow" interactive 3D demo | Not on any branch | Skipped; the sped-up irrigation visualisation in scene 9 is labelled as such |
+| Photos/renders of the kit | None exist (`presentation/presentation-assets/hardware/README.md`) | Illustration |
+| IRRIGATE / ADJUST / POSTPONE / SKIP buttons | Not in the app | The real controls: I watered (any amount), soil feel, start a run, dismiss with a note |
+| "IRRIGATION PLAN UPDATED" notification | No such alert | Plan change shown on the real week-ahead screen + visualised balance |
+| "CHECK THE FIELD: sensor wetter than estimate" message | No such rule (a calibrated reading at the wet point resets Dr; stuck/drift/offline checks exist) | Scene 12 shows the real checks and the farmer's own soil check |
+| In-app weather alerts | Weather alerts go to Telegram only | Telegram text, labelled |
+
+## Notes for the team (v3)
+
+1. The week-ahead screen's day 0 says "Rain should cover it" after a farmer logs watering on a day
+   with ≥ 1 mm of rain (`PlainDayAdvice` maps NoActionNeeded + rain to that line). The video shows the
+   screen as it reads before watering.
+2. History shows a litres-only "I watered" entry as "Irrigation ran for 0 minutes" (runtime 0).
+   Not shown up close.
+3. The admin "Run advice now" drawer's "Days until needed" reads 1 when the zone is due today, because
+   the projection starts tomorrow. Not shown up close.
+4. The firmware's 5-minute cap still limits any single kit run; field-scale amounts (here 70 min) are
+   applied by the farmer and logged, or as several runs.

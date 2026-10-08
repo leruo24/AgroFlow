@@ -1,0 +1,138 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  .c03-lab { position: absolute; left: 1290px; width: 540px; padding: 18px 24px; }
+  .c03-lab .h { font-weight: 700; font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: #14838c; }
+  .c03-lab .m { margin-top: 6px; font-weight: 700; font-size: 28px; color: #253126; }
+  .c03-lab .s { margin-top: 4px; font-weight: 500; font-size: 18px; color: #4b5a4d; }
+  #c03-facts { position: absolute; left: 96px; top: 880px; display: flex; gap: 16px; }
+  #c03-note { position: absolute; left: 96px; top: 228px; font-weight: 500; font-size: 19px; color: #637064; }
+</style>
+<div id="root" data-composition-id="c03" data-width="1920" data-height="1080">
+  <div id="c03-in" class="layer">
+    <div class="cap" id="c03-cap"><div class="k">Sensing · the field kit</div><div class="t">One kit per irrigation zone.</div></div>
+    <div id="c03-note">Illustration of the kit's real components, drawn from the firmware's wiring. Not a photograph.</div>
+    <svg class="layer" viewBox="0 0 1920 1080" data-layout-allow-overflow>
+      <defs>
+        <linearGradient id="c03-soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a7b5d"/><stop offset="1" stop-color="#6e5340"/></linearGradient>
+      </defs>
+      <!-- ground -->
+      <rect x="96" y="760" width="1130" height="100" rx="14" fill="url(#c03-soil)"/>
+      <rect x="96" y="752" width="1130" height="12" rx="6" fill="#86b77a"/>
+      <!-- post -->
+      <rect x="640" y="600" width="26" height="160" fill="#7d8a7f"/>
+      <!-- enclosure body -->
+      <g id="c03-box">
+        <rect x="430" y="290" width="450" height="330" rx="22" fill="#e9ede9" stroke="#4b5a4d" stroke-width="4"/>
+        <!-- internals -->
+        <g id="c03-inside">
+          <rect x="452" y="312" width="406" height="286" rx="12" fill="#f8faf8"/>
+          <!-- ESP32 dev board -->
+          <g id="c03-esp">
+            <rect x="476" y="336" width="150" height="236" rx="8" fill="#1f2a44"/>
+            <rect x="500" y="352" width="102" height="82" rx="4" fill="#b8bec6"/>
+            <text x="551" y="400" font-size="15" font-weight="700" fill="#1f2a44" text-anchor="middle">ESP32</text>
+            <g fill="#d8b34a"><rect x="480" y="450" width="6" height="110"/><rect x="616" y="450" width="6" height="110"/></g>
+            <rect x="534" y="552" width="34" height="16" rx="3" fill="#9aa3ad"/>
+          </g>
+          <!-- relay module -->
+          <g id="c03-relay">
+            <rect x="660" y="336" width="176" height="112" rx="8" fill="#1d5fa6"/>
+            <rect x="676" y="352" width="78" height="78" rx="6" fill="#2a7bd0" stroke="#174f8a" stroke-width="2"/>
+            <text x="715" y="396" font-size="13" font-weight="700" fill="#fff" text-anchor="middle">RELAY</text>
+            <rect x="770" y="356" width="52" height="70" rx="4" fill="#2bb673"/>
+            <circle id="c03-led" cx="796" cy="440" r="5" fill="#c9d3cb"/>
+          </g>
+          <!-- power terminal -->
+          <g id="c03-pwr">
+            <rect x="660" y="476" width="176" height="96" rx="8" fill="#e4e7e4" stroke="#7d8a7f" stroke-width="2"/>
+            <text x="748" y="516" font-size="15" font-weight="700" fill="#253126" text-anchor="middle">5 V POWER</text>
+            <text x="748" y="544" font-size="13" font-weight="600" fill="#637064" text-anchor="middle">USB / supply</text>
+          </g>
+          <!-- wires -->
+          <g fill="none" stroke-width="3">
+            <path d="M622 470 C 640 470, 640 420, 660 420" stroke="#e0a030"/>
+            <path d="M622 500 C 645 500, 645 520, 660 520" stroke="#c0392b"/>
+            <path d="M560 572 V 618" stroke="#253126"/>
+            <path d="M590 572 V 618" stroke="#7a4fb3"/>
+            <path d="M800 448 V 618" stroke="#0f6b73"/>
+          </g>
+        </g>
+        <!-- cable glands -->
+        <g fill="#4b5a4d"><rect x="548" y="616" width="24" height="16" rx="3"/><rect x="578" y="616" width="24" height="16" rx="3"/><rect x="788" y="616" width="24" height="16" rx="3"/></g>
+        <!-- lid -->
+        <g id="c03-lid">
+          <rect x="430" y="290" width="450" height="330" rx="22" fill="#dfe5df" stroke="#4b5a4d" stroke-width="4"/>
+          <rect x="460" y="320" width="390" height="18" rx="6" fill="#c9d3cb"/>
+          <circle cx="455" cy="315" r="7" fill="#9aa59b"/><circle cx="855" cy="315" r="7" fill="#9aa59b"/>
+          <circle cx="455" cy="595" r="7" fill="#9aa59b"/><circle cx="855" cy="595" r="7" fill="#9aa59b"/>
+          <image href="assets/brand/agroflow-icon-512.png" x="615" y="420" width="80" height="80"/>
+        </g>
+      </g>
+      <!-- cables to the field -->
+      <path id="c03-cab1" pathLength="1" d="M560 632 C 560 690, 330 690, 330 740" stroke="#253126" stroke-width="4" fill="none"/>
+      <path id="c03-cab2" pathLength="1" d="M590 632 C 590 670, 250 640, 220 560" stroke="#7a4fb3" stroke-width="4" fill="none"/>
+      <path id="c03-cab3" pathLength="1" d="M800 632 C 800 700, 1000 690, 1040 700" stroke="#0f6b73" stroke-width="4" fill="none"/>
+      <!-- YL-69 resistive probe -->
+      <g id="c03-probe">
+        <rect x="300" y="736" width="60" height="22" rx="3" fill="#253126"/>
+        <rect x="308" y="758" width="10" height="80" fill="#c0a060"/><rect x="342" y="758" width="10" height="80" fill="#c0a060"/>
+      </g>
+      <!-- DHT11 in a shaded mount -->
+      <g id="c03-dht">
+        <rect x="180" y="500" width="70" height="66" rx="8" fill="#4ea0d8"/>
+        <g fill="#2f80bb"><rect x="190" y="512" width="50" height="6" rx="2"/><rect x="190" y="526" width="50" height="6" rx="2"/><rect x="190" y="540" width="50" height="6" rx="2"/></g>
+        <text x="215" y="590" font-size="14" font-weight="700" fill="#253126" text-anchor="middle">DHT11</text>
+      </g>
+      <!-- pump -->
+      <g id="c03-pump">
+        <rect x="1040" y="672" width="110" height="64" rx="12" fill="#fff" stroke="#16241c" stroke-width="3"/>
+        <circle cx="1072" cy="704" r="18" fill="#e4e7e4" stroke="#16241c" stroke-width="2"/>
+        <text x="1118" y="710" font-size="14" font-weight="700" fill="#253126" text-anchor="middle">PUMP</text>
+        <path d="M1150 704 H1226" stroke="#0f6b73" stroke-width="9"/>
+      </g>
+    </svg>
+    <div class="card c03-lab" id="c03-l1" style="top:300px"><div class="h">Controller</div><div class="m">ESP32</div><div class="s">Wi-Fi · reports every 30 s</div></div>
+    <div class="card c03-lab" id="c03-l2" style="top:432px"><div class="h">Soil Moisture Sensor</div><div class="m">YL-69 resistive probe</div><div class="s">analogue input · GPIO 32</div></div>
+    <div class="card c03-lab" id="c03-l3" style="top:564px"><div class="h">Air</div><div class="m">DHT11 temperature &amp; humidity</div><div class="s">GPIO 27</div></div>
+    <div class="card c03-lab" id="c03-l4" style="top:696px"><div class="h">Irrigation output</div><div class="m">Relay module → pump</div><div class="s">GPIO 25</div></div>
+    <div id="c03-facts">
+      <div class="chip soft" id="c03-f1">Reports every 30 s</div>
+      <div class="chip soft" id="c03-f2">Any pump run stops at 5 min</div>
+      <div class="chip soft" id="c03-f3">Offline &gt; 10 min: waters dry soil in ≤ 60 s bursts, 5 min rest</div>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out", IO = "power2.inOut";
+  tl.fromTo("#c03-cap", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.6, ease: E3 }, 0.2);
+  tl.fromTo("#c03-note", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 0.8);
+  tl.fromTo("#c03-box", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.8, ease: E3 }, 0.3);
+  // closed -> open
+  tl.to("#c03-lid", { y: -360, opacity: 0, duration: 1.2, ease: IO }, 2.2);
+  tl.fromTo("#c03-l1", { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, 2.8);
+  tl.fromTo("#c03-esp", { opacity: 0.35 }, { opacity: 1, duration: 0.4 }, 2.8);
+  tl.fromTo("#c03-cab1", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.8, ease: IO }, 4.6);
+  tl.fromTo("#c03-probe", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 5.0);
+  tl.fromTo("#c03-l2", { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, 4.8);
+  tl.fromTo("#c03-cab2", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.8, ease: IO }, 7.6);
+  tl.fromTo("#c03-dht", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 8.0);
+  tl.fromTo("#c03-l3", { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, 7.8);
+  tl.fromTo("#c03-cab3", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 0.8, ease: IO }, 10.6);
+  tl.fromTo("#c03-pump", { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 0.5, ease: E3 }, 11.0);
+  tl.fromTo("#c03-l4", { opacity: 0, x: 24 }, { opacity: 1, x: 0, duration: 0.5, ease: E3 }, 10.8);
+  tl.to("#c03-led", { fill: "#ef4444", duration: 0.2 }, 11.6);
+  tl.fromTo("#c03-f1", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: E3 }, 13.0);
+  tl.fromTo("#c03-f2", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: E3 }, 15.1);
+  tl.fromTo("#c03-f3", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.45, ease: E3 }, 18.3);
+  tl.to("#c03-in", { opacity: 0, duration: 0.5, ease: "power2.in" }, 23.4);
+  window.__timelines["c03"] = tl;
+})();
+</script>
+</template>
+</body></html>

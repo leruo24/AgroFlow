@@ -15,7 +15,7 @@ It warns if a line would run into the next one.
 import json, os, re, subprocess, sys
 
 VOICE = "am_michael"   # e.g. af_heart, am_adam, bf_emma, bm_george
-SPEED = "1.15"
+SPEED = "1.2"
 # Shorten pauses longer than 0.28 s to 0.18 s, trim ends, normalise to -16 LUFS.
 FILTER = ("silenceremove=start_periods=1:start_threshold=-50dB:stop_periods=-1:"
           "stop_duration=0.28:stop_threshold=-45dB:stop_silence=0.18,areverse,"

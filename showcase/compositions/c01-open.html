@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #root { position: absolute; inset: 0; }
+  #c01-icon { position: absolute; left: 885px; top: 150px; width: 150px; height: 150px; }
+  #c01-word { position: absolute; left: 0; right: 0; top: 318px; text-align: center; font-weight: 700; font-size: 112px; letter-spacing: .14em; color: #184d35; }
+  #c01-by { position: absolute; left: 0; right: 0; top: 458px; text-align: center; font-weight: 600; font-size: 30px; letter-spacing: .3em; text-transform: uppercase; color: #14838c; }
+  #c01-tag { position: absolute; left: 0; right: 0; top: 530px; text-align: center; font-weight: 500; font-size: 36px; color: #253126; }
+  #c01-show { position: absolute; left: 0; right: 0; top: 600px; text-align: center; font-weight: 500; font-size: 22px; letter-spacing: .06em; color: #637064; }
+</style>
+<div id="root" data-composition-id="c01" data-width="1920" data-height="1080">
+  <div id="c01-in" class="layer">
+    <!-- A field: crop rows, a drip line, the field kit on its post and the soil probe. Illustration. -->
+    <svg class="layer" viewBox="0 0 1920 1080">
+      <defs>
+        <linearGradient id="c01-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f5f6f5"/><stop offset="1" stop-color="#eaf2ec"/></linearGradient>
+        <linearGradient id="c01-soil" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a7b5d"/><stop offset="1" stop-color="#6e5340"/></linearGradient>
+      </defs>
+      <g id="c01-field">
+        <path d="M0 760 C 500 720, 1400 720, 1920 760 V1080 H0 Z" fill="url(#c01-soil)"/>
+        <g id="c01-rows">
+          <path class="c01-row" d="M0 800 C 500 770, 1400 770, 1920 800" stroke="#4f8f62" stroke-width="16" fill="none" stroke-linecap="round" stroke-dasharray="2 34"/>
+          <path class="c01-row" d="M0 862 C 500 832, 1400 832, 1920 862" stroke="#4f8f62" stroke-width="20" fill="none" stroke-linecap="round" stroke-dasharray="2 40"/>
+          <path class="c01-row" d="M0 940 C 500 910, 1400 910, 1920 940" stroke="#4f8f62" stroke-width="26" fill="none" stroke-linecap="round" stroke-dasharray="2 50"/>
+          <path class="c01-row" d="M0 1040 C 500 1010, 1400 1010, 1920 1040" stroke="#4f8f62" stroke-width="32" fill="none" stroke-linecap="round" stroke-dasharray="2 62"/>
+        </g>
+        <path id="c01-drip" pathLength="1" d="M0 884 C 500 854, 1400 854, 1920 884" stroke="#0f6b73" stroke-width="6" fill="none"/>
+        <path id="c01-flow" pathLength="1" d="M0 884 C 500 854, 1400 854, 1920 884" stroke="#c8eef0" stroke-width="2.5" fill="none" stroke-dasharray="0.015 0.03"/>
+        <!-- field kit on a post -->
+        <g id="c01-kit"><g transform="translate(1560 640)">
+          <rect x="34" y="70" width="12" height="190" fill="#7d8a7f"/>
+          <rect x="0" y="0" width="80" height="96" rx="8" fill="#e9ede9" stroke="#4b5a4d" stroke-width="3"/>
+          <rect x="8" y="10" width="64" height="8" rx="3" fill="#c9d3cb"/>
+          <circle cx="62" cy="80" r="5" fill="#42c3c7"/>
+          <rect x="16" y="96" width="10" height="10" rx="2" fill="#4b5a4d"/><rect x="54" y="96" width="10" height="10" rx="2" fill="#4b5a4d"/>
+          <path d="M21 106 C 21 160, -20 170, -30 230" stroke="#253126" stroke-width="3" fill="none"/>
+          <path d="M59 106 C 59 150, 90 190, 80 240" stroke="#0f6b73" stroke-width="5" fill="none"/>
+          <!-- soil probe -->
+          <rect x="-42" y="226" width="24" height="12" rx="2" fill="#253126"/>
+          <rect x="-38" y="238" width="4" height="40" fill="#c0a060"/><rect x="-26" y="238" width="4" height="40" fill="#c0a060"/>
+        </g></g>
+      </g>
+    </svg>
+    <img id="c01-icon" src="assets/brand/agroflow-icon-512.png" alt="" />
+    <div id="c01-word">AGROFLOW</div>
+    <div id="c01-by">by MafiHub</div>
+    <div id="c01-tag">Smarter irrigation decisions from field data, weather and crop science.</div>
+    <div id="c01-show">UCT School of IT Showcase 2026 · INF3003W · Team 2</div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E3 = "power3.out";
+  tl.fromTo("#c01-field", { opacity: 0, y: 60 }, { opacity: 1, y: 0, duration: 1.4, ease: E3 }, 0.1);
+  tl.fromTo("#c01-drip", { strokeDasharray: "1 1", strokeDashoffset: 1 }, { strokeDashoffset: 0, duration: 1.8, ease: "power2.inOut" }, 0.6);
+  tl.fromTo("#c01-flow", { opacity: 0, strokeDashoffset: 0 }, { opacity: 1, strokeDashoffset: -0.5, duration: 9.6, ease: "none" }, 1.2);
+  tl.fromTo("#c01-kit", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.8, ease: E3 }, 1.0);
+  tl.fromTo("#c01-icon", { opacity: 0, scale: 0.88, transformOrigin: "50% 50%" }, { opacity: 1, scale: 1, duration: 0.8, ease: E3 }, 0.6);
+  tl.fromTo("#c01-word", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.8, ease: E3 }, 1.1);
+  tl.fromTo("#c01-by", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: E3 }, 1.8);
+  tl.fromTo("#c01-tag", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: E3 }, 4.9);
+  tl.fromTo("#c01-show", { opacity: 0 }, { opacity: 1, duration: 0.6 }, 6.2);
+  tl.to("#c01-in", { opacity: 0, duration: 0.5, ease: "power2.in" }, 10.35);
+  window.__timelines["c01"] = tl;
+})();
+</script>
+</template>
+</body></html>
