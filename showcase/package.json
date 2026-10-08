@@ -10,6 +10,7 @@
     "capture:mobile": "node capture/v3/mobile.mjs",
     "capture:admin": "node capture/v3/admin.mjs",
     "scenario": "python3 capture/v3/scenario_calc.py",
-    "voiceover": "python3 make-voiceover.py"
+    "voiceover": "python3 make-voiceover.py",
+    "render:4k": "npx --yes hyperframes@0.8.137 render -f 25 -q delivery --crf 14 --resolution 4k -o renders/AgroFlow_Showcase_Walkthrough_Final_4K.mp4"
   }
 }
