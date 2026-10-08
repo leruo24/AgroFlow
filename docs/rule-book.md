@@ -53,13 +53,13 @@ adjustment (p. 167) and today's water use (p. 162).
 
 | Soil | Crop stage | Dryness vs RAW | Rain forecast | → Action | Farmer sentence | Source |
 |---|---|---|---|---|---|---|
-| any (loam shown) | any | below RAW (20.5 of 21.5 mm) | none | No watering | "No watering needed today." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | none | Water today | "Water North Plot now: about 22 min (~32 L)." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | 4.9 mm < need | Water today | "Water North Plot now: about 22 min (~32 L)." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | 5 mm = need | Skip, rain covers it | "Rain expected. Skip watering North Plot today and save ~32 L." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | 12 mm > need | Skip, rain covers it | "Rain expected. Skip watering North Plot today and save ~32 L." | p. 171; p. 170 |
-| Sandy | any | at RAW (13 mm) | none | Water today | "Water North Plot now: about 13 min (~20 L)." | p. 171; p. 170 |
-| Clay | any | at RAW (21.9 mm) | none | Water today | "Water North Plot now: about 22 min (~33 L)." | p. 171; p. 170 |
+| any (loam shown) | any | below RAW (20.5 of 21.5 mm) | none | Water today | "Water North Plot today: about 25.5 mm (~38 L), run about 25.5 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | none | Water today | "Water North Plot today: about 26.5 mm (~40 L), run about 26.5 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | 4.9 mm < need | Water today | "Rain helps, but water North Plot today: about 21.6 mm (~32 L), run about 21.6 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | 5 mm = need | Water today | "Rain helps, but water North Plot today: about 21.5 mm (~32 L), run about 21.5 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | 12 mm > need | Postpone for rain | "Postpone watering North Plot: expected rain should move the field below its watering point." | p. 171; p. 170 |
+| Sandy | any | at RAW (13 mm) | none | Water today | "Water North Plot today: about 18 mm (~27 L), run about 18 min." | p. 171; p. 170 |
+| Clay | any | at RAW (21.9 mm) | none | Water today | "Water North Plot today: about 26.9 mm (~40 L), run about 26.9 min." | p. 171; p. 170 |
 
 **What the soil changes.** Sand holds less water than loam and clay more (Table 19), so in
 sand RAW is reached sooner and each watering is smaller - shorter, more often. That is not a

@@ -332,6 +332,19 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
         private static Explanation GrowthStatus(ZoneEngineInput i, ZoneEngineResult r)
         {
+            if (r.PrimaryAction == IrrigationPrimaryAction.CropNotPlanted)
+            {
+                return new Explanation
+                {
+                    Summary = $"{Capitalise(CropName(r))} is scheduled for planting on {i.PlantingDate:dd MMM}; crop irrigation has not started.",
+                    Rule = "A future crop does not receive ordinary irrigation advice before its planting date.",
+                    Confidence = r.Confidence.Reason,
+                    WhatWouldChangeIt = "Advice starts on the planting date, or when you update that date.",
+                    Technical = "Fao56Engine terminal state: CropNotPlanted.",
+                }.Fact("Planting date", i.PlantingDate?.ToString("d MMM", Inv) ?? "not set", FromSetup)
+                 .Fact("Crop", Capitalise(CropName(r)), FromSetup);
+            }
+
             if (r.StageAssumed)
             {
                 return new Explanation
@@ -547,8 +560,10 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
         private static void AddAmountFact(Explanation e, ZoneEngineResult r)
         {
-            if (r.RecommendedMinutes.HasValue && r.RecommendedLitres.HasValue)
-                e.Fact("How much", $"about {r.RecommendedMinutes} min (about {N(Math.Round(r.RecommendedLitres.Value))} L)", FromSetup);
+            if (r.RecommendedRuntimeSeconds.HasValue && r.RecommendedLitres.HasValue)
+                e.Fact("How much", r.RecommendedRuntimeSeconds.Value < 60.0
+                    ? $"about {N(r.RecommendedRuntimeSeconds.Value)} sec (about {N(Math.Round(r.RecommendedLitres.Value))} L)"
+                    : $"about {N(r.RecommendedRuntimeSeconds.Value / 60.0)} min (about {N(Math.Round(r.RecommendedLitres.Value))} L)", FromSetup);
             else if (r.RecommendedMinutesPerSquareMetre.HasValue)
                 e.Fact("How much", $"about {N(r.RecommendedMinutesPerSquareMetre.Value)} min for each square metre", FromSetup);
             else if (r.RecommendedDepthMm.HasValue)

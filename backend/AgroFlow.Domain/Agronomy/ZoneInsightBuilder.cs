@@ -233,82 +233,66 @@ namespace AgroFlow.Business.Agronomy
             }
 
             var todayRow = result.Days.FirstOrDefault(d => d.Day == today);
-            var dueForWater = result.BalanceRan && result.DepletionMm.HasValue && result.RawMm.HasValue
-                              && WaterRules.ShouldWaterToday(result.DepletionMm.Value, result.RawMm.Value);
+            var watersToday = result.PrimaryAction is IrrigationPrimaryAction.WaterNow
+                or IrrigationPrimaryAction.WaterNowReduced;
 
-            // A reading at or below the farmer's own threshold also means water now
-            // - but only a fresh one (item 2): yesterday's dry reading says
-            // nothing about today.
-            if (!dueForWater && WaterRules.AtOrBelowFarmerThreshold(
-                    result.RelativeMoisturePercent, input.MoistureThreshold, readingFresh: !result.ReadingStale))
+            if (result.PrimaryAction == IrrigationPrimaryAction.PostponeForRain)
             {
-                dueForWater = true;
-            }
-
-            // skip_rain takes precedence over water_now: there is no point telling
-            // someone to water and to skip watering on the same day.
-            var rainToday = todayRow?.RainMm ?? 0.0;
-            var etcToday = result.EtcTodayMm;
-            var rainCoversToday = dueForWater && etcToday.HasValue && WaterRules.SkipForRain(rainToday, etcToday.Value);
-
-            if (rainCoversToday)
-            {
-                var saved = result.RecommendedLitres;
-                var litresText = saved.HasValue
-                    ? " and save ~" + Math.Round(saved.Value).ToString("F0", CultureInfo.InvariantCulture) + " L"
-                    : "";
                 insights.Add(Make(input, InsightType.SkipRain, InsightSeverity.ActNow,
-                    Trim($"Rain expected. Skip watering {zone} today{litresText}."),
-                    "Weather app forecast rain for today against this crop's water use",
+                    Trim($"Postpone watering {zone}: expected rain should move the field below its watering point."),
+                    "Projected root-zone state after effective forecast rain",
                     today,
-                    ("forecast_rain_mm", Math.Round(rainToday, 1)),
-                    ("crop_water_use_mm", etcToday.HasValue ? Math.Round(etcToday.Value, 2) : (double?)null),
-                    ("litres_saved", saved.HasValue ? Math.Round(saved.Value) : (double?)null),
+                    ("primary_action", result.PrimaryAction.ToString()),
+                    ("forecast_rain_mm", result.ForecastRainTodayMm),
+                    ("projected_post_rain_mm", result.ProjectedPostRainDepletionMm),
+                    ("raw_mm", result.RawMm),
                     ("source", todayRow?.EtoSource)));
             }
-            else if (dueForWater)
-            {
-                var minutes = result.RecommendedMinutes;
-                var litres = result.RecommendedLitres;
 
+            if (result.PrimaryAction == IrrigationPrimaryAction.CropNotPlanted
+                && input.PlantingDate.HasValue)
+            {
+                insights.Add(Make(input, InsightType.GrowthStatus, InsightSeverity.Info,
+                    Trim($"No crop irrigation yet. Planting is scheduled for {input.PlantingDate.Value.ToString("d MMM", CultureInfo.InvariantCulture)}."),
+                    "The zone's future planting date",
+                    today,
+                    ("primary_action", result.PrimaryAction.ToString()),
+                    ("planting_date", input.PlantingDate.Value.ToString("yyyy-MM-dd"))));
+            }
+            else if (watersToday)
+            {
+                var seconds = result.RecommendedRuntimeSeconds;
+                var litres = result.RecommendedLitres;
                 var perM2 = result.RecommendedMinutesPerSquareMetre;
                 var depth = result.RecommendedDepthMm;
 
-                // Item 2: always an amount. Whole-zone minutes and litres when
-                // the zone is set up; otherwise per square metre, or as a depth.
-                string amount;
-                if (minutes.HasValue && litres.HasValue)
+                string amount = depth.HasValue
+                    ? $"about {depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} mm"
+                    : "";
+                if (litres.HasValue)
                 {
-                    amount = $"about {minutes.Value} min (~{Math.Round(litres.Value):F0} L)";
+                    amount += $" (~{Math.Round(litres.Value):F0} L)";
                 }
-                else if (litres.HasValue)
+                if (seconds.HasValue)
                 {
-                    amount = $"about {Math.Round(litres.Value):F0} L";
-                }
-                else
-                {
-                    amount = "";
+                    amount += seconds.Value < 60.0
+                        ? $", run about {seconds.Value.ToString("0.#", CultureInfo.InvariantCulture)} sec"
+                        : $", run about {(seconds.Value / 60.0).ToString("0.#", CultureInfo.InvariantCulture)} min";
                 }
 
-                // No size: the brief's own sentence, per square metre.
-                var perM2Sentence = "";
-                if (amount.Length == 0 && perM2.HasValue && depth.HasValue)
+                if (!litres.HasValue && depth.HasValue)
                 {
-                    perM2Sentence = $" For each square metre, run the pump about {perM2.Value.ToString("0.#", CultureInfo.InvariantCulture)} minutes ({depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} mm).";
-                }
-                else if (amount.Length == 0 && depth.HasValue && depth.Value > 0.0)
-                {
-                    perM2Sentence = $" Give about {depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} mm ({depth.Value.ToString("0.#", CultureInfo.InvariantCulture)} L per square metre).";
+                    amount += ". Add zone area to convert this to litres";
                 }
 
-                var message = (amount.Length > 0 ? $"Water {zone} now: {amount}." : $"Water {zone} now.") + perM2Sentence;
+                var prefix = result.PrimaryAction == IrrigationPrimaryAction.WaterNowReduced
+                    ? $"Rain helps, but water {zone} today: "
+                    : $"Water {zone} today: ";
+                var message = prefix + amount + ".";
                 if (result.ReadingStale)
                 {
-                    var action = (amount.Length > 0 ? $"water {zone} now, {amount}." : $"water {zone} now.") + perM2Sentence;
+                    var action = $"water {zone} today, {amount}.";
                     message = $"Based on the weather ({ConfidenceRules.KitQuiet(result.LatestReadingAtUtc)}): " + action;
-
-                    // Never trim the amount away to fit the date in: the date is
-                    // also in the confidence line, the amount is only here.
                     if (message.Length > MaxMessageLength) message = "Based on the weather: " + action;
                 }
 
@@ -318,7 +302,9 @@ namespace AgroFlow.Business.Agronomy
                         ? "FAO-56 Table 22 + weather water balance: the soil has dried past what this crop can stand"
                         : "FAO-56 Table 22 + soil sensor: the soil has dried past what this crop can stand",
                     today,
-                    ("minutes", minutes),
+                    ("primary_action", result.PrimaryAction.ToString()),
+                    ("runtime_seconds", seconds),
+                    ("minutes", result.RecommendedMinutes),
                     ("litres", litres.HasValue ? Math.Round(litres.Value, 1) : (double?)null),
                     ("minutes_per_m2", perM2),
                     ("depth_mm", depth),
@@ -340,7 +326,8 @@ namespace AgroFlow.Business.Agronomy
             }
 
             // water_soon: within 2 days, and only when not already due today.
-            if (!dueForWater && WaterRules.WaterSoon(result.DaysToNextWatering)
+            if (result.PrimaryAction == IrrigationPrimaryAction.WaterSoon
+                && WaterRules.WaterSoon(result.DaysToNextWatering)
                 && result.NextWateringDate.HasValue)
             {
                 var weekday = result.NextWateringDate.Value.ToString("dddd", CultureInfo.InvariantCulture);
@@ -518,9 +505,15 @@ namespace AgroFlow.Business.Agronomy
             if (result.Crop == null) return null;
             if (!input.CalibrationWet.HasValue || !input.CalibrationDry.HasValue) return null;
 
-            return WaterRules.RecommendedThreshold(
-                result.Crop.DepletionFractionP, result.Soil.PFactor,
-                input.CalibrationWet.Value, input.CalibrationDry.Value);
+            var pr = result.Crop.DepletionFractionP * result.Soil.PFactor;
+            if (pr < SoilWaterBalance.MinDepletionFraction) pr = SoilWaterBalance.MinDepletionFraction;
+            if (pr > SoilWaterBalance.MaxDepletionFraction) pr = SoilWaterBalance.MaxDepletionFraction;
+
+            return result.SensorDomain == SoilMoistureDomain.RelativePercent
+                ? 100.0 * (1.0 - pr)
+                : WaterRules.RecommendedThreshold(
+                    result.Crop.DepletionFractionP, result.Soil.PFactor,
+                    input.CalibrationWet.Value, input.CalibrationDry.Value);
         }
 
         private static ZoneInsight Make(

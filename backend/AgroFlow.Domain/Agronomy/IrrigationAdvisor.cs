@@ -153,7 +153,7 @@ namespace AgroFlow.Business.Agronomy
         public double? ReadilyAvailableWaterMm { get; internal set; }
         public double? DepletionMm { get; internal set; }
         public double? RecommendedLitres { get; internal set; }
-        public int? RecommendedMinutes { get; internal set; }
+        public double? RecommendedMinutes { get; internal set; }
         public double? RelativeMoisturePercent { get; internal set; }
         public int? DayOfSeason { get; internal set; }
         public int? SeasonLengthDays { get; internal set; }
@@ -419,8 +419,8 @@ namespace AgroFlow.Business.Agronomy
             if (result.BalanceRan)
             {
                 advice.Action =
-                    insights.Any(i => i.InsightType == InsightType.SkipRain) ? AdviceAction.HoldRainExpected
-                    : insights.Any(i => i.InsightType == InsightType.WaterNow) ? AdviceAction.IrrigateNow
+                    result.PrimaryAction == IrrigationPrimaryAction.PostponeForRain ? AdviceAction.HoldRainExpected
+                    : result.PrimaryAction is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced ? AdviceAction.IrrigateNow
                     : AdviceAction.NoActionNeeded;
 
                 // The balance decided, so "cannot decide" is no longer true.

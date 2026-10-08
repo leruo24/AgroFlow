@@ -55,11 +55,10 @@ namespace AgroFlow.Business.Agronomy
         public double? DhtTMaxC { get; set; }
         public double? DhtRhMeanPct { get; set; }
 
-        // Elevation is not recorded per farm. FAO-56 Eq. 8 needs it for
-        // atmospheric pressure; sea level is used and the effect is small
-        // (gamma moves ~1% per 100 m), but it is still an assumption and is
-        // reported as one.
-        public double ElevationM { get; set; }
+        // Null means AgroFlow has no reliable farm elevation. The resolver then
+        // uses standard atmospheric pressure as an explicit fallback; it never
+        // records or presents an invented elevation.
+        public double? ElevationM { get; set; }
     }
 
     public sealed class DailyEtoResult
@@ -279,7 +278,18 @@ namespace AgroFlow.Business.Agronomy
             result.NetRadiationMj = rn;
 
             var tMean = (tMin + tMax) / 2.0;
-            var pressure = PenmanMonteithEto.AtmosphericPressureKpa(inputs.ElevationM);
+            double pressure;
+            if (inputs.ElevationM.HasValue)
+            {
+                pressure = PenmanMonteithEto.AtmosphericPressureKpa(inputs.ElevationM.Value);
+            }
+            else
+            {
+                pressure = PenmanMonteithEto.AtmosphericPressureKpa(0.0);
+                result.Incomplete = true;
+                result.Limitations.Add(
+                    "Farm elevation is not available, so standard atmospheric pressure was used; no elevation was guessed.");
+            }
             var gamma = PenmanMonteithEto.PsychrometricConstantKpaPerC(pressure);
             var slope = PenmanMonteithEto.SaturationSlopeKpaPerC(tMean);
 

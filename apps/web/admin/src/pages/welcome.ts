@@ -146,7 +146,7 @@ export const WELCOME_HTML = `
             <article class="hardware-stage" data-hardware-stage="2">
               <span class="hardware-stage-number">03</span>
               <h3>Inside AgroFlow</h3>
-              <p>Remove the junction-box lid to reveal the ESP32, relay board, sensor interface, terminal connections and organised wiring.</p>
+              <p>Open the weatherproof side-hinged lid to reveal the ESP32, 5 V relay, soil-sensor interface, protected terminals and routed wiring.</p>
             </article>
 
             <article class="hardware-stage" data-hardware-stage="3">
@@ -183,12 +183,12 @@ export const WELCOME_HTML = `
               <div class="hardware-canvas" data-hardware-canvas></div>
 
               <div class="hardware-hotspots" aria-label="Hardware components">
-                <button type="button" data-hardware-hotspot="esp32" aria-controls="hardwareComponentInfo">ESP32 Controller</button>
-                <button type="button" data-hardware-hotspot="soil" aria-controls="hardwareComponentInfo">Soil Moisture Sensor</button>
-                <button type="button" data-hardware-hotspot="dht" aria-controls="hardwareComponentInfo">DHT11 Sensor</button>
-                <button type="button" data-hardware-hotspot="relay" aria-controls="hardwareComponentInfo">Relay Module</button>
-                <button type="button" data-hardware-hotspot="pump" aria-controls="hardwareComponentInfo">Pump Output</button>
-                <button type="button" data-hardware-hotspot="power" aria-controls="hardwareComponentInfo">Power Input</button>
+                <button type="button" data-hardware-hotspot="esp32" aria-label="ESP32 Controller" aria-controls="hardwareComponentInfo"><span>ESP32 Controller</span></button>
+                <button type="button" data-hardware-hotspot="soil" aria-label="Soil Moisture Sensor" aria-controls="hardwareComponentInfo"><span>Soil Moisture Sensor</span></button>
+                <button type="button" data-hardware-hotspot="dht" aria-label="Temperature &amp; Humidity Sensor" aria-controls="hardwareComponentInfo"><span>Temperature &amp; Humidity Sensor</span></button>
+                <button type="button" data-hardware-hotspot="relay" aria-label="5 V Relay Module" aria-controls="hardwareComponentInfo"><span>5 V Relay Module</span></button>
+                <button type="button" data-hardware-hotspot="pump" aria-label="Pump / Irrigation Output" aria-controls="hardwareComponentInfo"><span>Pump / Irrigation Output</span></button>
+                <button type="button" data-hardware-hotspot="power" aria-label="Power Input" aria-controls="hardwareComponentInfo"><span>Power Input</span></button>
               </div>
 
               <div class="hardware-viewer-footer">
@@ -198,6 +198,7 @@ export const WELCOME_HTML = `
                 </div>
                 <div class="hardware-controls" aria-label="3D view controls">
                   <button type="button" data-hardware-rotate="left" aria-label="Rotate product left">&#8634;</button>
+                  <button type="button" class="hardware-explore" data-hardware-toggle aria-expanded="false">Explore inside</button>
                   <button type="button" data-hardware-reset aria-label="Reset product view">Reset view</button>
                   <button type="button" data-hardware-rotate="right" aria-label="Rotate product right">&#8635;</button>
                 </div>
@@ -242,7 +243,7 @@ export const WELCOME_HTML = `
         <div>
           <p class="landing-eyebrow">Technology</p>
           <h2 id="technologyHeading" class="landing-h2">From field sensing to a controlled irrigation output.</h2>
-          <p class="landing-step-body">The working prototype uses an ESP32 controller, a capacitive soil-moisture probe, a DHT11 temperature and humidity sensor, and a relay output for a connected pump. The node communicates with the AgroFlow API over Wi-Fi.</p>
+          <p class="landing-step-body">The working prototype uses an ESP32 controller, a YL-69 resistive soil-moisture probe, a DHT11 temperature and humidity sensor, and a 5 V relay output for a connected pump. The node communicates with the AgroFlow API over Wi-Fi.</p>
         </div>
         <ol class="technology-flow" aria-label="AgroFlow technical flow">
           <li><b>Sense</b><span>Soil moisture and crop-zone temperature and humidity</span></li>

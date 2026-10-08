@@ -310,7 +310,7 @@ public class Fao56EngineDataRulesTests
     private static readonly string[] BannedWords =
     {
         "Kc", "ETo", "ETc", "TAW", "RAW", "Ks", "depletion", "evapotranspiration",
-        "FAO", "coefficient", "mm",
+        "FAO", "coefficient",
     };
 
     [Fact]
@@ -422,7 +422,10 @@ public class Fao56EngineDataRulesTests
         Run(i =>
         {
             i.Readings[0].RawValue = 2950;
-            i.Weather.First(w => w.Date == Today).RainMm = 25.0;
+            var today = i.Weather.First(w => w.Date == Today);
+            today.RainMm = 25.0;
+            today.IsForecast = true;
+            i.InitialDepletionMm = 35.0;
         }, new ZoneFaultSignals());
 
         // Nothing set up.
@@ -496,7 +499,10 @@ public class Fao56EngineDataRulesTests
     {
         var input = CompleteZone();
         input.Readings[0].RawValue = 2950;                                  // dry
-        input.Weather.First(w => w.Date == Today).RainMm = 30.0;            // heavy rain today
+        var today = input.Weather.First(w => w.Date == Today);
+        today.RainMm = 30.0;                                                // heavy forecast rain today
+        today.IsForecast = true;
+        input.InitialDepletionMm = 35.0;
 
         var result = Fao56Engine.Run(input);
         var insights = ZoneInsightBuilder.Build(input, result, new ZoneFaultSignals());

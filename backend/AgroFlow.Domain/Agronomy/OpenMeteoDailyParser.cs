@@ -79,7 +79,7 @@ namespace AgroFlow.Business.Agronomy
     {
         public const string ForecastSource = "open-meteo-forecast";
 
-        // Open-Meteo's wind_speed_10m_max is measured at 10 m above ground.
+        // Open-Meteo's wind_speed_10m_mean is measured at 10 m above ground.
         // FAO-56 Eq. 6 wants 2 m, so Eq. 47 converts using this height.
         public const double WindMeasurementHeightM = 10.0;
         public const string ArchiveSource = "open-meteo-archive";
@@ -88,12 +88,12 @@ namespace AgroFlow.Business.Agronomy
         // what FAO-56 Eq. 52 needs; precipitation_sum drives the rainfall
         // outlook. Humidity is collected because it is free from the same call
         // and useful for display - Hargreaves does not use it.
-        // relative_humidity_2m_min/max and wind_speed_10m_max were added for
+        // relative_humidity_2m_min/max and daily mean wind_speed_10m_mean are used for
         // FAO-56 Eq. 6 (Penman-Monteith). They come from the same free call that
         // already fetched the temperatures, so this costs nothing extra.
         public const string DailyVariables =
             "temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_mean," +
-            "relative_humidity_2m_min,relative_humidity_2m_max,wind_speed_10m_max";
+            "relative_humidity_2m_min,relative_humidity_2m_max,wind_speed_10m_mean";
 
         // Archive (ERA5) does not serve relative_humidity_2m_mean as a daily
         // aggregate, so the backfill asks for a narrower set rather than
@@ -137,7 +137,7 @@ namespace AgroFlow.Business.Agronomy
             var humidity = ReadOptionalNumberArray(daily, "relative_humidity_2m_mean");
             var humidityMin = ReadOptionalNumberArray(daily, "relative_humidity_2m_min");
             var humidityMax = ReadOptionalNumberArray(daily, "relative_humidity_2m_max");
-            var windMax = ReadOptionalNumberArray(daily, "wind_speed_10m_max");
+            var windMean = ReadOptionalNumberArray(daily, "wind_speed_10m_mean");
 
             var rows = new List<WeatherDailyRow>();
             var index = 0;
@@ -160,10 +160,10 @@ namespace AgroFlow.Business.Agronomy
                         isForecast: !treatAllAsActuals && date >= today,
                         rhMinPct: ValueAt(humidityMin, index),
                         rhMaxPct: ValueAt(humidityMax, index),
-                        windMs: ValueAt(windMax, index),
+                        windMs: ValueAt(windMean, index),
                         // Only claim a measurement height when there is a wind
                         // figure to attach it to.
-                        windHeightM: ValueAt(windMax, index).HasValue ? WindMeasurementHeightM : (double?)null));
+                        windHeightM: ValueAt(windMean, index).HasValue ? WindMeasurementHeightM : (double?)null));
                 }
 
                 index++;

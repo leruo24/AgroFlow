@@ -35,6 +35,7 @@ public sealed class Fao56EngineService : BackgroundService
     private readonly ILogger<Fao56EngineService> _logger;
 
     private DateOnly _lastDailyRun = DateOnly.MinValue;
+    private readonly Dictionary<long, List<RollingIrrigationDay>> _lastPlans = new();
 
     public Fao56EngineService(IConfiguration configuration, ILogger<Fao56EngineService> logger)
     {
@@ -120,6 +121,7 @@ public sealed class Fao56EngineService : BackgroundService
             try
             {
                 var insights = engine.RunZoneAndWriteInsights(zone, today);
+                TrackPlanChange(engine, zone, today);
                 insightsWritten += insights.Count;
                 zonesDone++;
             }
@@ -148,6 +150,7 @@ public sealed class Fao56EngineService : BackgroundService
             try
             {
                 actNow += engine.RunActNowChecks(zone, today).Count;
+                TrackPlanChange(engine, zone, today);
             }
             catch (Exception ex)
             {
@@ -159,5 +162,29 @@ public sealed class Fao56EngineService : BackgroundService
         {
             _logger.LogInformation("FAO-56 periodic checks wrote {Count} act_now insight(s)", actNow);
         }
+    }
+
+    private void TrackPlanChange(Fao56EngineController engine, AgroFlow.Data.EngineZoneRow zone, DateOnly today)
+    {
+        var current = engine.RunZone(zone, today, persist: false).Outlook
+            .Select(d => new RollingIrrigationDay
+            {
+                Date = d.Date,
+                Action = d.Action,
+                RequiredDepthMm = d.RequiredDepthMm,
+                ForecastRainMm = d.ForecastRainMm,
+            }).ToList();
+
+        if (_lastPlans.TryGetValue(zone.ZoneId, out var previous))
+        {
+            var change = IrrigationPlanChangeDetector.Compare(zone.ZoneName, previous, current);
+            if (change != null)
+            {
+                engine.Data.CreateDecisionAlert(zone.ZoneId, change.Message);
+                _logger.LogInformation("Decision alert for zone {ZoneId}: {Kind}", zone.ZoneId, change.Kind);
+            }
+        }
+
+        _lastPlans[zone.ZoneId] = current;
     }
 }

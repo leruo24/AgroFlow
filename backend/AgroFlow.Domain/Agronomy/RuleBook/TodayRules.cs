@@ -39,6 +39,12 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         {
             ZoneInsight? Get(string type) => insights.FirstOrDefault(i => i.InsightType == type);
 
+            if (result.PrimaryAction == IrrigationPrimaryAction.CropNotPlanted)
+                return new TodayAction("none", "No crop irrigation yet: the crop has not been planted", null);
+
+            if (result.PrimaryAction == IrrigationPrimaryAction.SeasonComplete)
+                return new TodayAction("none", "Crop cycle complete; start a new crop cycle if this field was replanted", null);
+
             if (Get(InsightType.SkipRain) is { } skip)
             {
                 return new TodayAction("skip", "No watering today: rain is expected to cover it.", skip.Explanation);
@@ -82,8 +88,10 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
         private static string Amount(ZoneEngineResult r)
         {
-            if (r.RecommendedMinutes is { } min && r.RecommendedLitres is { } l)
-                return $"about {min} min (about {Math.Round(l).ToString("0", Inv)} L)";
+            if (r.RecommendedRuntimeSeconds is { } seconds && r.RecommendedLitres is { } l)
+                return seconds < 60.0
+                    ? $"about {seconds.ToString("0.#", Inv)} sec (about {Math.Round(l).ToString("0", Inv)} L)"
+                    : $"about {(seconds / 60.0).ToString("0.#", Inv)} min (about {Math.Round(l).ToString("0", Inv)} L)";
             if (r.RecommendedLitres is { } litres)
                 return $"about {Math.Round(litres).ToString("0", Inv)} L";
             if (r.RecommendedMinutesPerSquareMetre is { } perM2)

@@ -256,6 +256,16 @@ namespace AgroFlow.Business.Agronomy
             return (int)Math.Ceiling(litres.Value / flowRateLpm.Value);
         }
 
+        // Exact runtime for farmer-facing dosing. Keeping seconds avoids turning
+        // a fraction-of-a-second requirement into a whole minute of watering.
+        public static double? IrrigationRuntimeSeconds(double? litres, double? flowRateLpm)
+        {
+            if (!litres.HasValue) return null;
+            if (!flowRateLpm.HasValue || flowRateLpm.Value <= 0.0) return null;
+            if (litres.Value <= 0.0) return 0.0;
+            return litres.Value / flowRateLpm.Value * 60.0;
+        }
+
         // Irrigation depth applied by a run, for the water balance: litres spread
         // over the zone area, in mm.
         public static double? IrrigationDepthMm(double? litres, double? areaM2)

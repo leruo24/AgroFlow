@@ -262,8 +262,10 @@ internal static class ActionReport
     private static string Amount(ZoneEngineResult? r)
     {
         if (r is null) return "water as usual";
-        if (r.RecommendedMinutes is { } min && r.RecommendedLitres is { } l)
-            return $"about {min} minutes (about {N(Math.Round(l))} L)";
+        if (r.RecommendedRuntimeSeconds is { } seconds && r.RecommendedLitres is { } l)
+            return seconds < 60.0
+                ? $"about {N(seconds)} seconds (about {N(Math.Round(l))} L)"
+                : $"about {N(seconds / 60.0)} minutes (about {N(Math.Round(l))} L)";
         if (r.RecommendedLitres is { } litres)
             return $"about {N(Math.Round(litres))} L";
         if (r.RecommendedMinutesPerSquareMetre is { } perM2)
@@ -277,6 +279,14 @@ internal static class ActionReport
     // that day, through the same rule the app uses for "now".
     private static string ProjectedAmount(WaterUsageReportModel z, DateOnly day)
     {
+        var planned = z.Engine?.Outlook.FirstOrDefault(d => d.Date == day);
+        if (planned?.RuntimeSeconds is { } seconds && planned.Litres is { } plannedLitres)
+            return seconds < 60.0
+                ? $"about {N(seconds)} seconds (about {N(Math.Round(plannedLitres))} L)"
+                : $"about {N(seconds / 60.0)} minutes (about {N(Math.Round(plannedLitres))} L)";
+        if (planned?.Litres is { } litresOnly) return $"about {N(Math.Round(litresOnly))} L";
+        if (planned?.RequiredDepthMm is { } plannedDepth) return $"about {N(plannedDepth)} mm";
+
         var dr = z.Engine?.Days.FirstOrDefault(d => d.Day == day)?.DrEndMm;
         if (dr is null) return "water as usual";
         var minutes = WaterRules.MinutesToRun(dr.Value, z.EngineInput?.AreaM2, z.EngineInput?.FlowRateLpm);

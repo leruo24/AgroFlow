@@ -103,7 +103,12 @@ public class EdgeCaseTests
     {
         var input = Zone(i => i.PlantingDate = Today.AddDays(daysFromToday));
         var result = Fao56Engine.Run(input);
-        Assert.True(result.BalanceRan);
+        if (daysFromToday > 0)
+            Assert.Equal(IrrigationPrimaryAction.CropNotPlanted, result.PrimaryAction);
+        else if (daysFromToday <= -400)
+            Assert.Equal(IrrigationPrimaryAction.SeasonComplete, result.PrimaryAction);
+        else
+            Assert.True(result.BalanceRan);
         Assert.NotEmpty(ZoneInsightBuilder.Build(input, result, new ZoneFaultSignals()));
     }
 

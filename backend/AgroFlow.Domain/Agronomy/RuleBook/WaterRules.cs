@@ -22,6 +22,11 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         // a heatwave's worth on the Western Cape's summer figures.
         public const double HotDaysEtoMultiple = 1.3;
 
+        // Configurable/testable equipment sanity bounds. These warn; they never
+        // cap or alter an agronomic requirement.
+        public const double ImpracticallyShortRuntimeSeconds = 10.0;
+        public const double ImpracticallyLongRuntimeSeconds = 12.0 * 60.0 * 60.0;
+
         // DATA RULE (item 6): where "moist" sits between full and the watering
         // point. A farmer's hand cannot tell a quarter-dry soil from a
         // three-quarter-dry one, so a "moist" check only pulls the estimate

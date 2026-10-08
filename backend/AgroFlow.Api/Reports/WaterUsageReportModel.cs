@@ -41,7 +41,7 @@ internal sealed class WaterUsageReportModel
 
     /// The day the engine expects the soil to reach its watering point.
     public DateOnly? NextWatering { get; init; }
-    public int? NextWateringMinutes { get; init; }
+    public double? NextWateringMinutes { get; init; }
     public double? NextWateringLitres { get; init; }
 
     /* ---- Item 3: what the action report needs from the engine ------- */

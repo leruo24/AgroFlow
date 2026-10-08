@@ -58,7 +58,7 @@ public class ExplanationTests
         var runs = new List<(string, ZoneEngineInput, ZoneFaultSignals)>
         {
             ("dry zone", Zone(i => i.Readings[0].RawValue = 2950), new ZoneFaultSignals()),
-            ("rain today", Zone(i => { i.Readings[0].RawValue = 2950; i.Weather.First(w => w.Date == Today).RainMm = 25; }), new ZoneFaultSignals()),
+            ("rain today", Zone(i => { i.Readings[0].RawValue = 2950; var w = i.Weather.First(x => x.Date == Today); w.RainMm = 25; w.IsForecast = true; i.InitialDepletionMm = 35; }), new ZoneFaultSignals()),
             ("wet zone, forecast", Zone(i => { i.Readings[0].RawValue = 1250; i.Weather.Where(w => w.Date < Today).ToList().ForEach(w => w.RainMm = 15); }), new ZoneFaultSignals { TrailingSevenDayMeanEto = 2.0 }),
             ("water soon", Zone(i =>
             {
@@ -155,7 +155,8 @@ public class ExplanationTests
         Assert.Contains(e.Facts, f => f.Label == "Soil" && f.Value.StartsWith("Loam"));
         Assert.Contains(e.Facts, f => f.Label == "Rain expected today" && f.Value == "0 mm");
         Assert.Contains(e.Facts, f => f.Label == "How dry the soil is" && f.Value.Contains(Math.Round(s.Result.DepletionMm!.Value, 1).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)));
-        Assert.Contains(e.Facts, f => f.Label == "How much" && f.Value.Contains(s.Result.RecommendedMinutes!.Value + " min"));
+        Assert.Contains(e.Facts, f => f.Label == "How much" && f.Value.Contains(
+            s.Result.RecommendedMinutes!.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " min"));
         // The rule quotes the share of soil water actually used for this crop and soil today.
         Assert.Contains(Math.Round(s.Result.AdjustedP!.Value * 100).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%", e.Rule);
     }

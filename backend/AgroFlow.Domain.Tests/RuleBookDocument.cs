@@ -192,6 +192,18 @@ public static class RuleBookDocument
     private static (string Action, string Sentence) Decide(
         Fao56EngineCrop crop, SoilWaterHolding soil, double depletion, double raw, double rainMm)
     {
+        var noRain = depletion + ExampleNeedMm;
+        var effectiveRain = SoilWaterBalance.EffectiveRainfallMm(rainMm, ExampleNeedMm);
+        var postRain = Math.Max(0, noRain - effectiveRain);
+        var dueWithoutRain = noRain >= raw;
+        var primary = dueWithoutRain && effectiveRain > 0 && postRain < raw
+            ? IrrigationPrimaryAction.PostponeForRain
+            : dueWithoutRain && effectiveRain > 0
+                ? IrrigationPrimaryAction.WaterNowReduced
+                : dueWithoutRain ? IrrigationPrimaryAction.WaterNow : IrrigationPrimaryAction.NoWaterNeeded;
+        var required = primary is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced
+            ? postRain
+            : (double?)null;
         var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "North Plot", CropType = crop.Key, Today = Today };
         var result = new ZoneEngineResult
         {
@@ -203,15 +215,23 @@ public static class RuleBookDocument
             DepletionMm = depletion,
             RawMm = raw,
             EtcTodayMm = ExampleNeedMm,
-            RecommendedLitres = SoilWaterBalance.IrrigationLitres(depletion, ExampleAreaM2),
-            RecommendedMinutes = WaterRules.MinutesToRun(depletion, ExampleAreaM2, ExampleFlowLpm),
-            RecommendedDepthMm = Math.Round(depletion, 1),
+            PrimaryAction = primary,
+            ProjectedPostRainDepletionMm = postRain,
+            ForecastRainTodayMm = rainMm,
+            RecommendedLitres = required.HasValue ? SoilWaterBalance.IrrigationLitres(required.Value, ExampleAreaM2) : null,
+            RecommendedRuntimeSeconds = required.HasValue
+                ? SoilWaterBalance.IrrigationRuntimeSeconds(SoilWaterBalance.IrrigationLitres(required.Value, ExampleAreaM2), ExampleFlowLpm)
+                : null,
+            RecommendedMinutes = required.HasValue
+                ? SoilWaterBalance.IrrigationRuntimeSeconds(SoilWaterBalance.IrrigationLitres(required.Value, ExampleAreaM2), ExampleFlowLpm) / 60.0
+                : null,
+            RecommendedDepthMm = required.HasValue ? Math.Round(required.Value, 1) : null,
         };
-        result.Days.Add(new WaterBalanceDay { Day = Today, RainMm = rainMm });
+        result.Days.Add(new WaterBalanceDay { Day = Today, RainMm = rainMm, IsForecast = true });
 
         var insights = ZoneInsightBuilder.Build(input, result, new ZoneFaultSignals());
         var skip = insights.FirstOrDefault(i => i.InsightType == InsightType.SkipRain);
-        if (skip != null) return ("Skip, rain covers it", skip.Message);
+        if (skip != null) return ("Postpone for rain", skip.Message);
         var water = insights.FirstOrDefault(i => i.InsightType == InsightType.WaterNow);
         if (water != null) return ("Water today", water.Message);
         return ("No watering", "No watering needed today.");

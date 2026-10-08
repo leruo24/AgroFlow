@@ -109,7 +109,7 @@ public class ActionReportTests
         var water = c.Actions[0];
         _out.WriteLine(water.Lead + water.Detail);
         Assert.Contains("today (Tue 10 Feb)", water.Lead);
-        Assert.Matches(@"about \d+ minutes \(about \d+ L\)", water.Detail);
+        Assert.Matches(@"about \d+(\.\d+)? minutes \(about \d+ L\)", water.Detail);
         Assert.NotNull(water.Why);
         Assert.All(c.Actions, a => Assert.NotNull(a.Why));
     }
@@ -125,7 +125,10 @@ public class ActionReportTests
     public void RainToday_IsASkipWithTheRainInIt()
     {
         var z = Zone("Tub 1", Setup.Full, 7);
-        z.EngineInput!.Weather.First(w => w.Date == Today).RainMm = 25;
+        var today = z.EngineInput!.Weather.First(w => w.Date == Today);
+        today.RainMm = 25;
+        today.IsForecast = true;
+        z.EngineInput.InitialDepletionMm = 35;
         var rerun = Fao56Engine.Run(z.EngineInput);
         var model = new WaterUsageReportModel
         {

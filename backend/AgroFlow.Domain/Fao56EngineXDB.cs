@@ -340,6 +340,29 @@ namespace AgroFlow.Data
             return byDay.Values.Sum();
         }
 
+        // Seed a bounded replay from the immediately preceding persisted state.
+        // zone_water_balance is derived/recomputable, but this row is what makes
+        // Dr continuous across query windows and calendar-week boundaries.
+        public (DateOnly Day, double DepletionMm)? GetLastCompleteBalanceBefore(long zoneId, DateOnly before)
+        {
+            const string sql =
+                "select day, dr_end_mm from zone_water_balance " +
+                "where zone_id = $1 and day = ($2::date - 1) and incomplete = false and dr_end_mm is not null " +
+                "limit 1";
+
+            using (var connection = Open())
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.AddWithValue(zoneId);
+                cmd.Parameters.AddWithValue(NpgsqlDbType.Date, before);
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (!reader.Read()) return null;
+                    return (reader.GetFieldValue<DateOnly>(0), Convert.ToDouble(reader.GetValue(1)));
+                }
+            }
+        }
+
         // ------------------------------------------------------------------
         // Writing the balance. Idempotent: re-running a day overwrites it,
         // because the engine is a pure function of its inputs and a rerun with
@@ -442,6 +465,24 @@ namespace AgroFlow.Data
                 cmd.Parameters.AddWithValue(dataJson);
                 cmd.Parameters.AddWithValue(NpgsqlDbType.Date, insight.ValidFor);
 
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // Reuses the existing alert table for material plan changes. Identical
+        // open alerts are deduplicated so a 15-minute recalculation cannot spam
+        // the farmer/admin dashboard.
+        public void CreateDecisionAlert(long zoneId, string message)
+        {
+            const string sql =
+                "insert into alert (zone_id, severity, message, status) " +
+                "select $1, 'Warning', $2, 'Open' " +
+                "where not exists (select 1 from alert where zone_id = $1 and status = 'Open' and message = $2)";
+            using (var connection = Open())
+            using (var cmd = new NpgsqlCommand(sql, connection))
+            {
+                cmd.Parameters.AddWithValue(zoneId);
+                cmd.Parameters.AddWithValue(message);
                 cmd.ExecuteNonQuery();
             }
         }
