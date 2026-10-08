@@ -1,0 +1,395 @@
+1
+00:00:00,400 --> 00:00:02,841
+This is AgroFlow, by MafiHub.
+
+2
+00:00:02,841 --> 00:00:08,396
+It helps farmers make better irrigation
+decisions from field data,
+
+3
+00:00:08,396 --> 00:00:10,500
+weather and crop science.
+
+4
+00:00:11,300 --> 00:00:15,106
+A farmer must decide when to irrigate, how
+much, for how long,
+
+5
+00:00:15,106 --> 00:00:17,378
+and whether the weather changes that.
+
+6
+00:00:17,378 --> 00:00:21,000
+Poor signal, scarce water and uneven
+fields make it harder.
+
+7
+00:00:21,800 --> 00:00:25,656
+AgroFlow combines sensor readings, the
+forecast, the crop,
+
+8
+00:00:25,656 --> 00:00:30,443
+the soil and the irrigation history, using
+the FAO-56 crop-water method.
+
+9
+00:00:30,443 --> 00:00:32,105
+Same inputs, same answer:
+
+10
+00:00:32,105 --> 00:00:33,900
+it's a calculation, not AI.
+
+11
+00:00:34,700 --> 00:00:38,268
+Each irrigation zone has a field kit.
+Inside the enclosure,
+
+12
+00:00:38,268 --> 00:00:42,865
+an ESP32 controller reads a YL-69
+resistive Soil Moisture Sensor and a DHT11
+
+13
+00:00:42,865 --> 00:00:44,800
+temperature and humidity sensor.
+
+14
+00:00:45,600 --> 00:00:47,417
+A relay switches the pump.
+
+15
+00:00:47,417 --> 00:00:52,868
+The kit reports every thirty seconds,
+stops any single run after five minutes,
+
+16
+00:00:52,868 --> 00:00:57,900
+and if its connection drops, it waters dry
+soil in short, rested bursts.
+
+17
+00:00:58,700 --> 00:01:04,529
+Readings travel over secure MQTT to the
+AgroFlow API and into a Supabase Postgres
+
+18
+00:01:04,529 --> 00:01:05,729
+database.
+
+19
+00:01:05,729 --> 00:01:08,104
+Open-Meteo provides the forecast.
+
+20
+00:01:08,104 --> 00:01:12,493
+Farmers use the mobile app, administrators
+use a web console,
+
+21
+00:01:12,493 --> 00:01:14,350
+and alerts go out on Telegram.
+
+22
+00:01:14,900 --> 00:01:21,100
+On the farmer's phone, Home gives one
+clear action for each irrigation zone.
+
+23
+00:01:21,900 --> 00:01:23,100
+For the tomato field:
+
+24
+00:01:23,100 --> 00:01:25,237
+water about seventy minutes this morning,
+
+25
+00:01:25,237 --> 00:01:29,406
+roughly seventeen hundred and fifty
+litres, or thirty-five millimetres of
+water.
+
+26
+00:01:30,100 --> 00:01:31,300
+Confidence is high:
+
+27
+00:01:31,300 --> 00:01:33,213
+sensor, setup and weather agree.
+
+28
+00:01:33,213 --> 00:01:35,664
+The spinach beds can wait until Saturday.
+
+29
+00:01:36,400 --> 00:01:40,375
+AgroFlow estimates how much water the
+weather is drawing,
+
+30
+00:01:40,375 --> 00:01:42,815
+five point eight millimetres today.
+
+31
+00:01:42,815 --> 00:01:46,302
+It adjusts that for the crop and its
+growth stage,
+
+32
+00:01:46,302 --> 00:01:49,300
+so these tomatoes use about six point
+four.
+
+33
+00:01:50,100 --> 00:01:54,451
+Soil and root depth set when the crop
+starts to struggle.
+
+34
+00:01:54,451 --> 00:02:00,100
+A daily tally of rain, irrigation and use
+puts this field past that point.
+
+35
+00:02:00,900 --> 00:02:04,379
+Each recommendation has a 'Why am I seeing
+this?' link:
+
+36
+00:02:04,379 --> 00:02:08,300
+the inputs, their sources, the rule, and
+what would change it.
+
+37
+00:02:09,100 --> 00:02:11,660
+Here, thirty-five millimetres have been
+used,
+
+38
+00:02:11,660 --> 00:02:14,618
+past the thirty-one and a half millimetre
+threshold,
+
+39
+00:02:14,618 --> 00:02:17,917
+and two millimetres of rain won't cover
+the day's use. So:
+
+40
+00:02:17,917 --> 00:02:18,850
+water today.
+
+41
+00:02:19,400 --> 00:02:21,963
+AgroFlow recommends. The farmer decides.
+
+42
+00:02:21,963 --> 00:02:25,550
+Here, the farmer applies fifteen hundred
+litres instead,
+
+43
+00:02:25,550 --> 00:02:27,600
+and records it with 'I watered'.
+
+44
+00:02:28,400 --> 00:02:30,829
+AgroFlow counts what actually happened:
+
+45
+00:02:30,829 --> 00:02:32,386
+no watering needed today.
+
+46
+00:02:32,386 --> 00:02:35,500
+A soil check by hand can correct the
+estimate too.
+
+47
+00:02:36,300 --> 00:02:40,442
+Where a kit controls the pump, a run can
+start from the app.
+
+48
+00:02:40,442 --> 00:02:42,305
+Ninety minutes is rejected:
+
+49
+00:02:42,305 --> 00:02:44,100
+the limit is one to sixty.
+
+50
+00:02:44,900 --> 00:02:50,015
+Five minutes is confirmed and sent, via
+the API and MQTT, to the ESP32,
+
+51
+00:02:50,015 --> 00:02:51,600
+which starts the pump.
+
+52
+00:02:52,400 --> 00:02:56,000
+The kit reports the run, and it appears in
+the history.
+
+53
+00:02:56,800 --> 00:02:58,191
+AgroFlow also looks ahead:
+
+54
+00:02:58,191 --> 00:03:01,400
+the week-ahead screen says what each day
+means for watering.
+
+55
+00:03:02,200 --> 00:03:05,253
+Underneath, the water balance carries on
+day by day:
+
+56
+00:03:05,253 --> 00:03:08,600
+each day's ending state is the next day's
+starting point.
+
+57
+00:03:09,400 --> 00:03:12,123
+So the tomatoes next need water on
+Tuesday.
+
+58
+00:03:12,123 --> 00:03:13,707
+The window rolls forward;
+
+59
+00:03:13,707 --> 00:03:15,100
+nothing resets weekly.
+
+60
+00:03:15,900 --> 00:03:17,243
+Then the forecast changes:
+
+61
+00:03:17,243 --> 00:03:20,289
+twenty-two millimetres of rain is now
+expected on Saturday,
+
+62
+00:03:20,289 --> 00:03:22,200
+so AgroFlow recalculates the balance.
+
+63
+00:03:23,000 --> 00:03:24,841
+The rain refills the root zone:
+
+64
+00:03:24,841 --> 00:03:26,800
+no irrigation expected this week.
+
+65
+00:03:27,600 --> 00:03:31,337
+It isn't 'rain means skip'. Too little
+rain: still water.
+
+66
+00:03:31,337 --> 00:03:34,681
+Enough rain: it waits. Some rain: a
+smaller amount.
+
+67
+00:03:34,681 --> 00:03:37,500
+And if the rain fades, watering moves
+back.
+
+68
+00:03:38,300 --> 00:03:42,300
+Heavy-rain warnings arrive on Telegram,
+with the same 'Why' button.
+
+69
+00:03:43,100 --> 00:03:46,500
+The soil sensor gives a local signal from
+one spot,
+
+70
+00:03:46,500 --> 00:03:50,100
+so AgroFlow treats it as a check, not the
+whole truth.
+
+71
+00:03:50,900 --> 00:03:52,456
+Faulty sensors raise warnings;
+
+72
+00:03:52,456 --> 00:03:55,100
+a farmer's own soil check can correct the
+estimate.
+
+73
+00:03:55,900 --> 00:03:59,181
+When setup is incomplete, AgroFlow still
+advises.
+
+74
+00:03:59,181 --> 00:04:03,600
+The maize block has no flow rate, so its
+advice is in litres only.
+
+75
+00:04:04,400 --> 00:04:07,752
+It's marked medium confidence, with one
+next step:
+
+76
+00:04:07,752 --> 00:04:10,500
+time the tap filling a half-litre bottle.
+
+77
+00:04:11,300 --> 00:04:15,200
+Administrators start from the public
+website and sign in to the console.
+
+78
+00:04:16,000 --> 00:04:17,959
+Home lists what needs attention.
+
+79
+00:04:17,959 --> 00:04:23,100
+Farmers' requests come in here, and each
+zone shows the same advice the farmer
+sees.
+
+80
+00:04:23,900 --> 00:04:28,751
+They can run the engine on demand, monitor
+kits, follow up alerts and maintenance,
+
+81
+00:04:28,751 --> 00:04:32,300
+produce reports, and every administrator
+action is recorded.
+
+82
+00:04:33,100 --> 00:04:38,114
+Field sensing, weather, crop science,
+farmer decisions and irrigation history,
+
+83
+00:04:38,114 --> 00:04:41,393
+combined into practical irrigation
+guidance. Sense.
+
+84
+00:04:41,393 --> 00:04:42,999
+Understand. Act. Monitor.
+
+85
+00:04:43,800 --> 00:04:46,287
+AgroFlow, by MafiHub.
+
+86
+00:04:46,287 --> 00:04:52,800
+Practical irrigation decisions, grounded
+in field data.
