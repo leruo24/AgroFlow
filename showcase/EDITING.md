@@ -17,7 +17,7 @@ Build the edit kit once with `./make-edit-kit.sh`. It writes to `renders/edit-ki
 | `sound-effects.m4a` | The small tick/switch/chime effects on their own, full length |
 
 `./split-clips.sh` writes one clip per scene with sound to `renders/clips/` (`01-opening.mp4` … `16-close.mp4`).
-The finished video is `renders/AgroFlow_Showcase_Walkthrough_Final.mp4`. The previous (v2, Oct 6) version is
+The finished video is `renders/AgroFlow_Showcase_Walkthrough_Final.mp4` (1080p), with the same video in 4K (3840×2160) as `renders/AgroFlow_Showcase_Walkthrough_Final_4K.mp4`. The previous (v2, Oct 6) version is
 `renders/AgroFlow_Showcase_Walkthrough_Previous.mp4`, with its 4K render `…_Previous_4K.mp4`.
 
 **How to use the edit kit:**
@@ -66,6 +66,9 @@ node v3/mobile.mjs && node v3/mobile.mjs kit && node v3/admin.mjs
 ```bash
 npx hyperframes check     # catches mistakes
 npm run render            # writes renders/AgroFlow_Showcase_Walkthrough_Final.mp4
+npm run render:4k         # 4K (about 30 min); comes out ~111 MB, so re-encode under GitHub's 100 MB limit:
+# ffmpeg -i in.mp4 -c:v libx264 -preset slow -b:v 2350k -pass 1 -an -f null /dev/null
+# ffmpeg -i in.mp4 -c:v libx264 -preset slow -b:v 2350k -pass 2 -pix_fmt yuv420p -c:a copy -movflags +faststart out.mp4
 ./split-clips.sh          # re-cuts the per-scene clips
 ./make-edit-kit.sh        # rebuilds the Option A files
 ```
