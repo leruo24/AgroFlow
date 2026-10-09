@@ -8,6 +8,12 @@ interface ExperienceProps {
   onClose: () => void;
 }
 
+// How long a message stays on screen for reading. Reduced motion cuts
+// animation and transitions only, never reading time, so these hold in both modes.
+const COMMAND_SENT_HOLD_MS = 700;
+const CONTROLLER_READY_HOLD_MS = 650;
+const WEATHER_ALERT_HOLD_MS = 2800;
+
 export function ExperienceAgroFlow({ onClose }: ExperienceProps) {
   const [state, dispatch] = useReducer(demoReducer, undefined, () =>
     demoReducer(
@@ -49,7 +55,7 @@ export function ExperienceAgroFlow({ onClose }: ExperienceProps) {
       const controllerReady = state.controllerStatus === "ACTIVE";
       const timer = window.setTimeout(
         () => dispatch({ type: controllerReady ? "BEGIN_IRRIGATION" : "CONTROLLER_READY" }),
-        reducedMotion ? 220 : controllerReady ? 650 : 700,
+        controllerReady ? CONTROLLER_READY_HOLD_MS : COMMAND_SENT_HOLD_MS,
       );
       return () => window.clearTimeout(timer);
     }
@@ -62,7 +68,7 @@ export function ExperienceAgroFlow({ onClose }: ExperienceProps) {
       return () => window.clearInterval(timer);
     }
     if (state.phase === "PLAN_RECALCULATING") {
-      const timer = window.setTimeout(() => dispatch({ type: "FINISH_RECALCULATION" }), reducedMotion ? 900 : 2800);
+      const timer = window.setTimeout(() => dispatch({ type: "FINISH_RECALCULATION" }), WEATHER_ALERT_HOLD_MS);
       return () => window.clearTimeout(timer);
     }
     return undefined;
