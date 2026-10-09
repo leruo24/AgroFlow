@@ -39,7 +39,7 @@ Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the dec
 ### Slide 1: AgroFlow (title)
 | Content / visual | Type | Source | Path / section | Current or historical | Notes |
 |---|---|---|---|---|---|
-| AgroFlow logo | Brand asset | REPO | `assets/brand/agroflow-icon.png` | Current | Same artwork as the app icon (`apps/mobile/assets/images/icon.png`) |
+| AgroFlow logo | Brand asset | REPO | `showcase/assets/brand/agroflow-icon.png` | Current | Same artwork as the app icon (`apps/mobile/assets/images/icon.png`) |
 | Title, subtitle, course, team, year | Text | User brief; M2/M3 covers | — | Current | |
 | Sponsor line "Mafikeng Cisco Edge Centre (MDiHub)" | Text | M2 cover, M3 §1.1 | — | Current | |
 | Two phone screens (zone irrigation control, reports) | Real app screenshot | RUN | `apps/mobile/src/app/zone/[id].tsx`, `src/app/reports.tsx` | Current UI, fixture config | `ui/mobile-zone-manual-run.png`, `ui/mobile-reports.png` |
