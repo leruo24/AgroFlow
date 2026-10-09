@@ -20,9 +20,8 @@ namespace AgroFlow.Data
         }
 
         #region Data Members
-        // TODO: source this connection string from configuration, not hardcoded.
-        // The workshop used Settings.Default (app.config); this project has no such
-        // file, so the connection string is passed into the constructor instead.
+        // The workshop read this from Settings.Default (app.config). Here it is
+        // passed into the constructor, so it comes from the API's configuration.
         private string strConn;
         protected NpgsqlConnection cnMain;
         protected DataSet dsMain;

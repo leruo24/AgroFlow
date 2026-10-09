@@ -77,7 +77,7 @@ namespace AgroFlow.Business
                 Today = today,
                 BalanceStartDate = from,
 
-                // Item 2: lets the engine tell a fresh reading from a stale one.
+                // Lets the engine tell a fresh reading from a stale one.
                 NowUtc = DateTime.UtcNow,
             };
 
@@ -103,7 +103,7 @@ namespace AgroFlow.Business
                 input.IrrigationMmByDay[pair.Key] = pair.Value;
             }
 
-            // Item 6: the farmer's own soil checks.
+            // The farmer's own soil checks.
             input.SoilFeelChecks.AddRange(db.GetSoilFeelChecks(zone.ZoneId, from));
 
             // Only needed when a watering cannot be measured in mm.
@@ -146,7 +146,7 @@ namespace AgroFlow.Business
                 {
                     db.SaveWaterBalanceDay(
                         zone.ZoneId, day,
-                        // An assumed stage (item 2) is never stored as if it were known.
+                        // An assumed stage is never stored as if it were known.
                         day.Stage.HasValue && !result.StageAssumed ? Fao56EngineReference.StageLabel(day.Stage.Value) : null);
                 }
 
@@ -242,7 +242,7 @@ namespace AgroFlow.Business
                 ["provenance"] = insight.Source,
             };
 
-            // Item 2c: stored with the insight so "Why?" shows what was true then.
+            // Stored with the insight so "Why?" shows what was true then.
             if (insight.Explanation != null) payload["explanation"] = insight.Explanation;
 
             return JsonSerializer.Serialize(payload);

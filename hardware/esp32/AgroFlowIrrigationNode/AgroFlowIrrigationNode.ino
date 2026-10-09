@@ -466,6 +466,8 @@ bool postSensorReading(const char *sensorType, float value) {
   return mqttClient.publish(mqttSensorsTopic.c_str(), body.c_str());
 }
 
+// Called on a timer: read the soil probe and the DHT11, and publish each value
+// to this board's MQTT sensors topic.
 void reportSensorReadings() {
   int raw = readMoistureRaw();
   if (moistureValid(raw)) {
@@ -489,6 +491,8 @@ void reportSensorReadings() {
   }
 }
 
+// Commands from the backend (start / stop the pump, setup actions). After
+// acting, the board acknowledges the command so the app can show it was done.
 void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
   JsonDocument doc;
   if (deserializeJson(doc, payload, length)) { Serial.println("WARN: failed to parse MQTT command payload"); return; }

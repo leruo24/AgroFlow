@@ -27,7 +27,7 @@ namespace AgroFlow.Business.Agronomy
         public bool IsValid { get; set; } = true;
     }
 
-    // Item 6: a farmer's own "How does the soil feel?" check.
+    // A farmer's own "How does the soil feel?" check.
     public sealed class ZoneSoilFeelCheck
     {
         public DateTime CheckedAtUtc { get; set; }
@@ -90,18 +90,18 @@ namespace AgroFlow.Business.Agronomy
         // never has to know about pumps.
         public Dictionary<DateOnly, double> IrrigationMmByDay { get; set; } = new Dictionary<DateOnly, double>();
 
-        // Item 2. The longest single pump run per day (SAST), in seconds. Used only when
+        // The longest single pump run per day (SAST), in seconds. Used only when
         // the zone has no flow rate or no size, so a watering cannot be turned
         // into millimetres: a real watering then resets the balance instead
         // (WaterRules.WateringResetsBalance).
         public Dictionary<DateOnly, double> LongestRunSecondsByDay { get; set; } = new Dictionary<DateOnly, double>();
 
-        // Item 2. The time "now" for deciding whether the latest reading is
+        // The time "now" for deciding whether the latest reading is
         // fresh. Null keeps the old behaviour (every reading counts as fresh),
         // so callers that have not been updated are unaffected.
         public DateTime? NowUtc { get; set; }
 
-        // Item 6: the farmer's own soil checks, newest last. Each corrects the
+        // The farmer's own soil checks, newest last. Each corrects the
         // balance on its day (WaterRules.SoilFeelDepletion).
         public List<ZoneSoilFeelCheck> SoilFeelChecks { get; set; } = new List<ZoneSoilFeelCheck>();
 
@@ -229,7 +229,7 @@ namespace AgroFlow.Business.Agronomy
         public List<string> Limitations { get; } = new List<string>();
         public List<AdviceFact> Facts { get; } = new List<AdviceFact>();
 
-        // ---- Item 2: advice is never blocked -------------------------------
+        // ---- Advice is never blocked ---------------------------------------
 
         // True when there was no planting date and the crop was assumed to be
         // at peak growth (CropRules.KcWhenStageUnknown). Stage is then
@@ -253,7 +253,7 @@ namespace AgroFlow.Business.Agronomy
         // balance (WaterRules.WateringResetsBalance).
         public bool BalanceResetByWatering { get; set; }
 
-        // Item 6: the latest soil check the balance used, if any.
+        // The latest soil check the balance used, if any.
         public ZoneSoilFeelCheck? LatestSoilFeel { get; set; }
 
         public ZoneSetupState Setup { get; set; } = new ZoneSetupState();
@@ -266,6 +266,10 @@ namespace AgroFlow.Business.Agronomy
         }
     }
 
+    // The FAO-56 irrigation engine. Give it one zone's crop, soil, weather,
+    // sensor readings and logged watering; it returns today's action and a
+    // 7-day outlook. Pure calculation with no database access, so the same
+    // inputs always give the same advice.
     public static class Fao56Engine
     {
         // Spec 3b: a raw ADC reading must sit in 0-4095, or 0-100 if the firmware
@@ -319,6 +323,9 @@ namespace AgroFlow.Business.Agronomy
             return true;
         }
 
+        // Main entry point. In order: look up the crop and soil, check the
+        // sensor, rebuild the daily water balance from past weather and
+        // watering, then project 7 days ahead and choose one action.
         public static ZoneEngineResult Run(ZoneEngineInput input)
         {
             if (input == null) throw new ArgumentNullException(nameof(input));
@@ -408,7 +415,7 @@ namespace AgroFlow.Business.Agronomy
 
             var latest = validReadings.LastOrDefault();
 
-            // Item 2: a reading older than a day no longer describes today's
+            // A reading older than a day no longer describes today's
             // soil. It is still shown, but advice comes from the weather.
             if (latest != null && input.NowUtc.HasValue
                 && (input.NowUtc.Value - latest.RecordedAtUtc).TotalHours > ConfidenceRules.FreshReadingHours)
@@ -451,7 +458,7 @@ namespace AgroFlow.Business.Agronomy
             // Without a crop there is no crop water use at all, so there is no
             // water balance to run. Say so and stop - do not invent a crop.
             // Without a planting date the balance still runs, on the assumed
-            // stage (item 2; CropRules.KcWhenStageUnknown).
+            // stage (CropRules.KcWhenStageUnknown).
             if (crop == null)
             {
                 return Finish(input, result, calibrated);
@@ -583,7 +590,7 @@ namespace AgroFlow.Business.Agronomy
                 dr = day.DrEndMm!.Value;
                 result.Days.Add(day);
 
-                // Item 6: the farmer's own soil check on this day corrects the
+                // The farmer's own soil check on this day corrects the
                 // estimate - the latest one that day wins.
                 var feel = input.SoilFeelChecks
                     .Where(c => DateOnly.FromDateTime(c.CheckedAtUtc.AddHours(2)) == w.Date)
@@ -596,7 +603,7 @@ namespace AgroFlow.Business.Agronomy
                     result.LatestSoilFeel = feel;
                 }
 
-                // Item 2: a watering that cannot be measured in mm still counts.
+                // A watering that cannot be measured in mm still counts.
                 double runtimeSeconds;
                 if (input.LongestRunSecondsByDay.TryGetValue(w.Date, out runtimeSeconds)
                     && WaterRules.WateringResetsBalance(runtimeSeconds, depthMeasurable))
@@ -719,6 +726,9 @@ namespace AgroFlow.Business.Agronomy
             return Finish(input, result, calibrated);
         }
 
+        // Steps the water balance forward one day at a time for the next 7 days
+        // and picks a single action for each day. Today's entry becomes the
+        // farmer's main advice.
         private static void BuildRollingOutlook(
             ZoneEngineInput input, ZoneEngineResult result, Fao56EngineCrop crop,
             Fao56SoilClass soil, double taw, double rootDepth, double currentDr,
@@ -782,6 +792,9 @@ namespace AgroFlow.Business.Agronomy
                     break;
                 }
 
+                // How dry the root zone will be by tonight (mm short of full),
+                // once with the forecast rain and once without it. "raw" is the
+                // watering point: past it, the crop starts to struggle.
                 var postRain = projectedDay.DrEndMm.Value;
                 var withoutRain = withoutRainDay.DrEndMm.Value;
                 var raw = projectedDay.RawMm.Value;
@@ -790,17 +803,22 @@ namespace AgroFlow.Business.Agronomy
                 IrrigationPrimaryAction action;
                 double? depth = null;
 
+                // One decision per day; the branches can't overlap, so the
+                // farmer never gets two conflicting messages.
                 if (dueWithoutRain && usefulRain > 0.0 && postRain < raw)
                 {
+                    // Needs water, but the rain will bring it back under the watering point.
                     action = IrrigationPrimaryAction.PostponeForRain;
                 }
                 else if (dueWithoutRain && usefulRain > 0.0 && postRain >= raw)
                 {
+                    // Rain helps but isn't enough: water only what is still missing.
                     action = IrrigationPrimaryAction.WaterNowReduced;
                     depth = postRain;
                 }
                 else if (dueWithoutRain)
                 {
+                    // No useful rain: refill the full shortfall.
                     action = IrrigationPrimaryAction.WaterNow;
                     depth = withoutRain;
                 }
@@ -969,7 +987,7 @@ namespace AgroFlow.Business.Agronomy
             }
         }
 
-        // Item 2: every way out of Run says how sure it is and names one next step.
+        // Every way out of Run says how sure it is and names one next step.
         private static ZoneEngineResult Finish(ZoneEngineInput input, ZoneEngineResult result, bool calibrated)
         {
             DateTime? newestAny = input.Readings.Count > 0
@@ -989,7 +1007,7 @@ namespace AgroFlow.Business.Agronomy
                 WeatherAvailable = result.Crop == null ? input.Weather.Count > 0 : result.BalanceRan,
                 LastReadingAtUtc = result.LatestReadingAtUtc ?? newestAny,
 
-                // Item 6: a soil check by hand in the last day stands in for a
+                // A soil check by hand in the last day stands in for a
                 // reading - at lower confidence than a set-up sensor.
                 ManualCheckFresh = input.NowUtc.HasValue && result.LatestSoilFeel != null
                     && (input.NowUtc.Value - result.LatestSoilFeel.CheckedAtUtc).TotalHours <= ConfidenceRules.FreshReadingHours,
@@ -1010,6 +1028,9 @@ namespace AgroFlow.Business.Agronomy
         }
 
         // One day of the balance.
+        // One day of the FAO-56 water balance (Eq. 85): start from yesterday's
+        // dryness, add what the crop used, take off effective rain and
+        // irrigation.
         private static WaterBalanceDay BuildDay(
             ZoneEngineInput input, Fao56EngineCrop crop, Fao56SoilClass soil,
             double taw, double rootDepth, ZoneWeatherDay w, double drPrevious, bool isForecast)
@@ -1059,7 +1080,7 @@ namespace AgroFlow.Business.Agronomy
             }
             else
             {
-                // Item 2: no planting date - assume peak growth, never a day number.
+                // No planting date - assume peak growth, never a day number.
                 day.DayOfSeason = null;
                 day.Stage = SeasonStage.PeakGrowth;
                 day.Kc = CropRules.KcWhenStageUnknown(crop);

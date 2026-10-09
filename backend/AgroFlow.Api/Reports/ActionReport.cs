@@ -4,8 +4,8 @@ using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Api.Reports;
 
-// Item 3: every farmer report - water usage, soil moisture, watering
-// schedule; one zone or all of them - is built around what to DO.
+// Every farmer report (water usage, soil moisture, watering schedule; one
+// zone or all of them) is built around what to DO, in this order:
 //
 //   1. This week, do this        1-5 actions: when, how much, how sure, why
 //   2. How your farm did          the period in boxes, one verdict per zone

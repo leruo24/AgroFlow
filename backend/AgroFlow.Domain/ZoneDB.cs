@@ -7,15 +7,12 @@ using AgroFlow.Business;
 
 namespace AgroFlow.Data
 {
-    // Direct equivalent of the workshop's EmployeeDB.cs: concrete class (no interface),
-    // holds an in-memory Collection<Zone> filled from the DataSet on construction,
-    // with the DataRow<->Zone mapping done inline in private Add2Collection/FillRow
-    // methods. No separate DTO class - the Zone business object itself is what the
-    // data layer reads and writes, exactly like Employee in the workshop.
+    // Workshop-style data class (like EmployeeDB.cs): fills a DataSet, then maps
+    // each DataRow into a Zone business object kept in a Collection<Zone>.
     //
-    // IMPORTANT: I have not seen your actual 0001_schema.sql, so the table name
-    // ("zones") and column names below are PLACEHOLDERS I could not verify. Replace
-    // them with your real column names before running against Supabase.
+    // Not called by the API. It follows an early design, and its table and column
+    // names don't match the current zone table. The live code reads zones through
+    // Fao56EngineXDB.
     public class ZoneDB : DB
     {
         #region Data Members
