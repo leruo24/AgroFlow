@@ -143,7 +143,7 @@ brief, `docs/actionable/final-report.md`) and are now shown.
 |---|---|---|
 | Realistic Three.js 3D field controller | No `three` dependency or WebGL code on any branch | Labelled 2D illustration of the real components (scene 3) |
 | "Experience AgroFlow" interactive 3D demo | Not on any branch | Skipped; the sped-up irrigation visualisation in scene 9 is labelled as such |
-| Photos/renders of the kit | None exist (`presentation/presentation-assets/hardware/README.md`) | Illustration |
+| Photos/renders of the kit | None exist (`showcase/presentation/presentation-assets/hardware/README.md`) | Illustration |
 | IRRIGATE / ADJUST / POSTPONE / SKIP buttons | Not in the app | The real controls: I watered (any amount), soil feel, start a run, dismiss with a note |
 | "IRRIGATION PLAN UPDATED" notification | No such alert | Plan change shown on the real week-ahead screen + visualised balance |
 | "CHECK THE FIELD: sensor wetter than estimate" message | No such rule (a calibrated reading at the wet point resets Dr; stuck/drift/offline checks exist) | Scene 12 shows the real checks and the farmer's own soil check |

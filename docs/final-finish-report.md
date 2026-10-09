@@ -17,7 +17,7 @@ This is the report for item 12.
 | 5 | Mobile v2.0.0, matching build env, release notes |
 | 6 | Cleanup SQL written, nothing applied |
 | 7 | `docs/demo-account.md` |
-| 8 | `docs/presentation-runbook.md` |
+| 8 | `showcase/presentation/presentation-runbook.md` |
 | 9 | Debug sweep — contract audit clean, one real find |
 | 10 | All checks pass, 650 tests |
 | 11 | Merged into `dev` and pushed |
