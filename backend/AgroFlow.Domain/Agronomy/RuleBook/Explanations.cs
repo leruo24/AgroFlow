@@ -167,62 +167,70 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
         // ---- water ------------------------------------------------------------
 
+        // The engine has already decided (PrimaryAction WaterNow or
+        // WaterNowReduced); this explains that decision and never re-derives it.
         private static Explanation WaterNow(ZoneEngineInput i, ZoneEngineResult r)
         {
             var crop = CropName(r);
-            var rainToday = r.Days.FirstOrDefault(d => d.Day == i.Today)?.RainMm ?? 0.0;
-            var byBalance = r.BalanceRan && r.DepletionMm.HasValue && r.RawMm.HasValue
-                            && WaterRules.ShouldWaterToday(r.DepletionMm.Value, r.RawMm.Value);
+            var rainToday = RainToday(i, r);
+            var reduced = r.PrimaryAction == IrrigationPrimaryAction.WaterNowReduced;
+            var pct = r.AdjustedP.HasValue ? Math.Round(r.AdjustedP.Value * 100) : (double?)null;
 
-            var e = new Explanation { Confidence = r.Confidence.Reason };
-
-            if (byBalance)
+            var e = new Explanation
             {
-                var pct = r.AdjustedP.HasValue ? Math.Round(r.AdjustedP.Value * 100) : (double?)null;
-                e.Summary = $"Your soil has dried to the point where {crop} starts to struggle" +
-                            (rainToday > 0 ? $", and the {N(rainToday)} mm of rain expected today won't cover it." : ", and no rain is expected today.");
-                e.Rule = pct.HasValue
-                    ? $"We suggest watering once your crop has used about {N(pct.Value)}% of the water your soil can hold for it."
-                    : "We suggest watering once your crop has used the share of soil water it can take without struggling.";
-            }
-            else
-            {
-                e.Summary = $"Your soil sensor reading has reached the watering level saved for this zone.";
-                e.Rule = "When a fresh, set-up sensor reading is at or below the zone's watering level, we suggest watering.";
-            }
+                Confidence = r.Confidence.Reason,
+                Summary = reduced
+                    ? $"The {N(rainToday)} mm of rain expected today helps, but your soil will still be drier than {crop} can stand, so it needs a smaller watering."
+                    : $"By the end of today your soil will be drier than {crop} can stand" +
+                      (rainToday > 0 ? $", and the {N(rainToday)} mm of rain expected today won't change that." : ", and no rain is expected today."),
+                Rule = pct.HasValue
+                    ? $"We suggest watering once your crop has used about {N(pct.Value)}% of the water your soil can hold for it, counting any useful rain first."
+                    : "We suggest watering once your crop has used the share of soil water it can take without struggling, counting any useful rain first.",
+            };
 
             AddCropFacts(e, i, r);
-            if (r.DepletionMm.HasValue) e.Fact("How dry the soil is", $"about {N(r.DepletionMm.Value)} mm short of full", r.Setup.Calibrated && !r.ReadingStale ? FromSensor + " and " + FromWeather : FromWeather);
+            if (r.DepletionMm.HasValue) e.Fact("How dry the soil is now", $"about {N(r.DepletionMm.Value)} mm short of full", r.Setup.Calibrated && !r.ReadingStale ? FromSensor + " and " + FromWeather : FromWeather);
+            if (r.ProjectedPostRainDepletionMm.HasValue) e.Fact("How dry it will be by tonight", $"about {N(r.ProjectedPostRainDepletionMm.Value)} mm short of full", FromWeather + " and " + FromGuide);
             if (r.RawMm.HasValue) e.Fact("Watering point", $"about {N(r.RawMm.Value)} mm short of full", FromGuide);
             AddReadingFact(e, i, r);
             e.Fact("Rain expected today", N(rainToday) + " mm", FromWeather);
             if (r.EtcTodayMm.HasValue) e.Fact("Water your crop will use today", N(r.EtcTodayMm.Value) + " mm", FromWeather + " and " + FromGuide);
             AddAmountFact(e, r);
 
-            e.WhatWouldChangeIt = r.EtcTodayMm.HasValue
-                ? $"If {N(r.EtcTodayMm.Value)} mm of rain or more falls today, you can skip this."
-                : "Rain today would make this unnecessary.";
-            e.Technical = Technical(r) + " WaterRules.ShouldWaterToday (FAO-56 p. 171): Dr >= RAW.";
+            e.WhatWouldChangeIt = "More rain than forecast today could make this smaller or unnecessary. If it has rained heavily, check the soil before watering.";
+            e.Technical = Technical(r) + (reduced
+                ? " Fao56Engine PrimaryAction WaterNowReduced: projected Dr after effective rain >= RAW (FAO-56 p. 171)."
+                : " Fao56Engine PrimaryAction WaterNow: projected end-of-day Dr >= RAW (FAO-56 p. 171).");
             return e;
         }
 
+        // PrimaryAction PostponeForRain: without rain the zone would be due,
+        // and after the effective forecast rain it stays below the watering point.
         private static Explanation SkipRain(ZoneEngineInput i, ZoneEngineResult r)
         {
-            var rain = r.Days.FirstOrDefault(d => d.Day == i.Today)?.RainMm ?? 0.0;
+            var rain = RainToday(i, r);
             var e = new Explanation
             {
-                Summary = $"The {N(rain)} mm of rain expected today is at least what {CropName(r)} will use today, so watering can wait.",
-                Rule = "If the rain expected today is at least as much as your crop will use today, we suggest skipping the watering.",
+                Summary = $"Without rain your soil would need water today, but after the {N(rain)} mm of rain expected it should stay wetter than {CropName(r)}'s watering point, so watering can wait.",
+                Rule = "We work out how dry the soil will be after the rain that is expected. If that is still short of the point where your crop starts to struggle, we suggest waiting.",
                 Confidence = r.Confidence.Reason,
-                WhatWouldChangeIt = "If the rain doesn't come, water as usual tomorrow.",
-                Technical = Technical(r) + " WaterRules.SkipForRain (DATA RULE; Eq. 85 p. 170 credits rain like irrigation).",
+                WhatWouldChangeIt = "If the rain doesn't come, or is much less than forecast, the zone will need water - check again tomorrow.",
+                Technical = Technical(r) +
+                            $" Fao56Engine PrimaryAction PostponeForRain: projected Dr after effective rain {N(r.ProjectedPostRainDepletionMm)} mm < RAW {N(r.RawMm)} mm.",
             };
             e.Fact("Rain expected today", N(rain) + " mm", FromWeather);
+            if (r.DepletionMm.HasValue) e.Fact("How dry the soil is now", $"about {N(r.DepletionMm.Value)} mm short of full", FromWeather);
+            if (r.ProjectedPostRainDepletionMm.HasValue) e.Fact("How dry it should be after the rain", $"about {N(r.ProjectedPostRainDepletionMm.Value)} mm short of full", FromWeather + " and " + FromGuide);
+            if (r.RawMm.HasValue) e.Fact("Watering point", $"about {N(r.RawMm.Value)} mm short of full", FromGuide);
             if (r.EtcTodayMm.HasValue) e.Fact("Water your crop will use today", N(r.EtcTodayMm.Value) + " mm", FromWeather + " and " + FromGuide);
             AddCropFacts(e, i, r);
-            if (r.RecommendedLitres.HasValue) e.Fact("Water saved", $"about {N(Math.Round(r.RecommendedLitres.Value))} L", FromSetup);
             return e;
         }
+
+        // The rain the engine credited today: the forecast figure it used for
+        // the decision, else today's balance row.
+        private static double RainToday(ZoneEngineInput i, ZoneEngineResult r) =>
+            r.ForecastRainTodayMm ?? r.Days.FirstOrDefault(d => d.Day == i.Today)?.RainMm ?? 0.0;
 
         private static Explanation WaterSoon(ZoneEngineInput i, ZoneEngineResult r)
         {

@@ -22,12 +22,23 @@ namespace AgroFlow.Business.Agronomy
     // an input is missing, the engine says what it cannot tell you and gives
     // the advice it still can - it never fills a gap with a plausible default.
 
+    // The first four are the original values and keep their meaning. The rest
+    // exist so every Fao56Engine PrimaryAction has its own answer: a crop that
+    // is not planted, or a zone the engine could not decide for, is never
+    // reported as "no action needed".
     public enum AdviceAction
     {
         IrrigateNow,
         HoldRainExpected,
         NoActionNeeded,
         InsufficientData,
+        WaterSoon,
+        CheckField,
+        CheckSensor,
+        CheckIrrigationSystem,
+        FinishSetup,
+        CropNotPlanted,
+        SeasonComplete,
     }
 
     // One reported quantity plus where it came from. The UI can render these as
@@ -171,6 +182,12 @@ namespace AgroFlow.Business.Agronomy
         public bool StageAssumed { get; internal set; }
         public double? RecommendedDepthMm { get; internal set; }
         public double? RecommendedMinutesPerSquareMetre { get; internal set; }
+
+        // The water balance's own decision and its rolling seven-day plan.
+        // Null / empty when the balance was not asked for. When set, Action,
+        // Reasoning and Summary are all derived from this - never re-decided.
+        public IrrigationPrimaryAction? PrimaryAction { get; internal set; }
+        public IReadOnlyList<RollingIrrigationDay> Outlook { get; internal set; } = Array.Empty<RollingIrrigationDay>();
     }
 
     public static class IrrigationAdvisor
@@ -302,9 +319,13 @@ namespace AgroFlow.Business.Agronomy
             }
 
             // ---- Stage-specific insights (3e) --------------------------------
+            // With the water balance supplied, the balance decides - not the
+            // farmer's threshold - so nothing below may claim otherwise.
+            var engineDecides = input.WaterBalance != null;
+
             if (crop != null && stage != null)
             {
-                insights.AddRange(BuildInsights(crop, stage, etc, limitations));
+                insights.AddRange(BuildInsights(crop, stage, etc, limitations, engineDecides));
             }
 
             // ---- Rainfall outlook --------------------------------------------
@@ -324,33 +345,36 @@ namespace AgroFlow.Business.Agronomy
             }
 
             // ---- Decision -----------------------------------------------------
-            advice.Action = Decide(moisture, threshold, out var decisionSentence);
-            reasoning.Add(decisionSentence);
-
-            if (advice.Action == AdviceAction.IrrigateNow && etc.HasValue && nextMeaningfulRain != null)
+            if (engineDecides)
             {
-                var daysOfDemandCovered = nextMeaningfulRain.PrecipitationMm / etc.Value;
-                reasoning.Add(
-                    Fao56Knowledge.Format(nextMeaningfulRain.PrecipitationMm, 0) + " mm forecast on " +
-                    nextMeaningfulRain.Date.ToString("dddd", CultureInfo.InvariantCulture) + " is about " +
-                    Fao56Knowledge.Format(daysOfDemandCovered, 1) + " days of demand at the current ETc, so it may cover the next cycle.");
-            }
-
-            // ---- Water balance -------------------------------------------------
-            // The FAO-56 root-zone water balance (Eq. 82-88), which is what turns
-            // the figures above into "water for 4 minutes". Runs only when the
-            // caller supplied the inputs for it; everything above is unchanged
-            // either way, so a caller that has not been updated still works.
-            if (input.WaterBalance != null)
-            {
+                // The FAO-56 root-zone water balance (Eq. 82-88) decides, and
+                // Action, Reasoning and Summary are worded from its
+                // PrimaryAction. The farmer's threshold is not consulted, so
+                // the two can never disagree.
                 ApplyWaterBalance(input, advice, reasoning, facts, limitations);
+            }
+            else
+            {
+                // A caller that has not supplied the balance keeps the original
+                // threshold-only decision, unchanged.
+                advice.Action = Decide(moisture, threshold, out var decisionSentence);
+                reasoning.Add(decisionSentence);
+
+                if (advice.Action == AdviceAction.IrrigateNow && etc.HasValue && nextMeaningfulRain != null)
+                {
+                    var daysOfDemandCovered = nextMeaningfulRain.PrecipitationMm / etc.Value;
+                    reasoning.Add(
+                        Fao56Knowledge.Format(nextMeaningfulRain.PrecipitationMm, 0) + " mm forecast on " +
+                        nextMeaningfulRain.Date.ToString("dddd", CultureInfo.InvariantCulture) + " is about " +
+                        Fao56Knowledge.Format(daysOfDemandCovered, 1) + " days of demand at the current ETc, so it may cover the next cycle.");
+                }
             }
 
             advice.Reasoning = reasoning;
             advice.Facts = facts;
             advice.Insights = insights;
             advice.Limitations = limitations;
-            advice.Summary = BuildSummary(input, advice, crop, stage, et0, etc, nextMeaningfulRain, moisture, threshold);
+            advice.Summary = BuildSummary(input, advice, crop, stage, et0, etc, nextMeaningfulRain, moisture, threshold, engineDecides);
 
             return advice;
         }
@@ -400,56 +424,106 @@ namespace AgroFlow.Business.Agronomy
                 engineInput, result, input.FaultSignals ?? new ZoneFaultSignals());
             advice.FarmerInsights = insights;
 
-            // The plain sentence. Taken from the highest-priority act_now insight
-            // so the app, the report and the farmer all read the same words.
+            advice.PrimaryAction = result.PrimaryAction;
+            advice.Outlook = result.Outlook;
+
+            // Item 2: the action is the balance's verdict - the same one the
+            // farmer reads in FarmerInsights - for every PrimaryAction,
+            // including the terminal states the balance returns early from.
+            advice.Action = ToAdviceAction(result.PrimaryAction);
+            reasoning.Add(DecisionSentence(result));
+
+            // The plain sentence, from the same PrimaryAction.
             advice.PlainSummary = BuildPlainSummary(result, insights);
+        }
 
-            if (result.BalanceRan && result.DepletionMm.HasValue && result.RawMm.HasValue)
+        // Every PrimaryAction, explicitly. Watering at a reduced amount is
+        // still watering; the reduced amount is in RecommendedDepthMm.
+        public static AdviceAction ToAdviceAction(IrrigationPrimaryAction action)
+        {
+            switch (action)
             {
-                reasoning.Add(result.DepletionMm.Value >= result.RawMm.Value
-                    ? "The soil has dried past what this crop can comfortably draw from, so it needs water now."
-                    : "The soil still holds enough water for this crop today.");
-            }
-
-            // Item 2: when the balance ran, the action is the balance's verdict
-            // - the same one the farmer reads in FarmerInsights. Before, the
-            // action came only from a calibrated reading against a threshold,
-            // so a zone without one was "InsufficientData" while its own
-            // insights said "water now".
-            if (result.BalanceRan)
-            {
-                advice.Action =
-                    result.PrimaryAction == IrrigationPrimaryAction.PostponeForRain ? AdviceAction.HoldRainExpected
-                    : result.PrimaryAction is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced ? AdviceAction.IrrigateNow
-                    : AdviceAction.NoActionNeeded;
-
-                // The balance decided, so "cannot decide" is no longer true.
-                reasoning.RemoveAll(r => r.StartsWith("Cannot decide:", StringComparison.Ordinal));
+                case IrrigationPrimaryAction.WaterNow:
+                case IrrigationPrimaryAction.WaterNowReduced: return AdviceAction.IrrigateNow;
+                case IrrigationPrimaryAction.PostponeForRain: return AdviceAction.HoldRainExpected;
+                case IrrigationPrimaryAction.NoWaterNeeded: return AdviceAction.NoActionNeeded;
+                case IrrigationPrimaryAction.WaterSoon: return AdviceAction.WaterSoon;
+                case IrrigationPrimaryAction.CheckField: return AdviceAction.CheckField;
+                case IrrigationPrimaryAction.CheckSensor: return AdviceAction.CheckSensor;
+                case IrrigationPrimaryAction.CheckIrrigationSystem: return AdviceAction.CheckIrrigationSystem;
+                case IrrigationPrimaryAction.FinishSetup: return AdviceAction.FinishSetup;
+                case IrrigationPrimaryAction.CropNotPlanted: return AdviceAction.CropNotPlanted;
+                case IrrigationPrimaryAction.SeasonComplete: return AdviceAction.SeasonComplete;
+                default: return AdviceAction.InsufficientData;
             }
         }
 
-        private static string? BuildPlainSummary(ZoneEngineResult result, IReadOnlyList<ZoneInsight> insights)
+        // The reasoning line for the balance's decision. Plain words only.
+        private static string DecisionSentence(ZoneEngineResult r)
         {
-            var waterNow = insights.FirstOrDefault(i => i.InsightType == InsightType.WaterNow);
-            if (waterNow != null)
+            switch (r.PrimaryAction)
             {
-                return result.RecommendedMinutes.HasValue
-                    ? "Water about " + result.RecommendedMinutes.Value + " min today."
-                    : waterNow.Message;
+                case IrrigationPrimaryAction.WaterNow:
+                    return "By the end of today the soil will be drier than this crop can comfortably draw from, so it needs water now.";
+                case IrrigationPrimaryAction.WaterNowReduced:
+                    return "The rain expected today helps, but the soil will still be drier than this crop can comfortably draw from, so it needs a smaller watering today.";
+                case IrrigationPrimaryAction.PostponeForRain:
+                    return "Without rain the soil would need water today, but after the rain expected it should stay wetter than its watering point, so watering can wait.";
+                case IrrigationPrimaryAction.NoWaterNeeded:
+                    return "The soil still holds enough water for this crop today.";
+                case IrrigationPrimaryAction.WaterSoon:
+                    return "The soil still holds enough water today, but it is expected to reach its watering point in about " +
+                           (r.DaysToNextWatering?.ToString(CultureInfo.InvariantCulture) ?? "2") + " day(s).";
+                case IrrigationPrimaryAction.CheckField:
+                    return "Check the field by hand before watering: the soil sensor and the weather estimate disagree.";
+                case IrrigationPrimaryAction.CheckSensor:
+                    return "Check the soil sensor before relying on today's watering advice.";
+                case IrrigationPrimaryAction.CheckIrrigationSystem:
+                    return "Check the pump and pipes before watering.";
+                case IrrigationPrimaryAction.FinishSetup:
+                    return "Finish this zone's setup to get a watering decision.";
+                case IrrigationPrimaryAction.CropNotPlanted:
+                    return "The crop has not been planted yet, so no crop watering is advised.";
+                case IrrigationPrimaryAction.SeasonComplete:
+                    return "The crop's season is over, so no crop watering is advised.";
+                default:
+                    return "There is not enough information to decide about watering today.";
             }
+        }
 
-            var skipRain = insights.FirstOrDefault(i => i.InsightType == InsightType.SkipRain);
-            if (skipRain != null) return "Rain is expected, so skip watering today.";
-
+        private static string BuildPlainSummary(ZoneEngineResult result, IReadOnlyList<ZoneInsight> insights)
+        {
             var setupMissing = insights.FirstOrDefault(i => i.InsightType == InsightType.SetupMissing);
-            if (setupMissing != null) return setupMissing.Message;
 
-            if (result.DaysToNextWatering.HasValue)
+            switch (result.PrimaryAction)
             {
-                return "No watering needed today; about " + result.DaysToNextWatering.Value + " days until the next one.";
+                case IrrigationPrimaryAction.WaterNow:
+                case IrrigationPrimaryAction.WaterNowReduced:
+                    var lead = result.PrimaryAction == IrrigationPrimaryAction.WaterNowReduced ? "Rain helps, but water" : "Water";
+                    if (result.RecommendedRuntimeSeconds is { } seconds)
+                    {
+                        return seconds < 60.0
+                            ? lead + " about " + seconds.ToString("0.#", CultureInfo.InvariantCulture) + " sec today."
+                            : lead + " about " + (seconds / 60.0).ToString("0.#", CultureInfo.InvariantCulture) + " min today.";
+                    }
+                    var waterNow = insights.FirstOrDefault(i => i.InsightType == InsightType.WaterNow);
+                    return waterNow?.Message ?? lead + " today.";
+                case IrrigationPrimaryAction.PostponeForRain:
+                    return "Rain is expected, so skip watering today.";
+                case IrrigationPrimaryAction.NoWaterNeeded:
+                    return "No watering needed today.";
+                case IrrigationPrimaryAction.WaterSoon:
+                    return "No watering needed today; about " + (result.DaysToNextWatering ?? 2) + " days until the next one.";
+                case IrrigationPrimaryAction.CropNotPlanted:
+                    return "No crop watering yet: the crop has not been planted.";
+                case IrrigationPrimaryAction.SeasonComplete:
+                    return "Crop cycle complete: no crop watering is advised.";
+                case IrrigationPrimaryAction.FinishSetup:
+                case IrrigationPrimaryAction.InsufficientData:
+                    return setupMissing?.Message ?? "No watering advice yet: there is not enough information for today.";
+                default:
+                    return DecisionSentence(result);
             }
-
-            return result.BalanceRan ? "No watering needed today." : null;
         }
 
         private static AdviceAction Decide(double? moisture, double? threshold, out string sentence)
@@ -483,7 +557,7 @@ namespace AgroFlow.Business.Agronomy
         // water stress, which is FAO-33 material (yield response factor Ky) and
         // is simply not in FAO-56. See notInFao56 in the knowledge JSON.
         private static IEnumerable<string> BuildInsights(
-            Fao56Crop crop, StageAssessment stage, double? etc, List<string> limitations)
+            Fao56Crop crop, StageAssessment stage, double? etc, List<string> limitations, bool engineDecides)
         {
             var insights = new List<string>();
 
@@ -555,8 +629,9 @@ namespace AgroFlow.Business.Agronomy
             }
             insights.Add(pLine);
 
-            // Say plainly why p is context and not a trigger.
-            limitations.Add("FAO-56's depletion limit p is a fraction of plant-available water, which needs the soil's field capacity and wilting point " +
+            // Say plainly why p is context and not a trigger. Only true on the
+            // threshold-only path: with the balance, p (via RAW) is the trigger.
+            if (!engineDecides) limitations.Add("FAO-56's depletion limit p is a fraction of plant-available water, which needs the soil's field capacity and wilting point " +
                             "(FAO-56 Table 19) to convert into a moisture percentage. AgroFlow does not record soil texture per zone, so p is reported as " +
                             "context only - the irrigation trigger remains the farmer's configured moisture threshold.");
 
@@ -605,7 +680,7 @@ namespace AgroFlow.Business.Agronomy
 
         private static string BuildSummary(
             ZoneAdviceInput input, ZoneAdvice advice, Fao56Crop? crop, StageAssessment? stage,
-            double? et0, double? etc, DailyWeather? nextRain, double? moisture, double? threshold)
+            double? et0, double? etc, DailyWeather? nextRain, double? moisture, double? threshold, bool engineDecides)
         {
             var parts = new List<string>();
 
@@ -633,7 +708,13 @@ namespace AgroFlow.Business.Agronomy
                 parts.Add("stage-aware guidance unavailable");
             }
 
-            if (moisture.HasValue && threshold.HasValue)
+            // With the balance deciding, the threshold comparison is not the
+            // reason for the action, so it is not stated as one.
+            if (engineDecides && moisture.HasValue)
+            {
+                parts.Add("Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "%");
+            }
+            else if (moisture.HasValue && threshold.HasValue)
             {
                 parts.Add("Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "%, " +
                           (RuleBook.WaterRules.AtOrBelowFarmerThreshold(moisture, threshold, readingFresh: true) ? "at or below" : "above") + " the " +
@@ -647,17 +728,44 @@ namespace AgroFlow.Business.Agronomy
             switch (advice.Action)
             {
                 case AdviceAction.IrrigateNow:
-                    var action = "Irrigate today";
-                    if (nextRain != null && etc.HasValue)
+                    var action = advice.PrimaryAction == IrrigationPrimaryAction.WaterNowReduced
+                        ? "Irrigate today at a reduced amount; the rain expected helps but is not enough"
+                        : "Irrigate today";
+                    // The threshold path's forward-looking hint. The balance has
+                    // its own outlook, which already accounts for that rain.
+                    if (!engineDecides && nextRain != null && etc.HasValue)
                     {
                         action += "; " + Fao56Knowledge.Format(nextRain.PrecipitationMm, 0) + " mm forecast " +
                                   nextRain.Date.ToString("dddd", CultureInfo.InvariantCulture) + " may cover the next cycle";
                     }
                     parts.Add(action);
                     break;
+                case AdviceAction.HoldRainExpected:
+                    parts.Add("Hold irrigation today: the rain expected should keep the soil above its watering point");
+                    break;
                 case AdviceAction.NoActionNeeded:
                     parts.Add("No irrigation needed today");
                     break;
+                case AdviceAction.WaterSoon:
+                    parts.Add("No irrigation needed today; irrigation is likely within " +
+                              (advice.DaysToNextWatering?.ToString(CultureInfo.InvariantCulture) ?? "2") + " day(s)");
+                    break;
+                case AdviceAction.CheckField:
+                    parts.Add("Check the field by hand before irrigating");
+                    break;
+                case AdviceAction.CheckSensor:
+                    parts.Add("Check the soil sensor before irrigating");
+                    break;
+                case AdviceAction.CheckIrrigationSystem:
+                    parts.Add("Check the pump and pipes before irrigating");
+                    break;
+                case AdviceAction.CropNotPlanted:
+                    parts.Add("No crop irrigation yet: the crop has not been planted");
+                    break;
+                case AdviceAction.SeasonComplete:
+                    parts.Add("Crop cycle complete: no crop irrigation is advised");
+                    break;
+                case AdviceAction.FinishSetup:
                 case AdviceAction.InsufficientData:
                     parts.Add("No watering call yet - see what to add to this zone below");
                     break;

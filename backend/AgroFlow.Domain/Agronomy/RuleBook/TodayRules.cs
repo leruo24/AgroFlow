@@ -27,8 +27,8 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
     // Item 6: the single thing to do today for one zone.
     //
-    // Picked from the same insights the advice card shows, in the order a
-    // farmer would want them: rain that makes watering pointless, then
+    // The decision is the engine's PrimaryAction; this only words it, in the
+    // order a farmer would want: rain that makes watering unnecessary, then
     // watering, then a kit problem, then unfinished setup, then "not today".
     // One sentence, so the Home screen never shows a list per zone.
     public static class TodayRules
@@ -45,14 +45,15 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             if (result.PrimaryAction == IrrigationPrimaryAction.SeasonComplete)
                 return new TodayAction("none", "Crop cycle complete; start a new crop cycle if this field was replanted", null);
 
-            if (Get(InsightType.SkipRain) is { } skip)
+            if (result.PrimaryAction == IrrigationPrimaryAction.PostponeForRain)
             {
-                return new TodayAction("skip", "No watering today: rain is expected to cover it.", skip.Explanation);
+                return new TodayAction("skip", "No watering today: rain is expected to cover it.", Get(InsightType.SkipRain)?.Explanation);
             }
 
-            if (Get(InsightType.WaterNow) is { } water)
+            if (result.PrimaryAction is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced)
             {
-                return new TodayAction("water", "Water " + Amount(result) + " this morning", water.Explanation);
+                var lead = result.PrimaryAction == IrrigationPrimaryAction.WaterNowReduced ? "Rain helps, but water " : "Water ";
+                return new TodayAction("water", lead + Amount(result) + " this morning", Get(InsightType.WaterNow)?.Explanation);
             }
 
             foreach (var (type, text) in new[]
@@ -71,18 +72,33 @@ namespace AgroFlow.Business.Agronomy.RuleBook
                 return new TodayAction("setup", "Finish setup: " + Lower(result.NextStep.Ask), Explanations.Confidence(result));
             }
 
-            if (Get(InsightType.WaterSoon) is { } soon && result.NextWateringDate is { } next)
+            switch (result.PrimaryAction)
             {
-                return new TodayAction("soon", "No watering today; next on " + next.ToString("dddd", Inv), soon.Explanation);
+                case IrrigationPrimaryAction.WaterSoon:
+                    return new TodayAction("soon",
+                        result.NextWateringDate is { } next
+                            ? "No watering today; next on " + next.ToString("dddd", Inv)
+                            : "No watering today; water is likely needed in the next few days",
+                        Get(InsightType.WaterSoon)?.Explanation);
+
+                case IrrigationPrimaryAction.NoWaterNeeded:
+                    return new TodayAction("none", "No watering needed today", null);
+
+                case IrrigationPrimaryAction.CheckField:
+                    return new TodayAction("kit", "Check the field by hand before watering", Explanations.Confidence(result));
+
+                case IrrigationPrimaryAction.CheckSensor:
+                    return new TodayAction("kit", "Check the soil sensor before relying on today's advice", Explanations.Confidence(result));
+
+                case IrrigationPrimaryAction.CheckIrrigationSystem:
+                    return new TodayAction("kit", "Check the pump and pipes before watering", Explanations.Confidence(result));
             }
 
-            if (result.BalanceRan)
-            {
-                return new TodayAction("none", "No watering needed today", null);
-            }
-
+            // FinishSetup and InsufficientData: no watering call could be made.
             return new TodayAction("setup",
-                result.NextStep != null ? "Finish setup: " + Lower(result.NextStep.Ask) : "No advice yet: there is no weather for this farm",
+                result.NextStep != null ? "Finish setup: " + Lower(result.NextStep.Ask)
+                : result.BalanceRan ? "No advice yet: there is not enough weather data for today"
+                : "No advice yet: there is no weather for this farm",
                 Explanations.Confidence(result));
         }
 

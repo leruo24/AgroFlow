@@ -17,7 +17,11 @@ test("homepage demo opens, waters the field, explains the decision and exits", a
   const errors = captureErrors(page);
   await openPublicExperience(page);
 
-  await expect(page.locator(".experience-stage canvas")).toBeVisible();
+  // The 3D scene is lazy-loaded (three.js is its own chunk), so on a cold
+  // dev server the canvas can take longer than the default 5 s to appear.
+  const canvas = page.locator(".experience-stage canvas");
+  await canvas.waitFor({ state: "attached", timeout: 15_000 });
+  await expect(canvas).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(".experience-recommendation .experience-kicker")).toHaveText("Water today");
   await page.getByRole("button", { name: "See why" }).click();
   await expect(page.getByText("Weather demand", { exact: true })).toBeVisible();
@@ -27,7 +31,8 @@ test("homepage demo opens, waters the field, explains the decision and exits", a
   await page.getByRole("button", { name: "Other options" }).click();
   await page.getByRole("button", { name: "Adjust to 1,200 L" }).click();
   await page.getByRole("button", { name: "Irrigate", exact: true }).click();
-  await expect(page.locator(".experience-phone")).toContainText(/Command sent|Controller ready/);
+  // Any phone state that shows Irrigate sent the command, not one transient frame.
+  await expect(page.locator(".experience-phone")).toContainText(/Command sent|Controller ready|Target reached/);
   await expect(page.getByText("Irrigating North Field", { exact: true })).toBeVisible({ timeout: 5_000 });
   await expect(page.getByText("Irrigation complete", { exact: true })).toBeVisible({ timeout: 8_000 });
   await page.getByRole("button", { name: "Continue" }).click();
@@ -49,7 +54,9 @@ test("demo stays usable without horizontal page overflow at desktop, tablet and 
     const dialog = page.getByTestId("experience-dialog");
     const box = await dialog.boundingBox();
     expect(box?.width).toBeLessThanOrEqual(viewport.width);
-    await expect(page.locator(".experience-stage canvas")).toBeVisible();
+    const canvas = page.locator(".experience-stage canvas");
+    await canvas.waitFor({ state: "attached", timeout: 15_000 });
+    await expect(canvas).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: /Irrigate/ }).first()).toBeVisible({ timeout: 5_000 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
     await page.getByRole("button", { name: "Close Experience AgroFlow" }).click();

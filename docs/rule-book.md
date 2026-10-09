@@ -33,8 +33,7 @@ written at the top of `Fao56EngineReference.cs`. No advice on this page comes fr
 4. `KitRules.PumpRanNoChange` → watering failed
 5. `KitRules.IsDhtOffline` → temperature sensor offline
 6. `WaterRules.RecommendedThreshold` + `ThresholdTooDry` → threshold unsafe
-7. `WaterRules.ShouldWaterToday`, then `AtOrBelowFarmerThreshold` → due for water
-8. `WaterRules.SkipForRain` → skip for rain, else water now
+7-8. `Fao56Engine` `PrimaryAction` (its rolling outlook: `WaterRules.ShouldWaterToday` on the projected dryness with and without the expected rain) → postpone for rain, else water now (reduced or full)
 9. a day with no weather → data gap
 10. `WaterRules.WaterSoon` → water soon
 11. `WaterRules.HotDaysAhead` → hot days
@@ -46,8 +45,8 @@ written at the top of `Fao56EngineReference.cs`. No advice on this page comes fr
 ## 1. Should I water today? (soil × stage × dryness × rain)
 
 Rules: `WaterRules.ShouldWaterToday` (FAO-56 p. 171: water "before or at the moment" the
-readily available water is used up, Dr ≥ RAW) and `WaterRules.SkipForRain` (DATA RULE: rain
-at least today's need replaces today's watering - Eq. 85, p. 170, credits rain like irrigation).
+readily available water is used up, Dr ≥ RAW), applied by `Fao56Engine` to the projected dryness
+with and without the expected rain: postpone only when the rain keeps the soil below RAW (Eq. 85, p. 170).
 RAW comes from the soil (Table 19, p. 144), the crop's p (Table 22, pp. 163-165), the soil
 adjustment (p. 167) and today's water use (p. 162).
 
@@ -189,16 +188,18 @@ All DATA RULES - FAO-56 knows nothing about sensors. A kit reports every 30 seco
 
 ## 8. Today's one action (`TodayRules`)
 
-The Home card and the admin farm page show ONE sentence per zone, picked from the insights
-above in this order (DATA RULE - the order a farmer would want them):
+The Home card and the admin farm page show ONE sentence per zone, worded from the engine's
+`PrimaryAction` in this order (DATA RULE - the order a farmer would want them):
 
-1. Rain will cover it → "No watering today: rain is expected to cover it."
-2. Water now → "Water about N min this morning (about N L)" - the amount from `MinutesToRun`.
-3. Kit problem: pump ran with no effect, kit offline, sensor stuck → "Check the …"
-4. No crop set → "Finish setup: …" with the one next step.
-5. Water soon → "No watering today; next on <day>".
-6. The balance ran and nothing is due → "No watering needed today".
-7. Otherwise → "Finish setup: …" or, with no weather, "No advice yet".
+1. Crop not planted / season complete → "No crop irrigation yet …" / "Crop cycle complete …"
+2. Postpone for rain → "No watering today: rain is expected to cover it."
+3. Water now → "Water about N min this morning (about N L)"; reduced → "Rain helps, but water …".
+4. Kit problem: pump ran with no effect, kit offline, sensor stuck → "Check the …"
+5. No crop set → "Finish setup: …" with the one next step.
+6. Water soon → "No watering today; next on <day>".
+7. No water needed → "No watering needed today" (only for this action).
+8. Check field / sensor / pump and pipes → "Check the …".
+9. Otherwise (finish setup, not enough data) → "Finish setup: …" or "No advice yet …".
 
 ## 9. Recommended for you (`RecommendationRules`)
 

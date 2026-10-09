@@ -346,6 +346,27 @@ public static class ReportEndpoints
     // reading lowers confidence and the advice comes from the weather.
     private const int MaxReadingAgeHours = (int)AgroFlow.Business.Agronomy.RuleBook.ConfidenceRules.FreshReadingHours;
 
+    // One schedule day's action and note. Day 0 is today's advice. Days 1-6
+    // come from the water balance's rolling outlook, the same plan as day 0;
+    // only without the engine (its columns missing) do they fall back to the
+    // rain-only hint they had before it.
+    internal static (string Action, string? Note) ScheduleDay(int dayIndex, ZoneAdvice advice, ZoneAdvice todayAdvice, DateOnly asOf, double? rainMm)
+    {
+        if (dayIndex == 0) return (advice.Action.ToString(), advice.Reasoning.FirstOrDefault());
+
+        if (todayAdvice.PrimaryAction != null)
+        {
+            var planned = todayAdvice.Outlook.FirstOrDefault(d => d.Date == asOf);
+            return planned != null
+                ? (IrrigationAdvisor.ToAdviceAction(planned.Action).ToString(), planned.Advice)
+                : (AdviceAction.InsufficientData.ToString(), "Forecast data unavailable; reassess when weather updates.");
+        }
+
+        return rainMm >= 1.0
+            ? ("RainExpectedCheckMoisture", $"{Math.Round(rainMm.Value, 1).ToString(CultureInfo.InvariantCulture)} mm rain forecast. Check soil moisture before irrigating.")
+            : ("CheckMoisture", "Check soil moisture this morning; irrigate if below the zone threshold.");
+    }
+
     // Item 2: how the latest reading is described. Never a % before the
     // wet/dry setup; a stale reading says when the kit last reported.
     internal static string ReadingLabel(double? raw, DateTime? readAtUtc, double? relativePct, bool fresh)
@@ -524,9 +545,7 @@ public static class ReportEndpoints
                 if (i == 0) todayAdvice = advice;
 
                 var rain = w?.PrecipitationMm;
-                var action = i == 0 ? advice.Action.ToString()
-                    : rain >= 1.0 ? "RainExpectedCheckMoisture"
-                    : "CheckMoisture";
+                var (action, note) = ScheduleDay(i, advice, todayAdvice!, asOf, rain);
                 days.Add(new
                 {
                     date = asOf.ToString("yyyy-MM-dd"),
@@ -537,9 +556,7 @@ public static class ReportEndpoints
                     etcMmPerDay = advice.EtcMmPerDay is { } ec ? Math.Round(ec, 1) : (double?)null,
                                         forecastRainMm = rain is { } rainMm ? Math.Round(rainMm, 1) : (double?)null,
                     weatherIsForecast = w?.IsForecast,
-                    note = i == 0 ? advice.Reasoning.FirstOrDefault()
-                                                : rain >= 1.0 ? $"{Math.Round(rain.Value, 1).ToString(CultureInfo.InvariantCulture)} mm rain forecast. Check soil moisture before irrigating."
-                        : "Check soil moisture this morning; irrigate if below the zone threshold.",
+                    note,
                 });
             }
 

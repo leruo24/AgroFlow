@@ -114,8 +114,7 @@ public static class RuleBookDocument
         L("4. `KitRules.PumpRanNoChange` → watering failed");
         L("5. `KitRules.IsDhtOffline` → temperature sensor offline");
         L("6. `WaterRules.RecommendedThreshold` + `ThresholdTooDry` → threshold unsafe");
-        L("7. `WaterRules.ShouldWaterToday`, then `AtOrBelowFarmerThreshold` → due for water");
-        L("8. `WaterRules.SkipForRain` → skip for rain, else water now");
+        L("7-8. `Fao56Engine` `PrimaryAction` (its rolling outlook: `WaterRules.ShouldWaterToday` on the projected dryness with and without the expected rain) → postpone for rain, else water now (reduced or full)");
         L("9. a day with no weather → data gap");
         L("10. `WaterRules.WaterSoon` → water soon");
         L("11. `WaterRules.HotDaysAhead` → hot days");
@@ -149,8 +148,8 @@ public static class RuleBookDocument
         L("## 1. Should I water today? (soil × stage × dryness × rain)");
         L("");
         L("Rules: `WaterRules.ShouldWaterToday` (FAO-56 p. 171: water \"before or at the moment\" the");
-        L("readily available water is used up, Dr ≥ RAW) and `WaterRules.SkipForRain` (DATA RULE: rain");
-        L("at least today's need replaces today's watering - Eq. 85, p. 170, credits rain like irrigation).");
+        L("readily available water is used up, Dr ≥ RAW), applied by `Fao56Engine` to the projected dryness");
+        L("with and without the expected rain: postpone only when the rain keeps the soil below RAW (Eq. 85, p. 170).");
         L("RAW comes from the soil (Table 19, p. 144), the crop's p (Table 22, pp. 163-165), the soil");
         L("adjustment (p. 167) and today's water use (p. 162).");
         L("");
@@ -428,16 +427,18 @@ public static class RuleBookDocument
     {
         L("## 8. Today's one action (`TodayRules`)");
         L("");
-        L("The Home card and the admin farm page show ONE sentence per zone, picked from the insights");
-        L("above in this order (DATA RULE - the order a farmer would want them):");
+        L("The Home card and the admin farm page show ONE sentence per zone, worded from the engine's");
+        L("`PrimaryAction` in this order (DATA RULE - the order a farmer would want them):");
         L("");
-        L("1. Rain will cover it → \"No watering today: rain is expected to cover it.\"");
-        L("2. Water now → \"Water about N min this morning (about N L)\" - the amount from `MinutesToRun`.");
-        L("3. Kit problem: pump ran with no effect, kit offline, sensor stuck → \"Check the …\"");
-        L("4. No crop set → \"Finish setup: …\" with the one next step.");
-        L("5. Water soon → \"No watering today; next on <day>\".");
-        L("6. The balance ran and nothing is due → \"No watering needed today\".");
-        L("7. Otherwise → \"Finish setup: …\" or, with no weather, \"No advice yet\".");
+        L("1. Crop not planted / season complete → \"No crop irrigation yet …\" / \"Crop cycle complete …\"");
+        L("2. Postpone for rain → \"No watering today: rain is expected to cover it.\"");
+        L("3. Water now → \"Water about N min this morning (about N L)\"; reduced → \"Rain helps, but water …\".");
+        L("4. Kit problem: pump ran with no effect, kit offline, sensor stuck → \"Check the …\"");
+        L("5. No crop set → \"Finish setup: …\" with the one next step.");
+        L("6. Water soon → \"No watering today; next on <day>\".");
+        L("7. No water needed → \"No watering needed today\" (only for this action).");
+        L("8. Check field / sensor / pump and pipes → \"Check the …\".");
+        L("9. Otherwise (finish setup, not enough data) → \"Finish setup: …\" or \"No advice yet …\".");
         L("");
     }
 

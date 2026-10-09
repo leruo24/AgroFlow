@@ -27,9 +27,8 @@ namespace AgroFlow.Business.Agronomy
     //   4. signals (KitRules.PumpRanNoChange, in the data layer) -> watering_failed
     //   5. signals (KitRules.IsDhtOffline, in the data layer)    -> dht_offline
     //   6. WaterRules.RecommendedThreshold + ThresholdTooDry     -> threshold_unsafe
-    //   7. WaterRules.ShouldWaterToday, then AtOrBelowFarmerThreshold
-    //      -> due for water today
-    //   8. WaterRules.SkipForRain        -> skip_rain, else water_now
+    //   7-8. Fao56Engine.PrimaryAction (its rolling outlook decides)
+    //      -> skip_rain for PostponeForRain, water_now for WaterNow/WaterNowReduced
     //   9. (a day with no weather)       -> data_gap
     //  10. WaterRules.WaterSoon          -> water_soon
     //  11. WaterRules.HotDaysAhead       -> hot_days

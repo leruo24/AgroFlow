@@ -407,13 +407,7 @@ internal static class ActionReport
         foreach (var day in days)
         {
             var w = day.First();
-            var water = withForecast.Where(z => z.Engine?.NextWateringDate == day.Key).Select(z => z.ZoneName).ToList();
-            var rainCovers = withForecast.Any(z =>
-                z.Engine?.Days.FirstOrDefault(d => d.Day == day.Key) is { EtcMm: { } etc } && WaterRules.SkipForRain(w.RainMm ?? 0, etc) && (w.RainMm ?? 0) > 0);
-
-            var action = water.Count > 0 ? "Water " + Join(water)
-                       : rainCovers ? "Rain covers it"
-                       : "No watering needed";
+            var action = ForecastAction(withForecast, day.Key);
 
             cards.Add(new ForecastCard(
                 ReportPeriod.Day(day.Key),
@@ -424,6 +418,37 @@ internal static class ActionReport
 
         line = "";
         return cards;
+    }
+
+    // One forecast card's action, read from each zone's rolling outlook for
+    // that day - the engine's plan, never a second rain rule.
+    internal static string ForecastAction(IReadOnlyList<WaterUsageReportModel> zones, DateOnly date)
+    {
+        IrrigationPrimaryAction? Planned(WaterUsageReportModel z)
+        {
+            if (z.Engine == null) return null;
+            // Terminal states have no outlook and need no crop water on any day.
+            if (z.Engine.PrimaryAction is IrrigationPrimaryAction.CropNotPlanted or IrrigationPrimaryAction.SeasonComplete)
+                return z.Engine.PrimaryAction;
+            return z.Engine.Outlook.FirstOrDefault(d => d.Date == date)?.Action;
+        }
+
+        var planned = zones.Select(z => (z.ZoneName, Action: Planned(z))).ToList();
+
+        var water = planned
+            .Where(p => p.Action is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced)
+            .Select(p => p.ZoneName).ToList();
+        if (water.Count > 0) return "Water " + Join(water);
+
+        if (planned.Any(p => p.Action == IrrigationPrimaryAction.PostponeForRain)) return "Rain covers it";
+
+        if (planned.Count > 0 && planned.All(p => p.Action is IrrigationPrimaryAction.NoWaterNeeded
+                or IrrigationPrimaryAction.WaterSoon
+                or IrrigationPrimaryAction.CropNotPlanted
+                or IrrigationPrimaryAction.SeasonComplete))
+            return "No watering needed";
+
+        return "Check nearer the day";
     }
 
     /* ---------------------------------------------------------------- *

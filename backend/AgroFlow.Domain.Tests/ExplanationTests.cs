@@ -154,7 +154,7 @@ public class ExplanationTests
         Assert.Contains(e.Facts, f => f.Label == "Crop" && f.Value == "Maize");
         Assert.Contains(e.Facts, f => f.Label == "Soil" && f.Value.StartsWith("Loam"));
         Assert.Contains(e.Facts, f => f.Label == "Rain expected today" && f.Value == "0 mm");
-        Assert.Contains(e.Facts, f => f.Label == "How dry the soil is" && f.Value.Contains(Math.Round(s.Result.DepletionMm!.Value, 1).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)));
+        Assert.Contains(e.Facts, f => f.Label == "How dry the soil is now" && f.Value.Contains(Math.Round(s.Result.DepletionMm!.Value, 1).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)));
         Assert.Contains(e.Facts, f => f.Label == "How much" && f.Value.Contains(
             s.Result.RecommendedMinutes!.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " min"));
         // The rule quotes the share of soil water actually used for this crop and soil today.
