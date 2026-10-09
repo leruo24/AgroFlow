@@ -6,12 +6,10 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Item 6c: people interested in AgroFlow ask for a call back.
-//
-// POST /api/public/enquiries - no login. Checked on the server
-// (EnquiryRules), limited per IP, and a hidden honeypot field catches the
-// form-filling bots without a captcha dependency. Admins are told on
-// Telegram. The admin side (claim, log a call, onboard, anonymise) is in
+// People interested in AgroFlow ask for a call back.
+// POST /api/public/enquiries needs no login. It is checked on the server
+// (EnquiryRules), rate-limited per IP, and a hidden honeypot field catches bots
+// without a captcha. Admins are told on Telegram. The admin side is in
 // EnquiryAdminEndpoints.
 public static class EnquiryEndpoints
 {
@@ -21,10 +19,9 @@ public static class EnquiryEndpoints
     {
         app.MapPost("/api/public/enquiries", SubmitAsync).AllowAnonymous();
 
-        // Admin polish, item 7: "is the server there?" for the admin's error
-        // messages. When a request fails, the admin asks this (a different
-        // path); if it answers, a browser extension probably blocked the first
-        // request. No login, no database, and it says nothing but "ok".
+        // "Is the server there?" for the admin's error messages: if this answers when
+        // another request failed, a browser extension probably blocked it. No login, no
+        // database, only "ok".
         app.MapGet("/api/public/ping", () => Results.Ok(new { ok = true })).AllowAnonymous();
     }
 
@@ -34,7 +31,7 @@ public static class EnquiryEndpoints
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Enquiries");
 
-        // Before anything else, so a script cannot use the checks to probe.
+        // Rate limit first, so a script cannot use the checks to probe.
         if (!limiter.TryTake(ClaimRateLimiter.ResolveAddress(context), DateTimeOffset.UtcNow))
         {
             return Results.Json(
@@ -42,8 +39,7 @@ public static class EnquiryEndpoints
                 statusCode: StatusCodes.Status429TooManyRequests);
         }
 
-        // A bot gets the same thank-you a person does - telling it why it
-        // failed would teach it to leave the field empty.
+        // A bot gets the same thank-you as a person, so it learns nothing.
         if (EnquiryRules.IsBot(form))
         {
             logger.LogInformation("Honeypot filled: enquiry discarded.");
@@ -52,8 +48,7 @@ public static class EnquiryEndpoints
 
         if (EnquiryRules.Check(form) is { } problem) return Results.BadRequest(new { error = problem });
 
-        // Part 2: with the database out of reach the person gets a sentence,
-        // not a bare 500 (DependencyFailureTests).
+        // If the database is down the person gets a sentence, not a bare 500.
         var crops = form.Crops!.Distinct().ToArray();
         try
         {

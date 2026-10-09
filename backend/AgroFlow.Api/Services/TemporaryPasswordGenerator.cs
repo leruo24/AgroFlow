@@ -2,22 +2,15 @@ using System.Security.Cryptography;
 
 namespace AgroFlow.Api.Services;
 
-// Lifted verbatim out of FarmerOnboardingEndpoints, which is no longer the
-// only thing that needs it: the Telegram bot issues a fresh temporary
-// password when a farmer redeems their onboarding code, and the admin screen
-// can reset one for a farmer who never links the bot. Same generator
-// everywhere, so "temporary password" means one thing across AgroFlow.
-//
-// The generated password is NEVER persisted by AgroFlow. It is handed to
-// Supabase Auth, shown or sent once, and forgotten. Every "show me the
-// temporary password again" path is therefore a reset that mints a new one,
-// not a lookup.
+// One generator for every temporary password (onboarding, the Telegram bot, admin
+// resets), so "temporary password" means one thing.
+// Security: the password is never stored. It goes to Supabase Auth, is shown or sent
+// once, and is forgotten, so "show it again" always means a reset.
 public static class TemporaryPasswordGenerator
 {
     public static string Generate()
     {
-        // I/O/0/1 are left out of the alphabets: these get read off a screen
-        // in a field and typed into a phone.
+        // No I/O/0/1, because these are read off a screen and typed into a phone.
         const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
         const string lower = "abcdefghijkmnopqrstuvwxyz";
         const string numbers = "23456789";

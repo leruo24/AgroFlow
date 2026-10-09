@@ -1,6 +1,6 @@
 namespace AgroFlow.Business
 {
-    // Kept isolated from irrigation commands (BR 6.9) - it advises, it does not actuate.
+    // Kept apart from irrigation commands (BR 6.9): it advises, it never switches anything.
     public class AIRecommendation
     {
         #region Data Members

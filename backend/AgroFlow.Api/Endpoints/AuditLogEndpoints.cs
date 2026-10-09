@@ -10,9 +10,8 @@ public record AuditRow(
     string CreatedAt,
     string ActorName,
     string Action,
-    /// The row as one readable sentence - "Leruo scheduled Johnny's new-zone
-    /// request" - built on the server so the console, a CSV export and a
-    /// future email all say the same thing.
+    /// The row as one readable sentence ("Thabo scheduled Lindiwe's new-zone
+    /// request"), built on the server so the console and CSV export match.
     string Summary,
     string EntityType,
     string? EntityId,
@@ -28,10 +27,8 @@ public record AuditLogResponse(
     IReadOnlyList<AuditFilterOption> Actions,
     IReadOnlyList<AuditFilterOption> Actors);
 
-// GET /api/admin/activity — the Platform Activity page.
-//
-// The page it replaces said there was nowhere to read administrator actions
-// from, which was true. This reads migration 0037's append-only log.
+// GET /api/admin/activity: the Platform Activity page, read from
+// migration 0037's append-only log.
 public static class AuditLogEndpoints
 {
     private const int MaxRows = 500;
@@ -44,8 +41,7 @@ public static class AuditLogEndpoints
 
         admin.MapGet("/", ListAsync);
 
-        // Everything that ever happened to one thing - the per-item
-        // timelines on a request, an alert or a kit.
+        // Everything that happened to one item: the timelines on a request, alert or kit.
         admin.MapGet("/{entityType}/{entityId}", TimelineAsync);
     }
 
@@ -91,9 +87,7 @@ public static class AuditLogEndpoints
                 },
                 cancellationToken);
 
-            // The filter options come from what is actually IN the log, not
-            // from the full list of verbs - a filter offering twenty actions
-            // that have never happened is noise.
+            // Filter options come from what is actually in the log, not the full list of actions.
             var actions = await DistinctAsync(
                 connection,
                 "select distinct action from admin_audit_log order by action",
@@ -105,8 +99,7 @@ public static class AuditLogEndpoints
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // An empty log rather than an error page: until 0037 is applied
-            // there genuinely is nothing recorded, and the page says so.
+            // An empty log instead of an error page: until 0037 is applied nothing is recorded.
             loggerFactory
                 .CreateLogger("AgroFlow.Api.Activity")
                 .LogError(ex, "Could not read the audit log. Is migration 0037 applied?");
@@ -128,8 +121,7 @@ public static class AuditLogEndpoints
         {
             await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-            // Oldest first: a timeline is read top to bottom in the order it
-            // happened, which is the opposite of the activity list.
+            // Oldest first: a timeline reads top to bottom in the order things happened.
             var rows = await QueryAsync(
                 connection,
                 """
@@ -238,22 +230,16 @@ public static class AuditLogEndpoints
         return options;
     }
 
-    /// "request.status_changed" -> "Request status changed". For the filter
-    /// dropdown, where a dotted verb reads like a log line rather than a
-    /// choice.
+    /// "request.status_changed" -> "Request status changed", for the filter dropdown.
     private static string Humanise(string action)
     {
         var words = action.Replace('.', ' ').Replace('_', ' ');
         return words.Length == 0 ? action : char.ToUpperInvariant(words[0]) + words[1..];
     }
 
-    /// One readable sentence per row.
-    ///
-    /// Built here rather than in the console so that the page, the CSV export
-    /// and anything added later all describe an action the same way - the
-    /// alternative is three slightly different vocabularies for one log.
-    // Item 6b: "Crop changed from Citrus to Potato by Thandi" - the farmer's
-    // own words for it, so an officer reading the farm's activity knows why
+    /// One readable sentence per row, built here so the page and the CSV export
+    /// describe actions the same way.
+    // "Crop changed from Citrus to Potato by Thandi", so an officer can see why
     // the advice changed.
     private static string CropChanged(string actor, string? details, string? farmName)
     {
@@ -320,7 +306,7 @@ public static class AuditLogEndpoints
             AuditActions.UserPasswordReset => $"{actor} reset a farmer's password",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",
-            // Item 6c: public enquiries.
+            // Public enquiries.
             "enquiry.claimed" => $"{actor} took on enquiry {entityId}",
             "enquiry.taken_over" => $"{actor} took over enquiry {entityId}",
             "enquiry.call_logged" => $"{actor} logged a call on enquiry {entityId}",
@@ -335,7 +321,7 @@ public static class AuditLogEndpoints
             AuditActions.ReportScheduleChanged => $"{actor} changed automatic reports{where}",
             AuditActions.TelegramCodeIssued => $"{actor} issued a Telegram link code",
 
-            // Item 5: handling and the actions that close an item.
+            // Handling, and the actions that close an item.
             "handling.claimed" => $"{actor} took on {Thing(entityType)} {entityId}{where}",
             "handling.taken_over" => $"{actor} took over {Thing(entityType)} {entityId}{where}",
             "handling.released" => $"{actor} let go of {Thing(entityType)} {entityId}{where}",
@@ -347,8 +333,7 @@ public static class AuditLogEndpoints
             "maintenance.note_added" => $"{actor} added a note to maintenance job {entityId}{where}",
             "service_request.note_added" => $"{actor} added a note to request {entityId}{where}",
 
-            // An action added later still reads as a sentence rather than
-            // vanishing from the page.
+            // An action added later still shows as a sentence instead of disappearing.
             _ => $"{actor} — {Humanise(action).ToLowerInvariant()} ({what})",
         };
     }

@@ -4,22 +4,16 @@ using System;
 namespace AgroFlow.Business.Agronomy
 {
     // Water volume per irrigation event.
-    //
-    // THERE IS NO FLOW METER ON ANY AGROFLOW NODE. Nothing in this system
-    // measures litres. Volume is inferred from how long the pump ran and a
-    // per-zone nominal flow rate that someone typed in:
+    // There is no flow meter on any AgroFlow node. Volume is inferred from pump run time
+    // and the zone's nominal flow rate:
     //
     //     litres = runtime_seconds / 60 * flow_rate_lpm
     //
-    // That makes every figure this class produces an ESTIMATE, and the type
-    // system is used to keep it labelled as one: the result carries
-    // IsEstimate = true and a Basis string, so a caller cannot accidentally
-    // render it as a measurement. Do not add a code path that returns a bare
-    // double - the labelling is the point.
-    //
-    // Real accuracy is bounded by things nobody here measures: pump wear, line
-    // pressure, emitter clogging, head differences between zones. Treat the
-    // number as an order-of-magnitude planning figure, not a billing figure.
+    // So every figure is an estimate, and the result carries IsEstimate = true and a
+    // Basis string so it is never shown as a measurement. Do not add a path that returns
+    // a bare double.
+    // Accuracy also depends on pump wear, pressure and clogging, so treat it as a
+    // planning figure, not a billing figure.
     public sealed class WaterVolumeEstimate
     {
         public double Litres { get; }
@@ -40,15 +34,13 @@ namespace AgroFlow.Business.Agronomy
 
     public static class WaterUsageEstimator
     {
-        // A pump running longer than this in one event is almost certainly a
-        // stuck valve or a bad payload rather than a real cycle. Callers use
-        // this to bound-check before persisting; see IrrigationEventEndpoints.
+        // A run longer than this in one event is almost certainly a stuck valve or a bad
+        // payload. Callers check it before saving (see IrrigationEventEndpoints).
         public const int MaxPlausibleRuntimeSeconds = 6 * 60 * 60; // 6 hours
 
-        // Litres for one irrigation event. Returns null when the zone has no
-        // flow rate configured - an unconfigured zone must not silently fall
-        // back to a guessed default rate, exactly as an unset moisture
-        // threshold must never trigger irrigation.
+        // Litres for one irrigation event. Null when the zone has no flow rate: an
+        // unconfigured zone never falls back to a guessed rate, just as an unset moisture
+        // threshold never triggers irrigation.
         public static WaterVolumeEstimate? EstimateEventLitres(int runtimeSeconds, double? flowRateLitresPerMinute)
         {
             if (runtimeSeconds < 0)

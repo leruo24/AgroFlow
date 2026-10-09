@@ -7,31 +7,19 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Note: item 6c's "Mark complete" asks for an optional note. Optional on the
-// wire, so older consoles that send only a status keep working.
+// "Mark complete" can send an optional note; it is optional so consoles that
+// only send a status still work.
 public record UpdateRequestStatusRequest(string Status, string? Note = null);
 
 public record AssignRequestBody(Guid? AssignedToProfileId);
 
 public record UpdateRequestStatusResponse(long Id, string Status, string? Message);
 
-// Admin-side status changes on a farm/zone request, so that moving one along
-// also tells the farmer.
-//
-// WHY THIS ENDPOINT HAS TO EXIST
-// ------------------------------
-// The admin dashboard changed service_request.status by writing to Supabase
-// DIRECTLY (api.ts's updateServiceRequestStatus), with no server involvement
-// at all. That works - the admin's JWT satisfies service_request_all_admin
-// from 0021 - but it means nothing server-side ever learns the status
-// changed, so there is no point at which a Telegram message could be sent.
-// The farmer's "your hardware kit is booked" could not be hooked onto the
-// direct write without putting the bot token in the browser.
-//
-// So the write moves here, and the dashboard calls this instead. The RLS
-// policy and the direct route both stay in place - this is additive, and an
-// older build of the dashboard keeps working (silently, without the
-// messages).
+// Admin status changes on a farm or zone request, so moving one along also
+// messages the farmer on Telegram.
+// The dashboard calls this instead of writing to Supabase directly, because the
+// bot token must stay on the server. The RLS policy (0021) still allows the
+// direct write.
 public static class AdminRequestEndpoints
 {
     public static void MapAdminRequestEndpoints(this WebApplication app)
@@ -42,21 +30,14 @@ public static class AdminRequestEndpoints
 
         admin.MapPut("/{requestId:long}/status", UpdateStatusAsync);
 
-        // Who owns this request. Separate from status on purpose:
-        // somebody picks a request up before it is scheduled, and
-        // "assigned to" is the answer to "who is dealing with this?"
+        // Who owns this request, kept separate from status: someone can pick a request
+        // up before it is scheduled.
         admin.MapPut("/{requestId:long}/assign", AssignAsync);
     }
 
-    /* Stamps the "by" and "at" columns for the step a request just moved to.
-     *
-     * Separate from the status UPDATE rather than folded into it because the
-     * columns differ per status, and a single UPDATE with five CASE
-     * expressions is the kind of SQL nobody can read six months later.
-     *
-     * Only ever SETS. Moving a request back to pending does not clear
-     * scheduled_by - it genuinely was scheduled by that person, and erasing
-     * that is the opposite of what an accountability chain is for. */
+    /* Records who moved the request to each step and when.
+     * Kept apart from the status UPDATE because the columns differ per status.
+     * It only ever sets values: moving back to pending does not clear scheduled_by. */
     private static async Task StampWhoAndWhenAsync(
         NpgsqlDataSource dataSource,
         long requestId,
@@ -85,11 +66,8 @@ public static class AdminRequestEndpoints
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /* Who is dealing with this request.
-     *
-     * Deliberately independent of status: somebody picks a request up before
-     * it is scheduled, and an unassigned-but-scheduled request is a real and
-     * useful state ("booked, nobody owns it yet"). Passing null un-assigns. */
+    /* Who is dealing with this request. Independent of status, so "scheduled but
+     * nobody owns it yet" is possible. Passing null un-assigns. */
     private static async Task<IResult> AssignAsync(
         long requestId,
         AssignRequestBody body,
@@ -98,9 +76,8 @@ public static class AdminRequestEndpoints
         AuditLog audit,
         CancellationToken cancellationToken)
     {
-        // Item 5: nobody can put work in somebody else's name. This route
-        // stays for older consoles, but it only accepts the caller's own id
-        // (or null, to let go). The caller comes from the login, never the body.
+        // Security: nobody can assign work in someone else's name. This route only
+        // accepts the caller's own id (or null to let go), taken from the login, never the body.
         if (!Guid.TryParse(user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier), out var caller))
         {
             return Results.Unauthorized();
@@ -166,9 +143,8 @@ public static class AdminRequestEndpoints
     {
         var status = FarmRequestMessages.Normalise(request.Status);
 
-        // The same three values 0021's CHECK allows. Validated here so a typo
-        // comes back as a 400 naming the options rather than as a constraint
-        // violation.
+        // The three values 0021's CHECK allows. Checked here so a typo gets a clear 400
+        // instead of a constraint error.
         if (status is not ("pending" or "scheduled" or "completed"))
         {
             return Results.BadRequest(new
@@ -181,15 +157,9 @@ public static class AdminRequestEndpoints
 
         await using (var connection = await dataSource.OpenConnectionAsync(cancellationToken))
         {
-            // Returns the OLD status, which is what makes the "nothing
-            // actually changed" case distinguishable below.
-            //
-            // It has to come from a CTE: a subquery in RETURNING against the
-            // same table would read the row the UPDATE has just written and
-            // hand back the NEW value, making every save look like a change.
-            // The `for update` in the CTE locks the row first, so two admins
-            // saving at once serialise rather than both reading the same old
-            // status and both sending.
+            // Returns the old status so we can tell when nothing changed.
+            // It needs a CTE: RETURNING would give the new value. `for update` locks the row,
+            // so two admins saving at once cannot both send a message.
             await using var command = new NpgsqlCommand(
                 """
                 with previous as (
@@ -216,18 +186,13 @@ public static class AdminRequestEndpoints
             previousStatus = result as string;
         }
 
-        // Committed before anything is sent. A message about a status change
-        // that then rolled back cannot be retracted.
-        //
-        // A no-op re-save sends nothing new anyway, because the ledger in
-        // 0032 has already claimed this (request, stage, audience) - this
-        // check just avoids the round trip.
+        // Committed before anything is sent, so we never message about a change that
+        // rolled back. A re-save sends nothing new anyway (the 0032 ledger); this check
+        // just saves a round trip.
         if (!string.Equals(previousStatus, status, StringComparison.OrdinalIgnoreCase))
         {
-            // The "by" and "at" columns for this step (0037). Which one is
-            // set depends on where the request moved TO, so the timeline can
-            // say "Scheduled by Leruo on Tuesday" rather than only showing a
-            // status word.
+            // Set the "by" and "at" columns for this step (0037), so the timeline can say
+            // "Scheduled by Thabo on Tuesday" instead of only a status word.
             await StampWhoAndWhenAsync(dataSource, requestId, status, user, cancellationToken);
 
             await audit.WriteAsync(

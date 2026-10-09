@@ -5,8 +5,8 @@ using QuestPDF.Infrastructure;
 
 namespace AgroFlow.Api.Reports;
 
-// Item 6c: the "Enquiries & sales follow-up" PDF and workbook, on the same
-// designed shell as the farm reports (header, footer, headings, chart style).
+// The "Enquiries & sales follow-up" PDF and workbook, on the same report shell
+// as the farm reports (header, footer, headings, chart style).
 internal static class EnquiryReportPdf
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;

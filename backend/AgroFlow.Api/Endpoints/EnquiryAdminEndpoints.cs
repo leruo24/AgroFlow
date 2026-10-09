@@ -7,23 +7,23 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
-// What was done - never who did it. The admin is the login's subject.
+// What was done, never who did it: the admin comes from the login.
 public record EnquiryTakeOverBody(string? Reason);
 public record EnquiryCallBody(string? Outcome, string? Reason, string? ReasonOther, string? Note, DateTimeOffset? CallbackAt);
 public record EnquiryCloseBody(string? Note);
 public record EnquiryOnboardedBody(Guid? FarmerProfileId);
 
-// Item 6c: the admin side of public enquiries.
+// The admin side of public enquiries.
 //
-// [I'll handle this] → [Log call] with an outcome:
-//   wants          → [Start onboarding]; finishing it links the farmer (won)
-//   callback       → a date and time; a reminder on Home when due
-//   no_answer      → counted; after 3 the console suggests closing
-//   not_interested → a reason is required (and words for Other); lost
-// Every call is a row in the append-only enquiry_call, with the caller from
-// the login. [Delete personal details] blanks name, phone, email and notes
-// for an enquiry that has ended (POPIA), keeping province, crops, outcome
-// and reason for the statistics. Every step is audit-logged.
+// [I'll handle this] -> [Log call] with an outcome:
+//   wants          -> [Start onboarding]; finishing it links the farmer (won)
+//   callback       -> a date and time; a reminder on Home when due
+//   no_answer      -> counted; after 3 the console suggests closing
+//   not_interested -> a reason is required (and words for Other); lost
+// Every call is a row in the append-only enquiry_call, with the caller from the
+// login. [Delete personal details] blanks name, phone, email and notes once an
+// enquiry has ended (POPIA) but keeps province, crops, outcome and reason for
+// statistics. Every step is audit-logged.
 public static class EnquiryAdminEndpoints
 {
     public const string NeedsMigration =
@@ -117,8 +117,7 @@ public static class EnquiryAdminEndpoints
         return Results.Ok(rows);
     }
 
-    // For the sidebar badge and Home: new enquiries nobody has, and
-    // call-backs that are due.
+    // For the sidebar badge and Home: new unclaimed enquiries and due call-backs.
     private static async Task<IResult> SummaryAsync(NpgsqlDataSource dataSource, CancellationToken ct)
     {
         await using var c = await dataSource.OpenConnectionAsync(ct);
@@ -334,8 +333,8 @@ public static class EnquiryAdminEndpoints
         foreach (var sql in new[]
         {
             "update enquiry set full_name = null, phone = null, email = null, notes = null, anonymised_at = now() where id = $1",
-            // A call note can name the person too. The only change a call
-            // row ever gets; who called, when, the outcome and reason stay.
+            // A call note can name the person too. This is the only change a call row ever
+            // gets; who called, when, the outcome and reason stay.
             "update enquiry_call set note = null where enquiry_id = $1",
         })
         {

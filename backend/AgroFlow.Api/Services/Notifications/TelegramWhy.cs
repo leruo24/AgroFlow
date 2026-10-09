@@ -6,20 +6,19 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Item 2c: "Why am I seeing this?" for Telegram.
-//
+// "Why am I seeing this?" for Telegram.
 // A message that leaves the app saves its explanation (table `explanation`,
-// migration 0039) and carries a button whose callback data is only that row's
-// id. A tap - or "/why <id>" - is answered with the full explanation, and
-// ONLY to a chat linked to someone on that farm. Everyone else gets a polite
-// refusal and nothing about the farm.
+// migration 0039) and has a button whose callback data is only that row's id. A tap
+// or "/why <id>" gets the full explanation.
+// Security: only a chat linked to someone on that farm gets an answer; everyone
+// else gets a polite refusal and nothing about the farm.
 
 public sealed record StoredExplanation(long Id, long FarmId, Explanation Explanation);
 
 public interface IExplanationStore
 {
-    // Null when the table is missing (migration 0039 not applied) or the write
-    // failed: the message then goes out without a button, never not at all.
+    // Null when the table is missing (0039 not applied) or the write failed: the message
+    // then goes without a button, but it still goes.
     Task<long?> SaveAsync(long farmId, long? zoneId, string kind, Explanation explanation, CancellationToken cancellationToken);
 
     Task<StoredExplanation?> GetAsync(long id, CancellationToken cancellationToken);
@@ -93,9 +92,8 @@ public sealed class TelegramWhyHandler
         await _replies.SendAsync(chatId, text ?? NotYours, cancellationToken);
     }
 
-    // Null when the explanation does not exist OR belongs to a farm this chat
-    // is not on - the two are deliberately indistinguishable, so ids cannot be
-    // probed to learn which exist.
+    // Security: null when the explanation does not exist or belongs to a farm this chat
+    // is not on. Both look the same, so ids cannot be probed.
     private async Task<string?> ExplainForChatAsync(long chatId, long id, CancellationToken cancellationToken)
     {
         var stored = await _store.GetAsync(id, cancellationToken);
@@ -107,8 +105,8 @@ public sealed class TelegramWhyHandler
         return Format(stored.Explanation);
     }
 
-    // The full plain explanation, as a Telegram message. Never the technical
-    // part: that is for admins and the report appendix.
+    // The full plain explanation as a Telegram message, never the technical part (that
+    // is for admins and the report appendix).
     public static string Format(Explanation e)
     {
         var sb = new StringBuilder();
@@ -128,7 +126,7 @@ public sealed class TelegramWhyHandler
     }
 }
 
-// ---- Database-backed implementations ---------------------------------------
+// Database implementations
 
 public sealed class ExplanationStore : IExplanationStore
 {
@@ -191,8 +189,8 @@ public sealed class ChatFarmAccess : IChatFarmAccess
 
     public ChatFarmAccess(NpgsqlDataSource dataSource) => _dataSource = dataSource;
 
-    // chat -> profile -> farms it owns or is a member of. The same rule
-    // app_can_access_farm applies to signed-in users.
+    // chat -> profile -> farms it owns or is a member of: the same rule
+    // app_can_access_farm uses for signed-in users.
     public async Task<IReadOnlySet<long>> FarmsForChatAsync(long chatId, CancellationToken cancellationToken)
     {
         const string sql =

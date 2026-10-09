@@ -16,14 +16,11 @@ namespace AgroFlow.Business.Agronomy
         public double? HumidityMean { get; }
         public bool IsForecast { get; }
 
-        // Added for FAO-56 Penman-Monteith (Eq. 6), which needs humidity and wind
-        // as well as temperature. All nullable: the archive endpoint does not
-        // serve them, and Eq. 6 has documented fallbacks for each (see
+        // Humidity and wind for FAO-56 Penman-Monteith (Eq. 6). All nullable: the archive
+        // endpoint does not serve them, and Eq. 6 has documented fallbacks (see
         // DailyEtoResolver).
-        //
-        // WindHeightM travels with WindMs because Open-Meteo measures wind at
-        // 10 m while Eq. 6 is defined at 2 m - Eq. 47 converts, but only if the
-        // height is known rather than assumed.
+        // WindHeightM comes with WindMs because Open-Meteo measures wind at 10 m and Eq. 6
+        // needs 2 m; Eq. 47 converts, but only with a known height.
         public double? RhMinPct { get; }
         public double? RhMaxPct { get; }
         public double? WindMs { get; }
@@ -45,20 +42,15 @@ namespace AgroFlow.Business.Agronomy
             WindHeightM = windHeightM;
         }
 
-        // A row with no temperatures cannot produce ET0, so there is no point
-        // storing it. Rainfall alone is still worth keeping, hence the check
-        // is on the pair rather than on everything.
+        // A row with no temperatures cannot give ET0, so we do not store it. Rain alone is
+        // still useful, so we only check the temperature pair.
         public bool HasUsableTemperatures => TMinC.HasValue && TMaxC.HasValue && TMaxC.Value >= TMinC.Value;
     }
 
     // Parses Open-Meteo's daily response into weather_daily rows.
-    //
-    // Open-Meteo is free, requires no API key and no account, and asks only
-    // for attribution for its non-commercial tier. Keeping it keyless is
-    // deliberate - see WeatherCollectionService. Do not "upgrade" this to a
-    // provider that needs a secret without a conversation first.
-    //
-    // The response shape is column-oriented, not row-oriented:
+    // Open-Meteo is free and needs no API key (see WeatherCollectionService); talk to the
+    // team before switching to a provider that needs a secret.
+    // The response is column-oriented:
     //
     //   { "daily": {
     //       "time":                ["2026-01-19", "2026-01-20", ...],
@@ -67,14 +59,10 @@ namespace AgroFlow.Business.Agronomy
     //       "precipitation_sum":   [0.0, 0.0, ...]
     //   } }
     //
-    // Parallel arrays that must be zipped by index. Every array except "time"
-    // is treated as optional and every element as nullable, because Open-Meteo
-    // returns null for a variable it has no data for on a given day, and
-    // simply omits a variable it does not support at that location. Assuming
-    // otherwise is how this would throw at 3am on a farm near the coast.
-    //
-    // Pure: takes a string, returns rows. No HTTP, no clock, no database -
-    // which is why it lives in the domain and is unit-tested offline.
+    // Parallel arrays zipped by index. Every array except "time" is optional and every
+    // element nullable, because Open-Meteo returns null for missing data and leaves out
+    // variables it does not support at a location.
+    // Pure: no HTTP, clock or database, so it is unit-tested offline.
     public static class OpenMeteoDailyParser
     {
         public const string ForecastSource = "open-meteo-forecast";
@@ -84,28 +72,21 @@ namespace AgroFlow.Business.Agronomy
         public const double WindMeasurementHeightM = 10.0;
         public const string ArchiveSource = "open-meteo-archive";
 
-        // The daily variables AgroFlow asks for. temperature_2m_max/min are
-        // what FAO-56 Eq. 52 needs; precipitation_sum drives the rainfall
-        // outlook. Humidity is collected because it is free from the same call
-        // and useful for display - Hargreaves does not use it.
-        // relative_humidity_2m_min/max and daily mean wind_speed_10m_mean are used for
-        // FAO-56 Eq. 6 (Penman-Monteith). They come from the same free call that
-        // already fetched the temperatures, so this costs nothing extra.
+        // The daily variables we ask for. temperature_2m_max/min are what FAO-56 Eq. 52
+        // needs; precipitation_sum drives the rainfall outlook. Humidity (min/max/mean) and
+        // mean wind are for Eq. 6 (Penman-Monteith) and come free in the same call.
         public const string DailyVariables =
             "temperature_2m_max,temperature_2m_min,precipitation_sum,relative_humidity_2m_mean," +
             "relative_humidity_2m_min,relative_humidity_2m_max,wind_speed_10m_mean";
 
-        // Archive (ERA5) does not serve relative_humidity_2m_mean as a daily
-        // aggregate, so the backfill asks for a narrower set rather than
-        // having the whole request rejected for one unsupported variable.
+        // The archive (ERA5) has no daily relative_humidity_2m_mean, so the backfill asks for
+        // fewer variables instead of having the whole request rejected.
         public const string ArchiveDailyVariables =
             "temperature_2m_max,temperature_2m_min,precipitation_sum";
 
-        // `today` decides which rows are forecasts. Today's own row is treated
-        // as a forecast because it is still partly predicted when fetched
-        // mid-morning; it is overwritten with actuals on a later cycle once
-        // the day is in the past. That is exactly what the (farm_id, date)
-        // upsert key in migration 0016 is for.
+        // `today` decides which rows are forecasts. Today's row counts as a forecast because
+        // it is still partly predicted; a later run overwrites it with actuals, using the
+        // (farm_id, date) upsert key from migration 0016.
         public static IReadOnlyList<WeatherDailyRow> Parse(string json, DateOnly today, bool treatAllAsActuals = false)
         {
             if (string.IsNullOrWhiteSpace(json))
@@ -146,9 +127,8 @@ namespace AgroFlow.Business.Agronomy
             {
                 var raw = timeElement.GetString();
 
-                // A row whose date will not parse is unusable - there is
-                // nothing to key it on. Skip it rather than failing the whole
-                // farm's fetch for one bad element.
+                // A row whose date does not parse cannot be stored, so we skip it instead of failing
+                // the whole farm's fetch.
                 if (DateOnly.TryParseExact(raw, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
                 {
                     rows.Add(new WeatherDailyRow(
@@ -161,8 +141,7 @@ namespace AgroFlow.Business.Agronomy
                         rhMinPct: ValueAt(humidityMin, index),
                         rhMaxPct: ValueAt(humidityMax, index),
                         windMs: ValueAt(windMean, index),
-                        // Only claim a measurement height when there is a wind
-                        // figure to attach it to.
+                        // Only set a measurement height when there is a wind value.
                         windHeightM: ValueAt(windMean, index).HasValue ? WindMeasurementHeightM : (double?)null));
                 }
 
@@ -194,12 +173,10 @@ namespace AgroFlow.Business.Agronomy
             return values[index];
         }
 
-        // Builds the forecast-endpoint URL. Kept here beside the parser so the
-        // requested variables and the parsed variables cannot drift apart.
-        //
-        // past_days=2 fetches yesterday (and the day before, cheaply) so that
-        // yesterday's row arrives as ACTUALS on the next cycle after it was
-        // last written as a forecast. forecast_days=8 gives today plus seven.
+        // Builds the forecast URL. Kept next to the parser so the requested and parsed
+        // variables always match.
+        // past_days=2 fetches yesterday, so it arrives as actuals on the next run after being
+        // stored as a forecast. forecast_days=8 gives today plus seven.
         public static string BuildForecastUrl(double latitude, double longitude)
         {
             return "https://api.open-meteo.com/v1/forecast"
@@ -208,14 +185,13 @@ namespace AgroFlow.Business.Agronomy
                    + "&daily=" + DailyVariables
                    + "&past_days=2"
                    + "&forecast_days=8"
-                   // FAO-56 works in m/s; Open-Meteo defaults to km/h, so ask
-                   // for the unit rather than converting after the fact.
+                   // FAO-56 uses m/s and Open-Meteo defaults to km/h, so we ask for m/s.
                    + "&wind_speed_unit=ms"
                    + "&timezone=auto";
         }
 
-        // Builds the archive-endpoint URL used by the backfill. A different
-        // host: ERA5 reanalysis, not the forecast model.
+        // Builds the archive URL for the backfill: a different host (ERA5 reanalysis, not
+        // the forecast model).
         public static string BuildArchiveUrl(double latitude, double longitude, DateOnly start, DateOnly end)
         {
             if (end < start)

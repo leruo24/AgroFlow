@@ -5,22 +5,12 @@ using System.Globalization;
 
 namespace AgroFlow.Business.Agronomy
 {
-    // Turns one day's available weather into an ETo figure, following the fallback
-    // order in spec section 3c and recording which source every input came from.
-    //
-    // THE POINT OF THE SOURCE STRINGS
-    // -------------------------------
-    // A farmer is told "water for 4 minutes". The report has to be able to say
-    // whether that rested on measured wind or on FAO-56's 2 m/s default. So every
-    // input carries provenance and every fallback leaves a line in Limitations.
-    // Nothing is silently defaulted.
-    //
-    // NAMING NOTE: the spec writes these provenance values as 'owm'/'owm_forecast'
-    // because it assumed OpenWeatherMap. AgroFlow's weather actually comes from
-    // Open-Meteo (free, no API key - see WeatherCollectionService and
-    // OpenMeteoDailyParser), so the values are 'weather_app' and
-    // 'weather_app_forecast'. Recording 'owm' would put a provider name in the
-    // database that never served the row.
+    // Turns one day's weather into an ETo figure, using a fallback order and recording
+    // where every input came from, so a report can say whether "water for 4 minutes"
+    // used measured wind or FAO-56's 2 m/s default. Every fallback adds a line to
+    // Limitations; nothing is silently defaulted.
+    // The values are 'weather_app' and 'weather_app_forecast' because our weather comes
+    // from Open-Meteo (see WeatherCollectionService and OpenMeteoDailyParser).
     public static class EtoSources
     {
         public const string WeatherApp = "weather_app";
@@ -49,23 +39,20 @@ namespace AgroFlow.Business.Agronomy
         public bool WeatherIsForecast { get; set; }
         public bool HasWeatherRow { get; set; }
 
-        // From the dht_daily view, used only when the weather app has no usable
-        // temperature for the day.
+        // From the dht_daily view, only used when the weather app has no usable temperature.
         public double? DhtTMinC { get; set; }
         public double? DhtTMaxC { get; set; }
         public double? DhtRhMeanPct { get; set; }
 
-        // Null means AgroFlow has no reliable farm elevation. The resolver then
-        // uses standard atmospheric pressure as an explicit fallback; it never
-        // records or presents an invented elevation.
+        // Null means we have no reliable farm elevation, so standard air pressure is used
+        // (and labelled); we never invent an elevation.
         public double? ElevationM { get; set; }
     }
 
     public sealed class DailyEtoResult
     {
-        // Null when the day has no usable temperature from any source. The caller
-        // must then write a data_gap insight and carry Dr forward - never
-        // substitute a number.
+        // Null when no source has a usable temperature for the day. The caller then writes a
+        // data_gap insight and carries Dr forward, never a made-up number.
         public double? EtoMm { get; set; }
 
         public string EtoSource { get; set; } = EtoSources.None;
@@ -74,12 +61,11 @@ namespace AgroFlow.Business.Agronomy
         public string HumiditySource { get; set; } = EtoSources.None;
         public string TemperatureSource { get; set; } = EtoSources.None;
 
-        // True when any input had to be defaulted or estimated. Written to
+        // True when any input was defaulted or estimated; saved to
         // zone_water_balance.incomplete so a report can mark the day.
         public bool Incomplete { get; set; }
 
-        // Farmer-readable, one line per fallback actually used. Goes straight into
-        // ZoneAdvice.Limitations.
+        // Farmer-readable, one line per fallback used. Goes into ZoneAdvice.Limitations.
         public List<string> Limitations { get; } = new List<string>();
 
         // The intermediate values, for report Facts and for checking by hand.
@@ -94,13 +80,12 @@ namespace AgroFlow.Business.Agronomy
 
     public static class DailyEtoResolver
     {
-        // FAO-56 Table 15 lists 2 m/s as "general global conditions" - the value
-        // the book itself suggests where no wind data exists (p. 63).
+        // FAO-56 Table 15 gives 2 m/s for "general global conditions", the value the book
+        // suggests when there is no wind data (p. 63).
         public const double DefaultWindSpeedMs = 2.0;
         public const double DefaultWindHeightM = 2.0;
 
-        // Plausibility limits, spec section 3b. Outside these a value is treated as
-        // absent rather than trusted.
+        // Plausibility limits: outside these a value counts as missing.
         public const double MinPlausibleTempC = -20.0;
         public const double MaxPlausibleTempC = 55.0;
         public const double MaxPlausibleWindMs = 60.0;
@@ -126,7 +111,7 @@ namespace AgroFlow.Business.Agronomy
 
             var result = new DailyEtoResult();
 
-            // ---- 1. Temperature: weather app, then DHT11, then give up --------
+            // 1. Temperature: weather app, then DHT11, then give up
             double tMin, tMax;
 
             var weatherTempUsable =
@@ -158,8 +143,8 @@ namespace AgroFlow.Business.Agronomy
             }
             else
             {
-                // Spec 3c fallback 5: no temperature from either source means no
-                // ETo. Carry Dr forward, raise data_gap, fabricate nothing.
+                // No temperature from either source means no ETo: carry Dr forward, raise data_gap,
+                // and make nothing up.
                 result.EtoSource = EtoSources.None;
                 result.Incomplete = true;
                 result.Limitations.Add(
@@ -171,7 +156,7 @@ namespace AgroFlow.Business.Agronomy
             result.TMinC = tMin;
             result.TMaxC = tMax;
 
-            // ---- 2. Latitude: needed for Ra, and there is no substitute -------
+            // 2. Latitude: needed for Ra, and there is no substitute
             if (!inputs.LatitudeDegrees.HasValue)
             {
                 result.EtoSource = EtoSources.None;
@@ -184,8 +169,8 @@ namespace AgroFlow.Business.Agronomy
             var latitude = inputs.LatitudeDegrees.Value;
             var dayOfYear = inputs.Date.DayOfYear;
 
-            // ---- 3. Radiation: always estimated, Eq. 50 from the temperature
-            //         range. AgroFlow has no pyranometer anywhere.
+            // 3. Radiation: always estimated with Eq. 50 from the temperature range
+            //    (we have no pyranometer).
             var ra = ReferenceEvapotranspiration.ExtraterrestrialRadiationMj(latitude, dayOfYear);
             var rs = PenmanMonteithEto.SolarRadiationFromTemperatureRangeMj(tMin, tMax, ra);
             var rso = PenmanMonteithEto.ClearSkySolarRadiationMj(ra);
@@ -196,7 +181,7 @@ namespace AgroFlow.Business.Agronomy
             result.Limitations.Add(
                 "Sunshine was estimated from the day's high and low temperature (FAO-56 Eq. 50); there is no sunlight sensor on any AgroFlow farm.");
 
-            // ---- 4. Wind: weather app, else FAO-56's 2 m/s ---------------------
+            // 4. Wind: weather app, else FAO-56's 2 m/s
             double wind2M;
             if (PlausibleWind(inputs.WeatherWindMs))
             {
@@ -220,8 +205,8 @@ namespace AgroFlow.Business.Agronomy
 
             result.Wind2MMs = wind2M;
 
-            // ---- 5. Humidity: RHmax/RHmin, else RHmean, else DHT11, else
-            //         estimate from the temperatures with Eq. 64 ----------------
+            // 5. Humidity: RHmax/RHmin, else RHmean, else DHT11, else estimated from the
+            //    temperatures with Eq. 64
             var es = PenmanMonteithEto.MeanSaturationVapourPressureKpa(tMin, tMax);
             double ea;
 
@@ -252,8 +237,8 @@ namespace AgroFlow.Business.Agronomy
             }
             else
             {
-                // FAO-56 Eq. 64 / Eq. 48: estimate RHmin from the temperatures and
-                // take ea as the saturation pressure at Tmin.
+                // FAO-56 Eq. 64 / Eq. 48: estimate RHmin from the temperatures and take ea as the
+                // saturation pressure at Tmin.
                 var rhMinEstimate = PenmanMonteithEto.EstimateRhMinFromTemperaturesPct(tMin, tMax);
                 ea = PenmanMonteithEto.ActualVapourPressureFromTMinKpa(tMin);
                 result.HumiditySource = EtoSources.Estimated;
@@ -263,15 +248,14 @@ namespace AgroFlow.Business.Agronomy
                     + rhMinEstimate.ToString("F0", CultureInfo.InvariantCulture) + "%).");
             }
 
-            // ea cannot exceed es: that would be a negative vapour pressure
-            // deficit, i.e. air wetter than saturated. Possible when ea is
+            // ea cannot be more than es (air wetter than saturated). It can happen when ea is
             // estimated on a day with almost no temperature range.
             if (ea > es) ea = es;
 
             result.SaturationVapourPressureKpa = es;
             result.ActualVapourPressureKpa = ea;
 
-            // ---- 6. Net radiation and ETo ------------------------------------
+            // 6. Net radiation and ETo
             var rns = PenmanMonteithEto.NetShortwaveRadiationMj(rs);
             var rnl = PenmanMonteithEto.NetLongwaveRadiationMj(tMin, tMax, ea, rs, rso);
             var rn = PenmanMonteithEto.NetRadiationMj(rns, rnl);
@@ -305,9 +289,8 @@ namespace AgroFlow.Business.Agronomy
 
             result.EtoMm = eto;
 
-            // The headline source is the weakest link in the chain: a day whose
-            // temperature came from the local zone sensor is a dht11_fallback day regardless of
-            // where the wind came from.
+            // The headline source is the weakest link: a day whose temperature came from the
+            // zone's own sensor is a dht11_fallback day, whatever the wind source.
             result.EtoSource = result.TemperatureSource == EtoSources.Dht11Fallback
                 ? EtoSources.Dht11Fallback
                 : result.TemperatureSource;

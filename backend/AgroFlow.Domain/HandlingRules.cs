@@ -18,18 +18,15 @@ namespace AgroFlow.Business
         NothingToRelease,
     }
 
-    // Item 5: whoever acts is on the record.
-    //
-    // Nobody can put work in somebody else's name. "I'll handle this" puts the
-    // CALLER's own name on an item; a second admin can take it over only with
-    // a stated reason, and both names go in the timeline; only the handler can
-    // let it go. The caller is always the login's subject - the endpoints
-    // never read an actor from a request body.
+    // Security: whoever acts is on the record.
+    // Nobody can assign work in someone else's name. "I'll handle this" uses the caller's
+    // own name; a second admin can only take over with a reason, and both names go in the
+    // timeline; only the handler can let it go. The caller is always the logged-in user,
+    // never read from the request body.
     public static class HandlingRules
     {
-        // DATA RULE: a take-over reason must say something. Three characters
-        // stops "." and " " without second-guessing a short honest reason
-        // like "sick".
+        // DATA RULE: a take-over reason must say something. Three characters blocks "." and " "
+        // without rejecting a short honest reason like "sick".
         public const int MinReasonLength = 3;
 
         public static HandlingOutcome Claim(Guid? currentHandler, Guid caller)
@@ -52,13 +49,12 @@ namespace AgroFlow.Business
             return currentHandler == caller ? HandlingOutcome.Released : HandlingOutcome.NotYours;
         }
 
-        /// The old PUT /api/admin/requests/{id}/assign: still answers, but it
-        /// can only name the caller or nobody. Naming anybody else is refused.
+        /// The older PUT /api/admin/requests/{id}/assign: still works, but can only name the
+        /// caller or nobody.
         public static bool AssignAllowed(Guid? target, Guid caller) => target is null || target == caller;
 
-        // The actions each kind of item has. Status changes on requests keep
-        // their own route (it also messages the farmer); here a request only
-        // takes a note.
+        // The actions each kind of item has. Request status changes keep their own route
+        // (it also messages the farmer); here a request only takes a note.
         private static readonly Dictionary<string, string[]> Actions = new Dictionary<string, string[]>
         {
             ["requests"] = new[] { "note" },

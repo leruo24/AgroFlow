@@ -4,8 +4,8 @@ using AgroFlow.Api.Services;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Admin polish, item 1: dismiss, history and restore for notifications.
-// The rules are in DismissalService; these only route.
+// Dismiss, history and restore for notifications. The rules are in
+// DismissalService; these only route.
 public static class DismissalEndpoints
 {
     public static void MapDismissalEndpoints(this WebApplication app)

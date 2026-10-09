@@ -6,18 +6,16 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Item 6: what was done - never who did it. The person is the login's subject.
+// What was done, never who: the person comes from the login.
 public record ManualWateringBody(double? Minutes, double? Litres, DateTimeOffset? At);
 public record SoilFeelBody(string? Feel, DateTimeOffset? At);
 
-// "I watered" and "How does the soil feel?" - for farms without a kit, or a
-// kit that is offline (item 6). Both feed the water balance, both are labelled
-// as entered by hand, and both appear in reports and the history.
-//
-// Not a device route: the kit's own POST /api/irrigation-events is untouched.
+// "I watered" and "How does the soil feel?" for farms without a kit or with an
+// offline kit. Both feed the water balance, are marked as entered by hand, and
+// show in reports and history. The kit's POST /api/irrigation-events is separate.
 public static class ManualLogEndpoints
 {
-    // DATA RULES: limits that catch a slip of the thumb, not real waterings.
+    // DATA RULES: limits that catch a typo, not a real watering.
     public const double MaxMinutes = 600;     // ten hours
     public const double MaxLitres = 10_000;   // a large bed, hosed for a long time
     public const int MaxDaysBack = 7;         // older than a week no longer changes today's advice
@@ -68,8 +66,8 @@ public static class ManualLogEndpoints
             return Results.Conflict(new { error = "Logging by hand needs database migration 0042, which has not been applied yet." });
         }
 
-        // Litres: what the farmer said, else minutes x the zone's flow rate
-        // (the 0018 formula), else unknown - never a made-up 0.
+        // Litres: what the farmer entered, else minutes x the zone's flow rate (0018),
+        // else unknown, never a made-up 0.
         await using var cmd = new NpgsqlCommand(
             """
             insert into irrigation_event

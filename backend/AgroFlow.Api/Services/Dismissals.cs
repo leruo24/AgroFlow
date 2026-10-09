@@ -5,15 +5,13 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Services;
 
-// Admin polish, item 1: dismiss and history for notifications.
-//
-// A dismissal hides one notification from its list - it never deletes
-// anything. Every dismissal is a row (migration 0045) with who and when from
-// the login, an optional note, and, once brought back, who restored it and
-// when. Admin dismissals and restores also go to admin_audit_log. A farmer
-// may only dismiss or restore their own farms' items.
+// Dismiss and history for notifications.
+// A dismissal only hides one notification; it never deletes anything. Each one is a
+// row (migration 0045) with who and when from the login, an optional note, and who
+// restored it and when. Admin dismissals and restores also go to admin_audit_log.
+// Security: a farmer may only dismiss or restore items on their own farms.
 
-/// What the client asks to dismiss. Never who - that is the login.
+/// What the client asks to dismiss, never who: that comes from the login.
 public sealed record DismissRequest(
     string? Kind, string? ItemKey, string? Title, DateTimeOffset? RaisedAt,
     bool Critical, string? ConditionKey, string? Note);
@@ -39,8 +37,8 @@ public interface IDismissalStore
     Task<DismissalRow?> GetAsync(long id, CancellationToken ct);
     Task RestoreAsync(long id, Guid actor, CancellationToken ct);
 
-    /// Closes a critical dismissal because its condition has cleared - so the
-    /// next occurrence shows again. Stamped as AgroFlow, not as a person.
+    /// Closes a critical dismissal once its condition has cleared, so the next time it
+    /// happens it shows again. Recorded as AgroFlow, not a person.
     Task ClearAsync(long id, CancellationToken ct);
     Task<IReadOnlyList<DismissalRow>> ListAsync(string audience, long? farmId, CancellationToken ct);
 
@@ -94,7 +92,7 @@ public sealed class DismissalService
         return null;
     }
 
-    // ---- admin ---------------------------------------------------------------
+    // Admin
 
     public async Task<Outcome> AdminDismissAsync(ClaimsPrincipal user, DismissRequest r, CancellationToken ct)
     {
@@ -127,8 +125,8 @@ public sealed class DismissalService
 
     public const string ClearedBy = "AgroFlow (the condition cleared)";
 
-    /// A critical item's condition has gone (the kit is back, the check is OK):
-    /// its dismissal is closed so that if it happens again it shows again.
+    /// A critical item's condition has gone (the kit is back, the check is OK), so its
+    /// dismissal is closed and it shows again if it recurs.
     public async Task<Outcome> AdminClearAsync(ClaimsPrincipal user, long id, CancellationToken ct)
     {
         if (!TryUser(user, out _)) return new(401, new { error = "Sign in again." });
@@ -149,7 +147,7 @@ public sealed class DismissalService
             ? new(200, Array.Empty<DismissalRow>())
             : new(200, await _store.ListAsync("admin", null, ct));
 
-    // ---- farmer --------------------------------------------------------------
+    // Farmer
 
     public async Task<Outcome> FarmerDismissAsync(ClaimsPrincipal user, DismissRequest r, CancellationToken ct)
     {
@@ -164,7 +162,7 @@ public sealed class DismissalService
         if (!await _store.CanAccessFarmAsync(me, item.FarmId, ct))
             return Forbidden("You can only dismiss notifications for your own farm.");
 
-        // Title, time and criticality come from the item itself, not the body.
+        // Security: title, time and criticality come from the item itself, not the body.
         var id = await _store.InsertAsync(new NewDismissal("farmer", r.Kind, key, item.FarmId, item.Title, item.RaisedAt,
             item.Critical, null, string.IsNullOrWhiteSpace(r.Note) ? null : r.Note.Trim()), me, ct);
         if (r.Kind == "insight") await _store.SetInsightDismissedAsync(key, me, true, ct);
@@ -195,8 +193,8 @@ public sealed class DismissalService
     }
 }
 
-// The database side. Read tolerant: without 0045 the lists are empty and the
-// writes answer 409 "needs migration 0045".
+// The database side. Without 0045 the lists are empty and writes answer 409
+// "needs migration 0045".
 public sealed class DbDismissalStore : IDismissalStore
 {
     private readonly NpgsqlDataSource _dataSource;

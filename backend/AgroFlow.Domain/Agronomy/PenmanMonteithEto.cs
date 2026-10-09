@@ -3,30 +3,16 @@ using System;
 
 namespace AgroFlow.Business.Agronomy
 {
-    // Daily FAO-56 Penman-Monteith reference evapotranspiration (Eq. 6) and the
-    // chain of equations it needs.
-    //
-    // WHY THIS SITS NEXT TO ReferenceEvapotranspiration (Hargreaves, Eq. 52)
-    // ---------------------------------------------------------------------
-    // ReferenceEvapotranspiration implements Eq. 52 because when it was written
-    // the weather rows carried only Tmin/Tmax and there was no humidity or wind
-    // at all - FAO-56 p. 64 offers Eq. 52 for exactly that case. Eq. 6 is the
-    // standard method and FAO-56 is clear it should be preferred wherever its
-    // inputs can be had, so now that weather_daily collects humidity and can
-    // collect wind, the engine computes Eq. 6 and records which inputs were
-    // measured, estimated or defaulted.
-    //
-    // Eq. 52 is NOT deleted: it stays as the documented fallback and the existing
-    // schedule-report narrative still uses it.
-    //
-    // Missing-input policy, per FAO-56's own chapters and spec section 3c:
+    // Daily FAO-56 Penman-Monteith reference evapotranspiration (Eq. 6) and the equations
+    // it needs. FAO-56 prefers Eq. 6 wherever its inputs are available, and weather_daily
+    // has humidity and wind. Hargreaves (Eq. 52, ReferenceEvapotranspiration) stays as
+    // the documented fallback and is still used by the schedule report narrative.
+    // Missing inputs, following FAO-56:
     //   Rs   not measured anywhere in AgroFlow -> Eq. 50 from (Tmax - Tmin) and Ra.
     //   wind missing -> 2 m/s, FAO-56 Table 15 "general global conditions".
     //   RH   missing -> RHmin estimated from Tmin via Eq. 64 (ea = e0(Tmin)).
-    //   temp missing -> no ETo at all. Never fabricated.
-    //
-    // Pure arithmetic: no I/O, no clock, no database, so it is verifiable against
-    // the book's worked examples offline.
+    //   temp missing -> no ETo at all, never made up.
+    // Pure arithmetic, so it can be checked against the book's worked examples offline.
     public static class PenmanMonteithEto
     {
         // FAO-56 Eq. 8, p. 31: atmospheric pressure from elevation, with the
@@ -49,9 +35,8 @@ namespace AgroFlow.Business.Agronomy
             return 0.6108 * Math.Exp(17.27 * tCelsius / (tCelsius + 237.3));
         }
 
-        // FAO-56 Eq. 12, p. 36: mean saturation vapour pressure over a day is the
-        // MEAN OF e0(Tmax) AND e0(Tmin), not e0(Tmean) - the book is explicit that
-        // using Tmean underestimates es.
+        // FAO-56 Eq. 12, p. 36: mean saturation vapour pressure is the mean of e0(Tmax) and
+        // e0(Tmin), not e0(Tmean), which underestimates es.
         public static double MeanSaturationVapourPressureKpa(double tMinC, double tMaxC)
         {
             return (SaturationVapourPressureKpa(tMaxC) + SaturationVapourPressureKpa(tMinC)) / 2.0;
@@ -74,20 +59,17 @@ namespace AgroFlow.Business.Agronomy
                     + SaturationVapourPressureKpa(tMaxC) * rhMinPct / 100.0) / 2.0;
         }
 
-        // FAO-56 Eq. 19, p. 39: actual vapour pressure from RHmean, used when only
-        // a daily mean RH is available (which is what weather_daily stores today).
+        // FAO-56 Eq. 19, p. 39: actual vapour pressure from RHmean, when only a daily mean
+        // RH is available.
         public static double ActualVapourPressureFromRhMeanKpa(
             double tMinC, double tMaxC, double rhMeanPct)
         {
             return MeanSaturationVapourPressureKpa(tMinC, tMaxC) * rhMeanPct / 100.0;
         }
 
-        // FAO-56 Eq. 48, p. 58: actual vapour pressure in the absence of any
-        // humidity data - ea = e0(Tmin), i.e. assume dewpoint equals Tmin. The book
-        // notes this holds for humid conditions and over-estimates ea in arid ones,
-        // and suggests subtracting 2-3 C from Tmin in arid climates. We do NOT make
-        // that subtraction, because whether a given SA farm is arid is not
-        // something the engine knows; the result is flagged 'estimated' instead.
+        // FAO-56 Eq. 48, p. 58: with no humidity data, ea = e0(Tmin) (dewpoint = Tmin). The
+        // book suggests subtracting 2-3 C in arid climates; we do not, because we do not know
+        // if a farm is arid, so the result is marked 'estimated'.
         public static double ActualVapourPressureFromTMinKpa(double tMinC)
         {
             return SaturationVapourPressureKpa(tMinC);
@@ -95,11 +77,9 @@ namespace AgroFlow.Business.Agronomy
 
         // FAO-56 Eq. 50, p. 60: Hargreaves' radiation formula.
         //   Rs = kRs * sqrt(Tmax - Tmin) * Ra
-        // kRs is 0.16 for interior locations and 0.19 for coastal ones (p. 60).
-        // 0.16 is used by default: it is the book's interior value and AgroFlow's
-        // farms are not known to be coastal. Rs is capped at clear-sky Rso
-        // (Eq. 37, 0.75 * Ra) because Eq. 50 can exceed it on a very large diurnal
-        // range, and more than clear-sky radiation is physically impossible.
+        // kRs is 0.16 inland and 0.19 on the coast (p. 60); we use 0.16 because our farms are
+        // not known to be coastal. Rs is capped at clear-sky Rso (Eq. 37, 0.75 * Ra), since
+        // Eq. 50 can exceed it on a very large daily range.
         public const double KRsInterior = 0.16;
         public const double KRsCoastal = 0.19;
 
@@ -144,9 +124,8 @@ namespace AgroFlow.Business.Agronomy
             var tMaxK4 = Math.Pow(tMaxC + 273.16, 4.0);
             var tMinK4 = Math.Pow(tMinC + 273.16, 4.0);
 
-            // Rs/Rso is the relative shortwave radiation term. Guard the divide:
-            // Ra is zero inside a polar night, which AgroFlow never serves, but a
-            // NaN leaking into irrigation advice is not an acceptable failure mode.
+            // Rs/Rso is the relative shortwave radiation term. Guard the divide: Ra is zero in a
+            // polar night, and a NaN must never reach the irrigation advice.
             var relative = rsoMj > 0.0 ? rsMj / rsoMj : 1.0;
             if (relative > 1.0) relative = 1.0;
             if (relative < 0.0) relative = 0.0;
@@ -174,8 +153,7 @@ namespace AgroFlow.Business.Agronomy
                     "Wind measurement height must be positive.");
             }
 
-            // Already at 2 m: Eq. 47 returns ~1.0 here anyway, but skip the log to
-            // keep the common case exact.
+            // Already at 2 m: Eq. 47 gives ~1.0 anyway, but we skip it to keep this case exact.
             if (Math.Abs(measurementHeightM - 2.0) < 1e-9) return windSpeedMs;
 
             return windSpeedMs * 4.87 / Math.Log(67.8 * measurementHeightM - 5.42);
@@ -192,17 +170,14 @@ namespace AgroFlow.Business.Agronomy
             return rhMin;
         }
 
-        // FAO-56 Eq. 6, p. 24 - the FAO Penman-Monteith equation for daily ETo:
+        // FAO-56 Eq. 6, p. 24: the FAO Penman-Monteith equation for daily ETo:
         //
         //            0.408 D (Rn - G) + g (900/(T+273)) u2 (es - ea)
         //   ETo =  ---------------------------------------------------
         //                       D + g (1 + 0.34 u2)
         //
-        // G is taken as zero: FAO-56 p. 54 states soil heat flux is small relative
-        // to Rn over daily periods and may be ignored.
-        //
-        // All inputs are explicit so this stays a pure function the book's worked
-        // examples can be run through directly.
+        // G is taken as zero: FAO-56 p. 54 says soil heat flux is small over a day.
+        // All inputs are explicit, so the book's worked examples can be run through directly.
         public static double Eto(
             double netRadiationMj,
             double soilHeatFluxMj,
@@ -223,11 +198,8 @@ namespace AgroFlow.Business.Agronomy
 
             var eto = numerator / denominator;
 
-            // A vapour-pressure deficit can come out slightly negative when ea is
-            // estimated rather than measured (ea = e0(Tmin) can exceed es on a day
-            // with a tiny diurnal range), which can drive ETo below zero.
-            // Evapotranspiration cannot be negative; floor it rather than let a
-            // nonsense value reach the water balance.
+            // The vapour pressure deficit can be slightly negative when ea is estimated, which
+            // can push ETo below zero. Evapotranspiration cannot be negative, so we floor it.
             return eto < 0.0 ? 0.0 : eto;
         }
     }

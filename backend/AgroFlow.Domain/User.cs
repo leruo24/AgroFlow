@@ -2,11 +2,9 @@ using System;
 
 namespace AgroFlow.Business
 {
-    // Abstract base class - mirrors the workshop's Person class.
-    // Declared abstract because the class diagram shows User only ever exists as
-    // an Admin or a FarmUser (hollow-triangle inheritance arrows point into it),
-    // so a plain User is never instantiated. (Notes 2.1: an abstract base class is
-    // "incomplete" - you inherit from it but don't create objects of it.)
+    // Abstract base class, like the workshop's Person class. A user is always an Admin
+    // or a FarmUser, so a plain User is never created. (Notes 2.1: an abstract base class
+    // is inherited from but not instantiated.)
     public abstract class User
     {
         #region Data Members
@@ -53,8 +51,8 @@ namespace AgroFlow.Business
         #endregion
 
         #region Methods
-        // Overridable so each user type can describe itself differently -
-        // the same virtual/override pattern the workshop uses on Role.Payment().
+        // virtual so each user type can describe itself differently, like Role.Payment() in
+        // the workshop.
         public virtual string GetDashboardRoute()
         {
             return "/";

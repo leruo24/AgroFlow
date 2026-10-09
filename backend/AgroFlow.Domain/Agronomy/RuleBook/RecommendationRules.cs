@@ -42,16 +42,14 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         public string Text { get; set; } = "";
     }
 
-    // Item 6b: "Recommended for you" - thresholds and an expected rhythm from
-    // the farm's climate, the crop and the soil, in one plain sentence.
-    //
-    // Every number comes from the same rules the daily advice uses, so the
-    // card never promises something the advice then contradicts:
-    //   threshold %  = (1 − p × soil factor) × 100   - exactly what "Reset to
-    //                  recommended" saves (Table 22 p, p. 167 soil adjust,
-    //                  clamp 0.1-0.8 p. 162)
-    //   interval     = RAW ÷ ETc, ETc = Kc × ETo     - Eqs 58 (p. 103), 83 (p. 162)
-    //   minutes      = RAW × area ÷ flow              - Ch. 1 p. 3, rounded up
+    // "Recommended for you": thresholds and an expected watering rhythm from the farm's
+    // climate, the crop and the soil, in one plain sentence.
+    // Every number uses the same rules as the daily advice, so the card never promises
+    // something the advice then contradicts:
+    //   threshold %  = (1 - p x soil factor) x 100   - what "Reset to recommended" saves
+    //                  (Table 22 p, p. 167 soil adjust, clamp 0.1-0.8 p. 162)
+    //   interval     = RAW / ETc, ETc = Kc x ETo      - Eqs 58 (p. 103), 83 (p. 162)
+    //   minutes      = RAW x area / flow              - Ch. 1 p. 3, rounded up
     public static class RecommendationRules
     {
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -64,9 +62,8 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         public const double Table22EtcMm = 5.0;
 
         /// <summary>
-        /// DATA RULE: at least this many days of measured ETo before the
-        /// history is used; with fewer, the forecast stands in (item 6b: "the
-        /// last 14-30 days, or the forecast if history is short").
+        /// DATA RULE: at least this many days of measured ETo before we use the history;
+        /// with fewer, the forecast is used instead.
         /// </summary>
         public const int MinHistoryDays = 14;
 

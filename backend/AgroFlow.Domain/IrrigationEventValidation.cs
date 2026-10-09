@@ -5,36 +5,24 @@ using System.Linq;
 
 namespace AgroFlow.Business
 {
-    // Validation for an inbound irrigation event, before anything is written.
-    //
-    // POST /api/irrigation-events increments zone.water_used_total by whatever
-    // estimated_litres the caller sends. It used to check only zoneId,
-    // triggerSource and syncStatus - so a negative runtime or a negative litres
-    // value was accepted and silently SUBTRACTED from the zone's running total,
-    // permanently corrupting it. Nothing recomputes that total from the event
-    // rows, so the corruption would not heal on its own.
-    //
-    // The endpoint is device-facing (X-Api-Key), and the device is an ESP32
-    // that buffers events to flash while offline and replays them later. A
-    // garbled buffer, a bad cast or a half-written flash record is a realistic
-    // source of nonsense values, not a hypothetical one.
-    //
-    // Pure and side-effect free so the rules can be tested directly. Returns
-    // null when the request is acceptable, or a human-readable reason to put in
-    // the 400 body.
+    // Validation for an incoming irrigation event, before anything is written.
+    // POST /api/irrigation-events adds estimated_litres to zone.water_used_total, and
+    // nothing ever recomputes that total, so a negative runtime or litres value would
+    // corrupt it for good. The ESP32 buffers events in flash while offline and replays
+    // them, so garbled values are a real risk.
+    // Pure, so the rules are tested directly. Returns null when the request is fine, or a
+    // readable reason for the 400 body.
     public static class IrrigationEventValidation
     {
         public static readonly string[] ValidTriggerSources = { "auto", "manual", "scheduled", "unknown" };
         public static readonly string[] ValidSyncStatuses = { "synced", "offline_queued" };
 
-        // A single irrigation cycle longer than this is a stuck valve, a
-        // corrupt offline record, or a firmware bug - not a real run. Matches
-        // WaterUsageEstimator.MaxPlausibleRuntimeSeconds.
+        // A single run longer than this is a stuck valve, a corrupt offline record or a
+        // firmware bug. Matches WaterUsageEstimator.MaxPlausibleRuntimeSeconds.
         public const int MaxRuntimeSeconds = 6 * 60 * 60; // 6 hours
 
-        // Upper bound on the implied delivery rate. Nothing on a smallholding
-        // irrigation zone moves a thousand litres a minute; a value implying it
-        // means runtime and litres disagree, so neither can be trusted.
+        // Upper limit on the implied flow rate. No smallholding zone moves 1,000 L/min, so
+        // such a value means runtime and litres disagree and neither can be trusted.
         public const double MaxImpliedFlowRateLpm = 1000.0;
 
         public static string? Validate(
@@ -55,7 +43,7 @@ namespace AgroFlow.Business
                 return "syncStatus must be one of: " + string.Join(", ", ValidSyncStatuses) + ".";
             }
 
-            // --- The bug: negatives were accepted and subtracted from the total.
+            // Negative values are rejected so they can never be subtracted from the total.
             if (runtimeSeconds < 0)
             {
                 return "runtimeSeconds cannot be negative (got " + runtimeSeconds.ToString(CultureInfo.InvariantCulture) + ").";
@@ -66,15 +54,14 @@ namespace AgroFlow.Business
                 return "estimatedLitres cannot be negative (got " + estimatedLitres.ToString(CultureInfo.InvariantCulture) + ").";
             }
 
-            // NaN slips past both comparisons above - every comparison with NaN
-            // is false - and would poison zone.water_used_total permanently,
-            // since NaN + anything stays NaN. Infinity is just as bad.
+            // NaN passes both checks above (every comparison with NaN is false) and would ruin
+            // zone.water_used_total for good, since NaN + anything is NaN. Infinity is just as bad.
             if (float.IsNaN(estimatedLitres) || float.IsInfinity(estimatedLitres))
             {
                 return "estimatedLitres must be a finite number.";
             }
 
-            // --- Absurd-duration bound.
+            // Duration limit.
             if (runtimeSeconds > MaxRuntimeSeconds)
             {
                 return "runtimeSeconds of " + runtimeSeconds.ToString(CultureInfo.InvariantCulture) +
@@ -82,7 +69,7 @@ namespace AgroFlow.Business
                        "s (6 hour) bound for a single irrigation cycle - this looks like a stuck valve or a corrupt offline record, not a real run.";
             }
 
-            // --- Internal consistency between the two numbers.
+            // The two numbers must agree with each other.
             if (runtimeSeconds == 0 && estimatedLitres > 0)
             {
                 return "estimatedLitres is " + estimatedLitres.ToString(CultureInfo.InvariantCulture) +

@@ -4,52 +4,23 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-// DeviceId is still accepted so a v1.1.0 board's ACK still parses, but on a
-// token-authenticated call it is IGNORED: the device is resolved from the
-// credential instead. Nullable because the identity no longer has to come
-// from the body at all.
+// DeviceId is still accepted so old boards' ACKs parse, but on a token call it
+// is ignored: the device comes from the credential.
 public record CommandExecutedRequest(string? DeviceId, DateTimeOffset? ExecutedAt);
 
 public record CommandExecutedResponse(Guid CommandId, string Status, DateTimeOffset ExecutedAt);
 
-// Device-side acknowledgement that an irrigation command was carried out.
-//
-// WHY THIS EXISTS
-// ---------------
-// The ESP32 used to mark a command executed by PATCHing Supabase's REST API
-// directly (applySupabaseHeaders / markCommandExecuted in
-// AgroFlowIrrigationNode.ino). That path was dead in two separate ways:
-//
-//   1. It used placeholder credentials - SUPABASE_URL and SUPABASE_ANON_KEY
-//      were still "YOUR_PROJECT_REF" and "YOUR_SUPABASE_ANON_KEY" in the
-//      committed sketch.
-//   2. Even fully configured it would have failed. Migration 0011 turned RLS
-//      on for irrigation_commands and deliberately granted the anon/
-//      authenticated roles SELECT only - there is no UPDATE policy, by
-//      design, because an anon INSERT or UPDATE there drives a physical
-//      valve. A firmware PATCH with an anon key would be silently refused.
-//
-// So acknowledgements never landed, every executed command stayed 'pending'
-// forever, and the manual-override cooldown in SensorReadingProcessor - which
-// keys off status = 'pending' - treated every past manual command as still
-// outstanding.
-//
-// The fix is to route the ACK through AgroFlow.Api like every other device
-// call: X-Api-Key gated, written with Npgsql as the `postgres` role, which
-// owns the table and so bypasses RLS (0011's header explains why ENABLE and
-// not FORCE). The firmware no longer holds any Supabase credential at all.
-//
-// FILE OWNERSHIP: this deliberately lives in its own file rather than in
-// DeviceEnrollmentEndpoints.cs, which is being worked on elsewhere. Nothing
-// here touches enrollment or claim.
+// The board confirms here that it carried out an irrigation command.
+// It goes through the API like every other device call and is written as the
+// `postgres` role, which owns the table and so bypasses RLS. Clients only have
+// SELECT on irrigation_commands (0011), because writes there drive a real valve.
+// The firmware holds no Supabase credentials.
 public static class DeviceCommandEndpoints
 {
     public static void MapDeviceCommandEndpoints(this WebApplication app)
     {
-        // Gated by the X-Api-Key middleware in Program.cs: the path does not
-        // start with /api/devices/enroll, /api/farmers or /api/farmer, so the
-        // shared device secret is required, exactly like /api/devices/claim
-        // and /api/irrigation-events.
+        // Security: protected by the device-key middleware in Program.cs, like
+        // /api/devices/claim and /api/irrigation-events.
         app.MapPost("/api/devices/commands/{id}/executed", HandleAsync);
     }
 
@@ -66,19 +37,10 @@ public static class DeviceCommandEndpoints
             return Results.BadRequest("Command id must be a UUID.");
         }
 
-        // v1.3.0: the identity comes out of the credential.
-        //
-        // This used to read a deviceId out of the REQUEST BODY and compare it
-        // to the zone's hardware row. That check was only ever as strong as
-        // the shared X-Api-Key behind it: any board holding the fleet key
-        // could claim to be any other board and acknowledge its commands -
-        // including marking executed a command its own zone never ran, which
-        // suppresses the replay sweep for a pump run that never physically
-        // happened.
-        //
-        // Now the token resolves the board, and the body's deviceId is
-        // ignored. A legacy shared-key board keeps the old behaviour, because
-        // it cannot be resolved any other way.
+        // Security: the board's identity comes from its token, not the request body.
+        // Otherwise any board with the shared key could confirm another board's
+        // commands and stop the replay sweep for a run that never happened.
+        // A legacy shared-key board can only be checked the old way.
         var device = await deviceAuth.AuthenticateAsync(context, cancellationToken);
 
         if (device is null)
@@ -105,23 +67,16 @@ public static class DeviceCommandEndpoints
             return Results.NotFound($"No irrigation command with id {commandId}.");
         }
 
-        // The ownership check the task calls for: this device must own the
-        // zone the command was issued for. On a token call both sides of this
-        // comparison are now server-derived - the left from the command's
-        // zone, the right from the credential - so a board genuinely cannot
-        // acknowledge another zone's command.
+        // This device must own the zone the command was for. On a token call both
+        // sides come from the server, so a board cannot confirm another zone's command.
         if (!DeviceCommandOwnership.MayAcknowledge(ownership.DeviceId, callerDeviceId))
         {
-            // Deliberately 404, not 403: a device that is not on this zone
-            // should not be able to probe which command ids exist.
+            // 404, not 403, so a device cannot probe which command ids exist.
             return Results.NotFound($"No irrigation command with id {commandId} for this device.");
         }
 
-        // Idempotent by design. The firmware retries on a failed ACK, and the
-        // replay sweep can redeliver a command the device already ran, so the
-        // same ACK legitimately arrives more than once. The first one wins and
-        // its executed_at is preserved - overwriting it with a later retry's
-        // timestamp would misreport when the pump actually ran.
+        // Idempotent: the firmware retries and the sweep can resend, so the same ACK
+        // can arrive twice. The first one wins and keeps its executed_at.
         if (ownership.Status == "executed")
         {
             return Results.Ok(new CommandExecutedResponse(
@@ -131,10 +86,8 @@ public static class DeviceCommandEndpoints
         var updated = await MarkExecutedAsync(connection, commandId, executedAt);
         if (!updated)
         {
-            // Lost a race with a concurrent ACK, or the row moved to 'failed'
-            // (the replay sweep expires stale commands). Either way the device
-            // did run the pump, so report what the row says now rather than
-            // returning an error the firmware would retry forever.
+            // Lost a race with another ACK, or the sweep marked it 'failed'. The pump did
+            // run, so report the current row instead of an error the board would retry forever.
             var current = await ResolveCommandOwnershipAsync(connection, commandId);
             return Results.Ok(new CommandExecutedResponse(
                 commandId, current?.Status ?? "unknown", current?.ExecutedAt ?? executedAt));
@@ -145,10 +98,9 @@ public static class DeviceCommandEndpoints
 
     private sealed record CommandOwnership(string? DeviceId, string Status, DateTimeOffset? ExecutedAt);
 
-    // Resolves which device is expected to run this command, via
-    // irrigation_commands -> zone -> hardware. Returns null when the command
-    // does not exist; returns a row with a null DeviceId when the command
-    // exists but its zone has no active claimed device.
+    // Finds which device should run this command (irrigation_commands -> zone ->
+    // hardware). Null when the command does not exist; a null DeviceId when its zone
+    // has no active device.
     private static async Task<CommandOwnership?> ResolveCommandOwnershipAsync(
         NpgsqlConnection connection, Guid commandId)
     {
@@ -171,8 +123,8 @@ public static class DeviceCommandEndpoints
     private static async Task<bool> MarkExecutedAsync(
         NpgsqlConnection connection, Guid commandId, DateTimeOffset executedAt)
     {
-        // The status = 'pending' guard makes this a compare-and-set, so two
-        // concurrent ACKs cannot both claim to have been the one that landed.
+        // The status = 'pending' check makes this compare-and-set, so two ACKs cannot
+        // both win.
         await using var cmd = new NpgsqlCommand(
             "update irrigation_commands set status = 'executed', executed_at = $2 " +
             "where id = $1 and status = 'pending'", connection);

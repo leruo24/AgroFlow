@@ -4,32 +4,18 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-// Finds equipment that has stopped working and tells the farmer, because this
-// is the class of problem the app cannot surface on its own: a farmer only
-// opens the app when they think about it, and a pump that silently stopped
-// working is precisely the thing they are not thinking about.
-//
-// Three sweeps, each with its own signature:
+// Finds equipment that has stopped working and tells the farmer, because a farmer
+// only opens the app when they think of it, and a silent pump is exactly what they
+// are not thinking about.
+// Three sweeps:
 //   1. Devices that have gone quiet (and come back).
-//   2. Pumps that never acknowledged a watering command.
+//   2. Pumps that never confirmed a watering command.
 //   3. Zones whose sensor has stopped reporting, or that have nothing able to
-//      control them at all.
-//
-// WHY THIS EXISTS
-// Before this service, nothing in AgroFlow ever wrote hardware.status after
-// enrolment: a device was set to 'Online' the moment it enrolled and stayed
-// that way forever, however long ago it had actually gone quiet. A farm left
-// running unattended had no way of finding out that its hardware had dropped
-// off.
-//
-// WHAT COUNTS AS ALIVE
-// The greater of two signals: hardware.last_seen, stamped per-message by the
-// MQTT path which knows exactly which device published; and the newest
-// sensor_reading in the device's zone, which is all the HTTP ingestion path
-// can offer, because POST /api/sensor-readings carries a zoneId and no device
-// identity at all. The zone fallback means two devices sharing one zone are
-// treated as alive together - a real limitation, whose right fix is device
-// identity on the HTTP endpoint rather than guesswork here.
+//      control them.
+// A device counts as alive by the newer of hardware.last_seen (set by MQTT, which
+// knows the device) and the newest sensor_reading in its zone (all the HTTP path
+// gives). So two devices in one zone look alive together; the real fix is device
+// identity on the HTTP endpoint.
 public sealed class DeviceStatusMonitorService : BackgroundService
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -70,9 +56,8 @@ public sealed class DeviceStatusMonitorService : BackgroundService
             "pump unresponsive after {PumpAfter}, sensor silent after {SensorAfter}; checked every {Interval}.",
             offlineAfter, pumpAfter, sensorAfter, interval);
 
-        // A first sweep at startup would fire on everything that went quiet
-        // while the API was being redeployed, so wait one interval first and
-        // let live devices report in.
+        // Wait one interval before the first sweep, so devices that were quiet during a
+        // redeploy can report in first.
         using var timer = new PeriodicTimer(interval);
 
         while (await SafeWaitAsync(timer, stoppingToken))
@@ -85,10 +70,8 @@ public sealed class DeviceStatusMonitorService : BackgroundService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Never let a bad sweep kill the service: an unhandled
-                // exception out of a BackgroundService stops the whole host
-                // under the default BackgroundServiceExceptionBehavior, which
-                // would take irrigation down with it.
+                // A failed sweep must not kill the service: an unhandled exception in a
+                // BackgroundService stops the whole host, including irrigation.
                 _logger.LogError(ex, "Equipment sweep failed; will retry on the next interval.");
             }
         }
@@ -106,20 +89,15 @@ public sealed class DeviceStatusMonitorService : BackgroundService
         }
     }
 
-    // ------------------------------------------------------------------
-    // 1. DEVICES GOING QUIET, AND COMING BACK
-    // ------------------------------------------------------------------
+    // 1. Devices going quiet, and coming back
 
     private async Task SweepDeviceStatusAsync(TimeSpan offlineAfter, CancellationToken cancellationToken)
     {
         var transitions = new List<(long HardwareId, long FarmId, string FarmName, string DeviceName, bool Online, DateTimeOffset LastSeen)>();
 
-        // One statement does the whole sweep: compute each device's real last
-        // activity, flip only the rows whose stored status disagrees with it,
-        // and return exactly those rows. `returning` is what makes this
-        // transition-only - a device that is already Offline and still quiet
-        // matches no row, so it produces no message however many times this
-        // runs.
+        // One statement does the whole sweep: work out each device's real last activity,
+        // flip only the rows whose status is wrong, and return just those. A device that is
+        // already Offline and still quiet matches nothing, so it is only messaged once.
         const string sql =
             """
             with activity as (
@@ -189,8 +167,8 @@ public sealed class DeviceStatusMonitorService : BackgroundService
                 "Device {HardwareId} transitioned to {Status} (last activity {LastSeen}).",
                 t.HardwareId, t.Online ? "Online" : "Offline", t.LastSeen);
 
-            // Already transition-only, but the ledger also caps a device that
-            // flaps across the threshold at one message of each kind per day.
+            // Already only on changes, but the ledger also limits a device that flaps around
+            // the threshold to one message of each kind per day.
             var alertType = $"{(t.Online ? "device_online" : "device_offline")}:{t.HardwareId}";
 
             if (!await _ledger.TryClaimAsync(t.FarmId, alertType, Today(), cancellationToken)) continue;
@@ -206,16 +184,13 @@ public sealed class DeviceStatusMonitorService : BackgroundService
         }
     }
 
-    // ------------------------------------------------------------------
-    // 2. PUMPS THAT NEVER ACKNOWLEDGED A COMMAND
-    // ------------------------------------------------------------------
+    // 2. Pumps that never confirmed a command
 
     private async Task SweepUnresponsivePumpsAsync(TimeSpan pumpAfter, CancellationToken cancellationToken)
     {
-        // A command sits 'pending' until the device confirms it, so one that
-        // is still pending well past the device's polling interval means the
-        // instruction was never carried out. 'failed' is included because
-        // nothing else reports those to the farmer at all.
+        // A command stays 'pending' until the device confirms it, so one still pending long
+        // after the device's polling interval was never carried out. 'failed' is included
+        // because nothing else tells the farmer about those.
         const string sql =
             """
             select distinct z.id, f.farm_id, f.name, coalesce(nullif(z.name, ''), 'Unnamed zone'),
@@ -250,9 +225,8 @@ public sealed class DeviceStatusMonitorService : BackgroundService
 
         foreach (var s in stuck)
         {
-            // Polled rather than transition-based, so without the ledger this
-            // would re-send on every sweep for as long as the command stayed
-            // stuck. One per zone per day.
+            // This sweep is polled, so the ledger is what stops it re-sending every time:
+            // one message per zone per day.
             if (!await _ledger.TryClaimAsync(s.FarmId, $"pump_unresponsive:{s.ZoneId}", Today(), cancellationToken))
             {
                 continue;
@@ -273,21 +247,15 @@ public sealed class DeviceStatusMonitorService : BackgroundService
         }
     }
 
-    // ------------------------------------------------------------------
-    // 3. SENSORS GONE SILENT, AND ZONES NOTHING CAN CONTROL
-    // ------------------------------------------------------------------
+    // 3. Sensors gone silent, and zones nothing can control
 
     private async Task SweepSilentSensorsAsync(TimeSpan sensorAfter, CancellationToken cancellationToken)
     {
-        // Two different faults with one query, distinguished by whether the
-        // zone has any active device at all:
-        //   - has a device, but no readings for a long time  -> sensor problem
-        //   - has no active device                           -> nothing can
-        //                                                       water it, ever
-        //
-        // Zones that have NEVER reported are included deliberately: a zone
-        // installed and never wired up is exactly the silent failure worth
-        // catching, and the ledger stops it being reported more than daily.
+        // Two faults in one query, told apart by whether the zone has an active device:
+        //   - a device, but no readings for a long time -> sensor problem
+        //   - no active device                          -> nothing can water it
+        // Zones that never reported are included: an installed but unwired zone is exactly
+        // the silent failure we want to catch. The ledger limits it to once a day.
         const string sql =
             """
             select z.id,

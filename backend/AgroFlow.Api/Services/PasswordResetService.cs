@@ -5,21 +5,11 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-// Self-service password recovery, delivered over Telegram.
-//
-// WHY TELEGRAM AND NOT EMAIL
-// Supabase's own resetPasswordForEmail needs SMTP, which this project has
-// never configured, so the mobile app's forgot-password screen silently did
-// nothing. A farmer who forgot their password had no self-service path at all
-// and had to find an administrator. Telegram is the one channel AgroFlow can
-// actually reach a farmer on.
-//
-// WHAT IT DELIBERATELY DOES NOT DO
-// It never reveals whether an email address belongs to an account, and never
-// reveals whether that account has Telegram linked. Every outcome returns the
-// same neutral response to the caller - see PasswordResetOutcome. An endpoint
-// that answered "no such user" would be an account enumerator: anyone could
-// harvest which of their guesses are real AgroFlow farmers.
+// Password recovery over Telegram, because Supabase's email reset needs SMTP and we
+// have none; Telegram is the one channel we can reach farmers on.
+// Security: it never reveals whether an email belongs to an account or whether that
+// account has Telegram. Every outcome gives the same neutral response (see
+// PasswordResetOutcome); otherwise anyone could find out which emails are real farmers.
 public sealed class PasswordResetService
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -28,13 +18,10 @@ public sealed class PasswordResetService
     private readonly PasswordResetOptions _options;
     private readonly ILogger<PasswordResetService> _logger;
 
-    // Rate limiting is per EMAIL, not per IP: the thing being protected is a
-    // particular farmer's Telegram chat from being flooded, and an attacker
-    // changing IP must not reset that. Kept in memory, which means the limit
-    // is per instance - acceptable because exactly one instance runs, and the
-    // ceiling is a courtesy rather than a security boundary (the real
-    // protection is that the message only ever goes to the account's OWN
-    // linked chat, never to the requester).
+    // Rate limited per email, not per IP: we are protecting one farmer's chat from being
+    // flooded, and changing IP must not get around that. In memory, per instance, which
+    // is fine with one instance. The real protection is that the message only goes to
+    // the account's own linked chat.
     private static readonly ConcurrentDictionary<string, List<DateTimeOffset>> Attempts = new();
 
     public PasswordResetService(
@@ -51,8 +38,7 @@ public sealed class PasswordResetService
         _logger = logger;
     }
 
-    // Always returns quietly. The caller must respond identically whatever
-    // happened in here.
+    // Always returns quietly; the caller must respond the same whatever happened here.
     public async Task RequestResetAsync(string email, CancellationToken cancellationToken)
     {
         var normalised = email.Trim().ToLowerInvariant();
@@ -61,8 +47,7 @@ public sealed class PasswordResetService
 
         if (!IsWithinRateLimit(normalised))
         {
-            // Logged at Information, not Warning: a farmer tapping the button
-            // twice is ordinary, not an incident.
+            // Information, not Warning: tapping the button twice is normal.
             _logger.LogInformation("Password reset for a given email was rate limited.");
             return;
         }
@@ -71,10 +56,8 @@ public sealed class PasswordResetService
 
         if (profileId is null)
         {
-            // Either no such account, or an account with no Telegram linked.
-            // Deliberately indistinguishable from here on, and the email is
-            // NOT logged - a log line naming addresses that asked for resets
-            // is its own small leak.
+            // No such account, or no Telegram linked: both look the same from here on.
+            // Security: the email is not logged.
             _logger.LogInformation(
                 "Password reset requested for an address with no linked Telegram chat; nothing sent.");
 
@@ -84,9 +67,8 @@ public sealed class PasswordResetService
         await IssueAndSendAsync(profileId.Value, cancellationToken);
     }
 
-    // The admin-triggered version: the administrator has already identified
-    // the farmer, so there is no enumeration concern and the caller gets a
-    // real answer about whether it worked.
+    // The admin-triggered version: the admin has already identified the farmer, so the
+    // caller can get a real answer.
     public async Task<bool> ResetForProfileAsync(Guid profileId, CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -106,8 +88,7 @@ public sealed class PasswordResetService
 
     private async Task<bool> IssueAndSendAsync(Guid profileId, CancellationToken cancellationToken)
     {
-        // Same generator as onboarding, so "temporary password" means one
-        // thing across AgroFlow. Generated, sent, forgotten - never stored.
+        // Same generator as onboarding. Created, sent and forgotten, never stored.
         var password = await _supabaseAdmin.ResetTemporaryPasswordAsync(profileId, cancellationToken);
 
         if (password is null)
@@ -119,9 +100,8 @@ public sealed class PasswordResetService
             return false;
         }
 
-        // Set BEFORE sending. If the send fails the farmer is no worse off -
-        // they simply request again - but a delivered password that did not
-        // force a change would sit in a chat history as a working credential.
+        // Security: set before sending. A failed send just means the farmer asks again,
+        // but a delivered password without a forced change would stay usable in the chat.
         await SetMustChangePasswordAsync(profileId, cancellationToken);
 
         await _notifications.NotifyPasswordResetAsync(profileId, password, cancellationToken);
@@ -131,9 +111,8 @@ public sealed class PasswordResetService
         return true;
     }
 
-    // Only profiles that actually have a chat linked are candidates: without
-    // one there is nowhere to deliver to, and resetting the password anyway
-    // would lock the farmer out of an account they could still use.
+    // Only profiles with a linked chat count: without one there is nowhere to send it,
+    // and resetting anyway would lock the farmer out.
     private async Task<Guid?> FindLinkedProfileAsync(string email, CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -192,8 +171,7 @@ public sealed class PasswordResetService
                 }
             });
 
-        // Keep the dictionary from growing without bound on a long-running
-        // process being probed with many distinct addresses.
+        // Stop the dictionary growing forever if many addresses are tried.
         if (Attempts.Count > 10_000)
         {
             foreach (var stale in Attempts.Where(e => e.Value.Count == 0 || now - e.Value[^1] > TimeSpan.FromDays(1)))

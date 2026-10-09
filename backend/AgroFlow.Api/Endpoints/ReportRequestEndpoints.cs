@@ -30,43 +30,25 @@ public record ReportRequestRow(
     string? CompletedAt,
     string? Error);
 
-// The farmer's own report queue: ask for one, see the ones you have asked
-// for, open a finished one.
-//
-// The generation itself is ReportGenerationService's job - see its class
-// note on why the work does not happen inside this request.
+// The farmer's own report queue: ask for one, see your requests, open a finished
+// one. ReportGenerationService does the actual work in the background.
 public static class ReportRequestEndpoints
 {
-    /* WHY EVERY HANDLER HERE IS WRAPPED
-     *
-     * This endpoint had no try/catch at all, so ANY database exception
-     * escaped as a bare 500 and the app showed the farmer
-     * "AgroFlow API request failed (500)" - a sentence that tells them
-     * nothing and tells us nothing either.
-     *
-     * The most likely cause by far is the simplest: migrations 0034/0035
-     * have not been applied, so `report_request` does not exist and Postgres
-     * answers 42P01. That is a deployment state, not a bug, and it must read
-     * as one in the log while the farmer still gets plain words.
-     *
-     * Ordered by how likely each is in practice - see the report.
-     */
+    /* Every handler here is wrapped so a database error never reaches the farmer as
+     * a bare 500. The usual cause is migrations 0034/0035 not applied, so
+     * `report_request` is missing (Postgres 42P01); we log that clearly and the
+     * farmer gets plain words. */
     private const string UndefinedTable = "42P01";
     private const string UndefinedColumn = "42703";
     private const string InsufficientPrivilege = "42501";
 
-    /// The farmer-facing sentence. Deliberately the SAME one whatever broke:
-    /// none of the real reasons - a missing table, a revoked grant, a null
-    /// flow rate - are things a farmer can act on, and the real reason is in
-    /// the log and the row for whoever can.
+    /// The farmer sees the same sentence whatever broke: none of the real reasons are
+    /// things they can fix, and the real reason is in the log.
     private const string FarmerFacingFailure =
         "This report couldn't be made. Try again later.";
 
-    /// Turns an exception into a logged diagnosis plus a plain 503.
-    ///
-    /// 503 and not 500: every cause below is "this is not set up / not
-    /// available right now", which is a temporary state the farmer should
-    /// retry, not a bug in their request.
+    /// Turns an exception into a logged diagnosis plus a plain 503 (not 500), because
+    /// the causes are temporary setup problems the farmer can retry.
     private static IResult Failure(ILogger logger, Exception ex, string what)
     {
         if (ex is PostgresException pg)
@@ -123,9 +105,8 @@ public static class ReportRequestEndpoints
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // An empty list rather than an error: the Reports screen's own
-            // request form must stay usable even when the history behind it
-            // cannot be read.
+            // An empty list instead of an error, so the request form still works when the
+            // history cannot be read.
             logger.LogError(ex, "Could not list report requests for {ProfileId}.", userId);
             return Results.Ok(Array.Empty<ReportRequestRow>());
         }
@@ -136,9 +117,8 @@ public static class ReportRequestEndpoints
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        // profile_id = the requester, which is what the RLS policy scopes by
-        // too. Repeated here because AgroFlow.Api connects as `postgres` and
-        // bypasses RLS - the policy is not doing this filtering for us.
+        // Security: filter by profile_id here as well as in RLS, because the API connects
+        // as `postgres` and bypasses RLS.
         await using var cmd = new NpgsqlCommand(
             """
             select r.id, r.report_type, r.zone_id, z.name, r.period_start, r.period_end,
@@ -177,9 +157,7 @@ public static class ReportRequestEndpoints
                 reader.GetString(8),
                 reader.GetFieldValue<DateTimeOffset>(9).ToString("o"),
                 reader.IsDBNull(10) ? null : reader.GetFieldValue<DateTimeOffset>(10).ToString("o"),
-                // The row's own error is for the team; the farmer gets the
-                // same plain sentence whatever went wrong, because none of
-                // the real reasons are things they can act on.
+                // The row's error is for the team; the farmer gets the same plain sentence.
                 status == ReportRequestStatuses.Failed
                     ? ReportRequestStatuses.FarmerFailureMessage
                     : null));
@@ -226,14 +204,8 @@ public static class ReportRequestEndpoints
             });
         }
 
-        // ------------------------------------------------------------------
-        // The period.
-        //
-        // Resolved on the SERVER from the farmer's choice, not taken as two
-        // dates from the client, so "last 7 days" means the same seven days
-        // however the phone's clock or timezone is set. Custom dates are the
-        // one case the client supplies.
-        // ------------------------------------------------------------------
+        // The period is worked out on the server from the farmer's choice, so "last 7
+        // days" is the same whatever the phone's clock says. Custom dates come from the client.
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2)); // SAST, no DST
         DateOnly start;
         DateOnly end;
@@ -254,9 +226,8 @@ public static class ReportRequestEndpoints
                     return Results.BadRequest(new { error = "The end date must not be before the start date." });
                 }
 
-                // The same ceiling Olwethu's endpoints enforce. Caught here so
-                // the farmer is told now rather than after waiting for a
-                // report that was never going to be made.
+                // The same one-year limit as the report endpoints, checked now so the farmer
+                // does not wait for a report that cannot be made.
                 if (end.DayNumber - start.DayNumber >= 366)
                 {
                     return Results.BadRequest(new { error = "Reports cover at most one year." });
@@ -277,11 +248,8 @@ public static class ReportRequestEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        // ------------------------------------------------------------------
-        // Ownership, resolved FROM THE ZONE when one is named - so a farmer
-        // cannot pair their own farmId with someone else's zoneId. Archived
-        // farms are refused: there is nothing to report on.
-        // ------------------------------------------------------------------
+        // Security: ownership is taken from the zone when one is named, so a farmer
+        // cannot pair their own farmId with someone else's zone. Archived farms are refused.
         long farmId;
         long? zoneId = request.ZoneId;
 
@@ -333,9 +301,8 @@ public static class ReportRequestEndpoints
             farmId = resolved;
         }
 
-        // The moisture report is per zone - Olwethu's endpoint takes a zoneId
-        // and nothing else. Refused here with a plain reason rather than
-        // queued and failed minutes later.
+        // The moisture report is per zone, so we refuse it here without a zone instead
+        // of failing it later.
         if (ReportKinds.RequiresZone(reportType) && zoneId is null)
         {
             return Results.BadRequest(new

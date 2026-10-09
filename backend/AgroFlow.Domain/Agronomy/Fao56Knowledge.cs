@@ -9,17 +9,10 @@ using System.Text.Json;
 
 namespace AgroFlow.Business.Agronomy
 {
-    // Typed access to Agronomy/fao56-crop-knowledge.json - the committed,
-    // citation-carrying extract of FAO-56 Tables 11, 12 and 22.
-    //
-    // The JSON is the source of truth, not this file. Everything here is a
-    // reader. Retuning the engine for a different region or a different
-    // management assumption is a JSON edit and a rebuild, with no code change
-    // and no recompiled constant to go hunting for.
-    //
-    // The JSON ships as an embedded resource so the values travel inside the
-    // assembly. A deployment cannot end up running with the file missing, and
-    // Railway's Docker image does not need a content-file copy step.
+    // Typed access to Agronomy/fao56-crop-knowledge.json, the cited extract of FAO-56
+    // Tables 11, 12 and 22. The JSON is the source of truth and this file only reads it,
+    // so retuning for another region is a JSON edit and a rebuild.
+    // The JSON is an embedded resource, so it always ships inside the assembly.
 
     public sealed class Fao56StageLengths
     {
@@ -28,9 +21,8 @@ namespace AgroFlow.Business.Agronomy
         public int MidSeasonDays { get; }
         public int LateSeasonDays { get; }
 
-        // The planting date and region of the Table 11 row these lengths came
-        // from. Surfaced to the farmer, because "125-day maize" means nothing
-        // without knowing which of the six published maize rows it came from.
+        // The planting date and region of the Table 11 row these lengths come from, shown to
+        // the farmer, because "125-day maize" means nothing without knowing which maize row.
         public string PlantDate { get; }
         public string Region { get; }
 
@@ -62,16 +54,13 @@ namespace AgroFlow.Business.Agronomy
         public double MidSeason { get; }
         public double End { get; }
 
-        // Set when FAO-56 publishes a second Kc_end for a different management
-        // choice (maize: field-dried grain; potato: vine kill). Null when the
-        // table gives only one value.
+        // Set when FAO-56 gives a second Kc_end for another management choice (maize:
+        // field-dried grain; potato: vine kill). Null when the table has one value.
         public double? EndAlternate { get; }
         public string? EndAlternateCondition { get; }
 
-        // Set when Table 12 printed a bare RANGE for Kc_end rather than a value
-        // (tomato's "0.70-0.90"). When this is true, End is the midpoint of
-        // EndRangeMin..EndRangeMax and the advice output says so out loud,
-        // rather than passing a derived number off as a tabulated one.
+        // True when Table 12 gives a range for Kc_end instead of one value (tomato's
+        // "0.70-0.90"). End is then the midpoint, and the advice says so.
         public bool EndIsMidpointOfPublishedRange { get; }
         public double? EndRangeMin { get; }
         public double? EndRangeMax { get; }
@@ -101,9 +90,8 @@ namespace AgroFlow.Business.Agronomy
         public double RootDepthMinM { get; }
         public double RootDepthMaxM { get; }
 
-        // Table 22's p: the fraction of total available soil water a crop can
-        // deplete before it starts suffering water stress. Tabulated at
-        // ETc ~ 5 mm/day; see Fao56Knowledge.AdjustDepletionFractionForEtc.
+        // Table 22's p: the share of available soil water a crop can use before it starts
+        // suffering stress. Tabulated at ETc ~ 5 mm/day; see AdjustDepletionFractionForEtc.
         public double DepletionFractionP { get; }
 
         public Fao56Soil(double rootDepthMinM, double rootDepthMaxM, double depletionFractionP)
@@ -118,9 +106,8 @@ namespace AgroFlow.Business.Agronomy
     {
         public string Key { get; }
 
-        // Short, farmer-facing name ("maize", "leafy veg (lettuce)"). Fao56Name
-        // is the full table entry ("Maize, Field (grain) (field corn)") and
-        // reads badly inside a sentence that is already parenthesised.
+        // Short farmer-facing name ("maize", "leafy veg (lettuce)"). Fao56Name is the full
+        // table entry, which reads badly inside a sentence.
         public string DisplayName { get; }
 
         public string Fao56Name { get; }
@@ -133,9 +120,8 @@ namespace AgroFlow.Business.Agronomy
         public Fao56Soil Soil { get; }
         public string SoilCite { get; }
 
-        // Present only where FAO-56 has something specific and quotable about
-        // this crop that changes how the numbers should be read. Null otherwise
-        // - an empty note is better than a made-up one.
+        // Only set where FAO-56 says something specific about this crop that changes how
+        // the numbers should be read. Null otherwise; no note is better than a made-up one.
         public string? MappingNote { get; }
         public string? KcShapeWarning { get; }
         public string? KcEndFootnote { get; }
@@ -181,15 +167,11 @@ namespace AgroFlow.Business.Agronomy
         }
 
         // Free-text zone.crop_type -> knowledge key.
-        //
-        // The database column is free text and the admin dashboard's own crop
-        // list (referenceData.ts) does not match the six crops this knowledge
-        // base covers - it offers Maize, Grapes, Citrus, Wheat, Potatoes and
-        // Apples. Grapes, Wheat and Apples resolve to nothing here on purpose:
-        // returning null so the caller degrades to moisture-only advice is
-        // correct, and far better than quietly substituting a crop whose Kc
-        // curve is wrong. See docs/OVERNIGHT_REPORT.md - reconciling the two
-        // crop lists is a decision, not a code fix.
+        // The admin dashboard's crop list (referenceData.ts) offers Maize, Grapes, Citrus,
+        // Wheat, Potatoes and Apples. Grapes, Wheat and Apples are not in this knowledge base
+        // and return null on purpose, so the advice falls back to moisture only instead of
+        // using a wrong Kc curve. Matching the two lists is a team decision (see
+        // docs/OVERNIGHT_REPORT.md).
         private static readonly Dictionary<string, string> CropAliases =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -227,7 +209,7 @@ namespace AgroFlow.Business.Agronomy
                 { "droëbone", "dry_beans" },
             };
 
-        // Returns null - never a guess - when the crop is not one of the six.
+        // Returns null, never a guess, when the crop is not one of the six.
         public static Fao56Crop? TryResolve(string? cropType)
         {
             if (string.IsNullOrWhiteSpace(cropType)) return null;
@@ -240,13 +222,10 @@ namespace AgroFlow.Business.Agronomy
             return Crops.TryGetValue(key, out crop) ? crop : null;
         }
 
-        // FAO-56 p. 162: "p = pTable 22 + 0.04 (5 - ETc) where the adjusted p is
-        // limited to 0.1 <= p <= 0.8 and ETc is in mm/day."
-        //
-        // This is what lets the engine say something genuinely weather-aware and
-        // still fully sourced: on a hot day with high ETc the crop tolerates
-        // LESS depletion before stress, so the same soil moisture reading is
-        // more urgent than it would be in mild weather.
+        // FAO-56 p. 162: "p = pTable 22 + 0.04 (5 - ETc) where the adjusted p is limited to
+        // 0.1 <= p <= 0.8 and ETc is in mm/day."
+        // On a hot day with high ETc the crop tolerates less depletion, so the same soil
+        // reading is more urgent than in mild weather.
         public static double AdjustDepletionFractionForEtc(double tabulatedP, double etcMmPerDay)
         {
             var adjusted = tabulatedP + 0.04 * (5.0 - etcMmPerDay);
@@ -376,9 +355,8 @@ namespace AgroFlow.Business.Agronomy
                    && value.GetBoolean();
         }
 
-        // Formats a double the way the advice text wants it, invariant so a
-        // farmer in a comma-decimal locale and the test suite see the same
-        // string.
+        // Formats a number for the advice text, with InvariantCulture so every locale and
+        // the tests see the same string.
         internal static string Format(double value, int decimals)
         {
             return value.ToString("F" + decimals.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);

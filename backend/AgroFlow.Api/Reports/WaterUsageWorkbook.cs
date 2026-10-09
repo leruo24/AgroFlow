@@ -4,17 +4,10 @@ using Sheet = AgroFlow.Api.Reports.XlsxWriter.Sheet;
 
 namespace AgroFlow.Api.Reports;
 
-/// The water usage report as a workbook, built to
-/// docs/agroflow-data-template.xlsx.
-///
-/// WHY THIS EXISTS ALONGSIDE THE PDF
-/// The PDF is for reading; this is for working with. A farmer or an extension
-/// officer who wants to chart three months, or paste a week into a funding
-/// application, needs the numbers as numbers - not as text in a document that
-/// has already rounded them for display.
-///
-/// Both are rendered from the same WaterUsageReportModel, so the two cannot
-/// disagree about a total. That is the whole reason the model exists.
+/// The water usage report as a workbook (docs/agroflow-data-template.xlsx).
+/// The PDF is for reading; this is for working with the numbers (charting months,
+/// pasting into a funding application). Both render from the same
+/// WaterUsageReportModel, so their totals match.
 internal static class WaterUsageWorkbook
 {
     public static byte[] Render(WaterUsageReportModel m)
@@ -50,7 +43,7 @@ internal static class WaterUsageWorkbook
         var sheet = new Sheet
         {
             Name = "Summary",
-            // Column B is wide for the Advice section's "Why" text (item 2c).
+            // Column B is wide for the Advice section's "Why" text.
             ColumnWidths = new[] { 40.0, 60.0, 10.0 },
         };
 
@@ -70,9 +63,8 @@ internal static class WaterUsageWorkbook
                   Cell.Of("Value", XlsxStyle.TableHeader),
                   Cell.Of("Unit", XlsxStyle.TableHeader));
 
-        // Every one of these is a number cell, not a formatted string, so the
-        // sheet can be charted and summed. Where a figure cannot be worked
-        // out the cell is left EMPTY rather than zeroed - see Cell.Blank.
+        // Every figure is a number cell, not text, so the sheet can be charted and summed.
+        // Where a figure cannot be worked out the cell is left empty, not 0 (see Cell.Blank).
         sheet.Add(Cell.Of("Pump flow rate"),
                   Cell.Maybe(m.FlowRateLpm, XlsxStyle.OneDecimal),
                   Cell.Of("L/min"));
@@ -145,8 +137,8 @@ internal static class WaterUsageWorkbook
         return sheet;
     }
 
-    // Item 2c: the period's verdict and each piece of advice, with a "Why"
-    // column beside it - the same summary the PDF prints under each line.
+    // The period's verdict and each piece of advice, with a "Why" column: the same
+    // summary the PDF prints under each line.
     internal static void AddAdvice(Sheet sheet, WaterUsageReportModel m)
     {
         var rows = new List<(string Advice, string Why)>();
@@ -181,8 +173,7 @@ internal static class WaterUsageWorkbook
     {
         var sheet = new Sheet
         {
-            // The zone goes in the tab name, because somebody comparing two
-            // zones will have both workbooks open at once.
+            // The zone goes in the tab name, so two zones' workbooks can be told apart.
             Name = $"Daily - {m.ZoneName}",
             ColumnWidths = new[] { 16.0, 11.0, 13.0, 13.0, 16.0, 17.0, 14.0, 13.0, 16.0, 15.0, 10.0, 26.0 },
         };
@@ -311,10 +302,8 @@ internal static class WaterUsageWorkbook
         return sheet;
     }
 
-    /// Rounded for the same reason the model's totals are: subtracting two
-    /// doubles that look like 28.2 and 26 gives 2.1999999999999993, and the
-    /// workbook stores what it is given. The cell would display 2.2 and hold
-    /// something else, which anyone filtering or comparing on it would hit.
+    /// Rounded like the model's totals: 28.2 - 26 gives 2.1999999999999993 otherwise,
+    /// which the workbook would store.
     private static double? Difference(double? a, double? b)
     {
         return a is { } x && b is { } y ? Math.Round(x - y, 3) : null;

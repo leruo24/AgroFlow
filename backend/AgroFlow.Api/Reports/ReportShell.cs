@@ -6,34 +6,22 @@ using QuestPDF.Infrastructure;
 
 namespace AgroFlow.Api.Reports;
 
-/// The page furniture every AgroFlow report shares: the green band at the top,
-/// the estimate note and page number at the bottom, headings, table cells and
-/// number formatting.
-///
-/// WHY IT IS SHARED
-/// There are three farmer-facing reports - water usage, soil moisture and the
-/// watering schedule - and until now each drew its own plain header. Pulling
-/// the furniture out means all three look like one product, and the estimate
-/// disclaimer at the foot of every page cannot be forgotten on one of them.
-/// It also means the logo is loaded once, not three times.
+/// The layout every AgroFlow report shares: the green band at the top, the
+/// estimate note and page number at the bottom, headings, table cells and number
+/// formatting. Shared so all reports look the same, the estimate note is never
+/// forgotten, and the logo is loaded once.
 internal static class ReportShell
 {
-    // Part 2: an emoji in a farm or zone name must not fail the report -
-    // the font has no glyph for it, so it prints as a blank box instead.
-    // Also set in Program.cs; here so every path through the shell has it.
+    // An emoji in a farm or zone name prints as a blank box instead of failing the
+    // report. Also set in Program.cs; here so every path through the shell has it.
     static ReportShell()
     {
         QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = false;
     }
 
-    /// The report's logo, read once out of the assembly.
-    ///
-    /// Embedded rather than deployed beside the binary: a Railway container's
-    /// filesystem is rebuilt on every deploy and nothing copies loose assets
-    /// into it, so a report loading this from disk would lose its header in
-    /// production and only in production. Null if the resource is missing,
-    /// which the header handles - a farmer's weekly report must not fail over
-    /// a picture.
+    /// The logo, embedded in the assembly and read once. Railway rebuilds the
+    /// container on every deploy, so a loose file would go missing. Null if the
+    /// resource is missing; the header copes without it.
     private static readonly Lazy<byte[]?> LogoBytes = new(() =>
     {
         var assembly = typeof(ReportShell).Assembly;
@@ -87,9 +75,8 @@ internal static class ReportShell
             });
     }
 
-    /// `note` carries whatever that report must say on every page. For water
-    /// usage that is the estimate disclaimer; a reader who only has page 3 in
-    /// their hand still has to know the litres are inferred.
+    /// `note` is printed on every page. For water usage it is the estimate note, so
+    /// even page 3 on its own says the litres are estimated.
     public static void Footer(IContainer container, string note)
     {
         container
@@ -112,9 +99,8 @@ internal static class ReportShell
                         .FontSize(7.5f).FontColor(ReportTheme.Muted);
                 });
 
-                // QuestPDF's own counters, rather than a number passed in:
-                // a report whose length depends on how many zones a farm has
-                // cannot know its page count in advance.
+                // QuestPDF's own page counters, because a report's length depends on how many
+                // zones the farm has.
                 row.ConstantItem(80).AlignRight().Text(t =>
                 {
                     t.DefaultTextStyle(x => x.FontSize(7.5f).FontColor(ReportTheme.Muted));
@@ -138,7 +124,7 @@ internal static class ReportShell
             .Text(text).FontSize(12.5f).Bold().FontColor(ReportTheme.Brand);
     }
 
-    /// A smaller heading, for a zone's section inside a farm-wide report.
+    /// A smaller heading for a zone's section inside a farm-wide report.
     public static void ZoneHeading(ColumnDescriptor col, string zone, string? crop)
     {
         col.Item().PaddingTop(4).PaddingBottom(8)
@@ -147,9 +133,7 @@ internal static class ReportShell
             .FontSize(13).Bold().FontColor(ReportTheme.Brand);
     }
 
-    /// The one-line explanation that sits UNDER a chart, not over it: the
-    /// chart is the thing being explained, and a caption above is read before
-    /// there is anything to apply it to.
+    /// The one-line note under a chart, read after the chart it explains.
     public static void ChartNote(ColumnDescriptor col, string text)
     {
         col.Item().PaddingTop(6).Text(text).FontSize(8.8f).FontColor(ReportTheme.Ink);
@@ -175,15 +159,12 @@ internal static class ReportShell
 
     public const string Stripe = "#FFFFFF";
 
-    /// InvariantCulture everywhere. .NET on some hosts renders "3 Sept" and a
-    /// comma decimal separator, and these strings reach a farmer in a Telegram
-    /// caption - the project has been bitten by exactly this once already, in
-    /// ReportPeriods.Describe.
+    /// InvariantCulture everywhere: some hosts write "3 Sept" and a comma decimal
+    /// separator, and these strings can reach a farmer in a Telegram caption.
     public static string Num(double value, int decimals) =>
         value.ToString("F" + decimals.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture);
 
-    /// An em dash, never "0". A missing reading and a measured zero are
-    /// different facts and must not share a rendering.
+    /// An em dash, never "0": a missing reading and a measured zero are different.
     public static string Opt(double? value, int decimals) =>
         value is { } v ? Num(v, decimals) : "—";
 

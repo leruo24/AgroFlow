@@ -5,57 +5,36 @@ namespace AgroFlow.Business
 {
     public enum ReplayDecision
     {
-        // Publish it - the device plausibly never received it.
+        // Publish it: the device probably never got it.
         Publish,
 
-        // Too old to act on safely. Mark it failed so the queue does not grow
-        // without bound and so it can never fire later as a surprise.
+        // Too old to act on safely. Mark it failed so the queue cannot grow forever and it
+        // can never fire later as a surprise.
         Expire,
     }
 
-    // Decides what to do with an irrigation_commands row that is still
-    // 'pending' when a replay sweep finds it.
-    //
-    // WHY REPLAY EXISTS AT ALL
-    // ------------------------
-    // Until now a command reached a device exactly once, at the instant it was
-    // inserted: the row fired trg_irrigation_commands_notify -> pg_notify ->
-    // MQTT publish. If AgroFlow.Api was down, or its MQTT connection was down,
-    // that NOTIFY went nowhere and the row sat at 'pending' forever with
-    // nothing to retry it. That was tolerable when the API ran on a laptop
-    // during a demo. It is not tolerable now that it is a Railway container
-    // that restarts on every deploy.
-    //
-    // WHY OLD COMMANDS ARE EXPIRED RATHER THAN REPLAYED
-    // -------------------------------------------------
-    // This is the safety-critical half, and it is the reason this decision is a
-    // named policy instead of a bare "select where status = 'pending'".
-    //
-    // A pending 'start' is an instruction to open a valve. Replaying one that
-    // was queued three days ago - because the container happened to restart -
-    // would start irrigating a field for reasons nobody watching could explain,
-    // possibly at night, possibly after rain, possibly on a crop that has since
-    // been harvested. The conditions that justified it are long gone.
-    //
-    // So: replay what is recent enough to still be the right instruction, and
-    // expire the rest. A farmer who wants water now can always ask again; a
-    // farmer who gets an unexplained midnight flood cannot un-flood the field.
+    // Decides what to do with an irrigation_commands row that is still 'pending' when a
+    // replay sweep finds it.
+    // A command is normally sent once, when it is inserted (trigger -> pg_notify -> MQTT).
+    // If the API or MQTT was down at that moment, nothing would ever retry it, and the
+    // Railway container restarts on every deploy, so we replay pending commands.
+    // Safety: old commands are expired, not replayed. A pending 'start' opens a valve;
+    // replaying one from three days ago would water a field for reasons nobody can
+    // explain, maybe at night or after rain. Recent commands are replayed and the rest
+    // expired: a farmer can always ask again, but cannot undo a midnight flood.
     public static class CommandReplayPolicy
     {
-        // How recent a pending command must be to still be worth sending.
-        //
-        // Two hours covers the cases replay is actually for - a deploy, a
-        // container restart, a broker blip, a brief network partition - while
-        // staying well short of "the situation has changed".
+        // Safety: how recent a pending command must be to still be sent. Two hours covers a
+        // deploy, a restart, a broker blip or a short network outage, well before the
+        // situation has changed.
         public static readonly TimeSpan MaxReplayAge = TimeSpan.FromHours(2);
 
         public static ReplayDecision Decide(DateTimeOffset createdAt, DateTimeOffset now)
         {
             var age = now - createdAt;
 
-            // A negative age means the row is timestamped in the future -
-            // clock skew between the database and this process. Treat it as
-            // current rather than expiring it: the row was only just written.
+            // A negative age means the row is timestamped in the future (clock skew between the
+            // database and this process). It was only just written, so treat it as current.
             if (age < TimeSpan.Zero) return ReplayDecision.Publish;
 
             return age <= MaxReplayAge ? ReplayDecision.Publish : ReplayDecision.Expire;

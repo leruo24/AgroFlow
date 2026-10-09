@@ -2,13 +2,10 @@ using System.Collections.Concurrent;
 
 namespace AgroFlow.Api.Services;
 
-// Item 6c: a ceiling on public enquiries per source IP.
-//
-// The enquiry form is the one write anyone on the internet can make. A real
-// person sends one; a family sharing a phone might send two or three. Far
-// above that is a script, and every enquiry pings the admins on Telegram.
-// In-memory and per-instance, like ClaimRateLimiter: a restart resets it,
-// which costs one window's worth of spam at most.
+// Security: a limit on public enquiries per source IP. The form is the one write
+// anyone on the internet can make, and every enquiry messages the admins. A person
+// sends one or two; far more is a script. In memory like ClaimRateLimiter: a restart
+// resets it, which allows one window of spam at most.
 public sealed class EnquiryRateLimiter
 {
     public const int MaxPerWindow = 5;

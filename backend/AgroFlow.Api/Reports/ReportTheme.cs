@@ -1,23 +1,15 @@
 namespace AgroFlow.Api.Reports;
 
-/// The one place the designed report's colours and spacing live.
-///
-/// WHY A THEME FILE RATHER THAN LITERALS AT EACH USE
-/// The report is drawn two different ways: QuestPDF elements for the page
-/// furniture, and SVG strings for the charts. Those are different rendering
-/// paths that cannot share a stylesheet, so without this the same green would
-/// be written twice in two syntaxes and drift the first time one was changed.
-/// Everything here is a plain hex string, which both paths accept.
-///
-/// The palette is the one in docs/agroflow-report-template.pdf, which in turn
-/// matches the console's brand tokens in apps/web/admin/src/styles/main.css.
+/// The report's colours and spacing in one place.
+/// The PDF layout (QuestPDF) and the charts (SVG) cannot share a stylesheet, so both
+/// read these plain hex strings. The palette matches the console's brand colours in
+/// apps/web/admin/src/styles/main.css.
 internal static class ReportTheme
 {
     /// The header band and every heading.
     public const string Brand = "#184D35";
 
-    /// Body text. Not pure black - against a white page at 10pt, #22 reads
-    /// softer over three pages without losing contrast (still ~15:1).
+    /// Body text. Slightly softer than pure black, still about 15:1 contrast.
     public const string Ink = "#222A26";
 
     /// Captions, axis labels, the footer.
@@ -26,15 +18,15 @@ internal static class ReportTheme
     /// Bars for water actually delivered, and the moisture line.
     public const string Teal = "#246B7A";
 
-    /// "Crop needed" in the paired chart - deliberately lighter than Teal so
-    /// the pair reads as need versus given at a glance.
+    /// "Crop needed" in the paired chart: lighter than Teal so need and given are
+    /// easy to tell apart.
     public const string TealLight = "#86CFE8";
 
     /// The healthy-moisture band behind the moisture chart.
     public const string BandFill = "#E7F3F9";
 
-    /// The area forecast line. Grey because it is the reference series; the
-    /// local field sensor is the one being compared against it.
+    /// The area forecast line, grey because it is the reference the local sensor is
+    /// compared against.
     public const string WeatherArea = "#96A39C";
 
     /// The local field sensor line.

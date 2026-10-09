@@ -13,15 +13,9 @@ namespace AgroFlow.Api.Endpoints;
 
 public static class ReportEndpoints
 {
-    // The three PDF builders below are `internal` rather than `private` so
-    // ReportGenerationService can call them directly.
-    //
-    // That is deliberate reuse and not a refactor: their bodies are
-    // untouched, and the alternative - a second renderer for the background
-    // queue - would mean the PDF a farmer downloads and the PDF the
-    // scheduler emails could drift apart. The ownership check inside each
-    // one still runs, because the generator hands it a ClaimsPrincipal built
-    // from the requesting farmer's own profile id.
+    // The three PDF builders are internal so ReportGenerationService can reuse them,
+    // which keeps the downloaded PDF and the scheduled one identical. Their
+    // ownership check still runs with the requesting farmer's identity.
 
     // South Africa has no daylight saving, so a fixed zone is safe for day boundaries.
     private const string ReportTimeZone = "Africa/Johannesburg";
@@ -35,9 +29,7 @@ public static class ReportEndpoints
         group.MapGet("/schedule", GetScheduleAsync);
         group.MapGet("/water-usage/pdf", GetWaterUsagePdfAsync);
 
-        // The same report as a workbook. Only ever per zone, because a
-        // spreadsheet of several zones' days side by side is not a thing
-        // anybody asked for - they would filter it back down to one.
+        // The same report as a workbook, one zone only.
         group.MapGet("/water-usage/xlsx", GetWaterUsageXlsxAsync);
         group.MapGet("/moisture/pdf", GetMoisturePdfAsync);
         group.MapGet("/schedule/pdf", GetSchedulePdfAsync);
@@ -61,7 +53,7 @@ public static class ReportEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync();
 
-        // 1. Ownership gate. Not found and not allowed look identical on purpose.
+        // 1. Ownership check. Not found and not allowed look the same on purpose.
         const string farmSql = """
             select f.name from farm f
             where f.farm_id = $1
@@ -79,9 +71,9 @@ public static class ReportEndpoints
             farmName = result as string ?? "";
         }
 
-        // 2. Zones of that farm (already access-checked above) with per-day runtime.
-        //    Litres are NOT read from irrigation_event.estimated_litres (seeded/stale);
-        //    they are derived from runtime and zone.flow_rate_lpm.
+        // 2. The farm's zones (already access-checked) with daily pump runtime.
+        //    Litres come from runtime and zone.flow_rate_lpm, never from
+        //    irrigation_event.estimated_litres (seeded and stale).
         const string usageSql = """
             select z.id, z.name, z.flow_rate_lpm, d.usage_date, d.event_count, d.runtime_seconds_total
             from zone z
@@ -166,7 +158,7 @@ public static class ReportEndpoints
             estimateNote = "Estimated: pump run time x zone flow rate. No flow meter is installed.",
             zones = zoneDtoList,
 
-            // Spec 9b: the water usage report carries the efficiency insights.
+            // The water usage report includes the efficiency insights.
             insights = CollectInsights(engine, zones.Select(z => z.ZoneId), WaterUsageReportInsights),
         });
     }
@@ -185,7 +177,7 @@ public static class ReportEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync();
 
-        // 1. Ownership gate on the zone's farm.
+        // 1. Ownership check on the zone's farm.
         const string zoneSql = """
             select z.name, z.moisture_threshold, z.desired_moisture, z.flow_rate_lpm,
                    -- Read through jsonb so a database without the engine's
@@ -214,17 +206,17 @@ public static class ReportEndpoints
             calibrationDry = zr.IsDBNull(5) ? null : zr.GetDouble(5);
         }
 
-        // Item 2: readings are a percentage only after the wet/dry setup.
-        // Calibrated: every figure is converted, the same way the engine does.
-        // Not calibrated: figures stay sensor numbers and are never shown with
-        // a %, and no comparison with the % threshold is made.
+        // Readings are only a percentage after the wet/dry setup.
+        // Calibrated: every figure is converted the same way the engine does it.
+        // Not calibrated: figures stay sensor numbers, shown without a %, and are not
+        // compared with the % threshold.
         var calibrated = AgroFlow.Business.Agronomy.SoilWaterBalance
             .RelativeMoisturePercent(0, calibrationWet, calibrationDry) is not null;
         double Shown(double raw) => calibrated
             ? AgroFlow.Business.Agronomy.SoilWaterBalance.RelativeMoisturePercent(raw, calibrationWet, calibrationDry)!.Value
             : raw;
 
-        // 2. Hourly moisture buckets (local SAST wall-clock time).
+        // 2. Hourly moisture averages (SAST).
         const string moistureSql = """
             select date_trunc('hour', r.recorded_at at time zone 'Africa/Johannesburg') as bucket,
                    avg(r.value), min(r.value), max(r.value), count(*)
@@ -245,8 +237,8 @@ public static class ReportEndpoints
             await using var r = await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
             {
-                // The conversion is linear, so the average converts directly;
-                // a probe that reads LOWER when wet swaps min and max.
+                // The conversion is linear, so the average converts directly; a probe that
+                // reads lower when wet swaps min and max.
                 var avg = Shown(Convert.ToDouble(r.GetValue(1)));
                 var a = Shown(Convert.ToDouble(r.GetValue(2)));
                 var b = Shown(Convert.ToDouble(r.GetValue(3)));
@@ -315,8 +307,7 @@ public static class ReportEndpoints
             message = hasData ? null : "Not enough data yet: no soil moisture readings in this period.",
             thresholds = new { dryPct = dryThreshold, targetPct = targetMoisture },
 
-            // Item 2, additive: false means every "...Pct" figure below is a
-            // raw sensor number and must be shown without a %.
+            // false means every "...Pct" figure below is a raw sensor number, shown without a %.
             calibrated,
             readingUnit = calibrated ? "%" : "sensor reading (not yet set up)",
             summary = hasData ? new
@@ -333,23 +324,21 @@ public static class ReportEndpoints
             isEstimate = true,
             estimateNote = "Irrigation litres are estimated: pump run time x zone flow rate. No flow meter is installed.",
 
-            // Spec 9b: the moisture report carries the sensor- and dryness-related
-            // insights. Each item is { text, source }.
+            // The moisture report includes the sensor and dryness insights, each as { text, source }.
             insights = CollectInsights(engine, new[] { zoneId.Value }, MoistureReportInsights),
 
-            // Spec 3b: the probe is resistive and will drift as it corrodes.
+            // The probe is resistive and drifts as it corrodes.
             calibrationNote = "The soil sensor is resistive, so its readings are relative, not a measured volume of water. They react to salts and fertiliser and drift as the probe corrodes. Redo the wet/dry setup if readings drift over weeks.",
         });
     }
 
-    // The same figure as RuleBook.ConfidenceRules.FreshReadingHours: past it a
-    // reading lowers confidence and the advice comes from the weather.
+    // Same as ConfidenceRules.FreshReadingHours: an older reading lowers confidence
+    // and the advice comes from the weather.
     private const int MaxReadingAgeHours = (int)AgroFlow.Business.Agronomy.RuleBook.ConfidenceRules.FreshReadingHours;
 
-    // One schedule day's action and note. Day 0 is today's advice. Days 1-6
-    // come from the water balance's rolling outlook, the same plan as day 0;
-    // only without the engine (its columns missing) do they fall back to the
-    // rain-only hint they had before it.
+    // One schedule day's action and note. Day 0 is today's advice; days 1-6 come
+    // from the engine's outlook. Only if the engine columns are missing do they fall
+    // back to a rain-only hint.
     internal static (string Action, string? Note) ScheduleDay(int dayIndex, ZoneAdvice advice, ZoneAdvice todayAdvice, DateOnly asOf, double? rainMm)
     {
         if (dayIndex == 0) return (advice.Action.ToString(), advice.Reasoning.FirstOrDefault());
@@ -367,8 +356,8 @@ public static class ReportEndpoints
             : ("CheckMoisture", "Check soil moisture this morning; irrigate if below the zone threshold.");
     }
 
-    // Item 2: how the latest reading is described. Never a % before the
-    // wet/dry setup; a stale reading says when the kit last reported.
+    // How the latest reading is described: never a % before the wet/dry setup, and
+    // a stale reading says when the kit last reported.
     internal static string ReadingLabel(double? raw, DateTime? readAtUtc, double? relativePct, bool fresh)
     {
         if (raw is null || readAtUtc is null) return "No soil reading yet.";
@@ -392,14 +381,8 @@ public static class ReportEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync();
 
-        // 1. Ownership gate + latitude (needed for ET0).
-        //
-        // The admin clause matches the other three report endpoints (lines
-        // 54, 179 and 1024 of this file). It was missing only here, so an
-        // administrator could open every other report for a farm they do not
-        // belong to and got a bare "Farm not found." on the schedule - which
-        // reads as a data problem rather than as the permission check it
-        // actually was.
+        // 1. Ownership check, plus latitude (needed for ET0). Admins are allowed, the
+        //    same as in the other report endpoints.
         const string farmSql = """
             select f.name, f.latitude from farm f
             where f.farm_id = $1
@@ -418,7 +401,7 @@ public static class ReportEndpoints
             latitude = r.IsDBNull(1) ? null : Convert.ToDouble(r.GetValue(1));
         }
 
-        // South Africa has no daylight saving, so UTC+2 is the local date.
+        // SAST is UTC+2 all year, so this is the local date.
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
 
         // 2. Weather rows (actuals + forecast) for today .. today+7.
@@ -445,7 +428,7 @@ public static class ReportEndpoints
             }
         }
 
-        // 3. Zones + each zone's latest moisture reading.
+        // 3. Zones and each zone's latest moisture reading.
         const string zoneSql = """
             select z.id, z.name, z.crop_type, z.planting_date, z.moisture_threshold, m.value, m.recorded_at
             from zone z
@@ -484,9 +467,8 @@ public static class ReportEndpoints
             var days = new List<object>();
             ZoneAdvice? todayAdvice = null;
 
-            // The FAO-56 water balance is a time series, not a per-day figure, so
-            // it is assembled once per zone and handed to today's Advise call.
-            // Future days keep the forecast-only outlook they always had.
+            // The water balance is a time series, so we build it once per zone and pass it
+            // to today's Advise call.
             AgroFlow.Business.Agronomy.ZoneEngineInput? balanceInput = null;
             AgroFlow.Business.Agronomy.ZoneFaultSignals? faultSignals = null;
             try
@@ -500,25 +482,22 @@ public static class ReportEndpoints
             }
             catch (Exception)
             {
-                // The report must still render if the engine's own columns are
-                // missing - migration 0027 may not be applied yet. The advice then
-                // degrades to exactly what it was before the engine existed, and
-                // the zone's limitations say what is unavailable.
+                // The report must still work if the engine's columns are missing (0027 not
+                // applied); the advice then falls back and the zone's limitations say what is missing.
                 balanceInput = null;
                 faultSignals = null;
             }
 
-            // Item 2: a reading is a percentage only after the wet/dry setup.
-            // Before it, it is a sensor number and is never shown with a %.
+            // A reading is only a percentage after the wet/dry setup; before that it is a
+            // sensor number, never shown with a %.
             var calibrated = balanceInput is { CalibrationWet: not null, CalibrationDry: not null };
             var relativePct = calibrated && z.Moisture is { } rawReading
                 ? AgroFlow.Business.Agronomy.SoilWaterBalance.RelativeMoisturePercent(
                     rawReading, balanceInput!.CalibrationWet, balanceInput.CalibrationDry)
                 : null;
 
-            // The threshold check needs a real percentage. With the engine
-            // available, only a calibrated reading is one; without it (engine
-            // columns missing) the old behaviour stands.
+            // The threshold check needs a real percentage: with the engine, only a
+            // calibrated reading counts; without it we use the raw value.
             var moistureForAdvice = !readingFresh ? null
                 : balanceInput is null ? z.Moisture
                 : relativePct;
@@ -567,7 +546,7 @@ public static class ReportEndpoints
                 cropType = z.Crop,
                 latestMoisture = new
                 {
-                    // A percentage only after the wet/dry setup (item 2).
+                    // A percentage only after the wet/dry setup.
                     pct = relativePct is { } rp ? Math.Round(rp, 1) : (double?)null,
                     reading = z.Moisture,
                     calibrated,
@@ -580,8 +559,8 @@ public static class ReportEndpoints
                 },
                 summary = todayAdvice!.Summary,
 
-                // Item 2: how sure, and the one thing that would improve it.
-                // Optional - null when the engine's inputs were unavailable.
+                // How sure the advice is and the one thing that would improve it.
+                // Null when the engine's inputs were unavailable.
                 confidence = todayAdvice.Confidence is { } conf
                     ? new { level = conf.Key, reason = conf.Reason }
                     : null,
@@ -596,8 +575,8 @@ public static class ReportEndpoints
                 reasoning = todayAdvice.Reasoning,
                 facts = todayAdvice.Facts.Select(f => new { f.Label, f.Value, f.Source }),
 
-                // The farmer-facing insight set, each as { text, source } per spec
-                // section 9a. Farmers see text; reports always show source.
+                // The farmer-facing insights, each as { text, source }. Farmers see the text;
+                // reports always show the source.
                 insights = todayAdvice.FarmerInsights.Select(i => new
                 {
                     text = i.Message,
@@ -605,15 +584,12 @@ public static class ReportEndpoints
                     insightType = i.InsightType,
                     severity = i.Severity,
 
-                    // Item 2c: the one-line "Why:" and the full explanation
-                    // for the report's appendix.
+                    // The one-line "Why:" and the full explanation for the appendix.
                     why = i.Explanation?.Summary,
                     explanation = i.Explanation,
                 }),
 
-                // The FAO-56 narrative notes that `insights` used to carry. Kept
-                // so nothing that was published is lost - every line still cites
-                // the textbook.
+                // The FAO-56 narrative notes; every line cites the textbook.
                 faoNotes = todayAdvice.Insights,
 
                 limitations = todayAdvice.Limitations,
@@ -638,7 +614,7 @@ public static class ReportEndpoints
             });
         }
 
-        // Spec 9c: the last 7 observed days, area against local field readings.
+        // The last 7 observed days, area weather against local field readings.
         var weatherComparison = await ReadWeatherComparisonAsync(
             connection, farmId.Value, today.AddDays(-7), today);
 
@@ -663,26 +639,13 @@ public static class ReportEndpoints
         });
     }
 
-        /* The designed, per-zone report (item 8b).
-     *
-     * WHY zoneId SWITCHES THE WHOLE DOCUMENT
-     * Without a zone this endpoint answers "how much water did this FARM
-     * use", which is a summary across zones and stays exactly as it was -
-     * the scheduler, the Telegram delivery and the admin console all depend
-     * on it. With a zone it answers "how did this block do this week", which
-     * is a different document for a different reader: a farmer, on a phone,
-     * who wants to know whether their tomatoes got enough. That is the one
-     * docs/agroflow-report-template.pdf describes, and it carries charts, the
-     * crop's needs, the moisture trace and the week's advice.
-     *
-     * Splitting them on a parameter rather than on a new route keeps one URL
-     * in the scheduler's regeneration path and one in the mobile app. */
-    /* "All zones": the whole farm, in the same designed template (item 3).
-     *
-     * The farm report is the per-zone report repeated with a summary in
-     * front - literally, in that each zone's section is rendered by the same
-     * code as its single-zone report. A farmer who pulls both documents must
-     * not find them disagreeing about the same zone. */
+        /* The designed, per-zone report.
+         * Without a zone this endpoint gives the farm-wide water summary (used by the
+         * scheduler, Telegram delivery and the admin console). With a zone it gives the
+         * per-zone report with charts, crop needs, the moisture trace and the week's
+         * advice. One URL with a parameter keeps the scheduler and the app simple. */
+    /* "All zones": the whole farm in the same template. Each zone's section uses
+     * the same code as its single-zone report, so the two never disagree. */
     private static async Task<IResult> BuildFarmDesignedAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource,
         long farmId, DateOnly from, DateOnly to,
@@ -742,8 +705,7 @@ public static class ReportEndpoints
         var model = await WaterUsageReportBuilder.BuildAsync(
             connection, engine, userId, zoneId, from, to, cancellationToken);
 
-        // One answer for "no such zone" and "not your zone". Telling them
-        // apart would let anyone with a token enumerate which zone ids exist.
+        // One answer for "no such zone" and "not your zone", so ids cannot be guessed.
         if (model is null) return Results.NotFound(new { error = "No such zone." });
 
         var stamp = $"{from:yyyy-MM-dd}-to-{to:yyyy-MM-dd}";
@@ -754,7 +716,7 @@ public static class ReportEndpoints
                 WaterUsageWorkbook.Render(model),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"agroflow-water-{slug}-{stamp}.xlsx")
-            // Item 3: every farmer PDF is the action report.
+            // Every farmer PDF is the action report.
             : Results.File(
                 ActionReportPdf.Render(kind, model.FarmName, new[] { model }, from, to,
                     AgroFlow.Business.Fao56EngineController.TodayInSast(), model.GeneratedAtSast),
@@ -822,8 +784,7 @@ public static class ReportEndpoints
                 asWorkbook: false, cancellationToken);
         }
 
-        // "All zones" now gets the designed template too (item 3), instead of
-        // the one-page summary it used to share with nothing else.
+        // "All zones" also uses the designed template.
         if (farmId is not null && from is not null && to is not null)
         {
             return await BuildFarmDesignedAsync(
@@ -932,7 +893,7 @@ public static class ReportEndpoints
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? zoneId, DateOnly? from, DateOnly? to,
         AgroFlow.Business.Fao56EngineController engine)
     {
-        // Item 3: the soil moisture report is the action report for one zone.
+        // The soil moisture report is the action report for one zone.
         if (zoneId is null || from is null || to is null)
         {
             return await GetMoistureAsync(user, dataSource, zoneId, from, to, engine);
@@ -947,7 +908,7 @@ public static class ReportEndpoints
         ClaimsPrincipal user, NpgsqlDataSource dataSource, long? farmId,
         AgroFlow.Business.Fao56EngineController engine, long? zoneId = null)
     {
-        // Item 4: one zone's own schedule, for per-zone automatic reports.
+        // One zone's own schedule, for per-zone automatic reports.
         if (zoneId is not null)
         {
             var day = AgroFlow.Business.Fao56EngineController.TodayInSast();
@@ -956,8 +917,8 @@ public static class ReportEndpoints
                 asWorkbook: false, CancellationToken.None, ReportKind.Schedule);
         }
 
-        // Item 3: the watering schedule is the farm's action report over the
-        // last 7 days, with the coming week's day cards.
+        // The watering schedule is the farm's action report over the last 7 days,
+        // with the coming week's day cards.
         if (farmId is null)
         {
             return await GetScheduleAsync(user, dataSource, farmId, engine);
@@ -1007,13 +968,9 @@ public static class ReportEndpoints
 
 
 
-    // Spec 9b: each report gets the subset of the engine's insights that belongs
-    // to it, in the { text, source } shape. Insights come from the engine rather
-    // than from the report's own numbers so the farmer sees the same words
-    // everywhere.
-    //
-    // Returns an empty list when the engine's columns are not there yet, so a
-    // report never fails because migration 0027 has not been applied.
+    // Each report gets its own subset of the engine's insights as { text, source },
+    // so the farmer sees the same words everywhere.
+    // Returns an empty list if the engine's columns are missing (0027 not applied).
     private static List<object> CollectInsights(
         AgroFlow.Business.Fao56EngineController engine, IEnumerable<long> zoneIds, string[] wantedTypes)
     {
@@ -1043,7 +1000,7 @@ public static class ReportEndpoints
                         severity = insight.Severity,
                         zoneId = insight.ZoneId,
 
-                        // Item 2c: the report's "Why:" line and appendix entry.
+                        // The report's "Why:" line and appendix entry.
                         why = insight.Explanation?.Summary,
                         explanation = insight.Explanation,
                     });
@@ -1058,7 +1015,7 @@ public static class ReportEndpoints
         return collected;
     }
 
-    // Which insight types belong on which report (spec 9b).
+    // Which insight types belong on which report.
     private static readonly string[] MoistureReportInsights =
     {
         AgroFlow.Business.Agronomy.InsightType.WateringFailed,
@@ -1074,9 +1031,8 @@ public static class ReportEndpoints
         AgroFlow.Business.Agronomy.InsightType.WaterNow,
     };
 
-    // Spec 9b: a top-level insights block, each line with its source in small
-    // text underneath. Shared by the moisture and water-usage PDFs so the two
-    // cannot drift apart.
+    // A top-level insights block, each line with its source in small text underneath.
+    // Shared by the moisture and water-usage PDFs so they match.
     private static void WriteInsightsBlock(ColumnDescriptor col, JsonElement root,
         AgroFlow.Api.Reports.ReportWhy why, List<AgroFlow.Business.Agronomy.RuleBook.Explanation?> perInsight)
     {
@@ -1113,11 +1069,9 @@ public static class ReportEndpoints
     private static double? Round1(double? value) =>
         value is { } v ? Math.Round(v, 1) : (double?)null;
 
-    // Spec 9c: the weather app beside local zone sensors, from report_daily_weather
-    // view. Observed days only - a forecast has nothing measured to compare to.
-    //
-    // Returns an empty list rather than throwing when the view does not exist yet
-    // (migration 0027 unapplied), so the report still renders.
+    // Area weather next to the local zone sensors, from the report_daily_weather view.
+    // Observed days only: a forecast has nothing measured to compare with.
+    // Returns an empty list if the view is missing (0027 not applied).
     private static async Task<List<object>> ReadWeatherComparisonAsync(
         NpgsqlConnection connection, long farmId, DateOnly from, DateOnly to)
     {
@@ -1162,8 +1116,8 @@ public static class ReportEndpoints
                         tminC = Val(11), tmaxC = Val(12), rhMeanPct = Val(13),
                         zoneCount = dhtZoneCount,
                     },
-                    // Null, never zero, when either side is missing - a missing
-                    // sensor must not read as perfect agreement.
+                    // Null, never 0, when either side is missing, so a missing sensor never looks
+                    // like perfect agreement.
                     difference = new { tminC = Val(15), tmaxC = Val(16), rhMeanPct = Val(17) },
                     // What to show in the cell when there is nothing to compare.
                     note = dhtZoneCount == 0
@@ -1174,8 +1128,8 @@ public static class ReportEndpoints
         }
         catch (PostgresException)
         {
-            // View missing (0027 not applied). An empty comparison is the honest
-            // answer; the caller renders the section as unavailable.
+            // View missing (0027 not applied): an empty comparison, and the caller shows the
+            // section as unavailable.
             return rows;
         }
 

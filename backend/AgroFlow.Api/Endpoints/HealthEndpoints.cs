@@ -10,12 +10,8 @@ using Npgsql;
 namespace AgroFlow.Api.Endpoints;
 
 /// One service, its traffic light, and a sentence a person can act on.
-///
-/// Status is deliberately three-valued and not a boolean. "Down" and
-/// "degraded" need different reactions - a broker that is reconnecting is
-/// not the same emergency as a database that cannot be reached - and the
-/// console's amber state exists precisely so the second does not get the
-/// same red treatment as the first.
+/// Three states, not a boolean, because a reconnecting broker (amber) is not the
+/// same emergency as an unreachable database (red).
 public record HealthCheck(
     string Key,
     string Name,
@@ -28,21 +24,11 @@ public record HealthResponse(
     string CheckedAt,
     IReadOnlyList<HealthCheck> Checks);
 
-// GET /api/admin/health.
-//
-// WHY THIS EXISTS
-// The console said "Monitoring not yet implemented" in three places - the
-// header chip, the sidebar footer and the System Health card. That was
-// honest, which is why it had survived, but it is not something to ship: an
-// admin looking at a farm that is not reporting had no way to tell whether
-// the problem was the kit, the broker or the API.
-//
-// Every check here answers a question somebody actually asks during an
-// incident, and each one degrades on its own - a dead Telegram cannot stop
-// the page reporting that the database is fine.
+// GET /api/admin/health: tells an admin whether a problem is the kit, the broker
+// or the API. Each check runs on its own, so one failure cannot hide the others.
 public static class HealthEndpoints
 {
-    // Statuses, as the console's badge tones.
+    // Statuses, matching the console's badge colours.
     private const string Ok = "ok";
     private const string Warning = "warning";
     private const string Down = "down";
@@ -75,8 +61,7 @@ public static class HealthEndpoints
             await CheckDevicesAsync(dataSource, cancellationToken),
         };
 
-        // The worst single check decides the overall light. An admin glancing
-        // at the sidebar needs to know whether to look, not an average.
+        // The worst single check sets the overall light.
         var overall =
             checks.Any(c => c.Status == Down) ? Down :
             checks.Any(c => c.Status == Warning) ? Warning : Ok;
@@ -91,10 +76,8 @@ public static class HealthEndpoints
 
     private static HealthCheck CheckApi()
     {
-        // The informational version carries the commit when the build set
-        // one (Directory.Build.props / CI), and falls back to the assembly
-        // version otherwise. Never throws: a missing attribute is not an
-        // outage.
+        // The informational version includes the commit when the build sets one, and
+        // falls back to the assembly version. A missing attribute is not an outage.
         var assembly = Assembly.GetEntryAssembly();
 
         var version =
@@ -102,8 +85,7 @@ public static class HealthEndpoints
             ?? assembly?.GetName().Version?.ToString()
             ?? "unknown";
 
-        // Trim the +sourcerevision suffix the SDK appends, which is noise in
-        // a UI but useful enough to keep the short hash from.
+        // Trim the +sourcerevision suffix, but keep the short hash.
         var plus = version.IndexOf('+');
         if (plus > 0 && version.Length > plus + 8)
         {
@@ -117,19 +99,9 @@ public static class HealthEndpoints
             $"Version {version}. Running for {DescribeSpan(uptime)}.");
     }
 
-    /// Which commit is actually running.
-    ///
-    /// WHY THIS IS A HEALTH CHECK AND NOT A FOOTNOTE
-    /// "The code is pushed" and "the code is deployed" are two separate
-    /// events, and nothing in this project reconciled them. An admin audit
-    /// log that records nothing looks identical whether the feature is broken
-    /// or simply not deployed yet, and the second is far more likely - but
-    /// answering it meant opening the Railway dashboard and comparing a
-    /// deployment id against a git log by eye.
-    ///
-    /// Railway injects these three on every deployment. Running anywhere
-    /// else - a laptop, a different host - they are simply absent, which is
-    /// reported as "not a Railway deployment" rather than as a fault.
+    /// Which commit is running, so we can tell "pushed" from "deployed".
+    /// Railway sets these variables on every deployment; anywhere else they are
+    /// missing and we report "not a Railway deployment" instead of a fault.
     private static HealthCheck CheckDeployment()
     {
         var sha = Environment.GetEnvironmentVariable("RAILWAY_GIT_COMMIT_SHA");
@@ -146,10 +118,8 @@ public static class HealthEndpoints
         var shortSha = string.IsNullOrWhiteSpace(sha) ? "unknown" : sha[..Math.Min(7, sha.Length)];
         var where = string.IsNullOrWhiteSpace(branch) ? "an unnamed branch" : branch;
 
-        // A deployment built from anything but dev is worth an amber light:
-        // dev is where this project's work lands, and main has sat far behind
-        // it for months. Not red - deploying a release branch on purpose is
-        // legitimate - but it should never be a surprise.
+        // A deployment from any branch but dev gets amber: dev is where our work lands.
+        // Not red, because deploying another branch on purpose is fine.
         var status = string.Equals(branch, "dev", StringComparison.OrdinalIgnoreCase) ? Ok : Warning;
 
         var detail = $"Commit {shortSha} from {where}."
@@ -159,10 +129,7 @@ public static class HealthEndpoints
         return new HealthCheck("deployment", "Deployment", status, detail);
     }
 
-    /// Have the migrations this build expects actually been applied?
-    ///
-    /// Migrations 0033 to 0036 were missed once already and nothing said so
-    /// until a farmer's report failed with a bare 500. See Services/SchemaCheck.
+    /// Have the migrations this build expects been applied? See Services/SchemaCheck.
     private static async Task<HealthCheck> CheckSchemaAsync(SchemaCheck schema, CancellationToken ct)
     {
         var result = await schema.RunAsync(ct);
@@ -183,9 +150,7 @@ public static class HealthEndpoints
                 $"All {result.Present.Count} expected objects are present. {audit.Detail}");
         }
 
-        // Down, not warning, when something is missing. A missing table is not
-        // a degraded service - every endpoint that touches it returns an error
-        // every single time, and that is what the sidebar light is for.
+        // A missing table is red, not amber: every endpoint that uses it fails every time.
         var problems = new List<string>();
 
         if (result.Missing.Count > 0)
@@ -214,8 +179,7 @@ public static class HealthEndpoints
 
             sw.Stop();
 
-            // A reachable but slow database is the shape of an incident
-            // about to happen, and is worth amber before anything fails.
+            // A slow but reachable database is worth amber before anything fails.
             var status = sw.ElapsedMilliseconds > 1500 ? Warning : Ok;
 
             return new HealthCheck(
@@ -236,12 +200,11 @@ public static class HealthEndpoints
     private static HealthCheck CheckMqtt(MqttConnectionService mqtt) =>
         MqttCheck(mqtt.IsConnected, mqtt.DisconnectedSinceUtc, DateTimeOffset.UtcNow);
 
-    /// DATA RULE: how long a broker may be out of reach before it is "down".
+    /// DATA RULE: how long the broker may be unreachable before it counts as down.
     public static readonly TimeSpan MqttDownAfter = TimeSpan.FromMinutes(2);
 
-    // A short drop is amber: the loop retries every 10 s and usually
-    // recovers. Out of reach for longer than MqttDownAfter is red (Part 2:
-    // an unreachable broker must show as down, not as a blip).
+    // A short drop is amber because the loop retries every 10 s. Longer than
+    // MqttDownAfter is red.
     public static HealthCheck MqttCheck(bool connected, DateTimeOffset? disconnectedSinceUtc, DateTimeOffset nowUtc)
     {
         if (connected)
@@ -266,8 +229,8 @@ public static class HealthEndpoints
 
         if (!options.EnablePolling)
         {
-            // Correct on every instance but one. Said plainly so nobody
-            // "fixes" it on a second container and starts stealing updates.
+            // Only one instance may poll Telegram; we say so plainly so nobody "fixes" it
+            // and starts stealing updates.
             return new HealthCheck("telegram", "Telegram", Ok,
                 "Configured. Inbound polling is off on this instance, which is correct unless this is the only one.");
         }
@@ -282,8 +245,8 @@ public static class HealthEndpoints
 
         var age = DateTimeOffset.UtcNow - last.Value;
 
-        // getUpdates long-polls for 30 s, so a gap over about two minutes
-        // means it is not coming back on its own.
+        // getUpdates long-polls for 30 s, so a gap over about two minutes means it is
+        // not recovering on its own.
         return age > TimeSpan.FromMinutes(2)
             ? new HealthCheck("telegram", "Telegram", Warning,
                 $"Last poll {DescribeSpan(age)} ago. Inbound messages may not be arriving.")
@@ -312,7 +275,7 @@ public static class HealthEndpoints
             var last = (DateTimeOffset)value;
             var age = DateTimeOffset.UtcNow - last;
 
-            // Collection runs every 6 hours; 12 is two missed cycles.
+            // Collection runs every 6 hours; 12 hours is two missed runs.
             return age > TimeSpan.FromHours(12)
                 ? new HealthCheck("weather", "Weather", Warning,
                     $"Last refreshed {DescribeSpan(age)} ago. Advice is running on stale forecasts.")
@@ -367,8 +330,7 @@ public static class HealthEndpoints
                 ? $"{online} of {total} online. No readings recorded yet."
                 : $"{online} of {total} online. Last reading {DescribeSpan(DateTimeOffset.UtcNow - lastReading.Value)} ago.";
 
-            // Every kit offline is a platform problem, not a farm problem -
-            // that is the shape of a broker or API outage, so it is red.
+            // Every kit offline points to a broker or API outage, so it is red.
             var status = online == 0 ? Down : online < total ? Warning : Ok;
 
             return new HealthCheck("devices", "Kits", status, detail);
@@ -380,8 +342,7 @@ public static class HealthEndpoints
         }
     }
 
-    // "4 minutes", "2 days" - the gap, not a timestamp, because every caller
-    // here is reporting how long ago something happened.
+    // "4 minutes", "2 days": how long ago, not a timestamp.
     private static string DescribeSpan(TimeSpan span)
     {
         if (span < TimeSpan.Zero) span = TimeSpan.Zero;

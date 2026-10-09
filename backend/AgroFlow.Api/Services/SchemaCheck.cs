@@ -20,24 +20,11 @@ public sealed record SchemaCheckResult(
     public bool AllPresent => Missing.Count == 0 && !CouldNotCheck;
 }
 
-/// Is the database actually running the migrations this build expects?
-///
-/// WHY THIS EXISTS
-/// Migrations 0033 to 0036 were missed. Nothing said so. The first anybody
-/// knew was a farmer's report failing with a bare 500, and the real cause -
-/// `relation "report_request" does not exist` - was four layers down in a
-/// Railway log nobody was reading. Every endpoint that touched those tables
-/// had been quietly broken for days.
-///
-/// The gap is structural: migrations are applied by hand in the Supabase SQL
-/// editor, so "the code is deployed" and "the schema is migrated" are two
-/// separate events that nothing reconciles. This reconciles them, at boot and
-/// on demand, and says which migration is missing rather than which relation.
-///
-/// STRICTLY READ-ONLY. It never applies anything. A self-healing migration
-/// runner is the kind of thing that works for a year and then rewrites a
-/// production table during an incident; the whole point here is to make the
-/// human apply it knowingly.
+/// Checks whether the database has the migrations this build expects.
+/// Migrations are applied by hand in the Supabase SQL editor, so "code deployed" and
+/// "schema migrated" can drift apart, and a missing migration only showed up as a
+/// failing report. This checks at boot and on demand and names the missing migration.
+/// Read-only: it never applies anything, so a person applies migrations knowingly.
 public sealed class SchemaCheck
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -49,13 +36,9 @@ public sealed class SchemaCheck
         _logger = logger;
     }
 
-    /// The objects worth checking: one cheap existence test per migration from
-    /// 0027, which is where the hand-applied range begins.
-    ///
-    /// Deliberately NOT every object each migration creates. This is a smoke
-    /// test - if a migration ran at all, it ran to the end, because each file
-    /// is a single statement batch. One well-chosen object per file catches a
-    /// skipped file, which is the failure that actually happened.
+    /// One cheap existence test per migration from 0027 (where hand-applied migrations
+    /// start). Each file runs as one batch, so one object per file is enough to catch a
+    /// skipped file.
     private static readonly SchemaObject[] Expected =
     {
         new("0027", "table", "zone_water_balance",
@@ -102,11 +85,8 @@ public sealed class SchemaCheck
             "select to_regclass('public.admin_audit_log')",
             "No administrator action is recorded - the Activity page stays empty."),
 
-        // A grant, not an object. Probed by asking whether the privilege is
-        // there rather than whether something exists, because that IS what
-        // the migration does - and because the symptom of its absence (every
-        // admin action succeeds, nothing is recorded) is the hardest in this
-        // list to trace back to a cause.
+        // A grant, not an object, so we check the privilege itself. Without it every admin
+        // action succeeds but nothing is recorded, which is very hard to trace.
         new("0038", "grant", "insert on admin_audit_log",
             "select 1 where has_table_privilege('service_role', 'public.admin_audit_log', 'INSERT')",
             "Admin actions are not recorded if the API does not connect as the table's owner."),
@@ -139,19 +119,14 @@ public sealed class SchemaCheck
             "select to_regclass('public.dismissal')",
             "Notifications cannot be dismissed or restored, and there is no notification history."),
 
-        // Not a migration, but applied by hand in the same way and just as
-        // invisible when missed: the private bucket report PDFs are stored in.
+        // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",
             "Generated reports cannot be stored or re-downloaded."),
     };
 
-    /// The migration numbers this check knows about.
-    ///
-    /// Exposed so a test can hold it against the files on disk: adding a
-    /// migration without adding a probe here is the same mistake that let
-    /// 0033-0036 go unnoticed, and it should fail the build rather than wait
-    /// to be discovered by a farmer.
+    /// The migration numbers this check knows about. A test compares it with the files
+    /// on disk, so adding a migration without a probe fails the build.
     public static IReadOnlySet<string> ProbedMigrations { get; } =
         Expected.Select(e => e.Migration).ToHashSet();
 
@@ -176,10 +151,8 @@ public sealed class SchemaCheck
                 }
                 catch (PostgresException ex)
                 {
-                    // A probe that cannot run is a missing object as far as
-                    // this is concerned - storage.buckets does not exist at
-                    // all on a database where Storage was never enabled, and
-                    // that is exactly the thing worth reporting.
+                    // A probe that cannot run counts as missing: storage.buckets does not exist at all
+                    // where Storage was never enabled, which is worth reporting.
                     _logger.LogDebug(ex,
                         "Schema probe for {Migration} ({Name}) could not run.",
                         expected.Migration, expected.Name);
@@ -192,9 +165,8 @@ public sealed class SchemaCheck
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The database being unreachable is a different problem, already
-            // reported by its own health check. Saying "every migration is
-            // missing" here would bury it.
+            // An unreachable database is reported by its own health check; saying every
+            // migration is missing would hide that.
             _logger.LogWarning(ex, "The schema check could not reach the database.");
 
             return new SchemaCheckResult(
@@ -206,8 +178,8 @@ public sealed class SchemaCheck
         return new SchemaCheckResult(missing, present, CouldNotCheck: false, Problem: null);
     }
 
-    /// One line per missing object, at Warning, naming the migration and what
-    /// it breaks. Called once at boot.
+    /// One Warning line per missing object, naming the migration and what it breaks.
+    /// Called once at boot.
     public async Task LogAtStartupAsync(CancellationToken ct = default)
     {
         var result = await RunAsync(ct);
@@ -248,16 +220,10 @@ public sealed class SchemaCheck
             result.Missing.Count);
     }
 
-    /// Can this connection actually write an audit row?
-    ///
-    /// Asked separately from "does the table exist", because the two fail for
-    /// completely different reasons and the fix is different. 0037 grants
-    /// INSERT to nobody: it relies on the API connecting as the table's owner,
-    /// which is true for a connection string using the `postgres` role and not
-    /// true for every other role somebody might reasonably configure. When it
-    /// is not true, every admin action still succeeds and the Activity page
-    /// stays empty - which is precisely the symptom that is hard to diagnose
-    /// without being told.
+    /// Can this connection write an audit row?
+    /// Checked apart from "does the table exist" because the fix is different. 0037 grants
+    /// INSERT to nobody and relies on the API connecting as the table owner (`postgres`).
+    /// With another role every admin action still succeeds but the Activity page stays empty.
     public async Task<(bool CanInsert, string Detail)> CheckAuditWritableAsync(
         CancellationToken ct = default)
     {

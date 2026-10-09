@@ -18,10 +18,9 @@ public static class FarmEndpoints
         group.MapPut("/{id:long}/location", UpdateFarmLocationAsync);
         group.MapDelete("/{id:long}", DeleteFarmAsync);
 
-        // Archive / restore. Deliberately next to Delete so the difference is
-        // visible in one place: Delete removes the farm and cascades to every
-        // zone, reading, event and alert it owns; Archive removes NOTHING and
-        // is reversible. Test data should go through Archive.
+        // Archive / restore, next to Delete so the difference is clear: Delete removes the
+        // farm and everything it owns; Archive removes nothing and can be undone.
+        // Use Archive for test data.
         group.MapPost("/{id:long}/archive", ArchiveFarmAsync);
         group.MapPost("/{id:long}/restore", RestoreFarmAsync);
     }
@@ -50,9 +49,7 @@ public static class FarmEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync();
 
-        // Existence is checked first so "no such farm" is a 404 rather than a
-        // silent success - archiving a farm id that does not exist should not
-        // report that it worked.
+        // Check the farm exists first, so a wrong id gets a 404 instead of a false success.
         await using (var exists = new NpgsqlCommand(
             "select name from farm where farm_id = $1", connection))
         {
@@ -68,9 +65,8 @@ public static class FarmEndpoints
                 archived ? "Archiving" : "Restoring", id, name);
         }
 
-        // The function moves the farm and its zones together - a farm archived
-        // while its zones stayed active would still feed the auto-report
-        // scheduler's zone lookup.
+        // The function archives the farm and its zones together, otherwise the auto-report
+        // scheduler would still find the zones.
         await using (var cmd = new NpgsqlCommand(
             archived ? "select archive_farm($1)" : "select restore_farm($1)", connection))
         {
@@ -104,9 +100,8 @@ public record RegisterFarmDetails(
     string Location,
     double SizeHectares,
     List<RegisterFarmZone> Zones,
-    // farm.latitude/longitude (migration 0010): what the weather lookup and
-    // the FAO-56 engine read. Nullable because a farm registered without a
-    // pin is still a valid farm - it just falls back to its district.
+    // farm.latitude/longitude (0010), used by the weather lookup and the engine.
+    // Nullable because a farm without a pin falls back to its district.
     double? Latitude = null,
     double? Longitude = null
 );
@@ -115,8 +110,8 @@ public record RegisterFarmZone(
     string Name,
     double SizeHectares,
     string CropType,
-    // Item 6: the setup the advice needs (zone columns from 0017, 0018,
-    // 0027). Optional so older admin builds still register farms.
+    // The zone setup the advice needs (columns from 0017, 0018, 0027). Optional so
+    // older admin builds can still register farms.
     string? SoilType = null,
     double? AreaM2 = null,
     DateOnly? PlantingDate = null,
@@ -345,9 +340,8 @@ private static async Task<IResult> RegisterFarmAsync(
         farmCommand.Parameters.AddWithValue(
             request.Farm.SizeHectares);
 
-        // DBNull rather than 0: zero is a real coordinate in the Gulf of
-        // Guinea, and a farm with no pin must read as "unknown", not as a
-        // point off the coast of Ghana.
+        // DBNull, not 0: 0,0 is a real point off Ghana, and a farm with no pin must
+        // read as unknown.
         farmCommand.Parameters.AddWithValue(
             NpgsqlTypes.NpgsqlDbType.Double,
             (object?)request.Farm.Latitude ?? DBNull.Value);
@@ -484,8 +478,8 @@ private static async Task<IResult> RegisterFarmAsync(
 
     private static async Task<IResult> GetFarmsAsync(
         NpgsqlDataSource dataSource,
-        // "Show archived" on the admin farms page. Opt-in, so every existing
-        // caller keeps seeing only live farms without being changed.
+        // "Show archived" on the admin farms page. Off by default, so other callers
+        // only see live farms.
         bool? includeArchived)
     {
         await using var connection =
@@ -602,12 +596,8 @@ private static async Task<IResult> RegisterFarmAsync(
                 });
             }
 
-            /*
-             * Hardware is linked to a zone with ON DELETE SET NULL.
-             * For farm deletion, we intentionally remove that hardware
-             * before deleting the farm so no hardware remains associated
-             * with the deleted farm's zones.
-             */
+            /* Hardware links to a zone with ON DELETE SET NULL, so we delete the farm's
+             * hardware first and none is left pointing at deleted zones. */
             const string deleteHardwareSql = """
                 delete from hardware
                 where zone_id in (
@@ -628,16 +618,13 @@ private static async Task<IResult> RegisterFarmAsync(
             var hardwareDeleted =
                 await deleteHardwareCommand.ExecuteNonQueryAsync();
 
-            /*
-             * Deleting the farm triggers the database's existing
-             * ON DELETE CASCADE relationships:
+            /* Deleting the farm cascades (ON DELETE CASCADE) to:
              *
              * farm_member
              * zone
              * sensor_reading
              * irrigation_event
-             * irrigation_commands
-             */
+             * irrigation_commands */
             const string deleteFarmSql = """
                 delete from farm
                 where farm_id = $1

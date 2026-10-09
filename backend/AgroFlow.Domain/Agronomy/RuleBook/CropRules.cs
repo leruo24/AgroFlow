@@ -22,23 +22,20 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         public int? DaysLeftInStage { get; }
     }
 
-    // Crop rules - what a crop needs, and at what stage.
-    //
-    // Values are READ from Fao56EngineReference (which holds FAO-56 Tables 11,
-    // 12 and 22), never re-typed here. This file adds the rules about how to
-    // use them; it is not a second copy of the table.
+    // Crop rules: what a crop needs, and at what stage. The values are read from
+    // Fao56EngineReference (FAO-56 Tables 11, 12 and 22), never copied here; this file
+    // only adds the rules for using them.
     public static class CropRules
     {
-        // The label shown whenever the stage is assumed rather than known, so a
-        // farmer is never told "peak growth" as if it were a fact.
+        // Shown whenever the stage is assumed, so a farmer is never told "peak growth" as fact.
         public const string AssumedStageLabel = "assumed peak growth";
 
-        // DATA RULE: warn this many days before the crop's water need changes
-        // stage - a week is one watering routine, enough to adjust it.
+        // DATA RULE: warn this many days before the crop's water need changes stage; a week
+        // is one watering routine, enough to adjust it.
         public const int StageChangeWarningDays = 7;
 
-        // DATA RULE: say "harvest soon" in the last two weeks, when the falling
-        // late-season factor (Table 12 Kc end) starts to matter for watering.
+        // DATA RULE: say "harvest soon" in the last two weeks, when the falling late-season
+        // factor (Table 12 Kc end) matters for watering.
         public const int HarvestSoonDays = 14;
 
         /// <summary>
@@ -89,21 +86,17 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         /// <remarks>
         /// DATA RULE, built on FAO-56 Table 12 (pp. 110-114).
         ///
-        /// Without a planting date there is no way to know where in its season a
-        /// crop is (Table 11, pp. 104-108, needs the start date). Rather than
-        /// refuse to advise, the engine assumes the crop is using as much water as
-        /// it ever does - so if the guess is wrong, it errs toward enough water,
-        /// not too little. Under-watering at the wrong moment costs yield; FAO-56
-        /// Chapter 8 (p. 176) says the loss is largest at flowering and yield
-        /// formation.
+        /// Without a planting date we cannot tell where the crop is in its season (Table 11,
+        /// pp. 104-108, needs the start date). Instead of refusing to advise, we assume the
+        /// crop uses as much water as it ever does, so a wrong guess errs toward enough water.
+        /// Under-watering costs most yield at flowering and yield formation (FAO-56 Chapter 8,
+        /// p. 176).
         ///
-        /// That means the HIGHEST of the crop's three Table 12 values, which is
-        /// the mid-season one for every crop we hold except one. Citrus has a
-        /// mid-season factor (0.65) LOWER than its initial one (0.70), so for
-        /// citrus "mid-season" would not be the cautious choice. Taking the
-        /// maximum honours the intent - conservative - for citrus too.
+        /// So we take the highest of the crop's three Table 12 values. That is the mid-season
+        /// one for every crop except citrus, whose mid-season factor (0.65) is lower than its
+        /// initial one (0.70), so the maximum is the cautious choice there too.
         ///
-        /// Every place this is used carries <see cref="AssumedStageLabel"/>.
+        /// Every place this is used shows <see cref="AssumedStageLabel"/>.
         /// </remarks>
         public static double KcWhenStageUnknown(Fao56EngineCrop crop)
         {

@@ -4,15 +4,9 @@ using Npgsql;
 
 namespace AgroFlow.Api.Reports;
 
-/// A whole farm's week: every zone, plus the farm-level totals and weather.
-///
-/// WHY THIS WRAPS THE PER-ZONE MODEL RATHER THAN REPLACING IT
-/// "All zones" is not a different report, it is the same report repeated with
-/// a summary in front. Building it from a list of WaterUsageReportModel means
-/// a zone's section in the farm report is rendered by exactly the code that
-/// renders its single-zone report - so the two can never disagree about that
-/// zone, which is the kind of discrepancy nobody notices until a farmer puts
-/// the two documents side by side.
+/// A whole farm's week: every zone, plus the farm totals and weather.
+/// It wraps a list of per-zone models, so each zone's section is rendered by the
+/// same code as its own report and the two never disagree.
 internal sealed class FarmWaterUsageReport
 {
     public required string FarmName { get; init; }
@@ -20,17 +14,16 @@ internal sealed class FarmWaterUsageReport
     public required DateOnly To { get; init; }
     public required DateTimeOffset GeneratedAtSast { get; init; }
 
-    /// One per zone, in name order. May be empty: a farm with no zones still
-    /// gets a report, which says so.
+    /// One per zone, in name order. May be empty: a farm with no zones still gets a
+    /// report that says so.
     public required IReadOnlyList<WaterUsageReportModel> Zones { get; init; }
 
     public int TotalRuns => Zones.Sum(z => z.TotalRuns);
 
     public double TotalMinutes => Math.Round(Zones.Sum(z => z.TotalMinutes), 3);
 
-    /// Null when NO zone could be estimated. One zone without a flow rate
-    /// does not void the farm's total - it is simply left out of it, and the
-    /// report says how many were.
+    /// Null when no zone could be estimated. A zone without a flow rate is left out
+    /// of the total, and the report says how many were.
     public double? TotalLitres =>
         Zones.Any(z => z.TotalLitres.HasValue)
             ? Math.Round(Zones.Sum(z => z.TotalLitres ?? 0), 3)
@@ -46,8 +39,7 @@ internal sealed class FarmWaterUsageReport
             ? Math.Round(TotalLitres.Value - TotalNeedLitres.Value, 3)
             : null;
 
-    /// Zones that could not be estimated at all, which is what the summary
-    /// has to disclose rather than quietly totalling the rest.
+    /// Zones that could not be estimated at all, which the summary must mention.
     public IReadOnlyList<string> ZonesWithoutEstimate =>
         Zones.Where(z => z.TotalLitres is null).Select(z => z.ZoneName).ToList();
 
@@ -57,11 +49,8 @@ internal sealed class FarmWaterUsageReport
         Zones.Count == 0 ? 0 : Math.Round(Zones[0].TotalRainMm, 3);
 
     /// The farm's weather, taken from the first zone.
-    ///
-    /// weather_daily is keyed on the FARM, so the area forecast is identical
-    /// on every zone's rows - reading it from one of them is not an
-    /// approximation. The local field readings do differ per zone, which is why
-    /// the farm-level comparison averages them below rather than picking one.
+    /// weather_daily is per farm, so every zone has the same area forecast. Local field
+    /// readings differ per zone, so the farm comparison averages them.
     public IReadOnlyList<WaterUsageReportModel.DayLine> WeatherDays =>
         Zones.Count == 0 ? Array.Empty<WaterUsageReportModel.DayLine>() : Zones[0].Days;
 
@@ -70,9 +59,9 @@ internal sealed class FarmWaterUsageReport
     public double? AvgLocalTempC => Avg(Zones.Select(z => z.AvgLocalTempC));
     public double? AvgLocalHumidity => Avg(Zones.Select(z => z.AvgLocalHumidity));
 
-    /// The farm's local field temperature for one day, averaged across whichever
-    /// zones reported it. A zone whose sensor was down simply does not
-    /// contribute, rather than pulling the average toward zero.
+    /// The farm's local field temperature for one day, averaged over the zones that
+    /// reported it. A zone whose sensor was down is left out instead of pulling the
+    /// average toward zero.
     public double? LocalTempOn(DateOnly date) =>
         Avg(Zones.Select(z => z.Days.FirstOrDefault(d => d.Date == date)?.LocalMaxC));
 
@@ -90,9 +79,8 @@ internal static class FarmWaterUsageReportBuilder
 {
     private static readonly TimeSpan Sast = TimeSpan.FromHours(2);
 
-    /// Returns null when the farm does not exist or the caller may not read
-    /// it - the caller turns that into a 404, so a farmer probing farm ids
-    /// cannot tell "not yours" from "not there".
+    /// Security: returns null when the farm does not exist or the caller may not read
+    /// it. The caller turns that into a 404, so "not yours" and "not there" look the same.
     public static async Task<FarmWaterUsageReport?> BuildAsync(
         NpgsqlConnection connection,
         Fao56EngineController engine,
@@ -124,11 +112,9 @@ internal static class FarmWaterUsageReportBuilder
         }
 
         /* ---- 2. Its zones -------------------------------------------- */
-        // Archived zones are left out, the same way archived farms are left
-        // out of every list: a retired block in this week's totals makes the
-        // farm look like it watered more than it did. Migration 0036 made
-        // zone.status mirror farm.status; it is compared case-insensitively
-        // because neither has ever had a CHECK constraint.
+        // Archived zones are left out, like archived farms everywhere, so a retired block
+        // does not inflate this week's totals. zone.status mirrors farm.status (0036) and
+        // is compared ignoring case.
         const string zoneSql = """
             select z.id
               from zone z
@@ -148,10 +134,9 @@ internal static class FarmWaterUsageReportBuilder
         }
 
         /* ---- 3. Each zone's own report ------------------------------- */
-        // Sequentially, on one connection, rather than in parallel. Each zone
-        // runs the FAO-56 balance, which is CPU-bound; a farm with twelve
-        // zones fanning out would make the API's slowest endpoint also its
-        // least predictable one.
+        // One zone at a time on one connection, not in parallel: each zone runs the
+        // CPU-heavy FAO-56 balance, and twelve at once would make this slow endpoint
+        // unpredictable.
         var zones = new List<WaterUsageReportModel>();
 
         foreach (var zoneId in zoneIds)
@@ -172,7 +157,7 @@ internal static class FarmWaterUsageReportBuilder
         };
     }
 
-    /// "28 Sep – 4 Oct 2026", shared by the PDF and the workbook.
+    /// "28 Sep - 4 Oct 2026", used by the PDF and the workbook.
     public static string DescribePeriod(DateOnly from, DateOnly to)
     {
         var a = from.ToDateTime(TimeOnly.MinValue);

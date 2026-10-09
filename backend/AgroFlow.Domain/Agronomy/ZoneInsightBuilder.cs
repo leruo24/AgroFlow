@@ -7,20 +7,14 @@ using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Business.Agronomy
 {
-    // Turns an engine run into the farmer-facing insight rows of section 7.
-    //
-    // COPY RULES, ENFORCED HERE AND NOT LEFT TO GOODWILL
-    // -------------------------------------------------
-    // No Kc, ETo, ETc, TAW, RAW, p, Ks or "depletion" ever reaches a message.
-    // One action per message, about 120 characters or less. Whole minutes and
-    // whole litres, and litres always carry "about" because there is no flow
-    // meter. The numbers themselves and their provenance go in Data and Source,
-    // which reports print and farmers never see.
-    //
-    // There is a test that greps every generated message for the banned words.
-    //
-    // THE ORDER THE RULES ARE CALLED IN (item 2b). Every decision below is a
-    // call into RuleBook/; this file only words the answer.
+    // Turns an engine run into the farmer-facing insight rows.
+    // Copy rules, checked here: no Kc, ETo, ETc, TAW, RAW, p, Ks or "depletion" in any
+    // message. One action per message, about 120 characters or less. Whole minutes and
+    // whole litres, and litres always say "about" because there is no flow meter. The
+    // numbers and where they came from go in Data and Source, which reports print and
+    // farmers never see. A test scans every message for the banned words.
+    // The order the rules are called in. Every decision is a call into RuleBook/; this
+    // file only words the answer.
     //   1. ConfidenceRules.NextStep      -> setup_missing (one step)
     //   2. KitRules.IsOffline            -> zone_offline
     //   3. KitRules.IsStuck              -> sensor_stuck
@@ -86,14 +80,13 @@ namespace AgroFlow.Business.Agronomy
 
         public DateOnly ValidFor { get; set; }
 
-        // Item 2c: "Why am I seeing this?", built from the same rule and
-        // inputs as the message. Stored in ai_recommendation.data.explanation
-        // so it can be shown later exactly as it was.
+        // "Why am I seeing this?", built from the same rule and inputs as the message.
+        // Stored in ai_recommendation.data.explanation so it can be shown later as it was.
         public Explanation? Explanation { get; set; }
     }
 
-    // Extra signals the engine itself cannot see, because they come from pump
-    // runs and device timing rather than from the water balance.
+    // Signals the engine cannot see itself, because they come from pump runs and device
+    // timing, not the water balance.
     public sealed class ZoneFaultSignals
     {
         // Most recent reading age, for zone_offline.
@@ -107,13 +100,11 @@ namespace AgroFlow.Business.Agronomy
         public bool WateringAppearedToFail { get; set; }
         public DateTime? FailedRunAtUtc { get; set; }
 
-        // Spec 8b: the board is still sending soil readings but no valid DHT11
-        // temperature or humidity.
+        // The board still sends soil readings but no valid DHT11 temperature or humidity.
         public bool DhtOffline { get; set; }
         public DateTime? DhtOfflineSinceUtc { get; set; }
 
-        // The zone's 7-day minimum reading - its wettest point after watering -
-        // for sensor_drift.
+        // The zone's lowest reading in 7 days (its wettest point after watering), for sensor_drift.
         public double? SevenDayMinimumReading { get; set; }
 
         // Irrigation and crop water use over the last 7 days, for overwatering.
@@ -125,8 +116,7 @@ namespace AgroFlow.Business.Agronomy
 
     public static class ZoneInsightBuilder
     {
-        // The thresholds live in RuleBook/ with their reasons; these names are
-        // kept so nothing that read them here breaks.
+        // The thresholds and their reasons are in RuleBook/; these names stay for existing callers.
         public const int ZoneOfflineHours = KitRules.ZoneOfflineHours;
         public const int SensorStuckHours = KitRules.SensorStuckHours;
         public const int WaterSoonDays = WaterRules.WaterSoonDays;
@@ -147,12 +137,11 @@ namespace AgroFlow.Business.Agronomy
             var today = input.Today;
             var zone = input.ZoneName;
 
-            // ---------------- act_now ----------------------------------------
+            // Act-now insights
 
-            // setup_missing: ONE next step, not a list (item 2). Only act_now
-            // when there is no crop - otherwise advice still comes, and finishing
-            // setup only improves it, so it is a heads-up. The full list stays
-            // in data for the setup checklist.
+            // setup_missing: one next step, not a list. Only act-now when there is no crop;
+            // otherwise the advice still comes and finishing setup only improves it, so it is a
+            // heads-up. The full list stays in Data for the setup checklist.
             if (result.MissingSetup.Count > 0)
             {
                 var step = result.NextStep;
@@ -206,7 +195,7 @@ namespace AgroFlow.Business.Agronomy
                     ("run_at", signals.FailedRunAtUtc)));
             }
 
-            // dht_offline: spec 8b.
+            // dht_offline: the DHT11 has stopped sending valid readings.
             if (signals.DhtOffline)
             {
                 insights.Add(Make(input, InsightType.DhtOffline, InsightSeverity.ActNow,
@@ -311,7 +300,7 @@ namespace AgroFlow.Business.Agronomy
                     ("source", todayRow?.EtoSource)));
             }
 
-            // ---------------- heads_up ---------------------------------------
+            // Heads-up insights
 
             // data_gap: a day with no usable weather.
             var gapDay = result.Days.FirstOrDefault(d => !d.IsForecast && !d.EtoMm.HasValue);
@@ -361,8 +350,8 @@ namespace AgroFlow.Business.Agronomy
                 }
             }
 
-            // Item 2: the stage is assumed, so say so - and say nothing about
-            // stage changes or harvest, which would need a real date.
+            // The stage is assumed, so we say so, and say nothing about stage changes or
+            // harvest, which need a real date.
             if (result.Crop != null && result.StageAssumed)
             {
                 insights.Add(Make(input, InsightType.GrowthStatus, InsightSeverity.Info,
@@ -485,7 +474,7 @@ namespace AgroFlow.Business.Agronomy
                     ("drift", Math.Round(drift, 1))));
             }
 
-            // Item 2c: every insight carries its own explanation.
+            // Every insight carries its own explanation.
             foreach (var insight in insights)
             {
                 insight.Explanation = Explanations.For(insight, input, result, signals);
@@ -494,11 +483,9 @@ namespace AgroFlow.Business.Agronomy
             return insights;
         }
 
-        // ------------------------------------------------------------------
         // Recommended threshold, shared with the reset-recommended endpoint:
         //   p_r = clamp(p * soilFactor, 0.1, 0.8)
         //   threshold = wet - p_r * (wet - dry)
-        // ------------------------------------------------------------------
         public static double? RecommendedThreshold(ZoneEngineInput input, ZoneEngineResult result)
         {
             if (result.Crop == null) return null;
@@ -537,8 +524,8 @@ namespace AgroFlow.Business.Agronomy
             return insight;
         }
 
-        // Spec 7: about 120 characters. Long zone or crop names can push a message
-        // past that, so it is trimmed on a word boundary rather than mid-word.
+        // About 120 characters. Long zone or crop names can push a message past that, so we
+        // cut it at a word boundary, not mid-word.
         public const int MaxMessageLength = 120;
 
         private static string Trim(string message)

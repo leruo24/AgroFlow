@@ -3,19 +3,11 @@ using Microsoft.Extensions.Options;
 
 namespace AgroFlow.Api.Services;
 
-// One-off startup report answering a single question: when a setting does not
-// arrive, is the container not being given it, or is our code not reading it?
-//
-// Without this the only evidence is "Telegram polling is off", which is
-// identical whether Railway never passed the variable, the variable landed
-// under a different key, or appsettings.json shadowed it. Those have opposite
-// fixes, so the log says which one it is.
-//
-// NEVER LOGS A SECRET VALUE. Tokens and passwords are reported as "present,
-// N characters". The two Telegram settings that are not secrets - the bot
-// username, which is public in the t.me link, and the polling flag - are
-// printed in full, because their exact value is usually the thing that is
-// wrong.
+// A start-up report that answers: when a setting does not arrive, is the container
+// not given it, or is our code not reading it? "Telegram polling is off" alone looks
+// the same in every case, and the fixes are opposite.
+// Security: never logs a secret value. Tokens and passwords show as "present, N
+// characters"; the bot username (public anyway) and the polling flag are printed in full.
 public static class StartupConfigurationDiagnostics
 {
     public static void Log(IConfiguration configuration, IOptions<TelegramOptions> telegramOptions, ILogger logger)
@@ -29,8 +21,8 @@ public static class StartupConfigurationDiagnostics
             DescribePlainEnvironmentVariable("Telegram__BotUsername"),
             DescribePlainEnvironmentVariable("Telegram__EnablePolling"));
 
-        // Which provider actually supplied each key. This is what separates
-        // "the environment variable is missing" from "appsettings.json won".
+        // Which provider supplied each key: separates "the environment variable is missing"
+        // from "appsettings.json won".
         logger.LogInformation(
             "Configuration check: Telegram:BotToken resolved {Token}; Telegram:BotUsername resolved {Username}; " +
             "Telegram:EnablePolling resolved {Polling}.",
@@ -44,9 +36,8 @@ public static class StartupConfigurationDiagnostics
             options.BotUsername ?? "(null)",
             options.EnablePolling);
 
-        // A working comparison. These two are known-good on Railway, so if
-        // they report differently from the Telegram keys, the difference is
-        // on the Railway side rather than in how the app reads configuration.
+        // A comparison: these two are known to work on Railway, so if they differ from the
+        // Telegram keys the problem is on the Railway side.
         logger.LogInformation(
             "Configuration check (known-good comparison): ConnectionStrings__Supabase {Connection}; Mqtt__Password {Mqtt}.",
             DescribeSecretEnvironmentVariable("ConnectionStrings__Supabase"),
@@ -106,11 +97,8 @@ public static class StartupConfigurationDiagnostics
             : $"as '{value}' from {DescribeProvider(configuration, key)}";
     }
 
-    // Configuration providers are consulted in reverse registration order, so
-    // the LAST provider holding a key is the one whose value wins. Walking
-    // them backwards and stopping at the first hit names the actual winner -
-    // which is how "appsettings.json is shadowing the environment variable"
-    // would show itself.
+    // Providers are checked in reverse order, so the last one with a key wins. Walking
+    // backwards and stopping at the first hit names the winner.
     private static string DescribeProvider(IConfiguration configuration, string key)
     {
         if (configuration is not IConfigurationRoot root)

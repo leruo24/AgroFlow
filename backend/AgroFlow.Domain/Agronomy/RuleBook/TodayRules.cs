@@ -25,12 +25,11 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         public Explanation? Why { get; }
     }
 
-    // Item 6: the single thing to do today for one zone.
-    //
-    // The decision is the engine's PrimaryAction; this only words it, in the
-    // order a farmer would want: rain that makes watering unnecessary, then
-    // watering, then a kit problem, then unfinished setup, then "not today".
-    // One sentence, so the Home screen never shows a list per zone.
+    // The single thing to do today for one zone.
+    // The decision is the engine's PrimaryAction; this only words it, in the order a
+    // farmer would want: rain that makes watering unnecessary, then watering, then a kit
+    // problem, then unfinished setup, then "not today". One sentence, so the Home screen
+    // never shows a list per zone.
     public static class TodayRules
     {
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;

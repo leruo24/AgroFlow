@@ -3,11 +3,9 @@ using System;
 
 namespace AgroFlow.Business.Agronomy.RuleBook
 {
-    // Soil rules - how much water a soil holds, and how far it can dry.
-    //
-    // Values are READ from Fao56EngineReference (FAO-56 Table 19 and the
-    // Chapter 8 soil adjustment), never re-typed here. A test asserts that
-    // what these rules return equals the reference table.
+    // Soil rules: how much water a soil holds and how far it can dry.
+    // The values are read from Fao56EngineReference (FAO-56 Table 19 and the Chapter 8
+    // soil adjustment), never copied here. A test checks these match the table.
 
     /// <summary>What a soil holds, and whether it was assumed.</summary>
     public sealed class SoilWaterHolding

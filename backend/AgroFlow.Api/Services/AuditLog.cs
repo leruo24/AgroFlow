@@ -5,9 +5,8 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Services;
 
-/// The verbs. One place, because the Activity page filters on them and a
-/// typo'd string would simply never appear in a filter - a silent gap in a
-/// record whose whole value is being complete.
+/// The action names in one place, because the Activity page filters on them and a
+/// typo would leave a silent gap in the log.
 public static class AuditActions
 {
     public const string RequestStatusChanged = "request.status_changed";
@@ -35,11 +34,11 @@ public static class AuditActions
     public const string ZoneUpdated = "zone.updated";
     public const string ZoneAdviceRun = "zone.advice_run";
 
-    // Item 6b: a farmer (or admin) changed a zone's crop or planting date.
+    // A farmer (or admin) changed a zone's crop or planting date.
     // details: from, to, fromLabel, toLabel, fromPlanting, toPlanting, actorRole.
     public const string ZoneCropChanged = "zone.crop_changed";
 
-    // Item 6c: zones added to an existing farm (a "new zone" request).
+    // Zones added to an existing farm (a "new zone" request).
     public const string ZonesAdded = "farm.zones_added";
 
     public const string EnrollmentCodeCreated = "enrollment_code.created";
@@ -48,17 +47,10 @@ public static class AuditActions
     public const string TelegramCodeIssued = "telegram.code_issued";
 }
 
-/// Writes the append-only record of what administrators do (migration 0037).
-///
-/// WHY EVERY METHOD SWALLOWS ITS OWN FAILURES
-/// An audit write must never be the reason an admin action fails. If the
-/// table is missing because 0037 has not been applied yet, revoking a stolen
-/// kit still has to work - the alternative is an admin who cannot act during
-/// the one incident the log exists to record.
-///
-/// That is a deliberate trade: completeness of the log is sacrificed to
-/// availability of the action, and a dropped row is logged loudly at Error so
-/// it is visible rather than silent.
+/// Writes the append-only record of admin actions (migration 0037).
+/// Every method catches its own failures: an audit write must never stop an admin
+/// action (e.g. revoking a stolen kit before 0037 is applied). A dropped row is
+/// logged at Error so it is visible.
 public sealed class AuditLog : IAuditWriter
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -75,11 +67,8 @@ public sealed class AuditLog : IAuditWriter
         _logger = logger;
     }
 
-    /// The actor, from the JWT only.
-    ///
-    /// Deliberately never a parameter a caller could pass: an endpoint that
-    /// took the actor from its request body would let anyone with an admin
-    /// token write somebody else's name into the permanent record.
+    /// Security: the actor comes from the JWT only, never from a parameter, so nobody
+    /// can write someone else's name into the record.
     public async Task WriteAsync(
         ClaimsPrincipal user,
         string action,
@@ -107,9 +96,8 @@ public sealed class AuditLog : IAuditWriter
         {
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
-            // The name is resolved here and stored flat, so the log stays
-            // readable after a profile is renamed or deleted. "Who did this"
-            // is a fact about the moment, not a live lookup.
+            // The name is stored as text so the log stays readable after a profile is renamed
+            // or deleted.
             var actorName = await ResolveActorNameAsync(connection, actorProfileId, cancellationToken);
 
             await using var cmd = new NpgsqlCommand(
@@ -134,17 +122,9 @@ public sealed class AuditLog : IAuditWriter
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Loud, and WITH THE REASON. The first version logged that the
-            // write had failed but not why, which is the difference between
-            // "migration 0037 was never applied" and "the API's role may not
-            // insert" - two problems with completely different fixes that
-            // produce exactly the same symptom: every admin action succeeds
-            // and the Activity page stays empty.
-            //
-            // Not fatal, deliberately: the action it describes has already
-            // happened and must not be rolled back for bookkeeping. Revoking
-            // a stolen kit has to work during the one incident the log exists
-            // to record.
+            // Log the failure with its reason, because "0037 not applied" and "the API role may
+            // not insert" look the same (an empty Activity page) but need different fixes.
+            // Not fatal: the action has already happened and must not be rolled back.
             var diagnosis = ex is PostgresException pg
                 ? pg.SqlState switch
                 {

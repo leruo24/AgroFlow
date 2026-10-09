@@ -4,20 +4,11 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Receives inbound Telegram messages by long-polling getUpdates.
-//
-// WHY POLLING AND NOT A WEBHOOK
-// A webhook would need a public HTTPS endpoint that accepts unauthenticated
-// POSTs from Telegram's IP ranges, plus a secret-token check, plus a way to
-// keep it out of the device X-Api-Key gate in Program.cs. AgroFlow.Api is
-// already always-on on Railway, so an outbound long poll gets the same
-// messages with no new public surface at all.
-//
-// ONLY ONE INSTANCE MAY RUN THIS. Telegram gives each update to a single
-// getUpdates consumer, and a second poll on the same token evicts the first
-// with HTTP 409. Two pollers steal each other's messages, so a farmer's
-// /start can vanish into a developer's laptop. Telegram:EnablePolling
-// therefore defaults to FALSE and is set to true only on Railway.
+// Receives Telegram messages by long-polling getUpdates. The API is always on, so
+// an outbound poll needs no new public endpoint.
+// Only one instance may run this: Telegram gives each update to one consumer and a
+// second poller kicks off the first (HTTP 409), so two pollers steal each other's
+// messages. Telegram:EnablePolling defaults to false and is only true on Railway.
 public sealed class TelegramPollingService : BackgroundService
 {
     private readonly TelegramClient _client;
@@ -29,22 +20,17 @@ public sealed class TelegramPollingService : BackgroundService
     private readonly TelegramOptions _options;
     private readonly ILogger<TelegramPollingService> _logger;
 
-    // getUpdates is acknowledged by asking for the next id: passing
-    // lastUpdateId + 1 is what tells Telegram the previous batch was handled
-    // and may be dropped. Held in memory only - on restart Telegram replays
-    // anything unacknowledged from the last 24 hours, which is the behaviour
-    // we want.
+    // We acknowledge updates by asking for the next id (lastUpdateId + 1). Kept in
+    // memory only; after a restart Telegram resends anything unacknowledged from the
+    // last 24 hours, which is what we want.
     private long _offset;
 
-    // When getUpdates last came back successfully. Read by
-    // GET /api/admin/health, which is the only way an admin can tell a bot
-    // that is quiet because nobody is messaging it from one that stopped
-    // polling an hour ago. Written on the success path only.
+    // When getUpdates last succeeded. GET /api/admin/health uses it to tell a quiet
+    // bot from one that stopped polling. Only set on success.
     public DateTimeOffset? LastSuccessfulPollUtc { get; private set; }
 
-    // Telegram renders message text literally, so this is a line break in the
-    // chat. Deliberately not Environment.NewLine, which would be CRLF on a
-    // Windows developer machine and LF on the deployed Linux container.
+    // A line break in the chat. Not Environment.NewLine, which differs between Windows
+    // and the Linux container.
     private const string NewLine = "\n";
 
     public TelegramPollingService(
@@ -90,17 +76,14 @@ public sealed class TelegramPollingService : BackgroundService
                 var updates = await _client.GetUpdatesAsync(_offset, stoppingToken);
                 consecutiveFailures = 0;
 
-                // Stamped on the SUCCESS path only, so the health check can
-                // tell "quiet because nobody is messaging the bot" (recent
-                // stamp, no updates) from "stopped polling an hour ago".
+                // Only set on success, so the health check can tell "nobody is messaging" from
+                // "stopped polling".
                 LastSuccessfulPollUtc = DateTimeOffset.UtcNow;
 
                 foreach (var update in updates)
                 {
-                    // Advance the offset BEFORE handling, so one poisonous
-                    // message cannot be redelivered forever and wedge the
-                    // loop. A dropped message is far cheaper than a bot that
-                    // stops responding to everyone.
+                    // Move the offset forward before handling, so one bad message cannot be resent
+                    // forever and jam the loop. Losing one message is better than a stuck bot.
                     _offset = Math.Max(_offset, update.UpdateId + 1);
 
                     try
@@ -119,14 +102,9 @@ public sealed class TelegramPollingService : BackgroundService
             }
             catch (TelegramApiException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
             {
-                // A 401 means the token does not match any bot: wrong value,
-                // revoked, or a deleted bot. No amount of retrying fixes that,
-                // and retrying anyway is how one bad token produced 11,320
-                // identical warnings over a week - noise that buried every
-                // real event in the log.
-                //
-                // Stop polling. The next deploy restarts this service, which
-                // is exactly when a corrected token would arrive.
+                // 401 means the token matches no bot (wrong, revoked or deleted). Retrying never
+                // helps and once filled the log with 11,320 identical warnings, so we stop polling;
+                // the next deploy restarts this with the fixed token.
                 _logger.LogCritical(
                     "Telegram rejected the bot token (401 Unauthorized). INBOUND MESSAGES ARE NOW OFF: " +
                     "farmers scanning an onboarding QR code will get no reply until this is fixed. " +
@@ -137,9 +115,8 @@ public sealed class TelegramPollingService : BackgroundService
             }
             catch (TelegramApiException ex) when (ex.StatusCode == HttpStatusCode.Conflict)
             {
-                // The single most likely cause of "onboarding silently did
-                // nothing", so it is logged as an error with the remedy in
-                // the message rather than as a generic failure.
+                // The most likely cause of "onboarding silently did nothing", so we log it as an
+                // error with the fix in the message.
                 _logger.LogError(
                     "Telegram returned 409 Conflict: another process is polling this same bot token. " +
                     "Two pollers steal each other's messages. Stop the local API, or unset " +
@@ -156,9 +133,8 @@ public sealed class TelegramPollingService : BackgroundService
 
             if (consecutiveFailures > 0)
             {
-                // Capped exponential backoff: 2s, 4s, 8s ... 60s. Keeps a
-                // Telegram outage or a token typo from turning into a hot
-                // loop against their API.
+                // Capped exponential backoff: 2s, 4s, 8s ... 60s, so an outage or a token typo does
+                // not become a hot loop against Telegram.
                 var delay = TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, Math.Min(consecutiveFailures, 6))));
 
                 try
@@ -175,21 +151,15 @@ public sealed class TelegramPollingService : BackgroundService
         _logger.LogInformation("Telegram polling stopped.");
     }
 
-    // PUBLIC so POST /api/telegram/webhook can hand this the same update
-    // Telegram would otherwise have been long-polled for. Both inbound routes
-    // then run identical handling - /start, /status, /alerts and /help behave
-    // the same whichever way the update arrived - rather than a webhook
-    // growing a second, drifting copy of the same switch.
-    //
-    // Safe to call while the poller is also running: nothing below touches
-    // _offset (that is getUpdates' own acknowledgement bookkeeping, and the
-    // webhook has no equivalent), and every state change it makes goes
-    // through TelegramOnboardingService, where single-use code redemption is
-    // already one atomic statement. A code delivered twice redeems once.
+    // Public so POST /api/telegram/webhook can pass in the same update, and both routes
+    // handle /start, /status, /alerts and /help the same way.
+    // Safe to call while the poller runs: nothing here touches _offset, and code
+    // redemption in TelegramOnboardingService is one atomic statement, so an update
+    // delivered twice links once.
     public async Task HandleUpdateAsync(TelegramUpdate update, CancellationToken cancellationToken)
     {
-        // Item 2c: a tap on "Why am I seeing this?". Answered only to a chat
-        // on the farm the explanation belongs to - see TelegramWhyHandler.
+        // A tap on "Why am I seeing this?". Only answered to a chat on the farm the
+        // explanation belongs to (see TelegramWhyHandler).
         if (update.CallbackQuery is { } callback)
         {
             var callbackChat = callback.Message?.Chat?.Id;
@@ -208,8 +178,7 @@ public sealed class TelegramPollingService : BackgroundService
 
         if (chatId is null || string.IsNullOrEmpty(text)) return;
 
-        // "/start CODE" or "/start@AgroFlowBot CODE" - Telegram appends the
-        // bot username when a command is sent in a group.
+        // "/start CODE" or "/start@AgroFlowBot CODE": Telegram adds the bot username in groups.
         var parts = text.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
         var command = parts[0].Split('@')[0].ToLowerInvariant();
         var argument = parts.Length > 1 ? parts[1].Trim() : null;
@@ -243,9 +212,7 @@ public sealed class TelegramPollingService : BackgroundService
         }
     }
 
-    // ------------------------------------------------------------------
-    // /start - the only path that links a chat to a profile
-    // ------------------------------------------------------------------
+    // /start: the only path that links a chat to a profile
 
     private async Task HandleStartAsync(long chatId, string? code, CancellationToken cancellationToken)
     {
@@ -256,10 +223,8 @@ public sealed class TelegramPollingService : BackgroundService
             await _client.SendMessageAsync(
                 chatId,
                 existing is null
-                    // Tells the farmer what they can do THEMSELVES first. The old
-                    // wording sent everyone to an installer - a phone call and a wait -
-                    // when most people reading it are holding the app that can link
-                    // them in two taps.
+                    // Tell the farmer what they can do themselves first: most people reading this have
+                    // the app, which can link them in two taps.
                     ? "Hello from AgroFlow. This chat isn't linked to an account yet. " +
                       "In the AgroFlow app, go to Settings → Connect Telegram, or ask your " +
                       "installer for a link code."
@@ -287,12 +252,8 @@ public sealed class TelegramPollingService : BackgroundService
 
         var profileId = redemption.ProfileId;
 
-        // A farmer who linked from the app already has an account and a
-        // password they use every day. They asked for their alerts to arrive
-        // here, nothing more - so the chat is linked and the account is left
-        // completely alone. Resetting their password here would invalidate a
-        // working one and force a change they never asked for, which is what
-        // every existing farmer would have hit when connecting for alerts.
+        // A farmer who linked from the app already has a password, so we only link the
+        // chat and leave the account alone; resetting would break a working password.
         if (redemption.Purpose == TelegramCodePurpose.Link)
         {
             await _client.SendMessageAsync(
@@ -330,11 +291,9 @@ public sealed class TelegramPollingService : BackgroundService
             return;
         }
 
-        // A NEW temporary password is minted here rather than replayed from
-        // onboarding, because AgroFlow never stores the one the admin saw.
-        // The consequence is deliberate and is spelled out on the admin
-        // screen: once the farmer links Telegram, the password shown at
-        // onboarding stops working and this one takes over.
+        // We create a new temporary password here because AgroFlow never stores the one
+        // the admin saw. The admin screen explains that once the farmer links Telegram, the
+        // onboarding password stops working and this one replaces it.
         var temporaryPassword = await _supabaseAdmin.ResetTemporaryPasswordAsync(profileId, cancellationToken);
 
         if (temporaryPassword is null)
@@ -362,9 +321,7 @@ public sealed class TelegramPollingService : BackgroundService
             cancellationToken);
     }
 
-    // ------------------------------------------------------------------
-    // /status - request tracking
-    // ------------------------------------------------------------------
+    // /status: request tracking
 
     private async Task HandleStatusAsync(long chatId, CancellationToken cancellationToken)
     {
@@ -424,24 +381,14 @@ public sealed class TelegramPollingService : BackgroundService
         await _client.SendMessageAsync(chatId, string.Join("\n", lines), cancellationToken);
     }
 
-    // ------------------------------------------------------------------
-    // THE ONE PLACE TO CHANGE WHEN LUBA'S REQUEST TABLE LANDS ON dev
-    // ------------------------------------------------------------------
-    // Farmers raise requests in the MOBILE APP, not over Telegram - the bot
-    // only tracks them. That table is not on dev at the time of writing, so
-    // this returns null, meaning "the feature does not exist yet" (as opposed
-    // to an empty list, which means "you have none"), and /status says so
-    // honestly rather than claiming the farmer has nothing open.
-    //
-    // To switch it on: replace the body below with a query against the real
-    // table, filtered to this profile and to not-yet-closed statuses. The
-    // admin's status-change write then needs one call to
-    // INotificationService.NotifyRequestStatusAsync - nothing else in this
-    // file or in TelegramNotificationService has to change.
-    //
-    // The existence probe means a half-deployed database (migration applied,
-    // code not yet redeployed, or the reverse) degrades to the "coming soon"
-    // message instead of throwing inside the polling loop.
+    // Farmers raise requests in the app; the bot only tracks them. Until the request
+    // table is on dev this returns null ("feature not ready", unlike an empty list,
+    // "you have none"), and /status says so.
+    // To turn it on: query the real table here, filtered to this profile and open
+    // statuses, and call INotificationService.NotifyRequestStatusAsync when an admin
+    // changes a status. Nothing else needs to change.
+    // The existence check means a half-deployed database shows the "coming soon" message
+    // instead of throwing inside the polling loop.
     private async Task<List<OpenRequest>?> FetchOpenRequestsAsync(
         Guid profileId,
         CancellationToken cancellationToken)
@@ -468,9 +415,7 @@ public sealed class TelegramPollingService : BackgroundService
 
     private sealed record OpenRequest(string RequestType, string Description, string Status);
 
-    // ------------------------------------------------------------------
     // /alerts on|off
-    // ------------------------------------------------------------------
 
     private async Task HandleAlertsAsync(long chatId, string? argument, CancellationToken cancellationToken)
     {

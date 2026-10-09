@@ -22,14 +22,13 @@ namespace AgroFlow.Business.Agronomy.RuleBook
     }
 
     /// <summary>
-    /// "Why am I seeing this?" (item 2c) - built by the same rule that
-    /// produced the advice, from the inputs it actually used. Never generic.
+    /// "Why am I seeing this?", built by the same rule that produced the advice, from
+    /// the inputs it actually used.
     /// </summary>
     /// <remarks>
-    /// Summary, facts, rule and whatWouldChangeIt are plain language: no
-    /// FAO-56 symbols, no column names, no ISO timestamps (a test scans
-    /// them). The FAO-56 detail lives in <see cref="Technical"/>, which only
-    /// admins and the report appendix show.
+    /// Summary, facts, rule and whatWouldChangeIt are plain language: no FAO-56 symbols,
+    /// no column names, no ISO timestamps (a test checks them). The FAO-56 detail is in
+    /// <see cref="Technical"/>, which only admins and the report appendix show.
     /// </remarks>
     public sealed class Explanation
     {

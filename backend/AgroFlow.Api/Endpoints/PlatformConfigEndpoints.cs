@@ -4,30 +4,11 @@ using Microsoft.Extensions.Options;
 
 namespace AgroFlow.Api.Endpoints;
 
-/// The thresholds the platform actually runs on, as it is actually running.
-///
-/// WHY THIS EXISTS
-/// The console's Settings page used to show six "Platform Defaults" - device
-/// offline threshold, maintenance warning, alert escalation and so on - as
-/// editable number inputs with a Save button. None of them were read by
-/// anything; there is no settings table in this schema. An admin could set
-/// the offline threshold to 5 minutes, press Save, be told it was saved, and
-/// nothing whatsoever would change.
-///
-/// Meanwhile the REAL thresholds - the ones DeviceStatusMonitorService and
-/// the weather alerting actually use - were invisible, because they live in
-/// configuration. So the page showed values that did nothing and hid the
-/// values that did everything.
-///
-/// This returns the real ones, read from the same IOptions the services read,
-/// so the page cannot drift from them.
-///
-/// READ-ONLY, DELIBERATELY. These are set as environment variables on the
-/// deployment, and that is the right place for them: they are operational
-/// configuration, they need a restart to take effect safely, and a settings
-/// table that silently shadowed an env var would make "what is the threshold"
-/// a question with two answers. The page says where to change them instead of
-/// pretending it can.
+/// The thresholds the platform really runs on (device offline time, weather
+/// alerts and so on), read from the same IOptions the services use, so the
+/// Settings page always matches.
+/// Read-only: they are environment variables on the deployment and need a restart.
+/// The page says where to change them.
 public static class PlatformConfigEndpoints
 {
     public record ConfigValue(string Label, string Value, string Explains);
@@ -106,9 +87,7 @@ public static class PlatformConfigEndpoints
                 "Telegram__* environment variables on the API deployment",
                 new List<ConfigValue>
                 {
-                    // The token itself is never returned, and never will be.
-                    // Whether one is configured is operationally useful;
-                    // what it is, is a secret.
+                    // Security: the token is never returned; we only say whether one is set.
                     new("Telegram bot",
                         string.IsNullOrWhiteSpace(telegram.Value.BotToken)
                             ? "Not configured - farmers receive nothing"

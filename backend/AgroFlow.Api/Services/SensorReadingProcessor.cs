@@ -6,24 +6,18 @@ namespace AgroFlow.Api.Services;
 
 public record SensorReadingResult(string HealthStatus, string? CommandIssued);
 
-// The actual sensor-insert + health/auto-irrigation decision logic, shared
-// between the HTTP endpoint (POST /api/sensor-readings) and the MQTT
-// handler (MqttConnectionService, subscribed to
-// agroflow/farm/+/device/+/sensors) - both transports resolve their own way
-// to a zoneId and then call the exact same method, so the decision logic
-// only exists once.
+// The sensor insert, health status and auto-irrigation decision, shared by the HTTP
+// endpoint (POST /api/sensor-readings) and the MQTT handler
+// (agroflow/farm/+/device/+/sensors). Both find the zoneId their own way and then
+// call this, so the decision logic exists once.
 public static class SensorReadingProcessor
 {
-    // Must match the cooldown the removed Postgres trigger used - how long a
-    // manual command holds the floor against auto-issued ones.
+    // How long a manual command takes priority over automatic ones.
     private static readonly TimeSpan ManualCooldown = TimeSpan.FromMinutes(30);
 
-    // notifications is optional so the two transports can opt in without
-    // every existing caller (and every test) having to hand one over. When it
-    // is null nothing is sent and the decision logic is completely unchanged.
-    // It is also, by contract, a service that never throws - see
-    // INotificationService - so no call below needs its own try/catch and a
-    // dead Telegram can never block a pump.
+    // notifications is optional so callers (and tests) can leave it out; when null
+    // nothing is sent and the decision logic is the same. It never throws (see
+    // INotificationService), so a Telegram outage can never block a pump.
     public static async Task<SensorReadingResult> ProcessAsync(
         NpgsqlConnection connection, long zoneId, string sensorType, float value,
         INotificationService? notifications = null, CancellationToken cancellationToken = default)
@@ -33,15 +27,13 @@ public static class SensorReadingProcessor
         var (moisture, temperature, humidity, moistureThreshold, desiredMoisture) =
             await FetchZoneLatestReadingAsync(connection, zoneId);
 
-        // Read before the write: the difference between the stored status and
-        // the newly calculated one is the transition, and it is the only
-        // thing worth telling anyone about. Alerting on the status itself
-        // would message the farmer every ~30s for as long as a zone stayed
-        // dry, which is how farmers learn to ignore alerts.
+        // Read the old status before writing: only the change of status is worth telling
+        // anyone about. Alerting on the status itself would message the farmer every ~30 s
+        // while a zone stays dry.
         var previousHealthStatus = await FetchZoneHealthStatusAsync(connection, zoneId);
 
-        // The domain layer decides the health status - this method's job is
-        // just to fetch inputs and persist the result.
+        // The domain class decides the health status; this method only fetches inputs and
+        // saves the result.
         var healthStatus = Zone.CalculateHealthStatus(moisture, temperature, humidity);
         await UpdateZoneHealthAsync(connection, zoneId, healthStatus);
 
@@ -50,56 +42,36 @@ public static class SensorReadingProcessor
 
         if (enteredCritical)
         {
-            // The alert table has existed since 0003 with nothing anywhere in
-            // the codebase writing to it, which is why the admin dashboard's
-            // alerts page has only ever shown an empty state. This is its
-            // first writer.
-            //
-            // The alert row is written for EVERY entry into Critical, because
-            // the app and the admin dashboard should show everything that
-            // happened. Whether the farmer is also messaged is decided further
-            // down, and is a much narrower question - see the note there.
+            // Write an alert row for every entry into Critical, so the app and dashboard show
+            // everything that happened. Whether the farmer is also messaged is decided further
+            // down (see the note there).
             await InsertCriticalAlertAsync(connection, zoneId, moisture, temperature);
         }
         else if (leftCritical)
         {
-            // Close the alert the transition above opened, so the admin's
-            // open-alert count reflects what is actually wrong right now
-            // rather than everything that has ever been wrong.
+            // Close the alert opened above, so the admin's open-alert count shows what is wrong now.
             await ResolveCriticalAlertsAsync(connection, zoneId);
         }
 
         string? commandIssued = null;
 
-        // Why the farmer could not be left to AgroFlow on this one. Null means
-        // either the zone is fine, or AgroFlow is handling it - both of which
-        // are app-only. See the note above the send at the end of this method.
+        // Why the farmer needs to be told. Null means the zone is fine or AgroFlow is
+        // handling it, which stay in the app. See the note above the send at the end.
         ZoneCriticalReason? couldNotActReason = null;
 
-        // Temperature and Humidity readings stop here: they are inserted
-        // above and feed the health status, but must never reach the
-        // irrigation decision. A hot afternoon is not a reason to open a
-        // valve.
+        // Temperature and Humidity readings stop here: they feed the health status but never
+        // the irrigation decision. A hot afternoon is no reason to open a valve.
         if (SensorReadingTypes.DrivesIrrigation(sensorType))
         {
-            // Respect the zone's irrigation_mode BEFORE deciding anything.
-            //
-            // This check used to be missing entirely, which meant a zone the
-            // farmer had deliberately set to Manual could still have its pump
-            // started by an incoming sensor reading. irrigation_mode is read
-            // straight off `zone` rather than from zone_latest_reading, because
-            // 0010's view does not carry the column and widening the view would
-            // mean another migration for no gain.
+            // Respect the zone's irrigation_mode before deciding anything, so a zone the farmer
+            // set to Manual is never started by a sensor reading. Read from `zone` because
+            // zone_latest_reading (0010) does not include the column.
             var irrigationMode = await FetchIrrigationModeAsync(connection, zoneId);
 
             if (!IrrigationMode.AllowsAutoCommands(irrigationMode))
             {
-                // Health status above is still updated - observing a zone is
-                // always allowed. Only the command is suppressed.
-                //
-                // A zone the farmer put on manual that has just gone Critical
-                // is the clearest case of "something needs you": nobody else
-                // is going to water it.
+                // The health status above is still updated; only the command is skipped.
+                // A manual zone that has just gone Critical is the clearest "you need to act" case.
                 if (enteredCritical)
                 {
                     couldNotActReason = ZoneCriticalReason.ManualMode;
@@ -116,19 +88,16 @@ public static class SensorReadingProcessor
                 DesiredMoisture = desiredMoisture,
             };
 
-            // Use the just-received value directly for the decision (matches
-            // the removed trigger's use of NEW.value) rather than re-reading
-            // zone_latest_reading, which avoids depending on read-your-writes
-            // ordering for a value already in hand.
+            // Use the value we just received for the decision instead of re-reading
+            // zone_latest_reading, so we do not depend on read-your-writes ordering.
             string? desired = null;
             if (zone.ShouldStartIrrigation(value)) desired = "start";
             else if (zone.ShouldStopIrrigation(value)) desired = "stop";
 
             if (desired is not null && !await HasActiveManualOverrideAsync(connection, zoneId))
             {
-                // Only insert if this actually changes what was last
-                // instructed - otherwise every ~30s reading while still dry
-                // would queue a duplicate 'start' command.
+                // Only insert if this changes the last instruction; otherwise every ~30 s reading
+                // while still dry would queue another 'start'.
                 var lastCommand = await FetchLastCommandAsync(connection, zoneId);
                 if (lastCommand != desired)
                 {
@@ -138,17 +107,11 @@ public static class SensorReadingProcessor
             }
         }
 
-        // ROUTINE IRRIGATION IS NOT MESSAGED. A zone that went dry and was
-        // watered automatically is the system working, and there is nothing
-        // for the farmer to do about it - it belongs in the app, with the rest
-        // of their usage history. This used to send a message on every auto
-        // start and stop; it was removed deliberately, because a channel that
-        // carries things you do not need to act on gets muted, and then the
-        // frost warning goes unread too.
-        //
-        // What IS worth a message is a zone that needed water and did not get
-        // it. By this point the zone is on automatic, so the remaining way
-        // AgroFlow can fail to act is having nothing to send the command to.
+        // Routine irrigation is not messaged: a zone that went dry and was watered
+        // automatically is the system working, so it stays in the app history. A noisy
+        // channel gets muted and the frost warning goes unread.
+        // What is worth a message is a zone that needed water and did not get it. By here
+        // the zone is automatic, so the remaining failure is having no device to command.
         if (enteredCritical && couldNotActReason is null)
         {
             if (!await HasActiveDeviceAsync(connection, zoneId))
@@ -163,11 +126,9 @@ public static class SensorReadingProcessor
         return new SensorReadingResult(healthStatus, commandIssued);
     }
 
-    // A pump that was sent a command and never acknowledged it is the third
-    // way AgroFlow can fail to water a zone, but it cannot be detected from
-    // here - the command has only just been queued. DeviceStatusMonitorService
-    // picks that up once the acknowledgement is overdue and raises
-    // SystemFailureKind.PumpUnresponsive.
+    // A pump that never confirms a command is the third way a zone goes unwatered, but
+    // it cannot be seen here (the command was just queued). DeviceStatusMonitorService
+    // catches it later as SystemFailureKind.PumpUnresponsive.
     private static async Task NotifyIfCouldNotActAsync(
         INotificationService? notifications,
         long zoneId,
@@ -180,9 +141,8 @@ public static class SensorReadingProcessor
         await notifications.NotifyZoneCriticalAsync(zoneId, moisture, reason.Value, cancellationToken);
     }
 
-    // "Active" means enrolled and in service. A zone whose only device was
-    // unassigned or never enrolled cannot be watered by AgroFlow however dry
-    // it gets, which is precisely the failure the farmer needs telling about.
+    // "Active" means enrolled and in service. A zone without one can never be watered by
+    // AgroFlow, which is exactly what the farmer must be told.
     private static async Task<bool> HasActiveDeviceAsync(NpgsqlConnection connection, long zoneId)
     {
         await using var cmd = new NpgsqlCommand(
@@ -228,10 +188,8 @@ public static class SensorReadingProcessor
         );
     }
 
-    // Null when the zone row has no stored status yet (a zone that has never
-    // had a reading). Null is treated as "not Critical", so the first reading
-    // that lands in the critical range does alert - which is right: that
-    // farmer genuinely has a dry zone.
+    // Null when the zone has no stored status yet (never had a reading). Null counts as
+    // not Critical, so the first critical reading does alert.
     private static async Task<string?> FetchZoneHealthStatusAsync(NpgsqlConnection connection, long zoneId)
     {
         await using var cmd = new NpgsqlCommand(
@@ -244,11 +202,10 @@ public static class SensorReadingProcessor
     private static async Task InsertCriticalAlertAsync(
         NpgsqlConnection connection, long zoneId, float? moisture, float? temperature)
     {
-        // Zone.CalculateHealthStatus reaches Critical on either low moisture
-        // or high temperature, so the message says which one it was rather
-        // than assuming dryness.
+        // Zone.CalculateHealthStatus reaches Critical on low moisture or high temperature,
+        // so the message says which.
         var reasons = new List<string>();
-        // Item 2: a sensor reading, never a % - it may predate the wet/dry setup.
+        // A sensor reading, never a %: it may be from before the wet/dry setup.
         if (moisture is not null && moisture < Zone.MoistureCriticalMax)
             reasons.Add($"soil sensor reading {moisture:0.#}");
         if (temperature is not null && temperature >= Zone.TemperatureCriticalMin)
@@ -267,8 +224,8 @@ public static class SensorReadingProcessor
             alertId = (long)(await cmd.ExecuteScalarAsync())!;
         }
 
-        // Item 2c: the alert's "Why am I seeing this?". Never lets a missing
-        // explanation table (migration 0039) get in the way of the alert.
+        // The alert's "Why am I seeing this?". A missing explanation table (0039) never
+        // stops the alert.
         var explanation = AgroFlow.Business.Agronomy.RuleBook.Explanations.CriticalAlert(
             moisture, temperature, Zone.MoistureCriticalMax, Zone.TemperatureCriticalMin);
         await SaveAlertExplanationAsync(connection, zoneId, alertId, "alert_critical", explanation);
@@ -291,8 +248,7 @@ public static class SensorReadingProcessor
         }
         catch (PostgresException)
         {
-            // The alert is what matters; its explanation is a bonus until
-            // migration 0039 is applied.
+            // The alert matters; the explanation is extra until 0039 is applied.
         }
     }
 
@@ -314,10 +270,9 @@ public static class SensorReadingProcessor
         await cmd.ExecuteNonQueryAsync();
     }
 
-    // Null when the zone row is gone (a delete racing an in-flight reading).
-    // IrrigationMode.AllowsAutoCommands fails closed on null, so that race
-    // ends in "no command issued" rather than in a pump start for a zone that
-    // no longer exists.
+    // Null when the zone row is gone (deleted during a reading).
+    // IrrigationMode.AllowsAutoCommands treats null as "no", so no pump is started for a
+    // zone that no longer exists.
     private static async Task<string?> FetchIrrigationModeAsync(NpgsqlConnection connection, long zoneId)
     {
         await using var cmd = new NpgsqlCommand(

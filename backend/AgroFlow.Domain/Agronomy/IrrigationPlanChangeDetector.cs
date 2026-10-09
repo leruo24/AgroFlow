@@ -23,8 +23,8 @@ namespace AgroFlow.Business.Agronomy
         DateOnly? OldDate = null,
         DateOnly? NewDate = null);
 
-    // Pure, testable material-change policy. Small numerical forecast movement
-    // is intentionally ignored; alerts are about changed farmer decisions.
+    // Pure, testable rule for what counts as a real plan change. Small forecast changes
+    // are ignored; alerts are only about changed farmer decisions.
     public static class IrrigationPlanChangeDetector
     {
         public const double MaterialDepthChangeMm = 5.0;

@@ -4,12 +4,9 @@ using System.Globalization;
 
 namespace AgroFlow.Business
 {
-    // The three reports a farmer can ask for, and the words used for each.
-    //
-    // One place, because the same three strings appear in the database CHECK
-    // constraint (0034), the request form, the status list, the Telegram
-    // caption and the auto-report checkboxes. Five spellings of
-    // "water_usage" is how one of them ends up never matching.
+    // The three reports a farmer can ask for, and their names. One place, because the
+    // same strings appear in the CHECK constraint (0034), the request form, the status
+    // list, the Telegram caption and the auto-report checkboxes.
     public static class ReportKinds
     {
         public const string WaterUsage = "water_usage";
@@ -23,10 +20,8 @@ namespace AgroFlow.Business
             return reportType == WaterUsage || reportType == Moisture || reportType == Schedule;
         }
 
-        // What the farmer sees. Not a prettified version of the key - "Soil
-        // moisture" is what the thing is called on every other screen, and
-        // "Watering schedule & advice" says that it carries the advice too,
-        // which is the half farmers actually read.
+        // What the farmer sees. "Soil moisture" matches every other screen, and "Watering
+        // schedule & advice" says it includes the advice, the part farmers actually read.
         public static string DisplayName(string? reportType)
         {
             switch (reportType)
@@ -38,19 +33,15 @@ namespace AgroFlow.Business
             }
         }
 
-        // The schedule report is always "right now, and the week ahead" -
-        // Olwethu's endpoint takes no date range, it projects forward from
-        // today. Asking a farmer to pick a period for it would offer a
-        // choice that changes nothing.
+        // The schedule report is always "now and the week ahead" (its endpoint takes no date
+        // range), so we do not ask the farmer to pick a period.
         public static bool UsesDateRange(string? reportType)
         {
             return reportType != Schedule;
         }
 
-        // Moisture is per zone; the other two are per farm. Olwethu's
-        // endpoints already draw this line (GetMoistureAsync takes zoneId,
-        // the others take farmId), so the request form has to respect it
-        // rather than offering "all zones" for a report that cannot do it.
+        // Moisture is per zone; the other two are per farm (the report endpoints take zoneId
+        // and farmId respectively), so the form does not offer "all zones" for moisture.
         public static bool RequiresZone(string? reportType)
         {
             return reportType == Moisture;
@@ -73,10 +64,8 @@ namespace AgroFlow.Business
             }
         }
 
-        // Shown to the farmer when generation fails. Deliberately says
-        // nothing about what went wrong: the farmer cannot act on "the
-        // engine threw on zone 12", and the real reason is in the row's
-        // error column and the server log for whoever can.
+        // Shown to the farmer when generation fails. It does not say what went wrong, because
+        // the farmer cannot act on that; the real reason is in the row and the server log.
         public const string FarmerFailureMessage = "This report couldn't be made. Try again later.";
     }
 
@@ -87,9 +76,8 @@ namespace AgroFlow.Business
         public const string Last30Days = "last_30_days";
         public const string Custom = "custom";
 
-        // "last 7 days" / "1 Sep to 30 Sep". Used in the Telegram caption and
-        // the list row, so the farmer can tell two reports of the same type
-        // apart.
+        // "last 7 days" / "1 Sep to 30 Sep", used in the Telegram caption and the list row so
+        // the farmer can tell two reports of the same type apart.
         public static string Describe(DateOnly start, DateOnly end)
         {
             var span = end.DayNumber - start.DayNumber + 1;
@@ -97,13 +85,8 @@ namespace AgroFlow.Business
             if (span == 7) return "last 7 days";
             if (span == 30 || span == 31) return "last 30 days";
 
-            // InvariantCulture, not the host's. Without it the month name is
-            // whatever the container's locale produces - a Linux box on
-            // .NET 8 renders September as "Sept", a Windows dev machine as
-            // "Sep" - so the same report would be captioned differently
-            // depending on where it was generated. This string reaches the
-            // farmer in a Telegram message, so it has to be the same every
-            // time.
+            // InvariantCulture, not the host's: otherwise Linux may write "Sept" and Windows
+            // "Sep", and this reaches the farmer in a Telegram message.
             return start.ToString("d MMM", CultureInfo.InvariantCulture)
                  + " to "
                  + end.ToString("d MMM yyyy", CultureInfo.InvariantCulture);

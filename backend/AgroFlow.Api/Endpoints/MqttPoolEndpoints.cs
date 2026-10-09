@@ -4,25 +4,18 @@ using AgroFlow.Business;
 
 namespace AgroFlow.Api.Endpoints;
 
-// One or more username/password pairs, as pasted out of the HiveMQ console.
-//
-// Pasted in bulk because that is how they are made: HiveMQ Cloud's credential
-// API needs the paid Starter plan, so an admin creates a batch by hand in the
-// console and brings them over together. A one-at-a-time form would mean
-// re-typing a password per kit, which is exactly where transcription errors
-// come from.
+// One or more username/password pairs pasted from the HiveMQ console. Pasted in
+// bulk because the free plan has no credential API, and typing them one by one
+// invites mistakes.
 public record AddMqttLoginsRequest(string Pasted);
 
 public record AddMqttLoginsResponse(int Added, int Duplicates, int Skipped, int FreeCount, bool RunningLow, string Message);
 
-// The admin "MQTT logins" page (step 4).
-//
-// NOTE WHAT IS NOT HERE: there is no endpoint that returns a password. The
-// pool's passwords leave this server by exactly one route - GET
-// /api/devices/mqtt-credentials, to the device that owns that entry, proving
-// ownership with its device token. The admin page lists usernames, status and
-// dates, and nothing else; see MqttCredentialPoolService.ListAsync, which does
-// not even SELECT the encrypted column.
+// The admin "MQTT logins" page.
+// Security: no endpoint here returns a password. Passwords only leave the server
+// through GET /api/devices/mqtt-credentials, to the device that owns the entry.
+// The page lists usernames, status and dates only (ListAsync does not even
+// select the encrypted column).
 public static class MqttPoolEndpoints
 {
     public static void MapMqttPoolEndpoints(this WebApplication app)
@@ -63,8 +56,7 @@ public static class MqttPoolEndpoints
     {
         if (!pool.IsConfigured)
         {
-            // Refused rather than stored in plaintext. A pool that silently
-            // accepted passwords with no key would be worse than no pool.
+            // Security: refuse instead of storing passwords in plain text when there is no key.
             return Results.Problem(
                 title: "Mqtt:PoolEncryptionKey is not configured.",
                 detail: "Pooled passwords are encrypted at rest, so no login can be stored until " +
@@ -90,9 +82,7 @@ public static class MqttPoolEndpoints
 
         var summary = await pool.ListAsync(cancellationToken);
 
-        // Counts only. The usernames would be harmless; the passwords are
-        // not, and a log that records "what was added" invites somebody to
-        // widen it later until it records both.
+        // Security: log counts only, never usernames or passwords.
         await audit.WriteAsync(
             user, AuditActions.MqttPoolAdded, "mqtt_credential_pool", null,
             details: new { added, duplicates, skipped, freeAfter = summary.FreeCount },
@@ -107,16 +97,13 @@ public static class MqttPoolEndpoints
     {
         var parts = new List<string> { $"{added} login(s) added." };
 
-        // Pasting the same batch twice is a realistic accident, so it is
-        // reported rather than treated as an error.
+        // Pasting the same batch twice is an easy mistake, so we report it instead of failing.
         if (duplicates > 0) parts.Add($"{duplicates} already in the pool.");
         if (skipped > 0) parts.Add($"{skipped} line(s) could not be read as a username and password.");
 
         return string.Join(" ", parts);
     }
 
-    // Parsing lives in AgroFlow.Business.MqttPoolPasteParser, not here: what
-    // this accepts IS the behaviour, and a separator it mishandles silently
-    // stores a password that will not work - the board then just fails to
-    // reach the broker with no visible cause. That deserves direct tests.
+    // Parsing is in AgroFlow.Business.MqttPoolPasteParser with its own tests: a
+    // wrongly split password would be stored and the board would just fail to connect.
 }

@@ -2,12 +2,10 @@ using System.Text;
 
 namespace AgroFlow.Api.Reports;
 
-// Part 2 (found by HostileTextTests): text typed by people goes into XML -
-// the workbook's sheets and the charts' SVG - and XML 1.0 cannot hold most
-// control characters or a half of a surrogate pair. One pasted bell or
-// backspace made Excel reject the whole workbook as corrupt and made the PDF
-// fail on its chart. They are dropped; everything else, emoji and accents
-// included, is kept.
+// Text typed by people goes into XML (the workbook sheets and chart SVG), and XML
+// 1.0 cannot hold most control characters or half a surrogate pair. One pasted bell
+// character could corrupt the workbook, so we drop those and keep everything else,
+// including emoji and accents.
 internal static class ReportText
 {
     public static string Clean(string? text)

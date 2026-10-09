@@ -2,12 +2,11 @@ using System.Net.Http.Json;
 
 namespace AgroFlow.Api.Services;
 
-// The one place outside FarmerOnboardingEndpoints that talks to Supabase's
-// Admin Auth API. Currently a single operation: change a user's password.
-//
-// SECURITY: Supabase:ServiceRoleKey bypasses Row Level Security entirely. It
-// lives only in server-side configuration (Railway variable / .NET
-// user-secrets) and must never reach the admin dashboard or the mobile app.
+// The one place outside FarmerOnboardingEndpoints that calls Supabase's Admin Auth
+// API; it changes a user's password.
+// Security: Supabase:ServiceRoleKey bypasses Row Level Security. It lives only in
+// server configuration (Railway variable / user-secrets) and must never reach the
+// admin dashboard or the mobile app.
 public sealed class SupabaseAdminService
 {
     private readonly IHttpClientFactory _httpClientFactory;
@@ -24,12 +23,9 @@ public sealed class SupabaseAdminService
         _logger = logger;
     }
 
-    // Sets a brand-new temporary password on an existing farmer and returns
-    // it. The caller shows or sends it once; nothing stores it.
-    //
-    // Returns null on failure rather than throwing, because one caller is the
-    // Telegram bot, which must not turn a Supabase hiccup into an unhandled
-    // exception inside the polling loop.
+    // Sets a new temporary password on an existing farmer and returns it; the caller
+    // shows or sends it once and nothing stores it. Returns null on failure instead of
+    // throwing, because the Telegram bot calls this from its polling loop.
     public async Task<string?> ResetTemporaryPasswordAsync(
         Guid userId,
         CancellationToken cancellationToken)
@@ -51,8 +47,7 @@ public sealed class SupabaseAdminService
 
             if (response.IsSuccessStatusCode)
             {
-                // Deliberately does not log the password. This log line ends
-                // up in Railway's log stream.
+                // Security: never log the password; this line goes to Railway's log stream.
                 _logger.LogInformation(
                     "Issued a new temporary password for user {UserId}.", userId);
 

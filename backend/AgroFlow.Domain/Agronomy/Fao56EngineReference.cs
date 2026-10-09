@@ -4,43 +4,29 @@ using System.Collections.Generic;
 
 namespace AgroFlow.Business.Agronomy
 {
-    // The water-balance engine's FAO-56 reference tables: crop coefficients and
-    // stage lengths (Tables 11, 12, 22) and soil water-holding values (Table 19).
-    //
-    // WHY THIS EXISTS ALONGSIDE fao56-crop-knowledge.json
-    // ---------------------------------------------------
-    // Agronomy/fao56-crop-knowledge.json is the citation-carrying extract that
-    // GrowthStageCalculator and the narrative half of IrrigationAdvisor read. It
-    // selects a Table 11 row per crop on its own documented policy, and for two
-    // crops that selection differs from the one the water-balance engine is
-    // specified against:
+    // The engine's FAO-56 reference tables: crop coefficients and stage lengths
+    // (Tables 11, 12, 22) and soil water-holding values (Table 19).
+    // Agronomy/fao56-crop-knowledge.json is a separate cited extract used by
+    // GrowthStageCalculator and the narrative part of IrrigationAdvisor. For two crops it
+    // picks a different Table 11 row from the engine:
     //
     //   maize   JSON: 30/40/50/30 = 150 (Apr, Spain/Calif.), Kc_end 0.60
     //           here: 25/40/45/30 = 140 (Dec/Jan, Arid),     Kc_end 0.35
     //   potato  JSON: 30/35/50/25 = 140 (Dec, Calif. Desert)
     //           here: 25/30/45/30 = 130 (Jan/Nov, (Semi)Arid)
     //
-    // Both readings are tabulated FAO-56 values - this is a choice of row and of
-    // management case, not a transcription difference. Maize Kc_end in particular
-    // is a published pair (0.60 harvest at high grain moisture / 0.35 field-dried)
-    // and the JSON already carries both; the engine is specified to plan against
-    // the field-dried figure.
-    //
-    // Editing the JSON instead would silently move the numbers in the existing
-    // schedule report and break the tests pinned to it. So the engine gets its own
-    // table and the divergence is written down rather than papered over.
-    // Unifying the two is a decision for the team, recorded in
-    // docs/fao56-engine-report.md.
-    //
-    // No value here is derived or invented. Where FAO-56 publishes a range and a
-    // single number is needed, the choice is marked ASSUMPTION in the report and
-    // in the comment on the value.
+    // Both are published FAO-56 values (a choice of row and management case). Maize
+    // Kc_end is a published pair: 0.60 harvested moist, 0.35 field-dried; the engine
+    // plans with the field-dried value. Changing the JSON would move the schedule report's
+    // numbers, so the difference is written down here and in docs/fao56-engine-report.md.
+    // No value is invented. Where FAO-56 gives a range, the single value used is marked
+    // ASSUMPTION in the report and on the value.
 
     public sealed class Fao56EngineCrop
     {
         public string Key { get; }
 
-        // Farmer-facing label, per spec section 5a.
+        // Farmer-facing label.
         public string Label { get; }
 
         public string Fao56Entry { get; }
@@ -50,28 +36,27 @@ namespace AgroFlow.Business.Agronomy
         public int LMidDays { get; }
         public int LLateDays { get; }
 
-        // The Table 11 row these lengths were read from. Surfaced in report
-        // Facts: "140-day maize" is meaningless without knowing which of the six
-        // published maize rows it came from.
+        // The Table 11 row the lengths come from, shown in report facts: "140-day maize" means
+        // nothing without knowing which of the six maize rows it is.
         public string Table11Row { get; }
 
         public double KcIni { get; }
         public double KcMid { get; }
         public double KcEnd { get; }
 
-        // Where Kc_ini came from: the crop's own Table 12 row, or its group row
-        // when Table 12 omits it on the crop line.
+        // Where Kc_ini came from: the crop's own Table 12 row, or its group row when the
+        // crop line has none.
         public string KcIniBasis { get; }
 
-        // Table 22 rooting depth, low end of the published range. FAO-56 p. 163:
-        // the smaller values are intended for irrigation scheduling.
+        // Table 22 rooting depth, low end of the range. FAO-56 p. 163: the smaller values
+        // are meant for irrigation scheduling.
         public double RootDepthM { get; }
 
-        // Table 22 soil water depletion fraction, tabulated at ETc ~ 5 mm/day.
+        // Table 22 depletion fraction, tabulated at ETc ~ 5 mm/day.
         public double DepletionFractionP { get; }
 
-        // Non-null when a single value stands in for a published range or for one
-        // of two published management cases. Printed in report Limitations.
+        // Set when one value stands in for a published range or one of two management
+        // cases. Printed in the report's limitations.
         public string? ValueNote { get; }
 
         public Fao56EngineCrop(
@@ -103,9 +88,8 @@ namespace AgroFlow.Business.Agronomy
         }
     }
 
-    // FAO-56 Table 19 soil water characteristics. Ranges are reproduced in
-    // Allen et al. (2005), J. Irrig. Drain. Eng. 131(1), Table 1; the midpoint of
-    // each range is used (ASSUMPTION, recorded in the report).
+    // FAO-56 Table 19 soil water characteristics (ranges also in Allen et al. 2005, J.
+    // Irrig. Drain. Eng. 131(1), Table 1). We use the midpoint of each range (ASSUMPTION).
     public sealed class Fao56SoilClass
     {
         public string Key { get; }
@@ -115,8 +99,8 @@ namespace AgroFlow.Business.Agronomy
         public double ThetaFieldCapacity { get; }
         public double ThetaWiltingPoint { get; }
 
-        // FAO-56 Chapter 8 allows p to be reduced 5-10% for clay and raised
-        // 5-10% for sand. 5% is used (ASSUMPTION, recorded in the report).
+        // FAO-56 Chapter 8 allows p to be lowered 5-10% for clay and raised 5-10% for sand.
+        // We use 5% (ASSUMPTION).
         public double PFactor { get; }
 
         public string ThetaNote { get; }
@@ -135,8 +119,7 @@ namespace AgroFlow.Business.Agronomy
         }
     }
 
-    // Farmer-facing stage names, spec section 5c. The engine never shows
-    // "Mid-season" to a farmer.
+    // Farmer-facing stage names; a farmer never sees "Mid-season".
     public enum SeasonStage
     {
         Establishing,
@@ -195,13 +178,10 @@ namespace AgroFlow.Business.Agronomy
                     1.0, 0.55,
                     "FAO-56 gives maize Kc_end as 0.60 when harvested at high grain moisture or 0.35 when field-dried. 0.35 is used, so the engine plans for a crop dried down in the field."),
 
-                // Carried over from Agronomy/fao56-crop-knowledge.json, which
-                // already holds FAO-56-sourced values for these two with page
-                // citations. Kept so that zones already growing them keep working
-                // advice instead of degrading to setup_missing.
-                // FAO-56 has no "leafy veg" entry - it tabulates specific crops.
-                // This key maps to LETTUCE throughout: Table 11 "Lettuce" (p. 104),
-                // Table 12 "Lettuce" (p. 110) with Kc_ini from its group row
+                // Taken from Agronomy/fao56-crop-knowledge.json, which has FAO-56 values with page
+                // references for these two, so zones already growing them keep getting advice.
+                // FAO-56 has no "leafy veg" entry, so this key means lettuce: Table 11 "Lettuce"
+                // (p. 104), Table 12 "Lettuce" (p. 110) with Kc_ini from its group row
                 // "a. Small Vegetables", and Table 22 "Lettuce" (p. 163).
                 ["leafy_veg"] = new Fao56EngineCrop(
                     "leafy_veg", "Leafy vegetables (lettuce)", "Lettuce",
@@ -210,11 +190,9 @@ namespace AgroFlow.Business.Agronomy
                     0.3, 0.30,
                     "FAO-56 does not tabulate \"leafy vegetables\". These are the published figures for LETTUCE (Table 11 p. 104, Table 12 p. 110, Table 22 p. 163). Spinach, chard and other leafy crops are not identical to lettuce - spinach has its own row and its own key here."),
 
-                // FAO-56 splits citrus six ways: with or without active ground
-                // cover, each at 70%, 50% and 20% canopy. These values are the
-                // "Citrus, no ground cover - 70% canopy" variant - a mature,
-                // clean-floor orchard. A younger planting or a grassed orchard
-                // floor is a DIFFERENT row and these numbers would not apply.
+                // FAO-56 splits citrus six ways (with or without ground cover, at 70%, 50% and 20%
+                // canopy). These are "Citrus, no ground cover - 70% canopy": a mature, clean-floor
+                // orchard. A young or grassed orchard is a different row.
                 ["citrus"] = new Fao56EngineCrop(
                     "citrus", "Citrus", "Citrus, no ground cover - 70% canopy",
                     60, 90, 120, 95, "Table 11, Jan, Mediterranean, p. 107",
@@ -223,9 +201,8 @@ namespace AgroFlow.Business.Agronomy
                     "These are the figures for a mature citrus orchard at 70% canopy with no ground cover (Table 12 p. 113, Table 22 'Citrus - 70% canopy' p. 165); FAO-56 publishes five other citrus variants for different canopies and orchard floors. Kc_mid (0.65) is below Kc_ini (0.70) because of stomatal closure at peak ET, so Kc falls through development and rises again late season - that is correct, not a sign error. Citrus is an evergreen perennial, so its 365-day season means the planting date is the start of the annual cycle, not the year the tree went in."),
             };
 
-        // Free-text zone.crop_type / service_request.crop_type -> engine key.
-        // Returns null rather than guessing: a zone whose crop has no FAO-56 row
-        // gets setup_missing, never a substituted Kc curve.
+        // Free-text crop type -> engine key. Returns null instead of guessing, so an unknown
+        // crop gets setup_missing, never a substitute Kc curve.
         private static readonly Dictionary<string, string> Aliases =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -256,7 +233,7 @@ namespace AgroFlow.Business.Agronomy
                 ["beans"] = "dry beans",
                 ["pulses"] = "dry beans",
 
-                // Kept working rather than dropped - see the two carried-over rows.
+                // Still supported (see the two carried-over rows).
                 ["leafy veg"] = "leafy_veg",
                 ["leafy vegetables"] = "leafy_veg",
                 ["leafy_veg"] = "leafy_veg",
@@ -276,9 +253,8 @@ namespace AgroFlow.Business.Agronomy
             get { return CropsByKey.Values; }
         }
 
-        // The six keys the farmer-facing crop pickers are specified to offer
-        // (spec section 5a). leafy_veg and citrus are resolvable but not offered
-        // as new choices.
+        // The six crops the farmer pickers offer. leafy_veg and citrus still resolve but are
+        // not offered as new choices.
         public static readonly string[] OfferedCropKeys =
             { "maize", "potato", "tomato", "dry beans", "spinach", "cucumber" };
 
@@ -291,7 +267,7 @@ namespace AgroFlow.Business.Agronomy
             string? key;
             if (!Aliases.TryGetValue(normalised, out key))
             {
-                // Try the raw spelling too, so 'dry_beans' and 'leafy_veg' both land.
+                // Try the raw spelling too, so 'dry_beans' and 'leafy_veg' both match.
                 if (!Aliases.TryGetValue(cropType.Trim(), out key)) return null;
             }
 
@@ -299,9 +275,7 @@ namespace AgroFlow.Business.Agronomy
             return CropsByKey.TryGetValue(key, out crop) ? crop : null;
         }
 
-        // ------------------------------------------------------------------
-        // Soils - FAO-56 Table 19 midpoints
-        // ------------------------------------------------------------------
+        // Soils: FAO-56 Table 19 midpoints
         private static readonly Dictionary<string, Fao56SoilClass> SoilsByKey =
             new Dictionary<string, Fao56SoilClass>(StringComparer.OrdinalIgnoreCase)
             {
@@ -336,9 +310,7 @@ namespace AgroFlow.Business.Agronomy
             get { return SoilsByKey[DefaultSoilKey]; }
         }
 
-        // ------------------------------------------------------------------
-        // Stage names, spec section 5c
-        // ------------------------------------------------------------------
+        // Stage names
         public static string StageLabel(SeasonStage stage)
         {
             switch (stage)

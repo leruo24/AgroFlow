@@ -5,23 +5,12 @@ using System.Linq;
 
 namespace AgroFlow.Business.Agronomy.RuleBook
 {
-    // How much to trust a piece of advice, and the one thing that would make it
-    // better (item 2).
-    //
-    // WHY THIS EXISTS
-    // The advice engine used to stop when an input was missing: no planting
-    // date, no fresh reading, no wet/dry setup - "No recommendation possible".
-    // A farmer with a half-finished setup got nothing at all, which is the
-    // worst possible outcome: they still have to water, they just have to
-    // guess. The engine now always gives the best advice it can, and this is
-    // the other half of that bargain - it says plainly how sure it is, and
-    // names ONE step that would improve it, rather than a list of five.
-    //
-    // Every rule in this file is a DATA RULE: none of it is FAO-56. FAO-56 says
-    // how much water a crop uses; it says nothing about how much to trust an
-    // estimate built from partial inputs. The levels and the order below are
-    // our judgement about which missing input distorts the advice most, and
-    // they are written down here so that judgement can be argued with.
+    // How much to trust a piece of advice, and the one thing that would improve it.
+    // The engine always gives the best advice it can, even with missing inputs; this
+    // says how sure it is and names one step, not a list.
+    // Every rule here is a DATA RULE, not FAO-56: FAO-56 says how much water a crop uses,
+    // not how far to trust an estimate from partial inputs. The levels and order are our
+    // judgement about which missing input distorts the advice most.
 
     public enum ConfidenceLevel
     {
@@ -51,7 +40,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         /// <summary>When the kit last reported, for "your kit hasn't sent data since 17 Sep".</summary>
         public DateTime? LastReadingAtUtc { get; set; }
 
-        /// <summary>Item 6: the farmer felt the soil by hand within <see cref="ConfidenceRules.FreshReadingHours"/>.</summary>
+        /// <summary>The farmer felt the soil by hand within <see cref="ConfidenceRules.FreshReadingHours"/>.</summary>
         public bool ManualCheckFresh { get; set; }
     }
 
@@ -90,47 +79,33 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
     public static class ConfidenceRules
     {
-        // DATA RULE: a soil reading older than this no longer describes the soil
-        // today. Soil dries by several millimetres a day in summer, so a day-old
-        // reading is about the limit of what can anchor today's advice. It is
-        // the same figure the schedule report has always used to decide whether
-        // to use a reading - here it switches the engine to weather-only advice
-        // instead of switching advice off.
+        // DATA RULE: a reading older than this no longer describes today's soil (soil dries
+        // several mm a day in summer). Past it, the engine switches to weather-only advice.
         public const double FreshReadingHours = 24.0;
 
-        // DATA RULE: up to this many missing setup inputs is still Medium. With
-        // the crop and the weather known, the engine has the two things that
-        // matter most (how much water this crop uses in this weather), and each
-        // missing input below adds error in one known direction. Three or more
-        // and the errors compound past the point where we would act on them
-        // ourselves.
+        // DATA RULE: up to this many missing setup inputs is still Medium. With the crop and
+        // weather known we have the two things that matter most; three or more missing and
+        // the errors add up too much.
         public const int MaxMissingForMedium = 2;
 
-        // The inputs counted for Medium vs Low, in the order the next step is
-        // chosen. Ordered by how much each one, when missing, distorts the
-        // advice (DATA RULE, reasoning per entry):
+        // The inputs counted for Medium vs Low, in the order the next step is chosen, by how
+        // much each one distorts the advice when missing (DATA RULE):
         //
-        //   crop           - no crop, no crop water use at all; nothing else
-        //                    matters until this is set.
-        //   planting date  - without it the crop is assumed to be at its peak
-        //                    water use (see CropRules.KcWhenStageUnknown).
-        //                    Across the crops we hold, FAO-56 Table 12
-        //                    (p. 110-114) puts the mid-season factor at 1.4x
-        //                    (spinach, lettuce) to 4.0x (maize) the early-
-        //                    season one - so a newly planted crop can be told
-        //                    to take up to four times what it uses. Checked
-        //                    against Fao56EngineReference, not from memory.
-        //   flow rate      - without it there is no "run the pump N minutes",
-        //                    only a depth in millimetres, which nobody can act
-        //                    on directly at a tap.
-        //   area           - without it there are no litres; minutes per square
-        //                    metre still work, so it ranks below flow rate.
-        //   soil type      - garden soil (loam) is assumed. Table 19 (p. 144)
-        //                    puts sand and clay either side of loam, so the
-        //                    error is bounded and two-sided.
-        //   wet/dry setup  - without it the soil sensor cannot be read as
-        //                    "how wet", so advice comes from the weather
-        //                    balance alone. Ranked last because that balance is
+        //   crop           - no crop, no crop water use at all; nothing else matters until
+        //                    this is set.
+        //   planting date  - without it the crop is assumed to be at peak water use (see
+        //                    CropRules.KcWhenStageUnknown). FAO-56 Table 12 (p. 110-114) puts
+        //                    the mid-season factor at 1.4x (spinach, lettuce) to 4.0x (maize)
+        //                    the early-season one, so a new crop could be told to take up to
+        //                    four times what it uses.
+        //   flow rate      - without it there is no "run the pump N minutes", only a depth in
+        //                    mm, which nobody can act on at a tap.
+        //   area           - without it there are no litres; minutes per square metre still
+        //                    work, so it ranks below flow rate.
+        //   soil type      - loam is assumed. Table 19 (p. 144) puts sand and clay either side
+        //                    of loam, so the error is limited.
+        //   wet/dry setup  - without it the sensor cannot be read as "how wet", so advice comes
+        //                    from the weather balance alone. Last, because that balance is
         //                    what FAO-56 itself prescribes; the sensor refines it.
         private static readonly (string Field, Func<ZoneSetupState, bool> IsMissing, string Ask, string Because)[] Steps =
         {
@@ -175,9 +150,8 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
             var missing = Steps.Where(step => step.IsMissing(s)).ToList();
 
-            // A stale reading is not "missing setup" - the kit is set up, it has
-            // just gone quiet. It still stops the advice being High, and it is
-            // the most useful thing to say when it is the only problem.
+            // A stale reading is not missing setup (the kit is set up but has gone quiet). It
+            // still stops High, and it is the most useful thing to say when it is the only problem.
             var staleKit = s.HasKit && !s.ReadingFresh;
 
             if (missing.Count == 0 && s.ReadingFresh)
@@ -188,8 +162,8 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             var level = missing.Count <= MaxMissingForMedium ? ConfidenceLevel.Medium : ConfidenceLevel.Low;
             var label = level == ConfidenceLevel.Medium ? "Medium" : "Low";
 
-            // Item 6: the farmer's own check - better than the weather alone,
-            // never as good as a set-up sensor, so it is said, and stays Medium.
+            // The farmer's own check is better than the weather alone but not as good as a
+            // sensor, so we mention it and stay Medium.
             var basis = s.ManualCheckFresh ? "based on the weather and your own soil check" : "based on the weather";
 
             string because;
@@ -214,7 +188,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             return new Confidence(level, label + ": " + because + ".");
         }
 
-        /// <summary>The ONE step that would most improve this zone's advice, or null if none.</summary>
+        /// <summary>The one step that would most improve this zone's advice, or null if none.</summary>
         public static SetupStep? NextStep(ZoneSetupState s)
         {
             if (s == null) throw new ArgumentNullException(nameof(s));

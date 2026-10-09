@@ -2,13 +2,9 @@ using Npgsql;
 
 namespace AgroFlow.Api.Auth;
 
-// Applied to admin-facing endpoints alongside .RequireAuthorization(). JWT
-// bearer validation (configured in Program.cs) only proves the caller is a
-// genuine, logged-in Supabase Auth user - it says nothing about their role,
-// since that lives in our own profile table, not in the token. This filter
-// does the actual admin-role check via a DB lookup rather than trusting a
-// role claim embedded in the JWT, which would require extra Supabase-side
-// custom-claims configuration this project doesn't have set up.
+// Security: used on admin endpoints together with .RequireAuthorization().
+// The JWT only proves the caller is a logged-in Supabase user; the role lives in
+// our profile table, so this filter looks it up in the database.
 public class AdminOnlyFilter : IEndpointFilter
 {
     public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
@@ -32,9 +28,8 @@ public class AdminOnlyFilter : IEndpointFilter
     }
 }
 
-// Who has which role, from the profile table. An interface only so the API's
-// own contract tests can play a farmer without a database (Part 2); the API
-// registers the database one, and the filter falls back to it regardless.
+// Who has which role, from the profile table. An interface only so the contract
+// tests can act as a farmer without a database.
 public interface IProfileRoles
 {
     Task<string?> RoleOfAsync(Guid profileId, CancellationToken ct);

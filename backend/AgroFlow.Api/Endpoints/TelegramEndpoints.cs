@@ -23,20 +23,15 @@ public record TemporaryPasswordResponse(
 
 // Two audiences, two route groups:
 //
-//   /api/telegram/admin/*  - admin-only. Regenerating a farmer's QR code for
-//                            one that expired or was lost, and resetting a
-//                            temporary password for a farmer who has no
-//                            Telegram at all.
+//   /api/telegram/admin/*  - admin only: regenerate a farmer's QR code, or reset
+//                            a temporary password for a farmer without Telegram.
 //
-//   /api/telegram/me/*     - any signed-in farmer, acting on themselves.
-//                            This is how farmers onboarded before Telegram
-//                            existed (john@test.db.za and anyone else already
-//                            in the database) link their own chat from the
-//                            mobile app's profile screen.
+//   /api/telegram/me/*     - any signed-in farmer, acting on themselves: how
+//                            existing farmers link their own chat from the
+//                            app's profile screen.
 //
-// Both sit behind JWT auth; neither is reachable with the device X-Api-Key.
-// /api/telegram is listed in Program.cs's isUserRoute check for exactly that
-// reason.
+// Security: both need a JWT and neither accepts the device X-Api-Key
+// (/api/telegram is in Program.cs's isUserRoute list).
 public static class TelegramEndpoints
 {
     public static void MapTelegramEndpoints(this WebApplication app)
@@ -59,13 +54,10 @@ public static class TelegramEndpoints
         me.MapDelete("/", UnlinkMeAsync);
     }
 
-    // ------------------------------------------------------------------
-    // ADMIN
-    // ------------------------------------------------------------------
+    // Admin
 
-    // "Regenerate code". Issuing a new code invalidates the farmer's previous
-    // unused one, so an old printed QR stops working the moment a new one is
-    // made - see TelegramOnboardingService.IssueCodeAsync.
+    // "Regenerate code". A new code cancels the farmer's old unused one, so an old
+    // printed QR stops working (see TelegramOnboardingService.IssueCodeAsync).
     private static async Task<IResult> IssueCodeForFarmerAsync(
         Guid profileId,
         TelegramOnboardingService onboarding,
@@ -77,25 +69,18 @@ public static class TelegramEndpoints
             return Results.NotFound(new { error = "No such farmer." });
         }
 
-        // Admin-issued, so redeeming it mints a fresh temporary password and
-        // forces a change - the farmer has no usable password of their own yet.
+        // Admin-issued, so redeeming it creates a new temporary password and forces a
+        // change: the farmer has no password of their own yet.
         var issued = await onboarding.IssueCodeAsync(
             profileId, TelegramCodePurpose.Onboarding, cancellationToken);
 
         return Results.Ok(new TelegramCodeResponse(issued.Code, issued.DeepLink, issued.ExpiresAt));
     }
 
-    // Chasing up a farmer who never connected Telegram, from the admin list.
-    //
-    // Deliberately a LINK code and not an onboarding one. The farmer already
-    // has an account and a password they use; they simply never pressed Start
-    // in the bot. Issuing an onboarding code here would reset that working
-    // password and force a change they never asked for - exactly the problem
-    // migration 0025 exists to prevent. Redeeming this attaches the chat and
-    // touches nothing else.
-    //
-    // Code generation itself is untouched: this calls the same IssueCodeAsync
-    // the other paths do, with the other purpose.
+    // Following up a farmer who never connected Telegram.
+    // A link code, not an onboarding code: the farmer already has a working password,
+    // and an onboarding code would reset it (what migration 0025 prevents). Redeeming
+    // this only attaches the chat.
     private static async Task<IResult> IssueLinkCodeForFarmerAsync(
         Guid profileId,
         TelegramOnboardingService onboarding,
@@ -121,9 +106,8 @@ public static class TelegramEndpoints
         return Results.Ok(new TelegramCodeResponse(issued.Code, issued.DeepLink, issued.ExpiresAt));
     }
 
-    // The fallback for a farmer with no Telegram, and the answer to "what was
-    // their password again?" - which cannot be answered, because AgroFlow
-    // never stored it. This mints a new one and returns it once.
+    // For a farmer with no Telegram, or one who forgot the password (we never store
+    // it). Creates a new one and returns it once.
     private static async Task<IResult> ResetTemporaryPasswordAsync(
         Guid profileId,
         SupabaseAdminService supabaseAdmin,
@@ -146,8 +130,7 @@ public static class TelegramEndpoints
                 statusCode: StatusCodes.Status502BadGateway);
         }
 
-        // Any temporary password must be changed at first sign-in, however it
-        // was delivered - read off a screen or sent over Telegram.
+        // Security: every temporary password must be changed at first sign-in.
         await onboarding.SetMustChangePasswordAsync(profileId, true, cancellationToken);
 
         return Results.Ok(new TemporaryPasswordResponse(
@@ -155,14 +138,10 @@ public static class TelegramEndpoints
             "This password is shown once and is not stored. The farmer must change it when they sign in."));
     }
 
-    // The same thing the farmer gets from "Forgot password?" in the app, but
-    // triggered by an administrator - for a farmer who phones in rather than
-    // using the app, or who cannot work the screen.
-    //
-    // Different from ResetTemporaryPasswordAsync above: that one RETURNS the
-    // password for the admin to read out, and is the path for a farmer with no
-    // Telegram. This one sends it to the farmer's own chat and never shows it
-    // to the admin, so the credential goes only to the account's owner.
+    // Same as "Forgot password?" in the app, but started by an admin, e.g. for a
+    // farmer who phones in.
+    // Security: unlike ResetTemporaryPasswordAsync, this sends the password to the
+    // farmer's own chat and never shows it to the admin.
     private static async Task<IResult> SendTemporaryPasswordAsync(
         Guid profileId,
         PasswordResetService passwordReset,
@@ -192,9 +171,7 @@ public static class TelegramEndpoints
         });
     }
 
-    // ------------------------------------------------------------------
-    // FARMER, ACTING ON THEMSELVES
-    // ------------------------------------------------------------------
+    // Farmer, acting on themselves
 
     private static async Task<IResult> GetMyLinkStatusAsync(
         ClaimsPrincipal user,
@@ -218,11 +195,8 @@ public static class TelegramEndpoints
         return Results.Ok(new TelegramLinkStatusResponse(reader.GetBoolean(0), reader.GetBoolean(1)));
     }
 
-    // A farmer generating their own link code. This is the migration path for
-    // everyone already in the database before Telegram existed: they open the
-    // app, tap Connect Telegram, and the deep link opens the bot with the code
-    // already filled in - no admin and no QR scanning needed, because they are
-    // holding the phone that will do the linking.
+    // A farmer creating their own link code: they tap Connect Telegram and the
+    // deep link opens the bot with the code filled in. No admin or QR needed.
     private static async Task<IResult> IssueMyCodeAsync(
         ClaimsPrincipal user,
         TelegramOnboardingService onboarding,
@@ -230,9 +204,7 @@ public static class TelegramEndpoints
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
-        // Farmer-issued: they are signed in with a password they already use
-        // and only want their alerts delivered here, so redeeming this links
-        // the chat and leaves the account untouched.
+        // Farmer-issued: they already have a password, so redeeming only links the chat.
         var issued = await onboarding.IssueCodeAsync(
             userId, TelegramCodePurpose.Link, cancellationToken);
 
@@ -260,9 +232,8 @@ public static class TelegramEndpoints
         return Results.NoContent();
     }
 
-    // Unlinking clears the chat id only. It does not touch the alerts
-    // preference, so re-linking later restores the farmer's previous choice
-    // rather than silently turning alerts back on.
+    // Unlinking clears the chat id only, so re-linking later keeps the farmer's
+    // alerts preference.
     private static async Task<IResult> UnlinkMeAsync(
         ClaimsPrincipal user,
         NpgsqlDataSource dataSource,

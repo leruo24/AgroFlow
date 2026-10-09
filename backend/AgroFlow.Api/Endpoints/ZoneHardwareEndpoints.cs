@@ -6,14 +6,9 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-// What the farmer's Kit screen and the admin hardware page both need to
-// describe one zone's device.
-//
-// SensorWorking flags are deliberately per-sensor rather than one "healthy"
-// boolean. A DHT11 that has stopped responding while the soil probe still
-// works is a real and common state - the kit keeps watering correctly and
-// the app falls back to weather-app temperature - and it is useless to the
-// farmer if it is reported as the whole kit being broken.
+// What the farmer's Kit screen and the admin hardware page need about one zone's device.
+// SensorWorking is per sensor, not one "healthy" flag: a dead DHT11 with a working
+// soil probe is common, and the kit still waters correctly.
 public record ZoneHardwareResponse(
     long? HardwareId,
     string? DeviceId,
@@ -34,14 +29,9 @@ public record ZoneHardwareResponse(
 public record ChangeWifiResponse(Guid CommandId, string SetupNetworkName, string SetupNetworkPassword);
 
 // One row of the admin hardware page.
-//
-// MqttUsername and TokenStatus are the reason this endpoint exists at all.
-// The dashboard reads most tables straight from Supabase under RLS, but
-// migration 0028 deliberately revoked the whole-table select on hardware and
-// granted an explicit column list that EXCLUDES device_token_hash and
-// token_revoked_at - and 0029 gives no client role any grant on
-// mqtt_credential_pool whatsoever. Neither value can be reached from the
-// browser by design, so the API derives them.
+// Security: the API works out MqttUsername and TokenStatus because the browser
+// cannot read them: 0028 hides device_token_hash and token_revoked_at from clients,
+// and 0029 gives no client access to mqtt_credential_pool.
 public record AdminHardwareRow(
     long HardwareId,
     string? DeviceId,
@@ -56,19 +46,10 @@ public record AdminHardwareRow(
     string TokenStatus,
     string? MqttUsername);
 
-// Step 5: the two new device commands, and the screens that drive them.
-//
-// WHY A SEPARATE FILE
-// -------------------
-// FarmerEndpoints.cs and FarmEndpoints.cs are both actively worked on
-// elsewhere. Nothing here touches irrigation, onboarding or reports, so it
-// lives on its own rather than widening a file somebody else is editing -
-// the same reasoning DeviceCommandEndpoints.cs records for itself.
+// Device commands (change WiFi, open setup) and the screens that use them.
 public static class ZoneHardwareEndpoints
 {
-    // The same ownership test FarmerEndpoints uses, against z (the zone row).
-    // Copied rather than shared because it is three lines of SQL and lifting
-    // it into a shared constant would mean editing that file.
+    // The same ownership check as FarmerEndpoints, against z (the zone row).
     private const string FarmAccessSql = """
         exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $1)
         or exists (select 1 from farm_member fm where fm.farm_id = z.farm_id and fm.profile_id = $1)
@@ -83,8 +64,7 @@ public static class ZoneHardwareEndpoints
 
         farmer.MapPost("/change-wifi", ChangeWifiAsync);
 
-        // Admin equivalents. Same three actions plus revoke, on any zone,
-        // behind the real admin role check rather than farm membership.
+        // Admin versions: the same actions plus revoke, on any zone, behind the admin role check.
         var admin = app.MapGroup("/api/admin/zones/{zoneId:long}/hardware")
             .RequireAuthorization()
             .AddEndpointFilter<AdminOnlyFilter>();
@@ -96,16 +76,13 @@ public static class ZoneHardwareEndpoints
         admin.MapPost("/open-setup", AdminOpenSetupAsync);
         admin.MapPost("/revoke", AdminRevokeAsync);
 
-        // The whole fleet, for the admin hardware table. Not under the
-        // per-zone group - it is not scoped to a zone.
+        // The whole fleet, for the admin hardware table (not scoped to one zone).
         app.MapGet("/api/admin/hardware", ListAllHardwareAsync)
             .RequireAuthorization()
             .AddEndpointFilter<AdminOnlyFilter>();
     }
 
-    // ------------------------------------------------------------------
-    // ADMIN FLEET LIST
-    // ------------------------------------------------------------------
+    // Admin fleet list
 
     private static async Task<IResult> ListAllHardwareAsync(
         NpgsqlDataSource dataSource, CancellationToken cancellationToken)
@@ -114,10 +91,8 @@ public static class ZoneHardwareEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        // The MQTT username comes from a left join rather than a second
-        // query, so a fleet of any size is one round trip. A burned entry is
-        // excluded: it is no longer this board's login, and showing it would
-        // suggest the kit is still using a password that has been retired.
+        // The MQTT username comes from a left join, so any fleet size is one query. Burned
+        // entries are left out because that login is retired.
         await using var cmd = new NpgsqlCommand(
             """
             select h.hardware_id, h.device_id, h.device_name, h.zone_id, z.name, f.name,
@@ -165,9 +140,7 @@ public static class ZoneHardwareEndpoints
         return Results.Ok(rows);
     }
 
-    // ------------------------------------------------------------------
-    // READ
-    // ------------------------------------------------------------------
+    // Read
 
     private static async Task<IResult> GetZoneHardwareAsync(
         long zoneId,
@@ -182,11 +155,8 @@ public static class ZoneHardwareEndpoints
 
         var accessClause = requireFarmAccess ? $"and ({FarmAccessSql})" : "";
 
-        // One query for everything the screen shows. The three lateral joins
-        // are the per-sensor "last heard from" timestamps - the same
-        // newest-row-per-sensor_type shape zone_latest_reading uses, except
-        // that this needs the TIMESTAMPS (to decide "working" vs "not
-        // responding"), and that view carries only the values.
+        // One query for the whole screen. The three lateral joins give each sensor's
+        // "last heard from" time, to decide "working" or "not responding".
         var sql = $"""
             select h.hardware_id, h.device_id, h.device_name, h.last_seen, h.firmware_version,
                    h.device_token_hash is not null, h.token_revoked_at,
@@ -217,9 +187,8 @@ public static class ZoneHardwareEndpoints
 
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
-        // No row at all means the zone does not exist OR this farmer cannot
-        // see it. Identical responses on purpose - the same choice the
-        // reports endpoints make.
+        // No row means the zone does not exist or this farmer cannot see it; both get the
+        // same answer, like the report endpoints.
         if (!await reader.ReadAsync(cancellationToken))
         {
             return Results.NotFound(new { error = "Zone not found." });
@@ -238,11 +207,8 @@ public static class ZoneHardwareEndpoints
 
         var now = DateTimeOffset.UtcNow;
 
-        // "Online" is the newest thing we have heard from this kit by ANY
-        // route - a reading on MQTT, or an HTTP call that touched last_seen.
-        // Taking only last_seen would call a kit offline between the events
-        // that write it; taking only readings would miss a board that is
-        // online but whose sensor has failed.
+        // "Online" uses the newest contact by any route (an MQTT reading or an HTTP call
+        // that updated last_seen), so a board with a failed sensor still shows online.
         var newestContact = Newest(lastSeen, Newest(soilAt, Newest(tempAt, humAt)));
 
         return Results.Ok(new ZoneHardwareResponse(
@@ -263,15 +229,14 @@ public static class ZoneHardwareEndpoints
             deviceId is null ? null : DeviceSetupCommands.SetupNetworkPassword(deviceId)));
     }
 
-    // active / revoked / legacy key - what the admin hardware page shows.
+    // active / revoked / legacy key, as shown on the admin hardware page.
     private static string DescribeTokenStatus(long? hardwareId, bool hasToken, DateTimeOffset? revokedAt)
     {
         if (hardwareId is null) return "no device";
         if (revokedAt.HasValue) return "revoked";
 
-        // A claimed board with no token hash is a v1.1.0 board still running
-        // on the shared key. Naming it explicitly is what tells you whether
-        // Devices:LegacyApiKeyEnabled can be retired yet.
+        // A claimed board with no token is an old board on the shared key; showing it
+        // tells us when Devices:LegacyApiKeyEnabled can be turned off.
         return hasToken ? "active" : "legacy key";
     }
 
@@ -283,9 +248,7 @@ public static class ZoneHardwareEndpoints
         return a.Value >= b.Value ? a : b;
     }
 
-    // ------------------------------------------------------------------
-    // CHANGE WIFI (farmer)
-    // ------------------------------------------------------------------
+    // Change WiFi (farmer)
 
     private static Task<IResult> ChangeWifiAsync(
         long zoneId, ClaimsPrincipal user, NpgsqlDataSource dataSource,
@@ -295,9 +258,7 @@ public static class ZoneHardwareEndpoints
             requireFarmAccess: true, requireOnline: true,
             cancellationToken: cancellationToken);
 
-    // ------------------------------------------------------------------
-    // ADMIN
-    // ------------------------------------------------------------------
+    // Admin
 
     private static Task<IResult> AdminChangeWifiAsync(
         long zoneId, ClaimsPrincipal user, NpgsqlDataSource dataSource,
@@ -307,12 +268,9 @@ public static class ZoneHardwareEndpoints
             requireFarmAccess: false, requireOnline: true,
             cancellationToken: cancellationToken);
 
-    // open_setup keeps the WiFi, so an offline board is not a hard stop the
-    // way it is for change_wifi: the command sits pending and the replay
-    // sweep delivers it when the board comes back, which is a reasonable
-    // thing for an admin to queue deliberately. The farmer has no equivalent,
-    // because "nothing visible happened, maybe later" is not an answer to
-    // give someone standing in a field.
+    // open_setup keeps the WiFi, so for an offline board the command waits and the
+    // replay sweep sends it later. Only admins can queue it; a farmer needs an
+    // answer straight away.
     private static Task<IResult> AdminOpenSetupAsync(
         long zoneId, ClaimsPrincipal user, NpgsqlDataSource dataSource,
         AuditLog audit, ILoggerFactory loggerFactory, CancellationToken cancellationToken)
@@ -321,9 +279,9 @@ public static class ZoneHardwareEndpoints
             requireFarmAccess: false, requireOnline: false,
             cancellationToken: cancellationToken);
 
-    // Cuts one board off. Sets token_revoked_at (so every device endpoint
-    // 401s it, and three of those make the board wipe its own credentials)
-    // and burns its pooled MQTT login.
+    // Security: cuts one board off. Sets token_revoked_at, so every device endpoint
+    // returns 401 (and after three the board wipes its own credentials), and burns
+    // its pooled MQTT login.
     private static async Task<IResult> AdminRevokeAsync(
         long zoneId,
         ClaimsPrincipal user,
@@ -368,8 +326,7 @@ public static class ZoneHardwareEndpoints
             "Revoked device {DeviceId} (hardware {HardwareId}) on zone {ZoneId}. Burned MQTT login: {Username}.",
             deviceId, hardwareId, zoneId, burnedUsername ?? "none");
 
-        // Irreversible and destructive, so it is exactly the kind of action
-        // the record exists for.
+        // Cannot be undone, so it is audit-logged.
         await audit.WriteAsync(
             user, AuditActions.DeviceRevoked, "hardware", hardwareId.ToString(),
             details: new { zoneId, deviceId, burnedMqttUsername = burnedUsername },
@@ -380,24 +337,20 @@ public static class ZoneHardwareEndpoints
             hardwareId,
             deviceId,
             burnedMqttUsername = burnedUsername,
-            // The admin has to do the HiveMQ half by hand - this system
-            // cannot change a password on the free tier. Spelled out in the
-            // response so the dashboard shows it rather than implying the job
-            // is finished.
+            // The admin still has to delete the login in HiveMQ by hand (the free tier has no
+            // API), so the response says so instead of implying the job is done.
             notice = burnedUsername is null
                 ? "This device had no pooled MQTT login, so only its device token was revoked."
                 : $"Change this password in the HiveMQ console, then re-add it to the pool. (Login: {burnedUsername})",
         });
     }
 
-    // ------------------------------------------------------------------
     // The shared insert
-    // ------------------------------------------------------------------
 
-    // One path for both commands and both audiences. The insert goes into
-    // irrigation_commands so it travels the existing pipeline: trigger ->
-    // pg_notify -> IrrigationCommandNotifyService -> the device's own
-    // .../commands topic, with a uuid the firmware ACKs. See migration 0030.
+    // One path for both commands and both audiences. The row goes into
+    // irrigation_commands so it uses the normal pipeline: trigger -> pg_notify ->
+    // IrrigationCommandNotifyService -> the device's .../commands topic, with a uuid
+    // the firmware confirms (migration 0030).
     private static async Task<IResult> IssueSetupCommandAsync(
         long zoneId,
         ClaimsPrincipal user,
@@ -417,9 +370,8 @@ public static class ZoneHardwareEndpoints
 
         var accessClause = requireFarmAccess ? $"and ({FarmAccessSql})" : "";
 
-        // Resolve the device and its liveness in one go. `greatest` over the
-        // reading timestamp and last_seen is the same "heard from by any
-        // route" rule the read endpoint applies.
+        // Find the device and when we last heard from it in one query, using the same
+        // "heard from by any route" rule as the read endpoint.
         var lookupSql = $"""
             select h.device_id,
                    greatest(h.last_seen, coalesce(r.recorded_at, h.last_seen))
@@ -454,14 +406,9 @@ public static class ZoneHardwareEndpoints
 
         if (requireOnline && !DeviceLiveness.IsOnline(lastContact, DateTimeOffset.UtcNow))
         {
-            // 409, not 503 or 400: the request is well-formed and the farmer
-            // is allowed to make it - the kit's current state is what
-            // conflicts with it.
-            //
-            // Telling them to power-cycle three times is the whole value of
-            // this response. It is the one route back into a board that
-            // cannot be reached over the network, and it needs no app, no
-            // admin and no internet.
+            // 409: the request is valid and allowed, but the kit's current state conflicts
+            // with it. The useful part is telling the farmer to power-cycle three times,
+            // which reopens setup with no app, admin or internet.
             return Results.Json(
                 new
                 {
@@ -474,9 +421,8 @@ public static class ZoneHardwareEndpoints
                 statusCode: StatusCodes.Status409Conflict);
         }
 
-        // duration_seconds is left null - neither command runs anything for a
-        // length of time, and 0030 constrains it to null for exactly these
-        // two values.
+        // duration_seconds stays null: neither command runs for a length of time, and
+        // 0030 requires null for these two.
         await using var insert = new NpgsqlCommand(
             "insert into irrigation_commands (zone_id, command, source) values ($1, $2, 'manual') returning id",
             connection);
@@ -485,10 +431,8 @@ public static class ZoneHardwareEndpoints
 
         var commandId = (Guid)(await insert.ExecuteScalarAsync(cancellationToken))!;
 
-        // Recorded for BOTH audiences: a farmer pressing Change WiFi in the
-        // app and an admin doing it from the console write the same row, so
-        // "why did this kit drop off the network on Tuesday?" has one answer
-        // rather than two half-answers.
+        // Audit-logged for farmers and admins alike, so "why did this kit go offline on
+        // Tuesday?" has one answer.
         await audit.WriteAsync(
             user,
             command == DeviceSetupCommands.ChangeWifi

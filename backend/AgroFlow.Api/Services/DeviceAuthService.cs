@@ -3,14 +3,8 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-// The device this request came from, resolved from its own credential.
-//
-// This is the point of the whole v1.3.0 token change. Every device endpoint
-// used to take the board's word for which device it was - the ACK endpoint
-// read a deviceId out of the request body and compared it to the zone's
-// hardware row, which is only as trustworthy as the shared X-Api-Key that
-// every board carried. Now the identity comes OUT of the credential, so a
-// board can only ever act as itself.
+// Security: the device a request came from, taken from its own credential, so a
+// board can only ever act as itself (not as whatever deviceId it sends).
 public sealed record AuthenticatedDevice(
     long HardwareId,
     string DeviceId,
@@ -18,16 +12,9 @@ public sealed record AuthenticatedDevice(
     long FarmId,
     bool IsLegacyApiKey);
 
-// Resolves X-Device-Token (or, while Devices:LegacyApiKeyEnabled is on, the
-// old shared X-Api-Key) to a specific board.
-//
-// WHY A SERVICE AND NOT AN ENDPOINT FILTER
-// ----------------------------------------
-// An IEndpointFilter would be the tidier ASP.NET shape, but every device
-// endpoint needs the RESOLVED DEVICE, not just a yes/no - the ACK needs its
-// zone, the credential endpoint needs its device_id, firmware-check needs to
-// record its version. Passing that through filter metadata would be more
-// indirection than four call sites are worth.
+// Resolves X-Device-Token (or, while Devices:LegacyApiKeyEnabled is on, the old
+// shared X-Api-Key) to a specific board. A service instead of an endpoint filter
+// because each endpoint needs the resolved device, not just a yes/no.
 public sealed class DeviceAuthService
 {
     public const string TokenHeader = "X-Device-Token";
@@ -45,17 +32,13 @@ public sealed class DeviceAuthService
         _logger = logger;
     }
 
-    // Default TRUE. Two boards are in the field on v1.1.0 with no token at
-    // all, and flipping this to false before they are re-enrolled would take
-    // them offline - including their ability to report the readings that are
-    // the only evidence they need re-enrolling. See the report for how to
-    // retire it.
+    // Defaults to true: two boards in the field still run old firmware with no token,
+    // and turning this off before they are re-enrolled would take them offline.
     public bool LegacyApiKeyEnabled =>
         !bool.TryParse(_configuration["Devices:LegacyApiKeyEnabled"], out var enabled) || enabled;
 
-    // Null means "refuse this request". The caller returns a bare 401 with no
-    // detail: which of the failure modes it was is useful in the log here and
-    // useless to the board, which reacts identically to all of them.
+    // Security: null means refuse. The caller returns a bare 401; the reason is only
+    // logged here, since the board reacts the same to every case.
     public async Task<AuthenticatedDevice?> AuthenticateAsync(
         HttpContext context, CancellationToken cancellationToken = default)
     {
@@ -66,13 +49,12 @@ public sealed class DeviceAuthService
             var device = await ResolveByTokenAsync(presented, cancellationToken);
             if (device is not null) return device;
 
-            // A well-formed token that resolved to nothing is either revoked
-            // or unknown; ResolveByTokenAsync has already logged which.
+            // A valid-looking token that matched nothing is revoked or unknown;
+            // ResolveByTokenAsync has already logged which.
             return null;
         }
 
-        // No usable token header. Fall back to the shared key only while the
-        // flag allows it.
+        // No usable token: fall back to the shared key only while the flag allows it.
         if (!LegacyApiKeyEnabled)
         {
             _logger.LogWarning(
@@ -93,11 +75,9 @@ public sealed class DeviceAuthService
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
-        // Resolves the board AND its zone/farm in one hop, because every
-        // caller needs all three. token_revoked_at comes back rather than
-        // being filtered in SQL so that a revoked token can be logged as
-        // revoked instead of as unknown - the two mean different things to
-        // whoever is reading the log.
+        // Finds the board and its zone/farm in one query, since every caller needs all
+        // three. token_revoked_at is returned, not filtered in SQL, so a revoked token is
+        // logged as revoked instead of unknown.
         await using var cmd = new NpgsqlCommand(
             "select h.hardware_id, h.device_id, h.zone_id, z.farm_id, h.token_revoked_at " +
             "from hardware h join zone z on z.id = h.zone_id " +
@@ -108,9 +88,7 @@ public sealed class DeviceAuthService
 
         if (!await reader.ReadAsync(cancellationToken))
         {
-            // Deliberately does not log the token or its hash. A hash is a
-            // verifiable fingerprint of a live credential and has no business
-            // in a log aggregator.
+            // Security: never log the token or its hash; a hash is a fingerprint of a live credential.
             _logger.LogWarning("Refused a device request: unknown {Header}.", TokenHeader);
             return null;
         }
@@ -133,9 +111,8 @@ public sealed class DeviceAuthService
 
         if (deviceId is null)
         {
-            // A token exists but the row has no device_id. Not reachable
-            // through the claim path, which sets both in one statement -
-            // guarded because the ACK's ownership check keys off device_id.
+            // A token with no device_id. The claim path sets both together, but we guard it
+            // because the ACK ownership check relies on device_id.
             _logger.LogError(
                 "Hardware {HardwareId} has a device token but no device_id - refusing the request.", hardwareId);
 
@@ -145,11 +122,9 @@ public sealed class DeviceAuthService
         return new AuthenticatedDevice(hardwareId, deviceId, zoneId, farmId, IsLegacyApiKey: false);
     }
 
-    // The v1.1.0 path. The shared key proves "a genuine AgroFlow board" and
-    // nothing more, so the device cannot be resolved from the credential -
-    // the caller has to fall back to trusting a deviceId in the request, the
-    // way it always did. That is exactly the weakness the token removes, and
-    // it is why this is logged every single time rather than once.
+    // The old shared-key path. The key only proves "a real AgroFlow board", not which
+    // one, so the caller must trust the deviceId in the request. That is the weakness
+    // the token removes, so we log every use.
     private async Task<AuthenticatedDevice?> ResolveByLegacyApiKeyAsync(
         HttpContext context, CancellationToken cancellationToken)
     {
@@ -172,17 +147,15 @@ public sealed class DeviceAuthService
             "Devices:LegacyApiKeyEnabled=false to close this path.",
             context.Request.Path, LegacyApiKeyHeader);
 
-        // Shared-key callers are not resolved to a device at all. Zeroes are
-        // deliberate: a caller that needs a real identity must check
-        // IsLegacyApiKey and fall back to its own (weaker) resolution, rather
-        // than silently acting on hardware 0.
+        // Shared-key callers get no device identity. The zeroes are on purpose: a caller
+        // that needs a real identity must check IsLegacyApiKey instead of acting on hardware 0.
         await Task.CompletedTask;
 
         return new AuthenticatedDevice(0, string.Empty, 0, 0, IsLegacyApiKey: true);
     }
 
-    // Records what a board says it is running. Used by the Kit screen, the
-    // admin hardware page, and the decision to retire the legacy flag.
+    // Records the firmware version a board reports, for the Kit screen, the admin
+    // hardware page and deciding when to turn off the legacy flag.
     public async Task RecordFirmwareVersionAsync(
         long hardwareId, string? firmwareVersion, CancellationToken cancellationToken = default)
     {
@@ -201,9 +174,8 @@ public sealed class DeviceAuthService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Bookkeeping. A board must never fail to report a reading or
-            // acknowledge a command because we could not write down its
-            // version number.
+            // Bookkeeping only: a board must never fail a reading or ACK because we could
+            // not record its version.
             _logger.LogWarning(ex, "Could not record the firmware version for hardware {HardwareId}.", hardwareId);
         }
     }

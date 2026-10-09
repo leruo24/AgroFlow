@@ -4,12 +4,8 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-// EstimatedLitres is accepted but IGNORED, and is nullable so current firmware
-// can stop sending it altogether. It exists only so a board still running the
-// old sketch keeps posting successfully during the window before it is
-// reflashed. Nothing reads it: zone.flow_rate_lpm is the single source of
-// truth for turning runtime into litres. Once every board is reflashed this
-// field can be deleted outright.
+// EstimatedLitres is accepted but ignored, and nullable so firmware can stop
+// sending it. zone.flow_rate_lpm is the only source for litres.
 public record IrrigationEventRequest(
     long ZoneId,
     int RuntimeSeconds,
@@ -18,17 +14,13 @@ public record IrrigationEventRequest(
     DateTimeOffset? StartedAt,
     float? EstimatedLitres = null);
 
-// EstimatedLitres is null when the zone has no flow_rate_lpm configured - that
-// is "no estimate can be made", which is the honest answer and is stored as
-// NULL rather than a zero that would read as "no water used". IsMeasured is
-// always false and is there to stop a caller rendering this as a meter
-// reading: no flow meter exists anywhere in AgroFlow.
+// EstimatedLitres is null when the zone has no flow rate (no estimate possible),
+// not 0, which would mean no water was used. IsMeasured is always false: there is
+// no flow meter in AgroFlow.
 public record IrrigationEventResponse(float WaterUsedTotal, float? EstimatedLitres, bool IsMeasured, string LitresBasis);
 
-// Replaces the ESP32's direct POST to Supabase's irrigation_event REST
-// endpoint, and replaces the removed Postgres water-usage trigger
-// (update_zone_water_usage in the now-dropped 0006_backend_irrigation_logic.sql)
-// with the equivalent increment done in C# via Zone.AddWaterUsage.
+// Where the board logs a pump run. The water-usage total is updated in C#
+// (Zone.AddWaterUsage) instead of a database trigger.
 public static class IrrigationEventEndpoints
 {
     public static void MapIrrigationEventEndpoints(this WebApplication app)
@@ -43,15 +35,9 @@ public static class IrrigationEventEndpoints
         NpgsqlDataSource dataSource,
         CancellationToken cancellationToken)
     {
-        // v1.3.0: X-Device-Token, which resolves WHICH board is posting. A
-        // board on a token may only log a run against its own zone - the
-        // zoneId in the body is now checked against the credential rather
-        // than trusted, which closes the "any board could log against any
-        // zone" hole the shared X-Api-Key left open.
-        //
-        // A legacy shared-key board cannot be resolved to a device, so it
-        // keeps the old behaviour (the body is taken at face value) for as
-        // long as Devices:LegacyApiKeyEnabled allows it at all.
+        // Security: X-Device-Token tells us which board is posting, and a token board may
+        // only log runs for its own zone. A legacy shared-key board cannot be identified,
+        // so its body is trusted while Devices:LegacyApiKeyEnabled allows it.
         var device = await deviceAuth.AuthenticateAsync(context, cancellationToken);
 
         if (device is null)
@@ -63,26 +49,14 @@ public static class IrrigationEventEndpoints
 
         if (!device.IsLegacyApiKey && device.ZoneId != request.ZoneId)
         {
-            // Deliberately 404, not 403: a board should not be able to probe
-            // which zone ids exist. Mirrors the command ACK's choice.
+            // 404, not 403, so a board cannot probe which zone ids exist (like the command ACK).
             return Results.NotFound("No such zone for this device.");
         }
 
-        // Validate BEFORE opening a connection or a transaction.
-        //
-        // This used to check only zoneId/triggerSource/syncStatus, so a
-        // negative runtime or a negative estimatedLitres was accepted and
-        // silently SUBTRACTED from zone.water_used_total via Zone.AddWaterUsage
-        // below. Nothing recomputes that running total from the event rows, so
-        // the corruption never healed. The rules live in the domain layer
-        // (IrrigationEventValidation) and are unit-tested there; the reason
-        // string goes back in the 400 body so a device developer can see which
-        // field was rejected instead of guessing.
-        // Structural validation first, BEFORE opening a connection or a
-        // transaction. Litres are passed as 0 here deliberately: the device no
-        // longer supplies a volume, so there is nothing of its to validate yet.
-        // Zero is always valid, so this call is exactly the zoneId / runtime /
-        // triggerSource / syncStatus checks.
+        // Validate before opening a connection. A negative runtime would otherwise be
+        // subtracted from zone.water_used_total, which nothing recomputes. The rules are in
+        // IrrigationEventValidation (unit-tested) and the reason goes back in the 400.
+        // Litres are 0 here because the device no longer sends a volume.
         var validationError = IrrigationEventValidation.Validate(
             request.ZoneId, request.RuntimeSeconds, 0f,
             request.TriggerSource, request.SyncStatus);
@@ -95,19 +69,9 @@ public static class IrrigationEventEndpoints
         await using var connection = await dataSource.OpenConnectionAsync();
         await using var transaction = await connection.BeginTransactionAsync();
 
-        // zone.flow_rate_lpm is THE source of truth for litres.
-        //
-        // This used to fall back to whatever the device sent when the zone had
-        // no rate configured. That meant the same event could be valued two
-        // ways - the board's compiled-in constant or the zone's column -
-        // depending on a row nobody had filled in. The fallback is gone: with
-        // no configured rate there is no estimate, and the event is stored with
-        // estimated_litres NULL rather than a number derived from a guess.
-        //
-        // Correcting a zone's rate is now a database update, not a reflash.
-        //
-        // Either way this is an ESTIMATE - there is no flow meter anywhere in
-        // AgroFlow - which is why the response says so explicitly.
+        // zone.flow_rate_lpm is the only source for litres. With no rate there is no
+        // estimate and estimated_litres is stored as NULL. Fixing a zone's rate is a
+        // database update, not a reflash. It is always an estimate: there is no flow meter.
         var flowRate = await FetchZoneFlowRateAsync(connection, transaction, request.ZoneId);
         var serverEstimate = WaterUsageEstimator.EstimateEventLitres(request.RuntimeSeconds, flowRate);
 
@@ -117,10 +81,8 @@ public static class IrrigationEventEndpoints
             ? serverEstimate.Basis
             : "no estimate available: zone.flow_rate_lpm is not configured for this zone, and no flow meter exists to measure the volume";
 
-        // Re-validate with the volume the server actually derived. The device's
-        // number never reaches this point, but an absurd flow_rate_lpm typed
-        // into the zone row could still produce an implausible volume, and that
-        // should be rejected rather than persisted.
+        // Re-check with the volume the server worked out, so a wrong flow_rate_lpm on
+        // the zone cannot store an impossible volume.
         if (estimatedLitres is not null)
         {
             var derivedError = IrrigationEventValidation.Validate(
@@ -136,23 +98,16 @@ public static class IrrigationEventEndpoints
 
         await InsertIrrigationEventAsync(connection, transaction, request, estimatedLitres);
 
-        // Row lock so a concurrent request for the same zone can't read the same
-        // starting total and clobber this update (lost-update race). The removed
-        // Postgres trigger did this increment atomically in a single SQL
-        // statement; locking the row for the duration of this transaction is the
-        // equivalent guarantee now that the read/compute/write happens in
-        // application code instead.
+        // Row lock so a second request for the same zone cannot read the same starting
+        // total and overwrite this update (lost-update race).
         var currentTotal = await FetchZoneWaterUsedTotalForUpdateAsync(connection, transaction, request.ZoneId);
 
-        // Only a real estimate moves the running total. An unconfigured zone
-        // leaves water_used_total untouched rather than adding a zero that would
-        // later be indistinguishable from a cycle that genuinely delivered
-        // nothing.
+        // Only a real estimate changes the running total; an unconfigured zone leaves it
+        // untouched instead of adding 0.
         var newTotal = currentTotal;
         if (estimatedLitres is not null)
         {
-            // The domain layer decides the new total - this endpoint's job is
-            // just to lock, fetch, persist.
+            // The domain class works out the new total; this endpoint only locks, reads and saves.
             var zone = new Zone { WaterUsedTotal = currentTotal };
             newTotal = zone.AddWaterUsage(estimatedLitres.Value);
 
@@ -164,9 +119,8 @@ public static class IrrigationEventEndpoints
         return Results.Ok(new IrrigationEventResponse(newTotal, estimatedLitres, IsMeasured: false, litresBasis));
     }
 
-    // Null when the zone has no flow rate configured. Read inside the same
-    // transaction as the water-total update so it cannot change underneath
-    // this event.
+    // Null when the zone has no flow rate. Read in the same transaction as the
+    // total update so it cannot change underneath this event.
     private static async Task<double?> FetchZoneFlowRateAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, long zoneId)
     {
@@ -182,10 +136,8 @@ public static class IrrigationEventEndpoints
         NpgsqlConnection connection, NpgsqlTransaction transaction, IrrigationEventRequest request,
         float? estimatedLitres)
     {
-        // started_at omitted entirely (falls back to Postgres's own now()
-        // default) when the firmware didn't have a valid NTP-synced clock at
-        // cycle start - same fallback behaviour as when it posted directly to
-        // Supabase.
+        // started_at is left out (Postgres uses now()) when the board had no valid NTP
+        // time at the start of the run.
         var sql = request.StartedAt.HasValue
             ? "insert into irrigation_event (zone_id, runtime_seconds, estimated_litres, trigger_source, sync_status, started_at) values ($1, $2, $3, $4, $5, $6)"
             : "insert into irrigation_event (zone_id, runtime_seconds, estimated_litres, trigger_source, sync_status) values ($1, $2, $3, $4, $5)";

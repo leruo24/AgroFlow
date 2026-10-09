@@ -4,15 +4,11 @@ using Sheet = AgroFlow.Api.Reports.XlsxWriter.Sheet;
 
 namespace AgroFlow.Api.Reports;
 
-/// "All zones" as a workbook: one Summary across the farm, one Daily sheet per
-/// zone, and the farm's weather once.
-///
-/// WHY THE FLOW RATE LIVES ON THE SUMMARY SHEET
-/// Each zone's Litres column is an Excel formula - pump minutes times that
-/// zone's flow rate, read from a named cell on Summary. A farmer who measures
-/// their pump at 1.3 L/min rather than the 1.5 on file changes one cell and
-/// the whole workbook follows, which is the difference between a document
-/// they can check and one they have to believe.
+/// "All zones" as a workbook: one Summary for the farm, one Daily sheet per zone,
+/// and the farm's weather once.
+/// Each zone's Litres column is a formula (pump minutes x the zone's flow rate on
+/// the Summary sheet), so a farmer who measures their pump at 1.3 L/min instead of
+/// 1.5 changes one cell and the whole workbook updates.
 internal static class FarmWaterUsageWorkbook
 {
     public static byte[] Render(FarmWaterUsageReport farm)
@@ -30,12 +26,8 @@ internal static class FarmWaterUsageWorkbook
         return XlsxWriter.Build(sheets);
     }
 
-    /// Where zone i's flow rate sits on the Summary sheet, as an absolute
-    /// reference a formula on another sheet can point at.
-    ///
-    /// The zone table starts at row 8 (title, farm, period, blank, "The farm",
-    /// header, totals, blank → first zone on 9). Absolute, so the reference
-    /// survives a reader inserting a column.
+    /// Where zone i's flow rate is on the Summary sheet, as an absolute reference
+    /// other sheets can use. The zone table starts at row 8, so the first zone is row 9.
     private static string SummaryFlowCell(int zoneIndex) =>
         $"Summary!$E${FirstZoneRow + zoneIndex}";
 
@@ -50,7 +42,7 @@ internal static class FarmWaterUsageWorkbook
         var sheet = new Sheet
         {
             Name = "Summary",
-            // B and C are wide for the Advice section (item 2c).
+            // Columns B and C are wide for the Advice section.
             ColumnWidths = new[] { 26.0, 40.0, 60.0, 14.0, 13.0, 13.0, 13.0, 13.0 },
         };
 
@@ -75,8 +67,8 @@ internal static class FarmWaterUsageWorkbook
         sheet.AddBlank();
 
         /* ---- a line per zone ------------------------------------------ */
-        // Row FirstZoneRow - 1 is this header, so the first zone lands on
-        // FirstZoneRow and SummaryFlowCell can point at column E.
+        // Row FirstZoneRow - 1 is this header, so the first zone is on FirstZoneRow and
+        // SummaryFlowCell can point at column E.
         sheet.Add(
             Cell.Of("Zone", XlsxStyle.TableHeader),
             Cell.Of("Crop", XlsxStyle.TableHeader),
@@ -98,13 +90,12 @@ internal static class FarmWaterUsageWorkbook
                 Cell.Of(zone.GrowthStage ?? "Not known"),
                 Cell.Of(zone.TotalMinutes, XlsxStyle.OneDecimal),
 
-                // THE editable cell. Everything downstream points here.
+                // The editable flow rate cell; everything else points here.
                 Cell.Maybe(zone.FlowRateLpm, XlsxStyle.OneDecimal),
 
-                // Minutes times rate, live. IFERROR rather than a bare
-                // product so a zone with no flow rate shows blank instead of
-                // #VALUE! - blank is what SUM and AVERAGE ignore, and 0 would
-                // read as a pump that ran and delivered nothing (0018).
+                // Minutes x rate as a live formula. IFERROR shows blank instead of #VALUE! for a
+                // zone with no flow rate; SUM and AVERAGE skip blanks, and 0 would look like the
+                // pump delivered nothing (0018).
                 Cell.Calc($"IFERROR(D{row}*E{row},\"\")", XlsxStyle.OneDecimal),
 
                 Cell.Maybe(zone.TotalNeedLitres, XlsxStyle.OneDecimal),
@@ -160,7 +151,7 @@ internal static class FarmWaterUsageWorkbook
                 XlsxStyle.Bold));
         }
 
-        // Item 2c: every zone's verdict and advice, each with its "Why".
+        // Every zone's verdict and advice, each with its "Why".
         var adviceRows = new List<(string Zone, string Advice, string Why)>();
         foreach (var zone in farm.Zones)
         {
@@ -224,7 +215,7 @@ internal static class FarmWaterUsageWorkbook
             Cell.Of("Rain (mm)", XlsxStyle.TableHeader),
             Cell.Of("Note", XlsxStyle.TableHeader));
 
-        // Header is row 4, so the first day is row 5.
+        // The header is row 4, so the first day is row 5.
         var firstRow = 5;
 
         for (var i = 0; i < zone.Days.Count; i++)
@@ -256,8 +247,8 @@ internal static class FarmWaterUsageWorkbook
             Cell.Calc($"SUM(D{firstRow}:D{lastRow})", XlsxStyle.TotalOneDecimal),
             Cell.Calc($"SUM(E{firstRow}:E{lastRow})", XlsxStyle.TotalOneDecimal),
 
-            // AVERAGE, not SUM: a mean of percentages and temperatures. It
-            // ignores blanks, which is why a sensor outage lowers nothing.
+            // AVERAGE, not SUM: these are percentages and temperatures. Blanks are skipped,
+            // so a sensor outage does not lower the average.
             Cell.Calc($"IFERROR(AVERAGE(F{firstRow}:F{lastRow}),\"\")", XlsxStyle.TotalOneDecimal),
             Cell.Calc($"IFERROR(AVERAGE(G{firstRow}:G{lastRow}),\"\")", XlsxStyle.TotalOneDecimal),
             Cell.Calc($"IFERROR(AVERAGE(H{firstRow}:H{lastRow}),\"\")", XlsxStyle.TotalOneDecimal),

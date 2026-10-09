@@ -4,19 +4,12 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Telegram implementation of INotificationService. Resolves an AgroFlow
-// identity (profile / zone / farm) to the linked Telegram chats, composes a
-// plain-language message and sends it.
-//
-// EVERY PUBLIC METHOD SWALLOWS EVERYTHING. See the contract on
-// INotificationService: a failed message must never propagate into onboarding,
-// sensor ingestion or irrigation. The catch blocks here are the single place
-// that guarantees it, which is why they are this broad.
-//
-// MESSAGE STYLE. Every alert names the farm, says what is expected and when,
-// and ends with what the farmer should do. A farmer reads these standing in a
-// field on a phone, so there is no jargon, no percentages without units, and
-// no mention of zones or devices by database id.
+// Telegram implementation of INotificationService: finds the Telegram chats for a
+// profile, zone or farm, writes a plain-language message and sends it.
+// Every public method catches everything (see INotificationService): a failed
+// message must never break onboarding, sensor ingestion or irrigation.
+// Every alert names the farm, says what is expected and when, and ends with what
+// to do. No jargon, no percentages without units, no database ids.
 public sealed class TelegramNotificationService : INotificationService
 {
     private const string NewLine = "\n";
@@ -47,10 +40,9 @@ public sealed class TelegramNotificationService : INotificationService
         _logger = logger;
     }
 
-    // Item 2c: every alert ends with a short "Why: ..." line and a "Why am I
-    // seeing this?" button. The explanation is saved first so the button can
-    // point at it; if it cannot be saved, the alert still goes, with the
-    // Why line but no button.
+    // Every alert ends with a short "Why: ..." line and a "Why am I seeing this?"
+    // button. The explanation is saved first so the button can point at it; if that
+    // fails the alert still goes, with the Why line but no button.
     private async Task<(string Message, long? WhyId)> WithWhyAsync(
         string message, long farmId, long? zoneId, string kind,
         AgroFlow.Business.Agronomy.RuleBook.Explanation explanation,
@@ -60,9 +52,7 @@ public sealed class TelegramNotificationService : INotificationService
         return (message + NewLine + NewLine + "Why: " + explanation.Summary, id);
     }
 
-    // ------------------------------------------------------------------
-    // SIGN-IN DETAILS
-    // ------------------------------------------------------------------
+    // Sign-in details
 
     public async Task NotifyFarmerWelcomeAsync(
         Guid profileId,
@@ -82,9 +72,7 @@ public sealed class TelegramNotificationService : INotificationService
                 return;
             }
 
-            // The APK may not exist yet. Saying so plainly beats sending a
-            // link that 404s on a farmer standing in a field with the
-            // installer already packing up.
+            // The APK may not be published yet; saying so is better than sending a link that 404s.
             var appLine = string.IsNullOrWhiteSpace(_apkOptions.DownloadUrl)
                 ? "The AgroFlow app download is coming soon. We will send you the link here as soon as it is ready."
                 : "Download the AgroFlow app here:" + NewLine + _apkOptions.DownloadUrl;
@@ -156,9 +144,7 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // ------------------------------------------------------------------
-    // A ZONE AGROFLOW COULD NOT WATER ITSELF
-    // ------------------------------------------------------------------
+    // A zone AgroFlow could not water itself
 
     public async Task NotifyZoneCriticalAsync(
         long zoneId,
@@ -171,9 +157,8 @@ public sealed class TelegramNotificationService : INotificationService
             var zone = await GetZoneContextAsync(zoneId, cancellationToken);
             if (zone is null) return;
 
-            // Each reason is a different thing for the farmer to do. A message
-            // that just said "this zone is dry" would leave them to work out
-            // why nothing happened about it.
+            // Each reason means something different for the farmer to do, so the message
+            // says why nothing happened.
             var (cause, action) = reason switch
             {
                 ZoneCriticalReason.ManualMode => (
@@ -194,8 +179,7 @@ public sealed class TelegramNotificationService : INotificationService
                 "",
                 $"Farm: {zone.FarmName}",
                 $"Zone: {zone.ZoneName}",
-                // Item 2: never a % - the reading may be from a sensor whose
-                // wet/dry setup has not been done.
+                // Never a %: the sensor's wet/dry setup may not be done.
                 $"Soil sensor reading: {moisture:0.#}",
                 "",
                 cause,
@@ -213,9 +197,7 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // ------------------------------------------------------------------
-    // WEATHER
-    // ------------------------------------------------------------------
+    // Weather
 
     public async Task NotifyWeatherAsync(
         long farmId,
@@ -284,8 +266,8 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // "tomorrow" beats "2026-10-02" for someone reading on a phone, but only
-    // for the next few days - past that an actual date is clearer.
+    // "tomorrow" is easier to read on a phone than "2026-10-02", but only for the next
+    // few days; after that a real date is clearer.
     private static string DescribeDay(DateOnly date)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -300,9 +282,7 @@ public sealed class TelegramNotificationService : INotificationService
         };
     }
 
-    // ------------------------------------------------------------------
-    // EQUIPMENT
-    // ------------------------------------------------------------------
+    // Equipment
 
     public async Task NotifySystemFailureAsync(
         long farmId,
@@ -400,9 +380,7 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // ------------------------------------------------------------------
-    // REQUEST STATUS
-    // ------------------------------------------------------------------
+    // Request status
 
     public async Task NotifyRequestStatusAsync(
         Guid profileId,
@@ -432,9 +410,8 @@ public sealed class TelegramNotificationService : INotificationService
             lines.Add("");
             lines.Add("Send /status at any time to see all your open requests.");
 
-            // Request updates deliberately ignore telegram_alerts_enabled:
-            // someone who muted weather and equipment messages still needs to
-            // know a technician is on the way to their farm.
+            // Request updates ignore telegram_alerts_enabled: someone who muted weather and
+            // equipment messages still needs to know a technician is coming.
             await _client.SendMessageAsync(chatId.Value, Compose(lines.ToArray()), cancellationToken);
         }
         catch (Exception ex)
@@ -443,9 +420,7 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // ------------------------------------------------------------------
-    // FARM / ZONE REQUESTS (step 7)
-    // ------------------------------------------------------------------
+    // Farm / zone requests
 
     public async Task NotifyFarmRequestAsync(
         Guid profileId,
@@ -458,10 +433,8 @@ public sealed class TelegramNotificationService : INotificationService
 
             if (chatId is null)
             {
-                // Not an error. A farmer who has never pressed Start in the
-                // bot has no chat for anything to be sent to, and a bot
-                // cannot message anyone first - so this is the ordinary state
-                // for part of the user base, logged and skipped.
+                // Not an error: a farmer who never pressed Start has no chat, and a bot cannot
+                // message first, so we log it and skip.
                 _logger.LogInformation(
                     "Skipped the {Stage} message for request {RequestId}: profile {ProfileId} has no linked Telegram chat.",
                     notification.Stage, notification.RequestId, profileId);
@@ -482,10 +455,8 @@ public sealed class TelegramNotificationService : INotificationService
 
             if (message is null) return;
 
-            // Deliberately NOT gated on telegram_alerts_enabled - same
-            // reasoning as NotifyRequestStatusAsync above: someone who muted
-            // weather and equipment messages still needs to know a technician
-            // is coming to their farm.
+            // Not limited by telegram_alerts_enabled, for the same reason as
+            // NotifyRequestStatusAsync: they still need to know a technician is coming.
             await _client.SendMessageAsync(chatId.Value, message, cancellationToken);
         }
         catch (Exception ex)
@@ -494,8 +465,8 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // Item 6c: the same recipients as a farm request - every admin with a
-    // linked chat - for any work-queue notice. Never throws.
+    // The same recipients as a farm request (every admin with a linked chat), for any
+    // work-queue notice. Never throws.
     public async Task NotifyAdminsAsync(string message, CancellationToken cancellationToken)
     {
         try
@@ -530,10 +501,8 @@ public sealed class TelegramNotificationService : INotificationService
             var message = FarmRequestMessages.AdminSubmitted(
                 notification.FarmerName, notification.RequestType, notification.Location);
 
-            // Every admin with a linked chat. Not filtered on
-            // telegram_alerts_enabled: that preference is about weather and
-            // equipment noise on a farmer's phone, and an admin who linked
-            // the bot at all did so to receive exactly this.
+            // Every admin with a linked chat, whatever telegram_alerts_enabled says: that
+            // preference is about a farmer's alert noise, and an admin linked the bot for this.
             var chatIds = new List<long>();
 
             await using (var connection = await _dataSource.OpenConnectionAsync(cancellationToken))
@@ -558,8 +527,8 @@ public sealed class TelegramNotificationService : INotificationService
                 return;
             }
 
-            // Sequential, for the same reason BroadcastToFarmAsync is: a
-            // handful of recipients, and Telegram rate-limits bots.
+            // One by one, like BroadcastToFarmAsync: only a few recipients, and Telegram
+            // rate-limits bots.
             foreach (var chatId in chatIds)
             {
                 await _client.SendMessageAsync(chatId, message, cancellationToken);
@@ -571,9 +540,8 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // Maps whatever the admin stores to something a farmer reads without
-    // having to interpret it. Unknown values pass through unchanged rather
-    // than being hidden, so a status added later still reaches the farmer.
+    // Turns the stored status into words a farmer understands. Unknown values pass
+    // through unchanged, so a new status still reaches the farmer.
     public static string DescribeRequestStatus(string status) => status.Trim().ToLowerInvariant() switch
     {
         "received" or "pending" or "open" => "Received - we have it and will be in touch",
@@ -584,12 +552,9 @@ public sealed class TelegramNotificationService : INotificationService
         _ => status,
     };
 
-    // ------------------------------------------------------------------
-    // RECIPIENT RESOLUTION
-    // ------------------------------------------------------------------
+    // Recipient resolution
 
-    // Blank entries are dropped rather than producing double blank lines, so
-    // an absent optional detail does not leave a hole in the message.
+    // Blank entries are dropped, so a missing optional detail does not leave a gap.
     private static string Compose(params string[] lines)
     {
         var cleaned = new List<string>(lines.Length);
@@ -620,9 +585,8 @@ public sealed class TelegramNotificationService : INotificationService
         return result is long chatId ? chatId : null;
     }
 
-    // Everyone attached to the farm - the owner and every farm_member - who
-    // has linked a chat and has alerts switched on. A farm can legitimately
-    // have several people on it, and equipment failing concerns all of them.
+    // Everyone on the farm (the owner and every farm_member) who has linked a chat and
+    // has alerts on: equipment failing concerns all of them.
     private async Task BroadcastToFarmAsync(
         long farmId,
         string message,
@@ -664,10 +628,8 @@ public sealed class TelegramNotificationService : INotificationService
             return;
         }
 
-        // Sequential on purpose. Telegram rate-limits bots at roughly 30
-        // messages a second overall, and an AgroFlow farm has a handful of
-        // members rather than thousands - a parallel fan-out would buy nothing
-        // and risk 429s.
+        // One by one on purpose: Telegram allows about 30 bot messages a second, and a farm
+        // has only a few members, so sending in parallel gains nothing and risks 429s.
         foreach (var chatId in chatIds)
         {
             await _client.SendMessageAsync(chatId, message, whyExplanationId, cancellationToken);
@@ -693,8 +655,7 @@ public sealed class TelegramNotificationService : INotificationService
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        // Null when the zone was deleted between the reading and the
-        // notification - nothing to say, and nobody to say it to.
+        // Null when the zone was deleted between the reading and this message: nothing to say.
         if (!await reader.ReadAsync(cancellationToken)) return null;
 
         return new ZoneContext(reader.GetInt64(0), reader.GetString(1), reader.GetString(2));

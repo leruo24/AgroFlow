@@ -6,15 +6,9 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Reports;
 
-/// One zone, one period, everything the designed report prints.
-///
-/// WHY A MODEL RATHER THAN QUERYING FROM THE RENDERERS
-/// Two things render this: the PDF and the workbook. The brief's two
-/// templates are the same report in two formats, and the first thing that
-/// would go wrong is the spreadsheet disagreeing with the document - a
-/// rounded figure in one, a raw one in the other, a day included here and
-/// excluded there. Gathering once and handing the same numbers to both makes
-/// that impossible rather than merely unlikely.
+/// One zone, one period: everything the report prints.
+/// The PDF and the workbook both render from this one model, gathered once, so
+/// they can never disagree on a figure.
 internal sealed class WaterUsageReportModel
 {
     public required string FarmName { get; init; }
@@ -25,8 +19,7 @@ internal sealed class WaterUsageReportModel
     public required DateOnly To { get; init; }
     public required DateTimeOffset GeneratedAtSast { get; init; }
 
-    /// Null when the zone has no flow rate on file. Everything derived from
-    /// it is then null too - see migration 0018.
+    /// Null when the zone has no flow rate; everything derived from it is null too (0018).
     public double? FlowRateLpm { get; init; }
 
     public required IReadOnlyList<DayLine> Days { get; init; }
@@ -34,9 +27,8 @@ internal sealed class WaterUsageReportModel
     public required IReadOnlyList<double> PumpPositions { get; init; }
     public required IReadOnlyList<AdviceLine> Advice { get; init; }
 
-    /// "Peak growth, day 72 of 145". Null when the crop or planting date is
-    /// not set, in which case the report simply does not mention a stage
-    /// rather than guessing one.
+    /// "Peak growth, day 72 of 145". Null when the crop or planting date is not set,
+    /// and the report then does not mention a stage.
     public string? GrowthStage { get; init; }
 
     /// The day the engine expects the soil to reach its watering point.
@@ -44,15 +36,14 @@ internal sealed class WaterUsageReportModel
     public double? NextWateringMinutes { get; init; }
     public double? NextWateringLitres { get; init; }
 
-    /* ---- Item 3: what the action report needs from the engine ------- */
+    /* ---- What the action report needs from the engine ------- */
 
-    /// Every insight for the zone, not just the four Advice lines - the
-    /// "This week, do this" list picks from all of them.
+    /// Every insight for the zone, not just the four Advice lines; "This week, do
+    /// this" picks from all of them.
     public IReadOnlyList<ZoneInsight> Insights { get; init; } = Array.Empty<ZoneInsight>();
 
-    /// The engine run behind the figures, for confidence, the next setup
-    /// step, the forecast and the technical appendix. Null when the zone has
-    /// no engine row (its columns missing) - the report then says so.
+    /// The engine run behind the figures, for confidence, the next setup step, the
+    /// forecast and the appendix. Null when the zone has no engine row; the report says so.
     public ZoneEngineInput? EngineInput { get; init; }
     public ZoneEngineResult? Engine { get; init; }
 
@@ -67,20 +58,13 @@ internal sealed class WaterUsageReportModel
     public int TotalRuns => Days.Sum(d => d.PumpRuns);
     public double TotalMinutes => Round(Days.Sum(d => d.PumpMinutes));
 
-    /// Every total is rounded to three decimals.
-    ///
-    /// Not cosmetic: summing seven doubles that are each already rounded to
-    /// two decimals produces the usual binary artefact, and 11 came out as
-    /// 10.999999999999998. The PDF hid that behind its display rounding, but
-    /// the workbook stores the raw value, so the cell read 11.0 and contained
-    /// something else - which anyone comparing or filtering on it would hit.
-    /// Three decimals is well past the precision of an estimate derived from
-    /// a nominal flow rate.
+    /// Every total is rounded to three decimals. Adding seven rounded doubles gave
+    /// 10.999999999999998 for 11, which the workbook would store as is. Three decimals
+    /// is far beyond the precision of an estimate anyway.
     private static double Round(double value) => Math.Round(value, 3);
 
-    /// Null if NO day could be estimated. A zone with no flow rate has no
-    /// water figure at all, which is different from a zone that was simply
-    /// not watered.
+    /// Null if no day could be estimated: a zone with no flow rate has no water figure,
+    /// which is different from a zone that was not watered.
     public double? TotalLitres =>
         Days.Any(d => d.Litres.HasValue) ? Round(Days.Sum(d => d.Litres ?? 0)) : null;
 
@@ -131,9 +115,8 @@ internal sealed class WaterUsageReportModel
         double? RainMm,
         string Note)
     {
-        /// "Mon 28" for charts, "Mon 28 Sep" for tables. Invariant culture:
-        /// .NET 8 on some hosts abbreviates September as "Sept", and this
-        /// string reaches a farmer in a Telegram caption.
+        /// "Mon 28" for charts, "Mon 28 Sep" for tables. Invariant culture, because some
+        /// hosts write "Sept" and this can reach a Telegram caption.
         public string ShortLabel =>
             Date.ToDateTime(TimeOnly.MinValue).ToString("ddd d", CultureInfo.InvariantCulture);
 
@@ -141,12 +124,11 @@ internal sealed class WaterUsageReportModel
             Date.ToDateTime(TimeOnly.MinValue).ToString("ddd d MMM", CultureInfo.InvariantCulture);
     }
 
-    // Item 2c: the insight's own explanation, for the "Why:" line.
+    // The insight's own explanation, for the "Why:" line.
     public sealed record AdviceLine(string Message, string Source, AgroFlow.Business.Agronomy.RuleBook.Explanation? Why = null);
 
-    // Item 2b/2c: the period's verdict comes from VerdictRules - not from a
-    // band hidden in the PDF - and carries its own explanation. Cached, so
-    // the PDF's "Why:" line and its appendix entry are the same object.
+    // The period's verdict comes from VerdictRules and carries its own explanation.
+    // Cached so the PDF's "Why:" line and its appendix entry are the same object.
     private AgroFlow.Business.Agronomy.RuleBook.Explanation? _verdictWhy;
     private bool _verdictBuilt;
 
@@ -174,17 +156,15 @@ internal sealed class WaterUsageReportModel
 /// Builds the model. All reads; nothing here writes.
 internal static class WaterUsageReportBuilder
 {
-    /// UTC+2, no DST.
+    /// SAST (UTC+2, no daylight saving).
     private static readonly TimeSpan Sast = TimeSpan.FromHours(2);
 
-    /// How far the engine's balance window reaches back. A report older than
-    /// this cannot carry crop-need or moisture figures, and says so rather
-    /// than leaving the reader to wonder why those columns are empty.
+    /// How far back the engine's balance reaches. A report older than this cannot show
+    /// crop-need or moisture figures, and says so.
     public const int EngineWindowDays = Fao56EngineController.BalanceWindowDays;
 
-    /// Returns null when the zone does not exist or the caller does not own
-    /// it. The caller turns that into a 404, so a farmer probing zone ids
-    /// cannot tell "not yours" from "not there".
+    /// Security: returns null when the zone does not exist or the caller does not own
+    /// it. The caller turns that into a 404, so "not yours" and "not there" look the same.
     public static async Task<WaterUsageReportModel?> BuildAsync(
         NpgsqlConnection connection,
         Fao56EngineController engine,
@@ -227,15 +207,14 @@ internal static class WaterUsageReportBuilder
             farmName = reader.IsDBNull(7) ? "Farm" : reader.GetString(7);
         }
 
-        // Item 6b: a past period keeps the crop that was growing then.
+        // A past period keeps the crop that was growing then.
         var cropChanges = await CropHistory.ReadAsync(connection, zoneId, ct);
         var (cropThen, _) = CropHistory.AsOf(cropType, null, cropChanges, to);
         cropType = cropThen;
 
         /* ---- 2. Pump runs per day ------------------------------------- */
-        // Grouped in SAST, not UTC. A run at 01:30 local belongs to that
-        // morning; grouped in UTC it lands on the previous day and the chart
-        // shows water arriving the night before it did.
+        // Grouped in SAST, not UTC: a run at 01:30 local belongs to that morning, not
+        // the previous day.
         const string eventSql = """
             select (started_at at time zone 'Africa/Johannesburg')::date as day,
                    count(*),
@@ -344,11 +323,8 @@ internal static class WaterUsageReportBuilder
         }
 
         /* ---- 6. The engine: crop need, weather, stage, next watering --- */
-        //
-        // Anchored on the report's LAST day rather than on today, so a report
-        // for last week is built from a balance that ended last week. Anchored
-        // on today instead, the "next watering" line would answer a question
-        // about a period the report does not cover.
+        // Anchored on the report's last day instead of today, so last week's report uses
+        // a balance that ended last week and its "next watering" fits that period.
         var engineZone = engine.Data.GetZone(zoneId);
         ZoneEngineResult? engineResult = null;
         ZoneEngineInput? engineInput = null;
@@ -373,11 +349,9 @@ internal static class WaterUsageReportBuilder
 
             engineResult = Fao56Engine.Run(input);
 
-            // ZoneInsightBuilder.Build directly, NOT engine.RunActNowChecks.
-            // That method writes the insights it finds (and handles DHT
-            // faults) as a side effect, which is right when the scheduler
-            // calls it and wrong here: producing a report must not change
-            // what the farmer sees in the app. The builder itself is pure.
+            // We call ZoneInsightBuilder.Build directly, not engine.RunActNowChecks, because
+            // that saves insights as a side effect. Making a report must not change what the
+            // farmer sees in the app; the builder is pure.
             var signals = engine.BuildFaultSignals(engineZone, anchor);
             insights = ZoneInsightBuilder.Build(input, engineResult, signals);
         }
@@ -393,19 +367,17 @@ internal static class WaterUsageReportBuilder
             runsByDay.TryGetValue(date, out var runs);
             var minutes = runs.Seconds / 60.0;
 
-            // The formula from migration 0018, and the only place litres are
-            // ever derived. Null when the zone has no flow rate, never 0.
+            // The formula from migration 0018, the only place litres are worked out.
+            // Null when the zone has no flow rate, never 0.
             double? litres = flowRate.HasValue ? minutes * flowRate.Value : null;
 
-            // A hand-logged watering given in litres, not minutes, adds its
-            // litres as the farmer gave them.
+            // A hand-logged watering given in litres adds the litres the farmer entered.
             if (runs.HandLitres > 0) litres = (litres ?? 0) + runs.HandLitres;
 
             balanceByDay.TryGetValue(date, out var balance);
 
-            // ETc is a depth in mm. Litres need an area: 1 mm over 1 m^2 is
-            // 1 litre. A zone with no area recorded therefore has no need
-            // figure - the depth alone cannot be turned into a volume.
+            // ETc is a depth in mm and 1 mm over 1 m² is 1 litre, so a zone with no area
+            // has no need figure.
             double? needLitres = balance?.EtcAdjustedMm is { } mm && areaM2 is { } area
                 ? mm * area
                 : null;
@@ -456,9 +428,8 @@ internal static class WaterUsageReportBuilder
             .ToList();
 
         /* ---- 9. Advice, with where each line came from ----------------- */
-        // Act-now first, then the rest, capped at four. The template shows
-        // three; four is the point where a farmer stops reading a numbered
-        // list, and anything past it would be the least urgent item anyway.
+        // Act-now first, then the rest, at most four: past that a farmer stops reading
+        // a numbered list.
         var advice = insights
             .OrderBy(i => i.Severity == InsightSeverity.ActNow ? 0 : 1)
             .Take(4)
@@ -498,10 +469,9 @@ internal static class WaterUsageReportBuilder
         };
     }
 
-    /// The one-line note in the daily table. Deliberately plain, and never a
-    /// judgement the data does not support: with no need figure to compare
-    /// against, it reports what happened rather than whether it was right.
-    // Item 6: entries typed in by the farmer are labelled as such.
+    /// The one-line note in the daily table. Plain, and never a judgement the data
+    /// cannot support: with no need figure we only say what happened.
+    // Entries typed in by the farmer are labelled as such.
     internal static string HandPrefix(int byHand) => byHand switch
     {
         0 => string.Empty,
