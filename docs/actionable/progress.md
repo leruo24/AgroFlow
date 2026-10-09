@@ -189,7 +189,7 @@ below RAW **p. 169**; sensitive stage **p. 176**, with mid-season defined on
   `WaterRules.AtOrBelowFarmerThreshold`.
 - `water_now` with no zone size now uses the brief's own sentence: "For each
   square metre, run the pump about N minutes".
-- `docs/rule-book.md` is **generated** by `RuleBookDocument.cs` from the
+- `docs/engine/rule-book.md` is **generated** by `RuleBookDocument.cs` from the
   rules themselves - every outcome and farmer sentence is computed, never
   typed - and a test fails if it drifts. Includes the brief's soil × stage ×
   RAW × rain table and "Needs another source".

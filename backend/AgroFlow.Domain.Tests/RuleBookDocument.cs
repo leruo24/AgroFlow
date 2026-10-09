@@ -10,7 +10,7 @@ using Xunit;
 
 namespace AgroFlow.Domain.Tests;
 
-// Item 2b: docs/rule-book.md is GENERATED from the rules, so it cannot drift
+// Item 2b: docs/engine/rule-book.md is GENERATED from the rules, so it cannot drift
 // from the code. Every "outcome" and every farmer sentence below is what the
 // code returns for those inputs - computed here, never typed.
 //
@@ -22,7 +22,7 @@ public class RuleBookDocumentTests
     [Fact]
     public void RuleBookDocument_MatchesTheCode()
     {
-        var path = Path.Combine(FindRepoRoot(), "docs", "rule-book.md");
+        var path = Path.Combine(FindRepoRoot(), "docs", "engine", "rule-book.md");
         var generated = RuleBookDocument.Build();
 
         if (Environment.GetEnvironmentVariable("AGROFLOW_WRITE_RULEBOOK") == "1")
@@ -30,11 +30,11 @@ public class RuleBookDocumentTests
             File.WriteAllText(path, generated, new UTF8Encoding(false));
         }
 
-        Assert.True(File.Exists(path), "docs/rule-book.md is missing. Regenerate it: AGROFLOW_WRITE_RULEBOOK=1 dotnet test --filter RuleBookDocument");
+        Assert.True(File.Exists(path), "docs/engine/rule-book.md is missing. Regenerate it: AGROFLOW_WRITE_RULEBOOK=1 dotnet test --filter RuleBookDocument");
 
         var committed = File.ReadAllText(path).Replace("\r\n", "\n");
         Assert.True(committed == generated.Replace("\r\n", "\n"),
-            "docs/rule-book.md no longer matches the rules in code. Regenerate it: AGROFLOW_WRITE_RULEBOOK=1 dotnet test --filter RuleBookDocument");
+            "docs/engine/rule-book.md no longer matches the rules in code. Regenerate it: AGROFLOW_WRITE_RULEBOOK=1 dotnet test --filter RuleBookDocument");
     }
 
     [Fact]

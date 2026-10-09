@@ -13,7 +13,7 @@ is [progress.md](progress.md); the plan with every acceptance criterion is
 | Pre-flight | done | 116f773 | Clean tree on `dev`, branch cut, baseline recorded (650 tests, 73 routes, firmware v1.4.0 and mobile contracts) in `baseline.md`. |
 | 0b - one action per tap | done | 43a9ce0 | Panel intents, single-flight writes and a navigation lock; rapid-click Playwright and jest tests. |
 | 2 - advice never blocked | done | 68ce29d | Engine advises with only crop + weather, labelled Medium/Low with the one next step; High only with full setup and a fresh calibrated reading. `AdviceNeverBlockedTests`. |
-| 2b - the rule book | done | 6888586 | Every rule in `RuleBook/` with an FAO-56 page or a DATA RULE; `docs/rule-book.md` generated from code; `RuleBookTests`. |
+| 2b - the rule book | done | 6888586 | Every rule in `RuleBook/` with an FAO-56 page or a DATA RULE; `docs/engine/rule-book.md` generated from code; `RuleBookTests`. |
 | 2c - "Why am I seeing this?" | done | 70a1c31, d3040c3, 86ad320, 41d351e, 4342ef4 | Explanations for every insight, alert, KPI and report line; Telegram Why button; admin and mobile Why sheets; no jargon outside the technical line (scanned). |
 | 3 - action reports | done | 154025b | One action-led report for all three types; real period wording; weather comparison only with local sensor data; samples in `docs/sample-reports/`. |
 | 4 - Reports page and automatic reports | done | 74efb2d | Daily / weekly on a chosen day / monthly, per zone, recipients, test send, one retry then an admin alert. |
@@ -74,7 +74,7 @@ The firmware needs **no reflash**: the contract review found no mismatch
 ## 5. Rule book - "Needs another source"
 
 What FAO-56 cannot answer, kept out of the app until a source is found
-(full table in [docs/rule-book.md](../rule-book.md)):
+(full table in [docs/engine/rule-book.md](../engine/rule-book.md)):
 
 - How slowly clay should be watered to avoid run-off (infiltration rates).
 - Which stage of each crop is most sensitive, and the yield lost (FAO Papers 33 / 66).
