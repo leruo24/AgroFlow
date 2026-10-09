@@ -90,6 +90,7 @@ export const WELCOME_HTML = `
         <span class="landing-wordmark">AgroFlow</span>
       </div>
       <nav class="landing-nav" aria-label="Public website">
+        <a href="#experience">Experience</a>
         <a href="#solutions">Solutions</a>
         <a href="#how-it-works">How it works</a>
         <a href="#technology">Technology</a>
@@ -118,6 +119,26 @@ export const WELCOME_HTML = `
           <li><b>Platform</b><span>FAO-56-informed advice</span></li>
           <li><b>Irrigation</b><span>Controlled pump output</span></li>
         </ul>
+      </section>
+
+      <section class="landing-experience" id="experience" aria-labelledby="experienceHeading">
+        <div class="landing-experience-copy">
+          <p class="landing-eyebrow">Experience AgroFlow</p>
+          <h2 id="experienceHeading">See irrigation decisions come to life.</h2>
+          <p>Explore a live 3D field, respond to AgroFlow's recommendation, start an irrigation cycle and see how changing weather reshapes the plan.</p>
+          <button type="button" class="btn landing-experience-launch" data-experience-launch>
+            Launch interactive demo <span aria-hidden="true">→</span>
+          </button>
+          <small>No login, real devices or farm data. This is a deterministic demonstration.</small>
+        </div>
+        <div class="landing-experience-preview" aria-hidden="true">
+          <div class="landing-experience-sky"></div>
+          <div class="landing-experience-field">
+            <i></i><i></i><i></i><i></i>
+          </div>
+          <div class="landing-experience-controller"><b>AgroFlow</b><span></span></div>
+          <div class="landing-experience-card"><b>WATER TODAY</b><span>8 mm · 1,600 L</span></div>
+        </div>
       </section>
 
       <section class="hardware-showcase" aria-labelledby="hardwareHeading" data-hardware-showcase>
@@ -183,10 +204,10 @@ export const WELCOME_HTML = `
               <div class="hardware-canvas" data-hardware-canvas></div>
 
               <div class="hardware-hotspots" aria-label="Hardware components">
-                <button type="button" data-hardware-hotspot="esp32" aria-label="ESP32 Controller" aria-controls="hardwareComponentInfo"><span>ESP32 Controller</span></button>
+                <button type="button" data-hardware-hotspot="esp32" aria-label="ESP32 Controller" aria-controls="hardwareComponentInfo" hidden><span>ESP32 Controller</span></button>
                 <button type="button" data-hardware-hotspot="soil" aria-label="Soil Moisture Sensor" aria-controls="hardwareComponentInfo"><span>Soil Moisture Sensor</span></button>
                 <button type="button" data-hardware-hotspot="dht" aria-label="Temperature &amp; Humidity Sensor" aria-controls="hardwareComponentInfo"><span>Temperature &amp; Humidity Sensor</span></button>
-                <button type="button" data-hardware-hotspot="relay" aria-label="5 V Relay Module" aria-controls="hardwareComponentInfo"><span>5 V Relay Module</span></button>
+                <button type="button" data-hardware-hotspot="relay" aria-label="5 V Relay Module" aria-controls="hardwareComponentInfo" hidden><span>5 V Relay Module</span></button>
                 <button type="button" data-hardware-hotspot="pump" aria-label="Pump / Irrigation Output" aria-controls="hardwareComponentInfo"><span>Pump / Irrigation Output</span></button>
                 <button type="button" data-hardware-hotspot="power" aria-label="Power Input" aria-controls="hardwareComponentInfo"><span>Power Input</span></button>
               </div>
@@ -297,4 +318,16 @@ export function wireWelcome(root: HTMLElement, onLogin: () => void): void {
     .forEach((button) => button.addEventListener("click", onLogin));
   wireEnquiry(root);
   initHardwareShowcase(root);
+  root.querySelector<HTMLButtonElement>("[data-experience-launch]")?.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    button.textContent = "Preparing the field…";
+    try {
+      const { mountExperience } = await import("@/experience/mount");
+      mountExperience();
+    } finally {
+      button.disabled = false;
+      button.innerHTML = 'Launch interactive demo <span aria-hidden="true">→</span>';
+    }
+  });
 }

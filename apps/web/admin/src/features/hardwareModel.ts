@@ -338,7 +338,7 @@ function makeBoardLabelTexture(THREE: ThreeModule, title: string, subtitle: stri
   return texture;
 }
 
-function buildHardwareModel(THREE: ThreeModule): HardwareModel {
+export function buildHardwareModel(THREE: ThreeModule): HardwareModel {
   const root = new THREE.Group();
   root.position.y = 0.32;
 

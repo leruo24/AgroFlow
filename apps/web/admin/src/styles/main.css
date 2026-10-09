@@ -1160,6 +1160,42 @@ tbody tr:last-child td{border-bottom:none}
    view. The pale product stage deliberately borrows the existing surface,
    border, green and teal tokens rather than introducing a second visual
    language inside the landing page. */
+.landing-experience{
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(0,.9fr) minmax(420px,1.1fr);
+  gap:clamp(32px,6vw,86px);
+  align-items:center;
+  margin:0 auto 92px;
+  padding:clamp(36px,5vw,72px);
+  max-width:1180px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:34px;
+  background:linear-gradient(135deg,rgba(10,48,51,.96),rgba(9,38,39,.9));
+  box-shadow:0 32px 80px rgba(4,25,25,.28);
+}
+.landing-experience::after{
+  content:""; position:absolute; inset:auto -10% -55% 30%; height:90%; pointer-events:none;
+  background:radial-gradient(ellipse,rgba(29,159,153,.17),transparent 68%);
+}
+.landing-experience-copy{ position:relative; z-index:2; }
+.landing-experience-copy h2{ margin:8px 0 16px; max-width:560px; color:#fff; font-size:clamp(2rem,4.4vw,3.55rem); line-height:1.02; letter-spacing:-.045em; }
+.landing-experience-copy>p:not(.landing-eyebrow){ color:rgba(235,249,246,.76); font-size:1.07rem; line-height:1.7; }
+.landing-experience-copy .landing-eyebrow{ color:#78d5ce; }
+.landing-experience-launch{ margin-top:22px; min-height:52px; gap:12px; }
+.landing-experience-copy small{ display:block; margin-top:14px; color:rgba(230,245,242,.55); }
+.landing-experience-preview{ position:relative; min-height:400px; overflow:hidden; border:1px solid rgba(255,255,255,.16); border-radius:25px; background:#b7d9db; box-shadow:0 24px 54px rgba(0,0,0,.28); transform:perspective(900px) rotateY(-4deg) rotateX(1deg); }
+.landing-experience-sky{ position:absolute; inset:0 0 38%; background:linear-gradient(#8fc9e3,#e8e0b5); }
+.landing-experience-field{ position:absolute; inset:42% -5% -10%; overflow:hidden; background:linear-gradient(#5c7d42 0 20%,#775139 20%); transform:perspective(500px) rotateX(52deg); transform-origin:top; }
+.landing-experience-field i{ position:absolute; top:8%; bottom:-20%; width:14%; border-radius:50%; background:repeating-linear-gradient(90deg,#315f35 0 10px,#6a4d34 10px 23px); }
+.landing-experience-field i:nth-child(1){ left:6%; }.landing-experience-field i:nth-child(2){ left:30%; }.landing-experience-field i:nth-child(3){ left:54%; }.landing-experience-field i:nth-child(4){ left:78%; }
+.landing-experience-controller{ position:absolute; top:25%; left:13%; display:grid; place-items:center; width:116px; height:96px; color:#1a5f55; font-size:.83rem; border:7px solid #d6d3c9; border-radius:10px; background:#eeeae0; box-shadow:0 15px 20px rgba(0,0,0,.22); }
+.landing-experience-controller::after{ content:""; position:absolute; top:100%; width:12px; height:146px; background:#737c76; }
+.landing-experience-controller span{ position:absolute; top:8px; right:8px; width:8px; height:8px; border-radius:50%; background:#62c971; box-shadow:0 0 0 4px rgba(98,201,113,.18); }
+.landing-experience-card{ position:absolute; right:20px; bottom:20px; display:flex; flex-direction:column; gap:4px; min-width:184px; padding:16px 18px; color:#183937; border-radius:15px; background:rgba(255,255,255,.92); box-shadow:0 12px 30px rgba(0,0,0,.2); }
+.landing-experience-card b{ color:#147b82; font-size:.75rem; letter-spacing:.08em; }.landing-experience-card span{ font-size:.9rem; }
+
 .hardware-showcase{
   position:relative;
   margin:0 calc(50% - 50vw);
@@ -1582,10 +1618,14 @@ tbody tr:last-child td{border-bottom:none}
   .landing-proof{ grid-template-columns:1fr; }
   .landing-footer{ flex-direction:column; }
   .hardware-viewer .hardware-hotspots button span{ max-width:112px; white-space:normal; font-size:.57rem; }
+  .landing-experience-preview{ min-height:280px; }
+  .landing-experience-card{ right:12px; bottom:12px; min-width:160px; }
 }
 
 @media (max-width:800px){
   .landing-nav{ display:none; }
+  .landing-experience{ grid-template-columns:1fr; margin-bottom:58px; padding:28px 20px; border-radius:24px; }
+  .landing-experience-preview{ transform:none; }
   .public-technology,.public-about{ grid-template-columns:1fr; }
   .hardware-showcase{
     margin-top:52px;
