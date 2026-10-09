@@ -69,5 +69,3 @@ export const SCENARIOS: Record<ScenarioId, ScenarioDefinition> = {
     reason: "The field sensor indicates wetter local conditions than the weather-based estimate. Check the zone before irrigating.",
   },
 };
-
-export const SCENARIO_ORDER: ScenarioId[] = ["HOT_DRY", "HEAVY_RAIN", "SENSOR_DISAGREEMENT"];

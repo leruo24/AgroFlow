@@ -333,14 +333,6 @@ export function skeletonPage(): string {
 
 /* ------------------------------ small bits ------------------------------- */
 
-export function statPill(label: string, value: string, tone: BadgeTone = "neutral"): string {
-  return `<div class="stat-pill tone-${tone}"><span>${esc(label)}</span><b>${esc(value)}</b></div>`;
-}
-
 export function meter(pct: number, tone = "good"): string {
   return `<div class="meter meter-${esc(tone)}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;
-}
-
-export function detailRow(label: string, value: string): string {
-  return `<div class="detail-row"><span>${esc(label)}</span><b>${value}</b></div>`;
 }

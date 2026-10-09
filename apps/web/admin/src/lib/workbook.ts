@@ -221,30 +221,6 @@ export async function exportActivityWorkbook(rows: AuditRow[]): Promise<void> {
 /* For the places that already have headers and rows and just need a real
    .xlsx instead of a CSV. Same freeze and filter treatment as the sheets
    above, so every export in the console behaves the same way when opened. */
-export async function exportRowsWorkbook(
-  filename: string,
-  sheetName: string,
-  headers: string[],
-  rows: (string | number)[][],
-): Promise<void> {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = "AgroFlow";
-  wb.created = new Date();
-
-  // Excel rejects a sheet name over 31 characters or containing : \ / ? * [ ]
-  // and fails to open the whole file rather than ignoring the name.
-  const safeName = sheetName.replace(/[:\/?*[\]]/g, " ").slice(0, 31) || "Data";
-
-  const ws = wb.addWorksheet(safeName);
-  ws.columns = headers.map((h) => ({ header: h, width: Math.max(14, Math.min(48, h.length + 8)) }));
-  styleHeader(ws.getRow(1));
-
-  for (const row of rows) ws.addRow(row);
-
-  ws.views = [{ state: "frozen", ySplit: 1 }];
-
-  await download(wb, filename);
-}
 
 /* ------------------------------------------------------------------ *
  * CSV, written so Excel can actually open it

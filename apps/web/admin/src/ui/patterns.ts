@@ -295,55 +295,6 @@ export type DetailAction = {
   tone?: "primary" | "ghost" | "danger";
 };
 
-/* Replaces the row of tiny text links.
- *
- * Clicking a row opens one place that holds everything about that item -
- * its fields, the things it is related to (each a link), and its actions as
- * real buttons with labels rather than four-character words squeezed into a
- * table cell. */
-export function detailPanel(opts: {
-  title: string;
-  subtitle?: string;
-  badgeHtml?: string;
-  sections: DetailSection[];
-  actions?: DetailAction[];
-}): string {
-  return `
-    <div class="detail">
-      <div class="detail-head">
-        <div>
-          <h3>${esc(opts.title)}</h3>
-          ${opts.subtitle ? `<p class="muted">${esc(opts.subtitle)}</p>` : ""}
-        </div>
-        ${opts.badgeHtml ?? ""}
-      </div>
-
-      ${opts.actions?.length
-        ? `<div class="detail-actions">
-             ${opts.actions
-               .map(
-                 (a) => `
-               <button
-                 class="btn ${a.tone === "danger" ? "danger" : a.tone === "ghost" ? "ghost" : ""}"
-                 data-act="${esc(a.act)}"${a.id ? ` data-id="${esc(a.id)}"` : ""}
-               >${esc(a.label)}</button>`,
-               )
-               .join("")}
-           </div>`
-        : ""}
-
-      ${opts.sections
-        .map(
-          (s) => `
-        <section class="detail-section">
-          <h6>${esc(s.title)}</h6>
-          ${s.bodyHtml}
-        </section>`,
-        )
-        .join("")}
-    </div>`;
-}
-
 /* A list of label/value rows inside a detail section. */
 export function detailList(rows: [string, string][]): string {
   if (rows.length === 0) return `<p class="muted">Nothing recorded.</p>`;
@@ -360,24 +311,6 @@ export function detailList(rows: [string, string][]): string {
    the "farmer ↔ farms ↔ zones ↔ kit ↔ alerts ↔ requests" chain: from any one
    of them you can reach the others without going back to a list and
    searching. */
-export function relatedList(
-  items: { label: string; secondary?: string; act: string; id: string }[],
-  emptyText = "None.",
-): string {
-  if (items.length === 0) return `<p class="muted">${esc(emptyText)}</p>`;
-
-  return `<ul class="related-list">${items
-    .map(
-      (i) => `
-      <li>
-        <a href="#" data-act="${esc(i.act)}" data-id="${esc(i.id)}">
-          <b>${esc(i.label)}</b>
-          ${i.secondary ? `<span>${esc(i.secondary)}</span>` : ""}
-        </a>
-      </li>`,
-    )
-    .join("")}</ul>`;
-}
 
 /* ------------------------------------------------------------------ *
  * The "needs attention" queue
@@ -460,26 +393,6 @@ export function attentionQueue(cards: AttentionCard[], dismissals: Dismissal[] =
 /* ------------------------------------------------------------------ *
  * Confirmation
  * ------------------------------------------------------------------ */
-
-/* The body of a confirm dialog for something that cannot be undone.
- *
- * `consequence` is the sentence that matters: not "Are you sure?" but what
- * will actually happen, in words. Archive and disable are preferred over
- * delete everywhere, and where both exist the dialog says which is which. */
-export function confirmBody(opts: {
-  consequence: string;
-  detail?: string;
-  alternative?: string;
-}): string {
-  return `
-    <div class="confirm-body">
-      <p class="confirm-consequence">${esc(opts.consequence)}</p>
-      ${opts.detail ? `<p class="muted">${esc(opts.detail)}</p>` : ""}
-      ${opts.alternative
-        ? `<p class="confirm-alt">${esc(opts.alternative)}</p>`
-        : ""}
-    </div>`;
-}
 
 /* ------------------------------------------------------------------ *
  * Item 5: who is handling an item

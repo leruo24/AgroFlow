@@ -46,11 +46,3 @@ export const ZONE_CROPS = [
 /** The same set as labels, for filter dropdowns. */
 export const CROPS = ZONE_CROPS.map((c) => c.label);
 
-export const EVENT_TYPE_OPTIONS = [
-  "User created", "User edited", "User disabled", "User enabled", "User deleted",
-  "Password reset", "Farm registered", "Farm approved", "Farm deactivated",
-  "Hardware replaced", "Hardware removed", "Alert assigned", "Alert escalated",
-  "Alert resolved", "Alert closed", "Maintenance scheduled", "Maintenance completed",
-  "Schedule edited", "Schedule deleted", "Report generated",
-] as const;
-
