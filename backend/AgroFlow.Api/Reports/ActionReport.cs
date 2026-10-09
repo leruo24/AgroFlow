@@ -4,20 +4,18 @@ using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Api.Reports;
 
-// Every farmer report (water usage, soil moisture, watering schedule; one
-// zone or all of them) is built around what to DO, in this order:
+// Every farmer report (water usage, soil moisture, watering schedule; one zone
+// or all) is built around what to do, in this order:
 //
 //   1. This week, do this        1-5 actions: when, how much, how sure, why
 //   2. How your farm did          the period in boxes, one verdict per zone
 //   3. Three questions            needed vs given / healthy soil / what's coming
 //   4. Area weather vs at plants  only days a local field sensor reported
 //   5. Improve your advice        one setup step per zone, grouped
-//   6. Technical appendix         ALL the jargon, and nowhere else
+//   6. Technical appendix         all the jargon, and nowhere else
 //
-// This file composes the WORDS; ActionReportPdf only lays them out. Keeping
-// the two apart is what lets a test read every sentence a farmer will see and
-// check it for jargon, ISO dates and repeats - which cannot be done against a
-// rendered PDF.
+// This file writes the words and ActionReportPdf lays them out, so a test can
+// check every farmer sentence for jargon, ISO dates and repeats.
 
 internal enum ReportKind
 {
@@ -82,8 +80,8 @@ internal sealed class ActionReportContent
         yield return Title;
         yield return Subtitle;
         yield return NoActionsLine;
-        // A reason shared by several zones is printed once; later lines point
-        // back to it (ReportWhy), so it is yielded once here too.
+        // A reason shared by several zones is printed once and later lines point back
+        // to it (ReportWhy), so we return it once here too.
         var reasons = new HashSet<string>(StringComparer.Ordinal);
         foreach (var a in Actions)
         {
@@ -104,8 +102,8 @@ internal static class ActionReport
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    // The brief's own bounds: at least one action when there is anything to
-    // do, never more than five - past that a farmer stops reading.
+    // At least one action when there is anything to do, and never more than five:
+    // past that a farmer stops reading.
     public const int MaxActions = 5;
 
     public static string TitleFor(ReportKind kind) => kind switch
@@ -275,8 +273,8 @@ internal static class ActionReport
         return "water as usual";
     }
 
-    // How much on the expected watering day: the forecast balance's dryness
-    // that day, through the same rule the app uses for "now".
+    // How much to give on the expected watering day: that day's forecast dryness,
+    // through the same rule the app uses for today.
     private static string ProjectedAmount(WaterUsageReportModel z, DateOnly day)
     {
         var planned = z.Engine?.Outlook.FirstOrDefault(d => d.Date == day);
@@ -297,7 +295,7 @@ internal static class ActionReport
         return $"about {N(Math.Round(dr.Value, 1))} mm";
     }
 
-    // The average run, scaled by need/given. Null without runs to scale.
+    // The average run, scaled by need/given. Null when there are no runs.
     private static int? ShortenTo(WaterUsageReportModel z, double factor)
     {
         if (z.TotalRuns <= 0 || z.TotalMinutes <= 0) return null;
@@ -361,7 +359,7 @@ internal static class ActionReport
         });
     }
 
-    /// The answer under "Was my soil in the healthy range?" - or why there is no chart.
+    /// The answer under "Was my soil in the healthy range?", or why there is no chart.
     public static ChartAnswer SoilAnswer(WaterUsageReportModel z, string period)
     {
         const string q = "Was my soil in the healthy range?";
@@ -420,14 +418,13 @@ internal static class ActionReport
         return cards;
     }
 
-    // One forecast card's action, read from each zone's rolling outlook for
-    // that day - the engine's plan, never a second rain rule.
+    // One forecast card's action, read from each zone's outlook for that day.
     internal static string ForecastAction(IReadOnlyList<WaterUsageReportModel> zones, DateOnly date)
     {
         IrrigationPrimaryAction? Planned(WaterUsageReportModel z)
         {
             if (z.Engine == null) return null;
-            // Terminal states have no outlook and need no crop water on any day.
+            // Not planted or season over: no outlook and no crop water on any day.
             if (z.Engine.PrimaryAction is IrrigationPrimaryAction.CropNotPlanted or IrrigationPrimaryAction.SeasonComplete)
                 return z.Engine.PrimaryAction;
             return z.Engine.Outlook.FirstOrDefault(d => d.Date == date)?.Action;
@@ -457,9 +454,8 @@ internal static class ActionReport
 
     public static List<WeatherRow> WeatherRows(IReadOnlyList<WaterUsageReportModel> zones)
     {
-        // One row per day a local sensor reported, across zones (the first zone
-        // that reported that day). Days without local data carry no comparison and
-        // are not printed at all - the old table was mostly "Sensor offline".
+        // One row per day a local sensor reported (the first zone that reported that
+        // day). Days without local data are left out.
         return zones
             .SelectMany(z => z.Days)
             .Where(d => d.LocalMaxC.HasValue || d.LocalHumidity.HasValue)
@@ -481,8 +477,8 @@ internal static class ActionReport
 
     public static List<string> ImproveSteps(IReadOnlyList<WaterUsageReportModel> zones)
     {
-        // Grouped by the step itself, so the same sentence is never printed
-        // once per zone: "North Plot and East Plot: Add the planting date ...".
+        // Grouped by the step, so the same sentence is printed once:
+        // "North Plot and East Plot: Add the planting date ...".
         return zones
             .Where(z => z.Engine?.NextStep != null)
             .GroupBy(z => z.Engine!.NextStep!.Ask)
@@ -510,7 +506,7 @@ internal static class ActionReport
         return new ZoneAppendix(z.ZoneName, facts, z.Engine?.Limitations.ToList() ?? new List<string> { "The FAO-56 engine did not run for this zone." });
     }
 
-    // A note that every zone carries is printed once, at farm level, not per zone.
+    // A note every zone has is printed once at farm level, not per zone.
     public static List<string> SharedNotes(IReadOnlyList<WaterUsageReportModel> zones)
     {
         if (zones.Count < 2) return new List<string>();

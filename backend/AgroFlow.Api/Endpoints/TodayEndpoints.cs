@@ -6,12 +6,10 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-// GET /api/farmer/farms/{farmId}/today: one card per zone with today's single
-// action, how sure we are, and the one setup step that would help. The mobile Home screen and the admin farm page
-// read the same thing, so an officer on the phone sees what the farmer sees.
-//
-// Read-only: the engine is run without persisting, exactly like the
-// confidence badge on the insights endpoint.
+// GET /api/farmer/farms/{farmId}/today: one card per zone with today's action,
+// how sure we are, and the setup step that would help most. The mobile Home
+// screen and the admin farm page read the same data.
+// Read-only: the engine runs without saving anything.
 public static class TodayEndpoints
 {
     public static void MapTodayEndpoints(this WebApplication app)
@@ -87,7 +85,7 @@ public static class TodayEndpoints
             }
             catch (Exception ex)
             {
-                // One zone the engine cannot read must not empty the screen.
+                // One zone that fails should not empty the whole screen.
                 logger.LogWarning(ex, "Could not work out today's action for zone {ZoneId}.", zone.ZoneId);
                 cards.Add(new
                 {
@@ -106,7 +104,7 @@ public static class TodayEndpoints
         return Results.Ok(new { farmId, day = today.ToString("yyyy-MM-dd"), zones = cards });
     }
 
-    // Farmers never get the technical line; admins do.
+    // Farmers never see the technical line; admins do.
     private static Explanation Plain(Explanation e, bool isAdmin)
     {
         if (!isAdmin) e.Technical = string.Empty;

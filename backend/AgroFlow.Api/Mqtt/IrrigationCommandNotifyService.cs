@@ -7,27 +7,12 @@ namespace AgroFlow.Api.Mqtt;
 public record IrrigationCommandNotification(
     Guid Id, long ZoneId, string Command, int? DurationSeconds, string Source);
 
-// Bridges "a new row landed in irrigation_commands" (Postgres, via the
-// notify_irrigation_command() trigger added in
-// 0009_mqtt_and_device_identity.sql) to "publish it on the device's MQTT
-// commands topic".
-//
-// Chose Postgres LISTEN/NOTIFY over the alternatives:
-//   - Supabase Realtime from this backend: there's no official Supabase
-//     Realtime client for .NET (JS/Dart/Python/Swift/Kotlin are supported,
-//     C# isn't) - only unmaintained community ports, which would be a
-//     fragile dependency for something this central.
-//   - Polling irrigation_commands on a timer: works, but reintroduces
-//     exactly the polling-latency-vs-load tradeoff this whole MQTT migration
-//     is meant to get away from, and AgroFlow.Api already holds a direct
-//     Npgsql connection, so LISTEN/NOTIFY is "free" - no new client, no new
-//     infra, well-documented Npgsql feature.
-// LISTEN/NOTIFY also has a real correctness edge the other options don't:
-// irrigation_commands rows come from THREE different write paths (the app's
-// direct Supabase insert for manual commands, this API's own auto-irrigation
-// insert, and the pg_cron schedule-firing job) - a table-level trigger
-// catches all three uniformly. A publish call added only inside this API's
-// own code paths would miss the other two entirely.
+// Sends each new irrigation_commands row to the device's MQTT commands topic.
+// The notify_irrigation_command() trigger (migration 0009) raises a Postgres
+// NOTIFY, and we LISTEN for it here.
+// We use LISTEN/NOTIFY because there is no official Supabase Realtime client for
+// .NET and polling would add delay. The trigger also catches all three ways a
+// command is written: the app, this API's auto-irrigation, and the pg_cron schedule job.
 public class IrrigationCommandNotifyService : BackgroundService
 {
     private const string Channel = "irrigation_commands_channel";
@@ -37,11 +22,9 @@ public class IrrigationCommandNotifyService : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly ILogger<IrrigationCommandNotifyService> _logger;
 
-    // Startup, MQTT reconnect and the periodic timer can all want to sweep at
-    // once - a container restart triggers the first two within a second of
-    // each other. One sweep at a time: a second caller skips rather than
-    // queues, because by the time it would run the first has already handled
-    // the same rows.
+    // Startup, MQTT reconnect and the timer can all start a sweep at once.
+    // Only one runs at a time; a second caller skips, since the first one
+    // already handles the same rows.
     private readonly SemaphoreSlim _replayGate = new(1, 1);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -59,10 +42,8 @@ public class IrrigationCommandNotifyService : BackgroundService
         _logger = logger;
     }
 
-    // How often the periodic safety-net sweep runs. The NOTIFY path and the
-    // reconnect hook cover the normal cases; this catches anything they both
-    // miss - a NOTIFY that arrived while the LISTEN connection was being
-    // re-established, for instance.
+    // How often the safety-net sweep runs. It catches anything NOTIFY and the
+    // reconnect hook both miss, e.g. a NOTIFY sent while LISTEN was reconnecting.
     private TimeSpan SweepInterval =>
         TimeSpan.FromSeconds(int.TryParse(_configuration["Irrigation:ReplaySweepIntervalSeconds"], out var s) && s > 0
             ? s
@@ -70,15 +51,14 @@ public class IrrigationCommandNotifyService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Replay when MQTT comes up, including the very first connect. This is
-        // the hook that flushes commands queued while the broker or this
-        // container was unreachable. Fire-and-forget: the handler runs on the
-        // MQTT connect path and must not block it.
+        // Replay pending commands whenever MQTT connects, including the first time,
+        // so commands queued during an outage go out. Fire-and-forget so the connect
+        // path is never blocked.
         _mqttPublisher.Connected += () =>
             _ = ReplayPendingCommandsAsync("MQTT connected", stoppingToken);
 
-        // The periodic safety net, independent of the LISTEN loop below so a
-        // wedged LISTEN connection cannot also stop replay.
+        // The periodic sweep runs separately from the LISTEN loop, so a stuck LISTEN
+        // connection cannot also stop the replay.
         var sweepTask = RunPeriodicSweepAsync(stoppingToken);
 
         try
@@ -108,13 +88,10 @@ public class IrrigationCommandNotifyService : BackgroundService
         }
     }
 
-    // Finds irrigation_commands rows still pending and either republishes them
-    // or expires them, per CommandReplayPolicy.
-    //
-    // Republishing a command the device already got is safe and expected: MQTT
-    // is at-least-once anyway, and once the device executes and ACKs via
-    // POST /api/devices/commands/{id}/executed the row leaves pending status
-    // and the sweep stops seeing it.
+    // Finds pending irrigation_commands rows and republishes or expires them
+    // (CommandReplayPolicy). Sending a command twice is safe: MQTT is at-least-once,
+    // and once the device confirms via POST /api/devices/commands/{id}/executed the
+    // row is no longer pending.
     private async Task ReplayPendingCommandsAsync(string trigger, CancellationToken stoppingToken)
     {
         if (!await _replayGate.WaitAsync(0, stoppingToken)) return;
@@ -123,7 +100,7 @@ public class IrrigationCommandNotifyService : BackgroundService
         {
             if (!_mqttPublisher.IsConnected)
             {
-                // Nothing to do yet. The Connected hook will call us back.
+                // Not connected yet; the Connected hook will call us again.
                 return;
             }
 
@@ -165,8 +142,7 @@ public class IrrigationCommandNotifyService : BackgroundService
         }
         catch (Exception ex)
         {
-            // A failing sweep must never take the host down - it is a safety
-            // net, not a critical path.
+            // A failed sweep must never crash the host; it is only a safety net.
             _logger.LogError(ex, "Irrigation command replay ({Trigger}) failed", trigger);
         }
         finally
@@ -180,9 +156,8 @@ public class IrrigationCommandNotifyService : BackgroundService
     {
         var results = new List<(IrrigationCommandNotification, DateTimeOffset)>();
 
-        // Oldest first, so a start/stop pair queued during an outage is
-        // replayed in the order the farmer issued it. Supported by
-        // idx_irrigation_commands_pending_created (migration 0019).
+        // Oldest first, so a start/stop pair queued during an outage is sent in the
+        // order the farmer gave it. Uses idx_irrigation_commands_pending_created (0019).
         await using var cmd = new NpgsqlCommand(
             "select id, zone_id, command, duration_seconds, source, created_at " +
             "from irrigation_commands where status = 'pending' order by created_at", connection);
@@ -205,9 +180,8 @@ public class IrrigationCommandNotifyService : BackgroundService
 
     private static async Task MarkCommandFailedAsync(NpgsqlConnection connection, Guid commandId, CancellationToken ct)
     {
-        // The failed status is already in 0004's status check constraint, so
-        // this needs no schema change. The row stops being replayed and stays
-        // visible as a command that never reached a device.
+        // 'failed' is already allowed by the status check constraint (0004). The row
+        // stops being replayed and stays visible as a command that never reached a device.
         await using var cmd = new NpgsqlCommand(
             "update irrigation_commands set status = 'failed' where id = $1 and status = 'pending'", connection);
         cmd.Parameters.AddWithValue(commandId);
@@ -230,10 +204,8 @@ public class IrrigationCommandNotifyService : BackgroundService
 
                 _logger.LogInformation("Listening on Postgres channel {Channel} for new irrigation_commands", Channel);
 
-                // WaitAsync blocks until a NOTIFY arrives (dispatching it via
-                // the Notification event above) or the timeout elapses - loop
-                // forever so this connection keeps listening for the life of
-                // the service.
+                // WaitAsync waits until a NOTIFY arrives or the timeout passes; we loop so this
+                // connection keeps listening for as long as the service runs.
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     await connection.WaitAsync(stoppingToken);
@@ -267,9 +239,8 @@ public class IrrigationCommandNotifyService : BackgroundService
         }
     }
 
-    // Resolves the zone's active devices and publishes to each. Shared by the
-    // NOTIFY path and the replay sweep so both behave identically. Returns
-    // true when at least one device was published to.
+    // Finds the zone's active devices and publishes to each. Used by both the
+    // NOTIFY path and the sweep. Returns true if at least one device got it.
     private async Task<bool> PublishNotificationAsync(
         NpgsqlConnection connection, IrrigationCommandNotification notification)
     {
@@ -285,11 +256,8 @@ public class IrrigationCommandNotifyService : BackgroundService
 
         var payload = JsonSerializer.Serialize(notification, JsonOptions);
 
-        // Publishes to every active device on this zone rather than assuming
-        // exactly one - multi-device-per-zone is explicitly supported now, and
-        // this errs on the side of not silently missing a legitimate second
-        // device (e.g. a separate pump-controller board) rather than picking
-        // one arbitrarily.
+        // Publish to every active device on the zone, since a zone can have more than
+        // one board (e.g. a separate pump controller).
         foreach (var (deviceId, farmId) in devices)
         {
             var topic = MqttTopics.CommandsTopic(farmId, deviceId);

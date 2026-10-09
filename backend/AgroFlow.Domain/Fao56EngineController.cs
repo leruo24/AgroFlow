@@ -9,20 +9,15 @@ using AgroFlow.Data;
 
 namespace AgroFlow.Business
 {
-    // Controller layer for the FAO-56 engine, in the project's DB / XDB /
-    // Controller shape: the endpoints and the hosted service talk to this, this
-    // talks to Fao56EngineXDB and the Agronomy calculation classes, and nothing
-    // skips a layer. Synchronous, no interfaces, no DTOs.
-    //
-    // This is also the only place that knows how to assemble a ZoneEngineInput
-    // from database rows, so the daily job, the after-a-reading checks and the
-    // report endpoint all run the engine on identically-built inputs. One source
-    // of truth for the advice, rather than three that drift.
+    // Controller for the FAO-56 engine (DB / XDB / Controller pattern): endpoints
+    // and the hosted service call this, and this calls Fao56EngineXDB and the
+    // Agronomy classes. Synchronous, no interfaces, no DTOs.
+    // It is the only place that builds a ZoneEngineInput, so every caller runs the
+    // engine on the same inputs.
     public class Fao56EngineController
     {
-        // How much history the balance is run over. Long enough for the 7-day
-        // insights and to let Dr settle from its anchor, short enough to stay a
-        // cheap query per zone.
+        // Days of history the water balance runs over: enough for the 7-day insights,
+        // small enough to stay a cheap query per zone.
         public const int BalanceWindowDays = 30;
         public const int ForecastWindowDays = 8;
 
@@ -38,16 +33,13 @@ namespace AgroFlow.Business
             get { return db; }
         }
 
-        // Today in Africa/Johannesburg. South Africa has no daylight saving, so
-        // the offset is a fixed UTC+2 and this needs no timezone database.
+        // Today in SAST. South Africa has no daylight saving, so it is always UTC+2.
         public static DateOnly TodayInSast()
         {
             return DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
         }
 
-        // ------------------------------------------------------------------
-        // Assemble the engine's inputs for one zone.
-        // ------------------------------------------------------------------
+        // Build the engine's inputs for one zone.
         public ZoneEngineInput BuildInput(EngineZoneRow zone, DateOnly today)
         {
             var from = today.AddDays(-BalanceWindowDays);
@@ -69,9 +61,8 @@ namespace AgroFlow.Business
                 DesiredMoisture = zone.DesiredMoisture,
                 FarmLatitudeDegrees = zone.FarmLatitude,
 
-                // farm has no reliable elevation column. Leave it unknown; the
-                // ETo resolver labels its standard-pressure fallback rather than
-                // inventing an elevation for the farm.
+                // We have no reliable farm elevation, so we leave it unknown and the ETo
+                // calculation uses (and labels) standard air pressure.
                 FarmElevationM = null,
 
                 Today = today,
@@ -92,7 +83,7 @@ namespace AgroFlow.Business
 
             foreach (var reading in db.GetMoistureReadings(zone.ZoneId, DateTime.UtcNow.AddDays(-BalanceWindowDays)))
             {
-                // Mark rather than drop: spec 3a says never lose a row.
+                // Mark bad readings instead of dropping them, so no row is lost.
                 reading.IsValid = Fao56Engine.IsPlausibleReading(
                     reading.RawValue, zone.CalibrationWet, zone.CalibrationDry);
                 input.Readings.Add(reading);
@@ -103,7 +94,6 @@ namespace AgroFlow.Business
                 input.IrrigationMmByDay[pair.Key] = pair.Value;
             }
 
-            // The farmer's own soil checks.
             input.SoilFeelChecks.AddRange(db.GetSoilFeelChecks(zone.ZoneId, from));
 
             // Only needed when a watering cannot be measured in mm.
@@ -132,9 +122,7 @@ namespace AgroFlow.Business
             return signals;
         }
 
-        // ------------------------------------------------------------------
-        // Run one zone end to end: balance, persist, insights.
-        // ------------------------------------------------------------------
+        // Run one zone end to end: balance, save, insights.
         public ZoneEngineResult RunZone(EngineZoneRow zone, DateOnly today, bool persist)
         {
             var input = BuildInput(zone, today);
@@ -146,12 +134,11 @@ namespace AgroFlow.Business
                 {
                     db.SaveWaterBalanceDay(
                         zone.ZoneId, day,
-                        // An assumed stage is never stored as if it were known.
+                        // A guessed stage is never stored as if it were known.
                         day.Stage.HasValue && !result.StageAssumed ? Fao56EngineReference.StageLabel(day.Stage.Value) : null);
                 }
 
-                // ETo belongs to the farm-day, not the zone, so it is written once
-                // for today's row rather than once per zone.
+                // ETo belongs to the farm and day, so we write it once for today's row.
                 var todayRow = result.Days.FirstOrDefault(d => d.Day == today);
                 if (todayRow != null)
                 {
@@ -162,8 +149,7 @@ namespace AgroFlow.Business
             return result;
         }
 
-        // Run the zone and write its insights. Returns what was written so a
-        // caller can log or report it.
+        // Run the zone and save its insights. Returns what was written.
         public List<ZoneInsight> RunZoneAndWriteInsights(EngineZoneRow zone, DateOnly today)
         {
             var input = BuildInput(zone, today);
@@ -191,8 +177,7 @@ namespace AgroFlow.Business
             return insights;
         }
 
-        // Only the act_now rules, for running after a reading arrives rather than
-        // once a day (spec section 10).
+        // Only the act-now rules, run after each reading instead of once a day.
         public List<ZoneInsight> RunActNowChecks(EngineZoneRow zone, DateOnly today)
         {
             var input = BuildInput(zone, today);
@@ -217,9 +202,8 @@ namespace AgroFlow.Business
             }
         }
 
-        // Spec 8b: while the DHT11 is down, log one maintenance callout for the
-        // team. Never closed automatically, even when the sensor returns - the
-        // team closes it after the visit.
+        // While the DHT11 is down we log one maintenance callout for the team.
+        // It is never closed automatically; the team closes it after the visit.
         private void HandleDhtFault(EngineZoneRow zone, ZoneFaultSignals signals, DateOnly today)
         {
             if (signals.DhtOffline)
@@ -228,8 +212,7 @@ namespace AgroFlow.Business
             }
             else
             {
-                // Back online: stop telling the farmer about it. The callout row
-                // is deliberately left open.
+                // Back online: stop showing it to the farmer, but leave the callout open.
                 db.ClearInsight(zone.ZoneId, InsightType.DhtOffline, today);
             }
         }
@@ -242,15 +225,13 @@ namespace AgroFlow.Business
                 ["provenance"] = insight.Source,
             };
 
-            // Stored with the insight so "Why?" shows what was true then.
+            // Saved with the insight so "Why?" shows what was true at the time.
             if (insight.Explanation != null) payload["explanation"] = insight.Explanation;
 
             return JsonSerializer.Serialize(payload);
         }
 
-        // ------------------------------------------------------------------
-        // Reset to recommended (spec section 8).
-        // ------------------------------------------------------------------
+        // Reset the zone's thresholds to the recommended values.
         public ResetRecommendedOutcome ResetToRecommended(long zoneId)
         {
             var zone = db.GetZone(zoneId);
@@ -303,9 +284,7 @@ namespace AgroFlow.Business
             return ResetRecommendedOutcome.Succeeded(message, threshold, desired);
         }
 
-        // ------------------------------------------------------------------
-        // Calibration (spec section 8).
-        // ------------------------------------------------------------------
+        // Wet/dry sensor calibration.
         public const double MinCalibrationSeparationFraction = 0.10;
 
         public CalibrationOutcome SaveCalibrationPoint(long zoneId, string point)
@@ -324,8 +303,7 @@ namespace AgroFlow.Business
                 return CalibrationOutcome.Failed("No recent soil reading from this zone yet. Wait for the next reading and try again.");
             }
 
-            // The other point as it currently stands, to check the separation
-            // BEFORE writing anything.
+            // Check the gap to the other point before writing anything.
             var other = point == "wet" ? zone.CalibrationDry : zone.CalibrationWet;
 
             if (other.HasValue)
@@ -358,9 +336,7 @@ namespace AgroFlow.Business
             return CalibrationOutcome.Succeeded(message, reading.Value);
         }
 
-        // ------------------------------------------------------------------
-        // Soil type (spec section 11).
-        // ------------------------------------------------------------------
+        // Soil type.
         public SoilTypeOutcome SaveSoilType(long zoneId, string? soilType)
         {
             var soil = Fao56EngineReference.TryResolveSoil(soilType);
@@ -374,10 +350,8 @@ namespace AgroFlow.Business
 
             db.SaveSoilType(zoneId, soil.Key);
 
-            // Recalculate today's advice for the new soil. The farmer's own saved
-            // thresholds are NOT touched - if the new soil makes their threshold
-            // unsafe, the normal threshold_unsafe insight says so rather than this
-            // endpoint quietly rewriting their setting.
+            // Recalculate today's advice for the new soil. We do not change the farmer's
+            // saved threshold; if it is now unsafe, the threshold_unsafe insight says so.
             var today = TodayInSast();
             var refreshed = db.GetZone(zoneId);
             if (refreshed != null)
@@ -390,8 +364,8 @@ namespace AgroFlow.Business
         }
     }
 
-    // Small outcome objects rather than exceptions for expected, farmer-facing
-    // failures: "do the wet/dry setup first" is a normal answer, not a fault.
+    // Expected farmer-facing problems (like "do the wet/dry setup first") come back
+    // as small outcome objects instead of exceptions.
     public sealed class ResetRecommendedOutcome
     {
         public bool Ok { get; private set; }

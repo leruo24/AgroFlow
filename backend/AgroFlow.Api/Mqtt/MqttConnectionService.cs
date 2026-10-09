@@ -13,26 +13,20 @@ public interface IMqttPublisher
 {
     Task PublishAsync(string topic, string payload);
 
-    // True only while the single shared MQTT connection is up. Callers that
-    // publish opportunistically (the irrigation-command replay sweep) check
-    // this instead of catching the "not connected" exception per message.
+    // True while the shared MQTT connection is up. The command replay sweep checks
+    // this instead of catching a "not connected" error for every message.
     bool IsConnected { get; }
 
-    // Raised after a connection is established AND the subscription is in
-    // place - on first connect and on every reconnect after a drop.
-    //
-    // This is what lets IrrigationCommandNotifyService flush commands that
-    // piled up while the broker was unreachable. Handlers are invoked on the
-    // connect path, so they must not block: the handler kicks off its own task
-    // and returns.
+    // Raised once the connection and subscription are ready, on the first connect
+    // and after every reconnect. IrrigationCommandNotifyService uses it to send
+    // commands that queued up while the broker was down. Handlers must not block.
     event Action? Connected;
 }
 
-// Owns the single MQTT connection to HiveMQ Cloud for the whole API process:
-// subscribes to agroflow/farm/+/device/+/sensors on startup and runs each
-// message through the same SensorReadingProcessor the HTTP endpoint uses,
-// and exposes PublishAsync so IrrigationCommandNotifyService can push
-// commands out over the same connection rather than opening a second one.
+// Owns the one MQTT connection to HiveMQ Cloud for the API: subscribes to
+// agroflow/farm/+/device/+/sensors, passes each message to the same
+// SensorReadingProcessor the HTTP endpoint uses, and lets
+// IrrigationCommandNotifyService publish commands over the same connection.
 public class MqttConnectionService : BackgroundService, IMqttPublisher
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -46,9 +40,8 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 
     public bool IsConnected => _client is { IsConnected: true };
 
-    // Part 2: since when the broker has been out of reach (from start-up until
-    // the first connection, and from each drop until the next), so health can
-    // tell a blip from a broker that is gone.
+    // When the broker became unreachable (from start-up or from the last drop),
+    // so the health check can tell a short blip from an outage.
     private DateTimeOffset? _disconnectedSinceUtc = DateTimeOffset.UtcNow;
     public DateTimeOffset? DisconnectedSinceUtc => IsConnected ? null : _disconnectedSinceUtc;
 
@@ -102,9 +95,8 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
                     await ConnectAsync(stoppingToken);
                 }
 
-                // MQTTnet manages message receipt itself. This loop owns all
-                // reconnect attempts so a failed ConnectAsync and its
-                // Disconnected event cannot start overlapping retry loops.
+                // MQTTnet handles receiving messages. This loop handles all reconnects, so a
+                // failed ConnectAsync and its Disconnected event cannot start two retry loops.
                 await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
             }
         }
@@ -125,10 +117,9 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
                 _disconnectedSinceUtc = null;
                 _logger.LogInformation("MQTT connected, subscribed to {Topic}", MqttTopics.SensorTopicFilter);
 
-                // Announce only once the subscription is actually in place, so
-                // a handler that immediately publishes is not racing a
-                // half-ready connection. A throwing handler must not kill the
-                // connect loop and strand the whole MQTT path.
+                // Only announce once the subscription is in place, so a handler that publishes
+                // straight away does not race a half-ready connection. A failing handler must
+                // not stop the connect loop.
                 try
                 {
                     Connected?.Invoke();
@@ -155,8 +146,8 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         return Task.CompletedTask;
     }
 
-    // Every sensor reading a board publishes arrives here: work out which
-    // device sent it from the topic, then hand it to SensorReadingProcessor.
+    // Every sensor reading a board publishes arrives here: we work out the device
+    // from the topic and pass the reading to SensorReadingProcessor.
     private async Task OnMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args)
     {
         try
@@ -173,19 +164,9 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
             var payload = JsonSerializer.Deserialize<SensorMqttPayload>(payloadJson, JsonOptions);
             if (payload is null) return;
 
-            // v1.3.0 boards publish Temperature and Humidity from the DHT11
-            // alongside SoilMoisture, on this same topic and in this same
-            // shape. All three are already allowed by sensor_reading's CHECK
-            // constraint (0002_relationships.sql), so they need no migration
-            // and no special case below - they simply flow through
-            // SensorReadingProcessor like any other reading.
-            //
-            // What this guard adds is the rejection of anything OUTSIDE that
-            // set. Without it an unrecognised sensorType reached Postgres,
-            // violated the CHECK and surfaced as a logged exception for every
-            // such message. One warning and a drop is the right answer to a
-            // malformed payload - the same thing this handler already does
-            // with an unparseable topic.
+            // Boards send SoilMoisture, Temperature and Humidity on this topic, and all
+            // three are allowed by sensor_reading's CHECK constraint (0002). Anything else
+            // is logged once and dropped instead of failing the database insert.
             if (!SensorReadingTypes.IsValid(payload.SensorType))
             {
                 _logger.LogWarning(
@@ -202,11 +183,8 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
                 return;
             }
 
-            // The only place in AgroFlow that knows which physical device a
-            // reading came from, so it is the only place that can stamp
-            // last_seen accurately. DeviceStatusMonitorService reads this to
-            // decide a device has gone quiet; without it, liveness could only
-            // ever be guessed from the zone.
+            // This is the only place that knows which physical device sent a reading, so
+            // it updates last_seen. DeviceStatusMonitorService uses that to spot quiet devices.
             await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId);
 
             await SensorReadingProcessor.ProcessAsync(
@@ -218,10 +196,8 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         }
     }
 
-    // Validates the topic's claimed farmId actually matches this device's
-    // real zone/farm rather than just trusting whatever the topic says - a
-    // device publishing to the wrong farm's topic (misconfigured or
-    // otherwise) is ignored, not silently trusted.
+    // Security: check that the farmId in the topic really is this device's farm.
+    // A device publishing to another farm's topic is ignored.
     private static async Task<(long HardwareId, long ZoneId)?> ResolveDeviceAsync(
         NpgsqlConnection connection, string deviceId, long claimedFarmId)
     {

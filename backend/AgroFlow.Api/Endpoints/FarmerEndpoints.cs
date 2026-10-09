@@ -227,20 +227,14 @@ public static class FarmerEndpoints
         var createdAt =
             reader.GetDateTime(2);
 
-        // The reader has to be closed before the notifier opens its own
-        // connection on this data source, and the insert above is already
-        // committed (there is no explicit transaction here, so it committed
-        // when it executed) - which is the ordering the message needs: a
-        // message about a request that then rolled back would be a lie that
-        // cannot be retracted.
+        // Close the reader before the notifier opens its own connection. The insert
+        // above has already committed, so we never send a message about a request
+        // that was rolled back.
         await reader.CloseAsync();
 
-        // Telegram, to this farmer and to every admin with a linked chat.
-        // Awaited rather than fire-and-forget so the work happens while the
-        // request is still alive, but it cannot fail this endpoint: every
-        // path inside NotifyAsync is wrapped, and INotificationService's
-        // contract is that it never throws. A dead Telegram means a logged
-        // skip, not a rejected request.
+        // Telegram the farmer and every admin with a linked chat. Awaited, but it can
+        // never fail this request: NotifyAsync catches everything, so a Telegram outage
+        // only means a logged skip.
         await requestNotifier.NotifyAsync(requestId, cancellationToken);
 
         return Results.Created(
@@ -307,14 +301,10 @@ public static class FarmerEndpoints
         return await command.ExecuteScalarAsync() is null ? Results.NotFound() : Results.NoContent();
     }
 
-    // Called by the mobile app immediately after a farmer sets their own
-    // password, which is what takes them off the forced-change screen.
-    //
-    // The flag is cleared HERE rather than by the client writing to profile
-    // directly: 0024 deliberately does not grant authenticated an UPDATE on
-    // must_change_password, precisely so a farmer cannot dismiss the forced
-    // change without actually changing anything. This endpoint runs as the
-    // table owner and only ever clears the caller's own flag.
+    // The app calls this right after a farmer sets their own password, which takes
+    // them off the forced-change screen.
+    // Security: migration 0024 does not let clients update must_change_password, so
+    // a farmer cannot skip the change. This endpoint only clears the caller's own flag.
     private static async Task<IResult> ClearMustChangePasswordAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
     {
@@ -433,12 +423,8 @@ public static class FarmerEndpoints
         command.Parameters.AddWithValue(zoneId);
         var id = await command.ExecuteScalarAsync();
 
-        // No notification. The farmer pressing this button is standing in the
-        // app and can see the result there; messaging them about their own
-        // action is the definition of routine traffic, and a channel carrying
-        // routine traffic gets muted. If the pump fails to acknowledge this
-        // command, DeviceStatusMonitorService raises that as an equipment
-        // failure - which is the part that actually needs them.
+        // No notification: the farmer can see the result in the app. If the pump never
+        // confirms the command, DeviceStatusMonitorService raises an equipment failure.
         return id is null ? Results.NotFound() : Results.Accepted(value: new { id });
     }
 }
