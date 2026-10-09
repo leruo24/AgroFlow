@@ -10,6 +10,8 @@ apps/
 hardware/
 supabase/
 docs/
+# Showcase videos, renders and the slide deck (~450 MB); the image needs none of it.
+showcase/
 **/.env
 **/.env.*
 **/secrets.h
