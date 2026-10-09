@@ -94,7 +94,7 @@ fast-tap guards. Both are the dev-dependencies the brief allows.
 ## Migrations
 
 Numbered after the highest existing file (0038). None applied. Each gets a
-probe in `docs/verify-migrations.sql` **and** in `Services/SchemaCheck.cs`.
+probe in `docs/ops/verify-migrations.sql` **and** in `Services/SchemaCheck.cs`.
 
 | # | Item | Objects |
 |---|---|---|

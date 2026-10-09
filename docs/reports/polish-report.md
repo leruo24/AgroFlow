@@ -231,7 +231,7 @@ And `fmtDate` no longer slices a UTC timestamp. Anything between midnight and
 02:00 SAST was dated to the previous day, differently depending on which
 column a page read.
 
-`docs/irrigation-data-checks.sql` holds read-only queries that tell "the page
+`docs/ops/irrigation-data-checks.sql` holds read-only queries that tell "the page
 is wrong" apart from "the data is wrong", including the work list of zones
 that still need a flow rate. **Run them one at a time** — the Supabase editor
 returns only the last statement's result.
@@ -409,7 +409,7 @@ I left it alone.
 ## Ground rules
 
 - `.github/workflows/` untouched. The Pages workflow stays at
-  `docs/pages-workflow.yml`.
+  `docs/ops/pages-workflow.yml`.
 - No secret file read, printed or edited. Config names only.
 - The live database was never written to. `0037` is written, not applied.
 - One new npm dependency: `exceljs`, in the admin, for `.xlsx`. Leaflet comes

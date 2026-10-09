@@ -46,7 +46,7 @@
     The whole history to a file, for a fresh database.
 
 .NOTES
-    AFTERWARDS, CHECK IT WORKED. Run docs\verify-migrations.sql in the same
+    AFTERWARDS, CHECK IT WORKED. Run docs\ops\verify-migrations.sql in the same
     editor: one row, one column per migration, every value should be 1. The
     API reports the same thing for 0027 onwards under "Database schema" in
     GET /api/admin/health.
@@ -97,7 +97,7 @@ $builder = [System.Text.StringBuilder]::new()
 $null = $builder.AppendLine("-- AgroFlow migrations $($files[0].Number.ToString('0000')) to $($files[-1].Number.ToString('0000'))")
 $null = $builder.AppendLine("-- $($files.Count) file(s), in order. Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
 $null = $builder.AppendLine('--')
-$null = $builder.AppendLine('-- Run this in the Supabase SQL editor, then run docs\verify-migrations.sql')
+$null = $builder.AppendLine('-- Run this in the Supabase SQL editor, then run docs\ops\verify-migrations.sql')
 $null = $builder.AppendLine('-- to confirm. Every file here is written to be safe to re-run.')
 $null = $builder.AppendLine()
 
@@ -127,4 +127,4 @@ foreach ($entry in $files) {
 
 Write-Host ''
 Write-Host 'Next: paste into the Supabase SQL editor and run it.' -ForegroundColor Cyan
-Write-Host 'Then run docs\verify-migrations.sql - every column should be 1.' -ForegroundColor Cyan
+Write-Host 'Then run docs\ops\verify-migrations.sql - every column should be 1.' -ForegroundColor Cyan

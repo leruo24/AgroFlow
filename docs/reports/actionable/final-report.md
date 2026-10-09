@@ -44,7 +44,7 @@ additive and safe to re-run. From the repository root:
 
 Until each is applied, the features that need it answer "needs migration
 00xx" (or keep working without it, read through `to_jsonb`); nothing breaks.
-`docs/verify-migrations.sql` and the startup schema check (and Health) report
+`docs/ops/verify-migrations.sql` and the startup schema check (and Health) report
 which are missing.
 
 ## 3. New configuration names

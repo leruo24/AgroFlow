@@ -452,7 +452,7 @@ the `apple-*` meta tags, and the loading video and poster.
 nothing. The brief asked to add the web app "following the admin's existing deploy setup" —
 there wasn't one, so a workflow was written that builds and publishes both.
 
-> **⚠️ The workflow is parked at `docs/pages-workflow.yml`, not `.github/workflows/`.**
+> **⚠️ The workflow is parked at `docs/ops/pages-workflow.yml`, not `.github/workflows/`.**
 > GitHub refuses a push from a credential without the `workflow` OAuth scope if any commit
 > in it adds or changes a file under `.github/workflows/`, and the token this repo is
 > pushed with does not have that scope. The file is unmodified — only relocated — and the
@@ -465,7 +465,7 @@ Once it runs, the URLs will be:
 
 **Three things must happen before those work**, none of which can be done from here:
 
-0. **Put the workflow in place** — `cp docs/pages-workflow.yml .github/workflows/pages.yml`,
+0. **Put the workflow in place** — `cp docs/ops/pages-workflow.yml .github/workflows/pages.yml`,
    then commit it with a credential that has the `workflow` scope (or add it through the
    GitHub web UI, which is not subject to that restriction).
 1. **Enable Pages** — repo Settings → Pages → Source: **GitHub Actions**.

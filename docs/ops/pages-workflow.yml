@@ -2,7 +2,7 @@
 # THIS FILE IS NOT ACTIVE WHERE IT SITS. COPY IT INTO PLACE TO USE IT:
 #
 #     mkdir -p .github/workflows
-#     cp docs/pages-workflow.yml .github/workflows/pages.yml
+#     cp docs/ops/pages-workflow.yml .github/workflows/pages.yml
 #     git add .github/workflows/pages.yml && git commit && git push
 #
 # WHY IT LIVES IN docs/ INSTEAD

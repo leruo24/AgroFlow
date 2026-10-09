@@ -33,7 +33,7 @@ Thirty minutes ahead, not five.
       it; it is your fallback for step 4.
 - [ ] Telegram linked on the demo phone, and send yourself one test message so
       you know the bot is awake.
-- [ ] Have `docs/demo-account.md` done already if the sponsor account is part
+- [ ] Have `docs/ops/demo-account.md` done already if the sponsor account is part
       of the story.
 
 ### Open and ready

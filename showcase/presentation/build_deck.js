@@ -480,7 +480,7 @@ const shadow = () => ({ type: "outer", color: "0F2A36", blur: 8, offset: 2, angl
     "Thanks, Philisile. This slide is our evidence that AgroFlow moved past concepts and mock-ups. " +
     "Top left is the farmer app: a zone's irrigation control and the reports screen. Top right is the admin console's home page, which starts with what needs attention across every farm. " +
     "Bottom left is the physical kit [describe photo]. And bottom right is the firmware running on the ESP32: when an MQTT 'start' command arrives with a duration, it switches the pump on, and on 'stop' it switches it off.\n\n" +
-    "Sources: screenshots captured from the running apps on 6 Oct 2026 (apps/mobile via Expo web; apps/web/admin via Vite). The build sandbox could not reach Supabase or Railway, so data comes from a local fixture mirroring docs/demo-account.md — no sensor values were invented, which is why readings show 'No reading'. " +
+    "Sources: screenshots captured from the running apps on 6 Oct 2026 (apps/mobile via Expo web; apps/web/admin via Vite). The build sandbox could not reach Supabase or Railway, so data comes from a local fixture mirroring docs/ops/demo-account.md — no sensor values were invented, which is why readings show 'No reading'. " +
     "Code: hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino lines 492–509.\n" +
     "ACTION: replace the dashed box with a real photo of the kit before presenting; consider re-capturing the app screens from the live system on a phone."
   );
@@ -515,7 +515,7 @@ const shadow = () => ({ type: "outer", color: "0F2A36", blur: 8, offset: 2, angl
     "This is where the project stands. In the field, each zone has a working kit that enrols with a one-time code, keeps watering on local rules if it loses its connection, and never runs the pump for more than five minutes in one go. " +
     "The platform handles MQTT, automatic irrigation, FAO-56 advice and Telegram alerts. Farmers get live readings, three irrigation modes, manual start and stop, and reports. Administrators get wizards to register farms and kits, kit status, alerts and exports. " +
     "We also want to be honest about what isn't finished: maintenance jobs and alert assignment only last for the browser session, per-kit uptime isn't measured, and two ideas from our Milestone 3 design — an ESP-NOW gateway and Supabase Realtime — weren't built.\n\n" +
-    "Sources: docs/reports/final-finish-report.md 'Still not done'; docs/release-notes-v2.md 'What is not connected yet'; firmware v1.2–1.4 header; admin exports commit 2ff6594. " +
+    "Sources: docs/reports/final-finish-report.md 'Still not done'; docs/releases/release-notes-v2.md 'What is not connected yet'; firmware v1.2–1.4 header; admin exports commit 2ff6594. " +
     "Not on the slide because it could not be verified here: the report states 650 domain tests pass (dotnet was not available in this environment), and the admin audit log depends on migration 0038 being applied and the dev branch being deployed."
   );
 

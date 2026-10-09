@@ -16,7 +16,7 @@ This is the report for item 12.
 | 4 | Migration safety net — verify query, startup check, apply script |
 | 5 | Mobile v2.0.0, matching build env, release notes |
 | 6 | Cleanup SQL written, nothing applied |
-| 7 | `docs/demo-account.md` |
+| 7 | `docs/ops/demo-account.md` |
 | 8 | `showcase/presentation/presentation-runbook.md` |
 | 9 | Debug sweep — contract audit clean, one real find |
 | 10 | All checks pass, 650 tests |
@@ -33,7 +33,7 @@ This is the report for item 12.
 ```
 
 Paste into the Supabase SQL editor and run it. Then run
-`docs\verify-migrations.sql` — every column should be 1.
+`docs\ops\verify-migrations.sql` — every column should be 1.
 
 It grants the API permission to write audit rows. Without it, admin actions
 may still not be recorded (see below).
@@ -218,7 +218,7 @@ and a moisture report is a trace.
 
 ## Item 4 — the migration safety net
 
-**`docs/verify-migrations.sql`** — one read-only query, one row, one column per
+**`docs/ops/verify-migrations.sql`** — one read-only query, one row, one column per
 migration 0001–0038 plus the `reports` storage bucket. Every column should be
 1; a 0 names the file to run.
 
@@ -292,14 +292,14 @@ npx eas-cli build -p android --profile preview
 npx eas-cli update --channel preview --message "v2: designed reports, all-zones reports, real settings"
 ```
 
-**`docs/release-notes-v2.md`** is written for farmers and the sponsor, with a
+**`docs/releases/release-notes-v2.md`** is written for farmers and the sponsor, with a
 section stating plainly what is not connected yet.
 
 ---
 
 ## Item 6 — the cleanup SQL
 
-All of it is in **`docs/data-cleanup.sql`**. Nothing has been run. Run the
+All of it is in **`docs/ops/data-cleanup.sql`**. Nothing has been run. Run the
 sections **one at a time** — the Supabase editor returns only the last
 statement's result.
 
@@ -410,7 +410,7 @@ Unchanged from the previous report unless noted.
 ## Ground rules
 
 - `.github/workflows/` untouched. The Pages workflow stays at
-  `docs/pages-workflow.yml`.
+  `docs/ops/pages-workflow.yml`.
 - No secret file read, printed or edited. Config names only; the Telegram
   token is reported as configured/not configured and never returned.
 - The live database was never written to. 0038 is written, not applied.

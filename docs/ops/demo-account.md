@@ -23,7 +23,7 @@ Allow about ten minutes.
 
 The `.test` domain is deliberate. It is reserved by RFC 2606 and can never be
 a real address, so this account cannot accidentally email anybody — and
-`docs/data-cleanup.sql` lists `.test` owners as candidates for archiving, so
+`docs/ops/data-cleanup.sql` lists `.test` owners as candidates for archiving, so
 it is easy to find and retire afterwards.
 
 ---
@@ -149,5 +149,5 @@ select archive_farm(<farm_id>);
 Archiving hides the farm from every list, report and the automatic report
 scheduler, and deletes nothing — so if the sponsor asks to see it again next
 month, `select restore_farm(<farm_id>);` brings it back exactly as it was.
-`docs/data-cleanup.sql` section 1 will list it as a candidate, with the
+`docs/ops/data-cleanup.sql` section 1 will list it as a candidate, with the
 statement ready to copy.
