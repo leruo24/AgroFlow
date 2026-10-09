@@ -12,7 +12,7 @@ Repository state: branch `dev` at `bb1c0a1` ("merge: final finish before the pre
 | M3 | `Milestone_3__Team_2.docx` (dated 28 Sep 2026 on its cover) | Latest milestone: business case, technology platform, network/deployment diagram, expanded class diagram, persona, wireframes |
 | REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/final-finish-report.md`, `showcase/presentation/presentation-runbook.md`, `docs/release-notes-v2.md`) |
 | RUN | Apps run locally on 6 Oct 2026 | See "What was run" below |
-| SHOWCASE | `showcase/` and `walkthrough-video/` on `dev` (pushed 6 Oct 2026 while this deck was being built) | The team's system-demo video: narration, system audit and captured screens. Used for slide 10. |
+| SHOWCASE | `showcase/` and `showcase/walkthrough-video/` on `dev` (pushed 6 Oct 2026 while this deck was being built) | The team's system-demo video: narration, system audit and captured screens. Used for slide 10. |
 | OLD DECK | Original AgroFlow presentation | **Not supplied.** It could not be audited, and none of its images could be reused. |
 
 Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the deck follows the **code**, because the code is what will be demonstrated. Each disagreement is listed under "Contradictions".
