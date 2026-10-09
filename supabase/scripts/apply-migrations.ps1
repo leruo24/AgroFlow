@@ -30,18 +30,18 @@
     large enough that pasting is unwieldy, or on a machine with no clipboard.
 
 .EXAMPLE
-    .\scripts\apply-migrations.ps1 -From 34 -To 36
+    .\supabase\scripts\apply-migrations.ps1 -From 34 -To 36
 
     The three that were missed. Copies 0034, 0035 and 0036 to the clipboard.
 
 .EXAMPLE
-    .\scripts\apply-migrations.ps1 -From 38
+    .\supabase\scripts\apply-migrations.ps1 -From 38
 
     Everything from 0038 to the newest file - the usual "catch me up" case
     after pulling.
 
 .EXAMPLE
-    .\scripts\apply-migrations.ps1 -From 1 -OutFile .\all-migrations.sql
+    .\supabase\scripts\apply-migrations.ps1 -From 1 -OutFile .\all-migrations.sql
 
     The whole history to a file, for a fresh database.
 
@@ -69,7 +69,7 @@ $ErrorActionPreference = 'Stop'
 
 # Relative to this script, not to the caller's working directory, so it works
 # from anywhere.
-$migrationsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'supabase\migrations'
+$migrationsDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'migrations'
 
 if (-not (Test-Path $migrationsDir)) {
     throw "Migrations folder not found at $migrationsDir"

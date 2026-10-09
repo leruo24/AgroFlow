@@ -29,7 +29,7 @@ This is the report for item 12.
 ### 1. Apply migration 0038
 
 ```powershell
-.\scripts\apply-migrations.ps1 -From 38
+.\supabase\scripts\apply-migrations.ps1 -From 38
 ```
 
 Paste into the Supabase SQL editor and run it. Then run
@@ -242,14 +242,14 @@ incident.
 > becomes noise and then becomes ignored. Caught by reading the migration
 > files rather than trusting the names.
 
-**`scripts/apply-migrations.ps1`** — concatenates a range onto the clipboard in
+**`supabase/scripts/apply-migrations.ps1`** — concatenates a range onto the clipboard in
 order with `-- ===== file =====` separators. It connects to nothing and
 applies nothing.
 
 ```powershell
-.\scripts\apply-migrations.ps1 -From 34 -To 36   # the three that were missed
-.\scripts\apply-migrations.ps1 -From 38          # the usual catch-up
-.\scripts\apply-migrations.ps1 -From 1 -OutFile .\all.sql
+.\supabase\scripts\apply-migrations.ps1 -From 34 -To 36   # the three that were missed
+.\supabase\scripts\apply-migrations.ps1 -From 38          # the usual catch-up
+.\supabase\scripts\apply-migrations.ps1 -From 1 -OutFile .\all.sql
 ```
 
 A test on `-From 37 -To 38` produced the expected two files in order.

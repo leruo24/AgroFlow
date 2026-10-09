@@ -243,7 +243,7 @@ public sealed class SchemaCheck
 
         _logger.LogWarning(
             "{Count} expected database object(s) are missing. Apply the migrations in " +
-            "supabase/migrations in order - see scripts/apply-migrations.ps1 - then restart. " +
+            "supabase/migrations in order - see supabase/scripts/apply-migrations.ps1 - then restart. " +
             "Nothing is applied automatically.",
             result.Missing.Count);
     }

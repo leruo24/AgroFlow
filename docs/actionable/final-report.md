@@ -30,7 +30,7 @@ None has been applied (the brief forbids touching the live database). All are
 additive and safe to re-run. From the repository root:
 
 ```powershell
-.\scripts\apply-migrations.ps1 -From 39
+.\supabase\scripts\apply-migrations.ps1 -From 39
 ```
 
 | # | File | What it adds |
