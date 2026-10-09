@@ -55,11 +55,10 @@ namespace AgroFlow.Business.Agronomy
         public double? DhtTMaxC { get; set; }
         public double? DhtRhMeanPct { get; set; }
 
-        // Elevation is not recorded per farm. FAO-56 Eq. 8 needs it for
-        // atmospheric pressure; sea level is used and the effect is small
-        // (gamma moves ~1% per 100 m), but it is still an assumption and is
-        // reported as one.
-        public double ElevationM { get; set; }
+        // Null means AgroFlow has no reliable farm elevation. The resolver then
+        // uses standard atmospheric pressure as an explicit fallback; it never
+        // records or presents an invented elevation.
+        public double? ElevationM { get; set; }
     }
 
     public sealed class DailyEtoResult
@@ -155,7 +154,7 @@ namespace AgroFlow.Business.Agronomy
                 result.Limitations.Add(
                     "No weather-app temperature for " + Iso(inputs.Date) +
                     ", so the zone's own temperature sensor readings were used instead. " +
-                    "FAO-56 defines this calculation for open-field weather, not for conditions inside a tub, so the figure is less reliable.");
+                    "FAO-56 defines this calculation for standard weather-station conditions, not a zone's local crop microclimate, so the figure is less reliable.");
             }
             else
             {
@@ -279,7 +278,18 @@ namespace AgroFlow.Business.Agronomy
             result.NetRadiationMj = rn;
 
             var tMean = (tMin + tMax) / 2.0;
-            var pressure = PenmanMonteithEto.AtmosphericPressureKpa(inputs.ElevationM);
+            double pressure;
+            if (inputs.ElevationM.HasValue)
+            {
+                pressure = PenmanMonteithEto.AtmosphericPressureKpa(inputs.ElevationM.Value);
+            }
+            else
+            {
+                pressure = PenmanMonteithEto.AtmosphericPressureKpa(0.0);
+                result.Incomplete = true;
+                result.Limitations.Add(
+                    "Farm elevation is not available, so standard atmospheric pressure was used; no elevation was guessed.");
+            }
             var gamma = PenmanMonteithEto.PsychrometricConstantKpaPerC(pressure);
             var slope = PenmanMonteithEto.SaturationSlopeKpaPerC(tMean);
 
@@ -296,7 +306,7 @@ namespace AgroFlow.Business.Agronomy
             result.EtoMm = eto;
 
             // The headline source is the weakest link in the chain: a day whose
-            // temperature came from the tub is a dht11_fallback day regardless of
+            // temperature came from the local zone sensor is a dht11_fallback day regardless of
             // where the wind came from.
             result.EtoSource = result.TemperatureSource == EtoSources.Dht11Fallback
                 ? EtoSources.Dht11Fallback

@@ -115,12 +115,35 @@ public static class Fao56EngineEndpoints
             totalAvailableMm = Round(result.TawMm),
             recommendedLitres = Round(result.RecommendedLitres),
             recommendedMinutes = result.RecommendedMinutes,
+            recommendedRuntimeSeconds = Round(result.RecommendedRuntimeSeconds),
+            recommendedDepthMm = Round(result.RecommendedDepthMm),
+            primaryAction = result.PrimaryAction.ToString(),
+            forecastRainTodayMm = Round(result.ForecastRainTodayMm),
+            projectedPostRainDepletionMm = Round(result.ProjectedPostRainDepletionMm),
+            equipmentWarning = result.EquipmentWarning,
 
             daysToNextWatering = result.DaysToNextWatering,
             nextWateringDate = result.NextWateringDate?.ToString("yyyy-MM-dd"),
 
             moisturePercent = Round(result.RelativeMoisturePercent),
+            sensorDomain = result.SensorDomain.ToString(),
+            sensorModifier = result.SensorModifier,
             balanceRan = result.BalanceRan,
+            confidence = new { level = result.Confidence.Key, reason = result.Confidence.Reason },
+
+            outlook = result.Outlook.Select(d => new
+            {
+                date = d.Date.ToString("yyyy-MM-dd"),
+                action = d.Action.ToString(),
+                requiredDepthMm = Round(d.RequiredDepthMm),
+                litres = Round(d.Litres),
+                runtimeSeconds = Round(d.RuntimeSeconds),
+                forecastRainMm = Round(d.ForecastRainMm),
+                projectedDepletionMm = Round(d.ProjectedDepletionMm),
+                confidence = d.Confidence,
+                tentative = d.Tentative,
+                advice = d.Advice,
+            }),
 
             // Why the engine could NOT answer, when it could not. This is the
             // half that makes the action useful during setup: it names the

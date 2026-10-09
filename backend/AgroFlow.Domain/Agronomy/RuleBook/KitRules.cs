@@ -45,8 +45,8 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         // two minutes WaterRules uses for "a real watering".
         public const double PumpCheckMinimumSeconds = WaterRules.FullWateringMinimumSeconds;
 
-        // DATA RULE: water reaches the probe within half an hour in a tub or
-        // bed; no change by then means none reached it.
+        // DATA RULE: water should reach a correctly placed zone probe within
+        // half an hour; no change by then means none reached it.
         public const int PumpCheckWindowMinutes = 30;
 
         // DATA RULE: the window in which a missing temperature/humidity reading

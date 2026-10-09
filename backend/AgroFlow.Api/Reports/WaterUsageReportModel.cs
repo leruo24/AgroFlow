@@ -41,7 +41,7 @@ internal sealed class WaterUsageReportModel
 
     /// The day the engine expects the soil to reach its watering point.
     public DateOnly? NextWatering { get; init; }
-    public int? NextWateringMinutes { get; init; }
+    public double? NextWateringMinutes { get; init; }
     public double? NextWateringLitres { get; init; }
 
     /* ---- Item 3: what the action report needs from the engine ------- */
@@ -107,9 +107,9 @@ internal sealed class WaterUsageReportModel
     public double TotalRainMm => Round(Days.Sum(d => d.RainMm ?? 0));
 
     public double? AvgAreaTempC => Avg(Days.Select(d => d.AreaMaxC));
-    public double? AvgTubTempC => Avg(Days.Select(d => d.TubMaxC));
+    public double? AvgLocalTempC => Avg(Days.Select(d => d.LocalMaxC));
     public double? AvgAreaHumidity => Avg(Days.Select(d => d.AreaHumidity));
-    public double? AvgTubHumidity => Avg(Days.Select(d => d.TubHumidity));
+    public double? AvgLocalHumidity => Avg(Days.Select(d => d.LocalHumidity));
 
     private static double? Avg(IEnumerable<double?> values)
     {
@@ -125,9 +125,9 @@ internal sealed class WaterUsageReportModel
         double? NeedLitres,
         double? AvgMoisturePercent,
         double? AreaMaxC,
-        double? TubMaxC,
+        double? LocalMaxC,
         double? AreaHumidity,
-        double? TubHumidity,
+        double? LocalHumidity,
         double? RainMm,
         string Note)
     {
@@ -314,7 +314,7 @@ internal static class WaterUsageReportBuilder
             }
         }
 
-        /* ---- 5. The tub's own temperature and humidity ----------------- */
+        /* ---- 5. Temperature and humidity measured locally in the zone --- */
         const string dhtSql = """
             select (recorded_at at time zone 'Africa/Johannesburg')::date,
                    max(value) filter (where sensor_type = 'Temperature'),
@@ -326,7 +326,7 @@ internal static class WaterUsageReportBuilder
              group by 1
             """;
 
-        var tubByDay = new Dictionary<DateOnly, (double? MaxC, double? Humidity)>();
+        var localByDay = new Dictionary<DateOnly, (double? MaxC, double? Humidity)>();
 
         await using (var cmd = new NpgsqlCommand(dhtSql, connection))
         {
@@ -337,7 +337,7 @@ internal static class WaterUsageReportBuilder
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
             {
-                tubByDay[reader.GetFieldValue<DateOnly>(0)] = (
+                localByDay[reader.GetFieldValue<DateOnly>(0)] = (
                     reader.IsDBNull(1) ? null : reader.GetDouble(1),
                     reader.IsDBNull(2) ? null : reader.GetDouble(2));
             }
@@ -420,7 +420,7 @@ internal static class WaterUsageReportBuilder
             double? avgMoisture = dayReadings.Count == 0 ? null : dayReadings.Average();
 
             weatherByDay.TryGetValue(date, out var weather);
-            tubByDay.TryGetValue(date, out var tub);
+            localByDay.TryGetValue(date, out var local);
 
             days.Add(new WaterUsageReportModel.DayLine(
                 date,
@@ -430,9 +430,9 @@ internal static class WaterUsageReportBuilder
                 needLitres.HasValue ? Math.Round(needLitres.Value, 2) : null,
                 avgMoisture.HasValue ? Math.Round(avgMoisture.Value, 1) : null,
                 weather?.TMaxC,
-                tub.MaxC ?? weather?.DhtTMaxC,
+                local.MaxC ?? weather?.DhtTMaxC,
                 weather?.RhMeanPct,
-                tub.Humidity ?? weather?.DhtRhMeanPct,
+                local.Humidity ?? weather?.DhtRhMeanPct,
                 balance?.RainMm ?? weather?.RainMm,
                 HandPrefix(runs.ByHand) + DayNote(runs.Runs, litres, needLitres, balance?.RainMm ?? weather?.RainMm, avgMoisture)));
         }

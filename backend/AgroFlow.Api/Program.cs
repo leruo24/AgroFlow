@@ -426,6 +426,7 @@ _ = Task.Run(async () =>
     await scope.ServiceProvider.GetRequiredService<SchemaCheck>().LogAtStartupAsync();
 });
 app.MapFarmEndpoints();
+app.MapLocationEndpoints();
 app.MapUserEndpoints();
 app.MapTelegramEndpoints();
 app.MapTelegramWebhookEndpoints();

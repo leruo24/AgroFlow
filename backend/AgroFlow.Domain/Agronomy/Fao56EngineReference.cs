@@ -330,7 +330,7 @@ namespace AgroFlow.Business.Agronomy
             return SoilsByKey.TryGetValue(soilType.Trim(), out soil) ? soil : null;
         }
 
-        // Loam is the documented default for the demo tubs (garden soil).
+        // Loam is the documented default when a zone's soil type is unknown.
         public static Fao56SoilClass DefaultSoil
         {
             get { return SoilsByKey[DefaultSoilKey]; }

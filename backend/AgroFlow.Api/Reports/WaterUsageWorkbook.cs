@@ -202,9 +202,9 @@ internal static class WaterUsageWorkbook
             Cell.Of("Crop water need (L)", XlsxStyle.TableHeader),
             Cell.Of("Avg soil moisture (%)", XlsxStyle.TableHeader),
             Cell.Of("Area max temp (°C)", XlsxStyle.TableHeader),
-            Cell.Of("Tub max temp (°C)", XlsxStyle.TableHeader),
+            Cell.Of("Local max temp (°C)", XlsxStyle.TableHeader),
             Cell.Of("Area humidity (%)", XlsxStyle.TableHeader),
-            Cell.Of("Tub humidity (%)", XlsxStyle.TableHeader),
+            Cell.Of("Local humidity (%)", XlsxStyle.TableHeader),
             Cell.Of("Rain (mm)", XlsxStyle.TableHeader),
             Cell.Of("Note", XlsxStyle.TableHeader));
 
@@ -218,9 +218,9 @@ internal static class WaterUsageWorkbook
                 Cell.Maybe(d.NeedLitres, XlsxStyle.TwoDecimals),
                 Cell.Maybe(d.AvgMoisturePercent, XlsxStyle.OneDecimal),
                 Cell.Maybe(d.AreaMaxC, XlsxStyle.OneDecimal),
-                Cell.Maybe(d.TubMaxC, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.LocalMaxC, XlsxStyle.OneDecimal),
                 Cell.Maybe(d.AreaHumidity, XlsxStyle.OneDecimal),
-                Cell.Maybe(d.TubHumidity, XlsxStyle.OneDecimal),
+                Cell.Maybe(d.LocalHumidity, XlsxStyle.OneDecimal),
                 Cell.Maybe(d.RainMm, XlsxStyle.OneDecimal),
                 Cell.Of(d.Note));
         }
@@ -233,9 +233,9 @@ internal static class WaterUsageWorkbook
             Cell.Maybe(m.TotalNeedLitres, XlsxStyle.TotalOneDecimal),
             Cell.Maybe(m.AvgMoisturePercent, XlsxStyle.TotalOneDecimal),
             Cell.Maybe(m.AvgAreaTempC, XlsxStyle.TotalOneDecimal),
-            Cell.Maybe(m.AvgTubTempC, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgLocalTempC, XlsxStyle.TotalOneDecimal),
             Cell.Maybe(m.AvgAreaHumidity, XlsxStyle.TotalOneDecimal),
-            Cell.Maybe(m.AvgTubHumidity, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgLocalHumidity, XlsxStyle.TotalOneDecimal),
             Cell.Of(m.TotalRainMm, XlsxStyle.TotalOneDecimal),
             Cell.Of("", XlsxStyle.Total));
 
@@ -254,20 +254,20 @@ internal static class WaterUsageWorkbook
             ColumnWidths = new[] { 16.0, 14.0, 14.0, 15.0, 17.0, 16.0, 15.0, 26.0 },
         };
 
-        sheet.Add(Cell.Of("Weather: area forecast vs in the tub", XlsxStyle.Title));
+        sheet.Add(Cell.Of("Weather: area forecast vs conditions at the crop", XlsxStyle.Title));
         sheet.Add(Cell.Of(
-            "Area = the weather app (Open-Meteo). Tub = the DHT11 sensor next to the plants. " +
-            "A sheltered tub running warmer and more humid than its area is normal.",
+            "Area = the weather app (Open-Meteo). Local = the AgroFlow DHT11 installed in this irrigation zone. " +
+            "Local crop conditions can differ naturally from the wider area.",
             XlsxStyle.Note));
         sheet.AddBlank();
 
         sheet.Add(
             Cell.Of("Date", XlsxStyle.TableHeader),
             Cell.Of("Area max °C", XlsxStyle.TableHeader),
-            Cell.Of("Tub max °C", XlsxStyle.TableHeader),
+            Cell.Of("Local max °C", XlsxStyle.TableHeader),
             Cell.Of("Difference °C", XlsxStyle.TableHeader),
             Cell.Of("Area humidity %", XlsxStyle.TableHeader),
-            Cell.Of("Tub humidity %", XlsxStyle.TableHeader),
+            Cell.Of("Local humidity %", XlsxStyle.TableHeader),
             Cell.Of("Difference %", XlsxStyle.TableHeader),
             Cell.Of("Rain (mm)", XlsxStyle.TableHeader));
 
@@ -276,35 +276,35 @@ internal static class WaterUsageWorkbook
             sheet.Add(
                 Cell.Of(d.LongLabel),
                 Cell.Maybe(d.AreaMaxC, XlsxStyle.OneDecimal),
-                Cell.Maybe(d.TubMaxC, XlsxStyle.OneDecimal),
-                Cell.Maybe(Difference(d.TubMaxC, d.AreaMaxC), XlsxStyle.OneDecimal),
+                Cell.Maybe(d.LocalMaxC, XlsxStyle.OneDecimal),
+                Cell.Maybe(Difference(d.LocalMaxC, d.AreaMaxC), XlsxStyle.OneDecimal),
                 Cell.Maybe(d.AreaHumidity, XlsxStyle.OneDecimal),
-                Cell.Maybe(d.TubHumidity, XlsxStyle.OneDecimal),
-                Cell.Maybe(Difference(d.TubHumidity, d.AreaHumidity), XlsxStyle.OneDecimal),
+                Cell.Maybe(d.LocalHumidity, XlsxStyle.OneDecimal),
+                Cell.Maybe(Difference(d.LocalHumidity, d.AreaHumidity), XlsxStyle.OneDecimal),
                 Cell.Maybe(d.RainMm, XlsxStyle.OneDecimal));
         }
 
         sheet.Add(
             Cell.Of("Average", XlsxStyle.Total),
             Cell.Maybe(m.AvgAreaTempC, XlsxStyle.TotalOneDecimal),
-            Cell.Maybe(m.AvgTubTempC, XlsxStyle.TotalOneDecimal),
-            Cell.Maybe(Difference(m.AvgTubTempC, m.AvgAreaTempC), XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgLocalTempC, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(Difference(m.AvgLocalTempC, m.AvgAreaTempC), XlsxStyle.TotalOneDecimal),
             Cell.Maybe(m.AvgAreaHumidity, XlsxStyle.TotalOneDecimal),
-            Cell.Maybe(m.AvgTubHumidity, XlsxStyle.TotalOneDecimal),
-            Cell.Maybe(Difference(m.AvgTubHumidity, m.AvgAreaHumidity), XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(m.AvgLocalHumidity, XlsxStyle.TotalOneDecimal),
+            Cell.Maybe(Difference(m.AvgLocalHumidity, m.AvgAreaHumidity), XlsxStyle.TotalOneDecimal),
             Cell.Of(m.TotalRainMm, XlsxStyle.TotalOneDecimal));
 
         sheet.AddBlank();
 
-        if (m.AvgTubTempC is { } tub && m.AvgAreaTempC is { } area)
+        if (m.AvgLocalTempC is { } local && m.AvgAreaTempC is { } area)
         {
-            var warmer = tub - area >= 0 ? "warmer" : "cooler";
+            var warmer = local - area >= 0 ? "warmer" : "cooler";
 
             sheet.Add(Cell.Of(
-                $"Inside the tub it was on average " +
-                $"{Math.Abs(tub - area).ToString("0.0", CultureInfo.InvariantCulture)} °C {warmer} than the " +
-                "area forecast. AgroFlow uses the area forecast for its water calculations and the tub " +
-                "sensor as a check on it.",
+                $"At the crop it was on average " +
+                $"{Math.Abs(local - area).ToString("0.0", CultureInfo.InvariantCulture)} °C {warmer} than the " +
+                "area forecast. AgroFlow uses the area forecast for its water calculations and the local " +
+                "field sensor as a check on it.",
                 XlsxStyle.Bold));
         }
 

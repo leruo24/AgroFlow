@@ -345,7 +345,7 @@ public class Fao56EngineVerificationTests
         Assert.Equal(0.0, SoilWaterBalance.RelativeMoisturePercent(3500, 1200, 3000)!.Value, 3);
     }
 
-    // Root depth is capped by the tub, so a 1.0 m maize root zone in a 0.3 m tub
+    // Root depth is capped by a physical soil boundary, so a 1.0 m maize root zone in 0.3 m of soil
     // claims 0.3 m of water, not 1.0 m.
     [Fact]
     public void RootDepth_IsCappedByTheZoneLimit()

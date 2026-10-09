@@ -15,7 +15,13 @@ public record ForecastDayResponse(
     double? RainMm,
     double? HumidityPercent,
     string Icon,
-    string? Advice);
+    string? Advice,
+    string? Action = null,
+    double? RequiredDepthMm = null,
+    double? Litres = null,
+    double? RuntimeSeconds = null,
+    string? Confidence = null,
+    bool Tentative = false);
 
 public record ForecastResponse(
     long FarmId,
@@ -194,18 +200,18 @@ public static class ForecastEndpoints
         //    zone's real soil reading and the full water balance; later days
         //    have no reading and never get a guessed one.
         // ------------------------------------------------------------------
-        var advicePerDay = new Dictionary<DateOnly, string?>();
+        var planPerDay = new Dictionary<DateOnly, RollingIrrigationDay>();
 
         if (zoneId is not null)
         {
-            advicePerDay = await BuildZoneAdviceAsync(
-                connection, engine, zoneId.Value, latitude, today, weatherByDate, days, cancellationToken);
+            planPerDay = BuildZoneAdvice(engine, zoneId.Value, today);
         }
 
         var response = days.Select(d =>
         {
             var icon = ForecastOutlook.PickIcon(d.Rain, d.Humidity);
 
+            planPerDay.TryGetValue(d.Date, out var plan);
             return new ForecastDayResponse(
                 d.Date.ToString("yyyy-MM-dd"),
                 // Named on the server so every client shows the same word, and
@@ -217,114 +223,36 @@ public static class ForecastEndpoints
                 d.Rain is { } rn ? Math.Round(rn, 1) : null,
                 d.Humidity is { } hm ? Math.Round(hm, 0) : null,
                 ForecastOutlook.IconName(icon),
-                advicePerDay.TryGetValue(d.Date, out var advice) ? advice : null);
+                plan?.Advice,
+                plan?.Action.ToString(),
+                plan?.RequiredDepthMm,
+                plan?.Litres,
+                plan?.RuntimeSeconds,
+                plan?.Confidence,
+                plan?.Tentative ?? false);
         }).ToList();
 
         return Results.Ok(new ForecastResponse(
             resolvedFarmId, zoneId, zoneName, response, ForecastOutlook.SourceLine, null));
     }
 
-    private static async Task<Dictionary<DateOnly, string?>> BuildZoneAdviceAsync(
-        NpgsqlConnection connection,
+    private static Dictionary<DateOnly, RollingIrrigationDay> BuildZoneAdvice(
         AgroFlow.Business.Fao56EngineController engine,
         long zoneId,
-        double? latitude,
-        DateOnly today,
-        Dictionary<DateOnly, DailyWeather> weatherByDate,
-        List<(DateOnly Date, double? Min, double? Max, double? Rain, double? Humidity)> days,
-        CancellationToken cancellationToken)
+        DateOnly today)
     {
-        var result = new Dictionary<DateOnly, string?>();
-
-        string? crop = null;
-        DateOnly? planted = null;
-        double? threshold = null;
-        double? moisture = null;
-        DateTime? readAt = null;
-
-        const string zoneSql = """
-            select z.crop_type, z.planting_date, z.moisture_threshold, m.value, m.recorded_at
-              from zone z
-              left join lateral (
-                select r.value, r.recorded_at from sensor_reading r
-                 where r.zone_id = z.id and r.sensor_type = 'SoilMoisture'
-                 order by r.recorded_at desc limit 1) m on true
-             where z.id = $1
-            """;
-
-        await using (var cmd = new NpgsqlCommand(zoneSql, connection))
-        {
-            cmd.Parameters.AddWithValue(zoneId);
-
-            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-            if (await reader.ReadAsync(cancellationToken))
-            {
-                crop = reader.IsDBNull(0) ? null : reader.GetString(0);
-                planted = reader.IsDBNull(1) ? null : reader.GetFieldValue<DateOnly>(1);
-                threshold = reader.IsDBNull(2) ? null : Convert.ToDouble(reader.GetValue(2));
-                moisture = reader.IsDBNull(3) ? null : Convert.ToDouble(reader.GetValue(3));
-                readAt = reader.IsDBNull(4) ? null : reader.GetDateTime(4);
-            }
-        }
-
-        // Only today's reading is usable, and only if it is recent. A stale
-        // reading presented as today's is how a farmer ends up watering on
-        // yesterday's conditions.
-        var readingFresh = readAt is not null && (DateTime.UtcNow - readAt.Value).TotalHours <= 24;
-
-        // The water balance is a time series assembled once per zone, exactly
-        // as the schedule report does it. Wrapped because the engine's columns
-        // may be absent on a database where 0027 has not been applied - the
-        // forecast must still render.
-        ZoneEngineInput? balanceInput = null;
+        var result = new Dictionary<DateOnly, RollingIrrigationDay>();
         try
         {
             var engineZone = engine.Data.GetZone(zoneId);
-            if (engineZone != null) balanceInput = engine.BuildInput(engineZone, today);
+            if (engineZone == null) return result;
+            return engine.RunZone(engineZone, today, persist: false)
+                .Outlook.ToDictionary(d => d.Date);
         }
         catch (Exception)
         {
-            balanceInput = null;
+            return result;
         }
-
-        foreach (var d in days)
-        {
-            weatherByDate.TryGetValue(d.Date, out var w);
-
-            try
-            {
-                var advice = IrrigationAdvisor.Advise(new ZoneAdviceInput
-                {
-                    CropType = crop,
-                    PlantingDate = planted,
-                    AsOf = d.Date,
-                    // Today only, and only when fresh. Future days get null,
-                    // never a guess.
-                    SoilMoisturePercent = d.Date == today && readingFresh ? moisture : null,
-                    MoistureThresholdPercent = threshold,
-                    FarmLatitudeDegrees = latitude,
-                    LatestWeather = w,
-                    Forecast = weatherByDate.Values.Where(x => x.Date > d.Date).ToList(),
-                    WaterBalance = d.Date == today ? balanceInput : null,
-                });
-
-                // Day 0 carries a real decision. Later days have no soil
-                // reading behind them, so they fall back to the rainfall-only
-                // outlook the schedule report already uses past day 0 -
-                // rather than dressing up a guess as the engine's advice.
-                result[d.Date] = d.Date == today
-                    ? ForecastOutlook.PlainDayAdvice(advice.Action, d.Rain)
-                    : ForecastOutlook.PlainOutlookFromRainOnly(d.Rain);
-            }
-            catch (Exception)
-            {
-                // One un-adviseable day must not take the forecast down. The
-                // weather for that day still shows; the advice line does not.
-                result[d.Date] = null;
-            }
-        }
-
-        return result;
     }
 
     private static bool TryGetUserId(ClaimsPrincipal user, out Guid userId) =>

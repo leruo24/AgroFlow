@@ -144,7 +144,7 @@ internal static class XlsxWriter
     }
 
     /// Excel forbids : \ / ? * [ ] in a sheet name and caps it at 31
-    /// characters. A zone called "Tub 1 / North" would otherwise produce a
+    /// characters. A zone called "North / Seedlings" would otherwise produce a
     /// file that will not open - and a zone name is user input.
     private static string SafeSheetName(string name)
     {

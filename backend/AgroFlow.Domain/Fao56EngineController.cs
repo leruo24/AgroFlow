@@ -69,17 +69,24 @@ namespace AgroFlow.Business
                 DesiredMoisture = zone.DesiredMoisture,
                 FarmLatitudeDegrees = zone.FarmLatitude,
 
-                // farm has no elevation column. FAO-56 Eq. 8 needs it for
-                // atmospheric pressure; sea level is used, which moves the
-                // psychrometric constant about 1% per 100 m. Recorded as an
-                // assumption rather than guessed at per farm.
-                FarmElevationM = 0.0,
+                // farm has no reliable elevation column. Leave it unknown; the
+                // ETo resolver labels its standard-pressure fallback rather than
+                // inventing an elevation for the farm.
+                FarmElevationM = null,
 
                 Today = today,
+                BalanceStartDate = from,
 
                 // Item 2: lets the engine tell a fresh reading from a stale one.
                 NowUtc = DateTime.UtcNow,
             };
+
+            var prior = db.GetLastCompleteBalanceBefore(zone.ZoneId, from);
+            if (prior.HasValue)
+            {
+                input.InitialDepletionDate = prior.Value.Day;
+                input.InitialDepletionMm = prior.Value.DepletionMm;
+            }
 
             input.Weather.AddRange(db.GetWeather(zone.FarmId, zone.ZoneId, from, to));
 
@@ -277,9 +284,14 @@ namespace AgroFlow.Business
 
             var wet = zone.CalibrationWet.Value;
             var dry = zone.CalibrationDry.Value;
+            var domain = Fao56Engine.DetectSensorDomain(wet, dry);
+            if (domain == SoilMoistureDomain.InvalidMixedCalibration)
+                return ResetRecommendedOutcome.Failed("Wet and dry settings use different sensor scales. Record both again first.");
 
-            var desired = wet;
-            var threshold = wet - pr * (wet - dry);
+            var desired = domain == SoilMoistureDomain.RelativePercent ? 100.0 : wet;
+            var threshold = domain == SoilMoistureDomain.RelativePercent
+                ? 100.0 * (1.0 - pr)
+                : wet - pr * (wet - dry);
 
             db.SaveRecommendedThresholds(zoneId, threshold, desired);
 
@@ -318,8 +330,20 @@ namespace AgroFlow.Business
 
             if (other.HasValue)
             {
+                var domain = Fao56Engine.DetectSensorDomain(
+                    point == "wet" ? reading.Value : other.Value,
+                    point == "dry" ? reading.Value : other.Value);
+                if (domain == SoilMoistureDomain.InvalidMixedCalibration)
+                {
+                    return CalibrationOutcome.Failed(
+                        "This reading uses a different sensor scale from the saved point. Clear the old calibration and record both points again.");
+                }
+
                 var separation = Math.Abs(reading.Value - other.Value);
-                if (separation < MinCalibrationSeparationFraction * Fao56Engine.MaxAdcReading)
+                var domainMaximum = domain == SoilMoistureDomain.RelativePercent
+                    ? 100.0
+                    : Fao56Engine.MaxAdcReading;
+                if (separation < MinCalibrationSeparationFraction * domainMaximum)
                 {
                     return CalibrationOutcome.Failed("Wet and dry readings are too close. Try again.");
                 }

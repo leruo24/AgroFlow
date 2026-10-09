@@ -114,7 +114,10 @@ public class ManualLoggingTests
         var (_, action) = RunToday(NoKit(i =>
         {
             i.SoilFeelChecks.Add(Feel("dry"));
-            i.Weather.Last().RainMm = 30;
+            var today = i.Weather.Last();
+            today.RainMm = 30;
+            today.IsForecast = true;
+            i.InitialDepletionMm = 35;
         }));
         Assert.NotEqual("water", action.Kind);
     }

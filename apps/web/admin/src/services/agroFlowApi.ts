@@ -62,6 +62,40 @@ async function postAuthorized<T = void>(path: string, body: unknown): Promise<T>
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+async function getAuthorized<T>(path: string): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(errorMessage(await response.text(), response.status));
+  return await response.json() as T;
+}
+
+export type LocationSearchResult = {
+  name: string;
+  detail: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type ReverseLocationResult = {
+  locality: string | null;
+  district: string | null;
+  province: string | null;
+  country: string | null;
+  displayName: string | null;
+};
+
+export function searchLocations(query: string): Promise<LocationSearchResult[]> {
+  return getAuthorized(`/api/admin/locations/search?q=${encodeURIComponent(query)}`);
+}
+
+export function reverseLocation(latitude: number, longitude: number): Promise<ReverseLocationResult> {
+  return getAuthorized(`/api/admin/locations/reverse?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}`);
+}
+
 export async function createFarmer(input: {
   email: string;
   temporaryPassword: string;
@@ -211,6 +245,21 @@ export async function registerFarm(input: {
   };
 }): Promise<void> {
   await postAuthorized("/api/farms/register", input);
+}
+
+export async function updateFarmLocation(
+  farmId: number,
+  input: { location: string; latitude: number; longitude: number },
+): Promise<void> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const response = await navigationAwareFetch(`${API_BASE}/api/farms/${farmId}/location`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(errorMessage(await response.text(), response.status));
 }
 export type FarmerOption = {
   id: string;

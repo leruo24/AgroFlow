@@ -40,7 +40,7 @@ farm-wide summary as picking "All zones". It now produces the document in
 - **Page 2** — what the crop needed against what it got, the soil moisture
   trace with its healthy band and a marker at every pump run, and the week's
   advice with the source of each line.
-- **Page 3** — the area forecast against the sensor in the tub, the daily
+- **Page 3** — the area forecast against the local field sensor, the daily
   table with a week totals row, and a glossary of the three terms the report
   cannot avoid using.
 

@@ -141,7 +141,9 @@ public class AdviceNeverBlockedTests
     [Fact]
     public void FullSetup_WithAFreshReading_IsHigh_AndHasNoNextStep()
     {
-        var result = Fao56Engine.Run(FullZone());
+        var input = FullZone();
+        input.Readings[0].RawValue = 3000; // agrees with the dry weather balance
+        var result = Fao56Engine.Run(input);
 
         Assert.Equal(ConfidenceLevel.High, result.Confidence.Level);
         Assert.Null(result.NextStep);
@@ -163,8 +165,8 @@ public class AdviceNeverBlockedTests
         Assert.Equal("kit", result.NextStep!.Field);
 
         // The stale reading did not start the balance: the dryness is exactly
-        // what the weather alone gives, as if there were no reading at all.
-        Assert.Contains(result.Facts, f => f.Label == "How dry the soil is now" && f.Source.Contains("full profile"));
+        // what the weather-only chronological balance gives.
+        Assert.Contains(result.Facts, f => f.Label == "How dry the soil is now" && f.Source.Contains("continuous water balance"));
 
         var weatherOnly = FullZone();
         weatherOnly.Readings.Clear();
@@ -190,7 +192,7 @@ public class AdviceNeverBlockedTests
     }
 
     [Fact]
-    public void NoArea_GivesMinutesPerSquareMetre()
+    public void NoArea_GivesAgronomicDepthOnly()
     {
         var input = FullZone();
         input.AreaM2 = null;
@@ -202,9 +204,8 @@ public class AdviceNeverBlockedTests
         var water = insights.Single(i => i.InsightType == InsightType.WaterNow);
 
         Assert.Null(result.RecommendedLitres);
-        Assert.Equal(Math.Round(result.DepletionMm!.Value / 1.5, 1), result.RecommendedMinutesPerSquareMetre);
-        // The brief's own sentence.
-        Assert.Contains($"For each square metre, run the pump about {result.RecommendedMinutesPerSquareMetre!.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} minutes", water.Message);
+        Assert.NotNull(result.RecommendedDepthMm);
+        Assert.Contains("Add zone area to convert this to litres", water.Message);
         Assert.Contains("mm", water.Message);
         _out.WriteLine("     " + water.Message);
     }
@@ -224,7 +225,7 @@ public class AdviceNeverBlockedTests
 
         Assert.Null(result.RecommendedMinutesPerSquareMetre);
         Assert.Contains("mm", water.Message);
-        Assert.Contains("L per square metre", water.Message);
+        Assert.Contains("Add zone area to convert this to litres", water.Message);
         _out.WriteLine("     " + water.Message);
     }
 

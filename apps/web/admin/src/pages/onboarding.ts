@@ -16,7 +16,7 @@ a zone row.
 /* Item 6: what the advice needs, asked for here instead of later.
    Soil is three cards with Loam already chosen ("Not sure? Pick Loam" -
    the engine assumes loam anyway, so the default is honest). Size is a
-   preset; hectares are only asked for bigger plots. Planting is "about how
+   preset; hectares are also available for field-scale zones. Planting is "about how
    many weeks ago?", which a farmer can answer when a date is a guess. */
 export const SOILS: { value: string; label: string; hint: string }[] = [
   { value: "sandy", label: "Sandy", hint: "Gritty, water runs straight through" },
@@ -25,8 +25,8 @@ export const SOILS: { value: string; label: string; hint: string }[] = [
 ];
 
 export const AREA_PRESETS: { value: string; label: string; m2: number | null }[] = [
-  { value: "tub", label: "Small tub (about 0.2 m²)", m2: 0.2 },
-  { value: "bed", label: "Bed, 1 × 2 m (2 m²)", m2: 2 },
+  { value: "small", label: "Small growing area (about 0.2 m²)", m2: 0.2 },
+  { value: "field", label: "Field / plot", m2: null },
   { value: "custom", label: "Custom size", m2: null },
 ];
 
@@ -96,14 +96,15 @@ export function zoneRow(index: number): string {
     </label>
 
     <label class="drawer-field">
-      <span>Zone ${n} size in hectares (bigger plots only)</span>
+      <span>Zone ${n} area in hectares (optional)</span>
       <input
         type="number"
         min="0.0001"
         step="0.01"
         data-field="zone_size_${index}"
-        placeholder="Leave empty for a tub or bed"
+        placeholder="e.g. 1.5"
       />
+      <small class="field-note">Use hectares for field-scale areas; AgroFlow stores the equivalent area without changing the agronomy model.</small>
     </label>
 
     <label class="drawer-field">
@@ -118,8 +119,9 @@ export function zoneRow(index: number): string {
     </label>
 
     <label class="drawer-field">
-      <span>Zone ${n} soil depth in cm (tubs and raised beds, optional)</span>
+      <span>Zone ${n} available root-zone depth in cm (optional)</span>
       <input type="number" min="1" max="300" step="1" data-field="zone_depth_cm_${index}" placeholder="e.g. 30" />
+      <small class="field-note">Use this when crop roots are physically limited by shallow soil, a raised bed, container or another boundary.</small>
     </label>
   </div>
 
@@ -142,10 +144,10 @@ export type ZoneSetupInput = {
 export function readZoneSetup(v: Record<string, string>, i: number, today: Date = new Date()): ZoneSetupInput {
   const preset = AREA_PRESETS.find((a) => a.value === v[`zone_area_preset_${i}`]);
   const custom = Number(v[`zone_area_m2_${i}`]);
-  const areaM2 = preset?.m2 ?? (preset?.value === "custom" && custom > 0 ? custom : null);
+  const areaM2 = preset?.m2 ?? (["custom", "field"].includes(preset?.value ?? "") && custom > 0 ? custom : null);
 
-  // Hectares stay the farmer-facing size (0010). A tub or bed has none
-  // typed in, so it is the watered area in hectares (1 ha = 10 000 m²).
+  // Hectares stay the farmer-facing size (0010). For a measured growing area,
+  // use its equivalent area (1 ha = 10 000 m²) when no hectare value was typed.
   const ha = Number(v[`zone_size_${i}`]);
   const sizeHectares = ha > 0 ? ha : areaM2 != null ? areaM2 / 10000 : 0;
 
@@ -164,8 +166,8 @@ export function readZoneSetup(v: Record<string, string>, i: number, today: Date 
     areaM2,
     plantingDate,
     flowRateLpm: Number(v[`zone_flow_${i}`]) > 0 ? Number(v[`zone_flow_${i}`]) : null,
-    // The roots cannot go deeper than the soil in a tub: the engine caps
-    // its root depth here (item 2). Typed in cm, stored in metres.
+    // A physical boundary can limit the crop's available root zone. Typed in
+    // centimetres here and stored in metres for the FAO-56 engine.
     rootDepthLimitM: Number(v[`zone_depth_cm_${i}`]) > 0 ? Number(v[`zone_depth_cm_${i}`]) / 100 : null,
   };
 }
@@ -173,7 +175,7 @@ export function readZoneSetup(v: Record<string, string>, i: number, today: Date 
 /* What the per-field required checks cannot say. Null = fine. */
 export function zoneSetupProblem(v: Record<string, string>, i: number): string | null {
   const n = i + 1;
-  if (v[`zone_area_preset_${i}`] === "custom" && !(Number(v[`zone_area_m2_${i}`]) > 0)) {
+  if (["custom", "field"].includes(v[`zone_area_preset_${i}`]) && !(Number(v[`zone_area_m2_${i}`]) > 0) && !(Number(v[`zone_size_${i}`]) > 0)) {
     return `Enter the watered area of zone ${n} in m².`;
   }
   const weeks = (v[`zone_weeks_${i}`] ?? "").trim();
@@ -226,7 +228,7 @@ export function syncZoneChoices(root: ParentNode): void {
   });
   root.querySelectorAll<HTMLSelectElement>("[data-area-preset]").forEach((sel) => {
     const box = root.querySelector<HTMLElement>(`[data-area-custom="${sel.dataset["areaPreset"]}"]`);
-    if (box) box.hidden = sel.value !== "custom";
+    if (box) box.hidden = !["custom", "field"].includes(sel.value);
   });
 }
 

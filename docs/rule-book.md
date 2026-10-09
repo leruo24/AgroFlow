@@ -21,7 +21,7 @@ FAO-56 notes in the schedule report. For maize and potato it uses a different Ta
 row (a different planting season) - both are published FAO-56 values, and the reason is
 written at the top of `Fao56EngineReference.cs`. No advice on this page comes from it.
 
-**Worked example** used in every table: maize in a 0.3 m deep tub of 1.5 m², a 1.5 L/min drip line, crop water use 5 mm/day.
+**Worked example** used in every table: maize in a 1.5 m² plot with a 0.3 m usable root zone, a 1.5 L/min drip line, crop water use 5 mm/day.
 
 ## The order the rules run in
 
@@ -33,8 +33,7 @@ written at the top of `Fao56EngineReference.cs`. No advice on this page comes fr
 4. `KitRules.PumpRanNoChange` → watering failed
 5. `KitRules.IsDhtOffline` → temperature sensor offline
 6. `WaterRules.RecommendedThreshold` + `ThresholdTooDry` → threshold unsafe
-7. `WaterRules.ShouldWaterToday`, then `AtOrBelowFarmerThreshold` → due for water
-8. `WaterRules.SkipForRain` → skip for rain, else water now
+7-8. `Fao56Engine` `PrimaryAction` (its rolling outlook: `WaterRules.ShouldWaterToday` on the projected dryness with and without the expected rain) → postpone for rain, else water now (reduced or full)
 9. a day with no weather → data gap
 10. `WaterRules.WaterSoon` → water soon
 11. `WaterRules.HotDaysAhead` → hot days
@@ -46,20 +45,20 @@ written at the top of `Fao56EngineReference.cs`. No advice on this page comes fr
 ## 1. Should I water today? (soil × stage × dryness × rain)
 
 Rules: `WaterRules.ShouldWaterToday` (FAO-56 p. 171: water "before or at the moment" the
-readily available water is used up, Dr ≥ RAW) and `WaterRules.SkipForRain` (DATA RULE: rain
-at least today's need replaces today's watering - Eq. 85, p. 170, credits rain like irrigation).
+readily available water is used up, Dr ≥ RAW), applied by `Fao56Engine` to the projected dryness
+with and without the expected rain: postpone only when the rain keeps the soil below RAW (Eq. 85, p. 170).
 RAW comes from the soil (Table 19, p. 144), the crop's p (Table 22, pp. 163-165), the soil
 adjustment (p. 167) and today's water use (p. 162).
 
 | Soil | Crop stage | Dryness vs RAW | Rain forecast | → Action | Farmer sentence | Source |
 |---|---|---|---|---|---|---|
-| any (loam shown) | any | below RAW (20.5 of 21.5 mm) | none | No watering | "No watering needed today." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | none | Water today | "Water Tub 1 now: about 22 min (~32 L)." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | 4.9 mm < need | Water today | "Water Tub 1 now: about 22 min (~32 L)." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | 5 mm = need | Skip, rain covers it | "Rain expected. Skip watering Tub 1 today and save ~32 L." | p. 171; p. 170 |
-| any (loam shown) | any | at RAW (21.5 mm) | 12 mm > need | Skip, rain covers it | "Rain expected. Skip watering Tub 1 today and save ~32 L." | p. 171; p. 170 |
-| Sandy | any | at RAW (13 mm) | none | Water today | "Water Tub 1 now: about 13 min (~20 L)." | p. 171; p. 170 |
-| Clay | any | at RAW (21.9 mm) | none | Water today | "Water Tub 1 now: about 22 min (~33 L)." | p. 171; p. 170 |
+| any (loam shown) | any | below RAW (20.5 of 21.5 mm) | none | Water today | "Water North Plot today: about 25.5 mm (~38 L), run about 25.5 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | none | Water today | "Water North Plot today: about 26.5 mm (~40 L), run about 26.5 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | 4.9 mm < need | Water today | "Rain helps, but water North Plot today: about 21.6 mm (~32 L), run about 21.6 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | 5 mm = need | Water today | "Rain helps, but water North Plot today: about 21.5 mm (~32 L), run about 21.5 min." | p. 171; p. 170 |
+| any (loam shown) | any | at RAW (21.5 mm) | 12 mm > need | Postpone for rain | "Postpone watering North Plot: expected rain should move the field below its watering point." | p. 171; p. 170 |
+| Sandy | any | at RAW (13 mm) | none | Water today | "Water North Plot today: about 18 mm (~27 L), run about 18 min." | p. 171; p. 170 |
+| Clay | any | at RAW (21.9 mm) | none | Water today | "Water North Plot today: about 26.9 mm (~40 L), run about 26.9 min." | p. 171; p. 170 |
 
 **What the soil changes.** Sand holds less water than loam and clay more (Table 19), so in
 sand RAW is reached sooner and each watering is smaller - shorter, more often. That is not a
@@ -181,24 +180,26 @@ All DATA RULES - FAO-56 knows nothing about sensors. A kit reports every 30 seco
 
 | Problem | Rule | → Farmer sentence |
 |---|---|---|
-| Offline | no reading for 3 h | "No data from Tub 1 since 08:00 on 6 Oct." |
-| Sensor stuck | same reading for 6 h | "Tub 1 sensor may be faulty or loose. Check it." |
-| Pump ran, no change | a run of at least 2 min, soil no wetter 30 min later; never judged on missing readings | "Tub 1: pump ran but soil didn't get wetter. Check pump, pipe and water supply." |
-| Temperature sensor offline | soil readings arriving, no valid temperature/humidity for 2 h; back after 3 good readings in a row | "Tub 1's temperature sensor isn't working. We're using weather app data for now, and our team has been notified." |
-| Sensor drift | wettest reading this week more than 15% of the wet/dry span from the saved wet point | "Tub 1 sensor readings are drifting. Re-do the wet/dry setup." |
+| Offline | no reading for 3 h | "No data from North Plot since 08:00 on 6 Oct." |
+| Sensor stuck | same reading for 6 h | "North Plot sensor may be faulty or loose. Check it." |
+| Pump ran, no change | a run of at least 2 min, soil no wetter 30 min later; never judged on missing readings | "North Plot: pump ran but soil didn't get wetter. Check pump, pipe and water supply." |
+| Temperature sensor offline | soil readings arriving, no valid temperature/humidity for 2 h; back after 3 good readings in a row | "North Plot's temperature sensor isn't working. We're using weather app data for now, and our team has been notified." |
+| Sensor drift | wettest reading this week more than 15% of the wet/dry span from the saved wet point | "North Plot sensor readings are drifting. Re-do the wet/dry setup." |
 
 ## 8. Today's one action (`TodayRules`)
 
-The Home card and the admin farm page show ONE sentence per zone, picked from the insights
-above in this order (DATA RULE - the order a farmer would want them):
+The Home card and the admin farm page show ONE sentence per zone, worded from the engine's
+`PrimaryAction` in this order (DATA RULE - the order a farmer would want them):
 
-1. Rain will cover it → "No watering today: rain is expected to cover it."
-2. Water now → "Water about N min this morning (about N L)" - the amount from `MinutesToRun`.
-3. Kit problem: pump ran with no effect, kit offline, sensor stuck → "Check the …"
-4. No crop set → "Finish setup: …" with the one next step.
-5. Water soon → "No watering today; next on <day>".
-6. The balance ran and nothing is due → "No watering needed today".
-7. Otherwise → "Finish setup: …" or, with no weather, "No advice yet".
+1. Crop not planted / season complete → "No crop irrigation yet …" / "Crop cycle complete …"
+2. Postpone for rain → "No watering today: rain is expected to cover it."
+3. Water now → "Water about N min this morning (about N L)"; reduced → "Rain helps, but water …".
+4. Kit problem: pump ran with no effect, kit offline, sensor stuck → "Check the …"
+5. No crop set → "Finish setup: …" with the one next step.
+6. Water soon → "No watering today; next on <day>".
+7. No water needed → "No watering needed today" (only for this action).
+8. Check field / sensor / pump and pipes → "Check the …".
+9. Otherwise (finish setup, not enough data) → "Finish setup: …" or "No advice yet …".
 
 ## 9. Recommended for you (`RecommendationRules`)
 
@@ -214,7 +215,7 @@ above in this order (DATA RULE - the order a farmer would want them):
 
 Worked example - potato, loam, 0.2 m², 1.5 L/min, ETo 5 mm/day, stage unknown:
 
-> Based on your climate in Mafikeng and since you want to grow potato on loam soil, we recommend: water when the soil reaches about 65% (relative), stop at 100%; expect to water about every 2–3 days in October, about 3 minutes each time for a 0.2 m² tub.
+> Based on your climate in Mafikeng and since you want to grow potato on loam soil, we recommend: water when the soil reaches about 65% (relative), stop at 100%; expect to water about every 2–3 days in October, about 3 minutes each time for this 0.2 m² irrigation zone.
 
 Confidence: Medium: the planting date is missing, so peak growth is assumed.
 

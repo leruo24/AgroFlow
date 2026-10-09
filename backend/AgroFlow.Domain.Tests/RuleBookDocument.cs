@@ -63,7 +63,8 @@ public static class RuleBookDocument
     private static readonly DateOnly Today = new DateOnly(2026, 10, 6);
 
     // The worked example every table uses, so the numbers can be checked by
-    // hand: maize in a 0.3 m deep tub of 1.5 m², a 1.5 L/min drip line, and a
+    // hand: maize in a 1.5 m² plot with a 0.3 m usable root zone, a
+    // 1.5 L/min drip line, and a
     // 5 mm/day crop water use.
     private const string ExampleCrop = "maize";
     private const double ExampleRootLimitM = 0.3;
@@ -99,8 +100,9 @@ public static class RuleBookDocument
         L("row (a different planting season) - both are published FAO-56 values, and the reason is");
         L("written at the top of `Fao56EngineReference.cs`. No advice on this page comes from it.");
         L("");
-        L("**Worked example** used in every table: maize in a " + N(ExampleRootLimitM) + " m deep tub of " + N(ExampleAreaM2) +
-          " m², a " + N(ExampleFlowLpm) + " L/min drip line, crop water use " + N(ExampleNeedMm) + " mm/day.");
+        L("**Worked example** used in every table: maize in a " + N(ExampleAreaM2) +
+          " m² plot with a " + N(ExampleRootLimitM) + " m usable root zone, a " +
+          N(ExampleFlowLpm) + " L/min drip line, crop water use " + N(ExampleNeedMm) + " mm/day.");
         L("");
         L("## The order the rules run in");
         L("");
@@ -112,8 +114,7 @@ public static class RuleBookDocument
         L("4. `KitRules.PumpRanNoChange` → watering failed");
         L("5. `KitRules.IsDhtOffline` → temperature sensor offline");
         L("6. `WaterRules.RecommendedThreshold` + `ThresholdTooDry` → threshold unsafe");
-        L("7. `WaterRules.ShouldWaterToday`, then `AtOrBelowFarmerThreshold` → due for water");
-        L("8. `WaterRules.SkipForRain` → skip for rain, else water now");
+        L("7-8. `Fao56Engine` `PrimaryAction` (its rolling outlook: `WaterRules.ShouldWaterToday` on the projected dryness with and without the expected rain) → postpone for rain, else water now (reduced or full)");
         L("9. a day with no weather → data gap");
         L("10. `WaterRules.WaterSoon` → water soon");
         L("11. `WaterRules.HotDaysAhead` → hot days");
@@ -147,8 +148,8 @@ public static class RuleBookDocument
         L("## 1. Should I water today? (soil × stage × dryness × rain)");
         L("");
         L("Rules: `WaterRules.ShouldWaterToday` (FAO-56 p. 171: water \"before or at the moment\" the");
-        L("readily available water is used up, Dr ≥ RAW) and `WaterRules.SkipForRain` (DATA RULE: rain");
-        L("at least today's need replaces today's watering - Eq. 85, p. 170, credits rain like irrigation).");
+        L("readily available water is used up, Dr ≥ RAW), applied by `Fao56Engine` to the projected dryness");
+        L("with and without the expected rain: postpone only when the rain keeps the soil below RAW (Eq. 85, p. 170).");
         L("RAW comes from the soil (Table 19, p. 144), the crop's p (Table 22, pp. 163-165), the soil");
         L("adjustment (p. 167) and today's water use (p. 162).");
         L("");
@@ -190,26 +191,46 @@ public static class RuleBookDocument
     private static (string Action, string Sentence) Decide(
         Fao56EngineCrop crop, SoilWaterHolding soil, double depletion, double raw, double rainMm)
     {
-        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "Tub 1", CropType = crop.Key, Today = Today };
+        var noRain = depletion + ExampleNeedMm;
+        var effectiveRain = SoilWaterBalance.EffectiveRainfallMm(rainMm, ExampleNeedMm);
+        var postRain = Math.Max(0, noRain - effectiveRain);
+        var dueWithoutRain = noRain >= raw;
+        var primary = dueWithoutRain && effectiveRain > 0 && postRain < raw
+            ? IrrigationPrimaryAction.PostponeForRain
+            : dueWithoutRain && effectiveRain > 0
+                ? IrrigationPrimaryAction.WaterNowReduced
+                : dueWithoutRain ? IrrigationPrimaryAction.WaterNow : IrrigationPrimaryAction.NoWaterNeeded;
+        var required = primary is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced
+            ? postRain
+            : (double?)null;
+        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "North Plot", CropType = crop.Key, Today = Today };
         var result = new ZoneEngineResult
         {
             ZoneId = 1,
-            ZoneName = "Tub 1",
+            ZoneName = "North Plot",
             Crop = crop,
             Soil = soil.Soil,
             BalanceRan = true,
             DepletionMm = depletion,
             RawMm = raw,
             EtcTodayMm = ExampleNeedMm,
-            RecommendedLitres = SoilWaterBalance.IrrigationLitres(depletion, ExampleAreaM2),
-            RecommendedMinutes = WaterRules.MinutesToRun(depletion, ExampleAreaM2, ExampleFlowLpm),
-            RecommendedDepthMm = Math.Round(depletion, 1),
+            PrimaryAction = primary,
+            ProjectedPostRainDepletionMm = postRain,
+            ForecastRainTodayMm = rainMm,
+            RecommendedLitres = required.HasValue ? SoilWaterBalance.IrrigationLitres(required.Value, ExampleAreaM2) : null,
+            RecommendedRuntimeSeconds = required.HasValue
+                ? SoilWaterBalance.IrrigationRuntimeSeconds(SoilWaterBalance.IrrigationLitres(required.Value, ExampleAreaM2), ExampleFlowLpm)
+                : null,
+            RecommendedMinutes = required.HasValue
+                ? SoilWaterBalance.IrrigationRuntimeSeconds(SoilWaterBalance.IrrigationLitres(required.Value, ExampleAreaM2), ExampleFlowLpm) / 60.0
+                : null,
+            RecommendedDepthMm = required.HasValue ? Math.Round(required.Value, 1) : null,
         };
-        result.Days.Add(new WaterBalanceDay { Day = Today, RainMm = rainMm });
+        result.Days.Add(new WaterBalanceDay { Day = Today, RainMm = rainMm, IsForecast = true });
 
         var insights = ZoneInsightBuilder.Build(input, result, new ZoneFaultSignals());
         var skip = insights.FirstOrDefault(i => i.InsightType == InsightType.SkipRain);
-        if (skip != null) return ("Skip, rain covers it", skip.Message);
+        if (skip != null) return ("Postpone for rain", skip.Message);
         var water = insights.FirstOrDefault(i => i.InsightType == InsightType.WaterNow);
         if (water != null) return ("Water today", water.Message);
         return ("No watering", "No watering needed today.");
@@ -386,8 +407,8 @@ public static class RuleBookDocument
         L("| Problem | Rule | → Farmer sentence |");
         L("|---|---|---|");
 
-        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "Tub 1", Today = Today, CalibrationWet = 1200, CalibrationDry = 3000 };
-        var result = new ZoneEngineResult { ZoneId = 1, ZoneName = "Tub 1", LatestReadingAtUtc = new DateTime(2026, 10, 6, 6, 0, 0, DateTimeKind.Utc) };
+        var input = new ZoneEngineInput { ZoneId = 1, ZoneName = "North Plot", Today = Today, CalibrationWet = 1200, CalibrationDry = 3000 };
+        var result = new ZoneEngineResult { ZoneId = 1, ZoneName = "North Plot", LatestReadingAtUtc = new DateTime(2026, 10, 6, 6, 0, 0, DateTimeKind.Utc) };
 
         string Sentence(ZoneFaultSignals s, string type) =>
             ZoneInsightBuilder.Build(input, result, s).First(i => i.InsightType == type).Message;
@@ -406,16 +427,18 @@ public static class RuleBookDocument
     {
         L("## 8. Today's one action (`TodayRules`)");
         L("");
-        L("The Home card and the admin farm page show ONE sentence per zone, picked from the insights");
-        L("above in this order (DATA RULE - the order a farmer would want them):");
+        L("The Home card and the admin farm page show ONE sentence per zone, worded from the engine's");
+        L("`PrimaryAction` in this order (DATA RULE - the order a farmer would want them):");
         L("");
-        L("1. Rain will cover it → \"No watering today: rain is expected to cover it.\"");
-        L("2. Water now → \"Water about N min this morning (about N L)\" - the amount from `MinutesToRun`.");
-        L("3. Kit problem: pump ran with no effect, kit offline, sensor stuck → \"Check the …\"");
-        L("4. No crop set → \"Finish setup: …\" with the one next step.");
-        L("5. Water soon → \"No watering today; next on <day>\".");
-        L("6. The balance ran and nothing is due → \"No watering needed today\".");
-        L("7. Otherwise → \"Finish setup: …\" or, with no weather, \"No advice yet\".");
+        L("1. Crop not planted / season complete → \"No crop irrigation yet …\" / \"Crop cycle complete …\"");
+        L("2. Postpone for rain → \"No watering today: rain is expected to cover it.\"");
+        L("3. Water now → \"Water about N min this morning (about N L)\"; reduced → \"Rain helps, but water …\".");
+        L("4. Kit problem: pump ran with no effect, kit offline, sensor stuck → \"Check the …\"");
+        L("5. No crop set → \"Finish setup: …\" with the one next step.");
+        L("6. Water soon → \"No watering today; next on <day>\".");
+        L("7. No water needed → \"No watering needed today\" (only for this action).");
+        L("8. Check field / sensor / pump and pipes → \"Check the …\".");
+        L("9. Otherwise (finish setup, not enough data) → \"Finish setup: …\" or \"No advice yet …\".");
         L("");
     }
 

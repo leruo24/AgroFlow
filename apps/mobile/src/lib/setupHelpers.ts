@@ -17,9 +17,9 @@ export function plantedWeeksAgo(weeks: number, today: Date = new Date()): string
 }
 
 /** The size presets the farm registration wizard also offers. */
-export const AREA_PRESETS: { key: 'tub' | 'bed'; label: string; m2: number }[] = [
-  { key: 'tub', label: 'Small tub (about 0.2 m²)', m2: 0.2 },
-  { key: 'bed', label: 'Bed, 1 × 2 m (2 m²)', m2: 2 },
+export const AREA_PRESETS: { key: 'small' | 'plot'; label: string; m2: number }[] = [
+  { key: 'small', label: 'Small growing area (about 0.2 m²)', m2: 0.2 },
+  { key: 'plot', label: 'Field / plot (about 200 m²)', m2: 200 },
 ];
 
 /** Quick choices for "I watered". */

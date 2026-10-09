@@ -42,7 +42,9 @@ public record FarmerOnboardingFarm(
     string FarmName,
     string Location,
     double SizeHectares,
-    List<FarmerOnboardingZone> Zones
+    List<FarmerOnboardingZone> Zones,
+    double? Latitude = null,
+    double? Longitude = null
 );
 
 public record FarmerOnboardingRequest(
@@ -171,13 +173,14 @@ public static class FarmerOnboardingEndpoints
             });
         }
 
-        if (string.IsNullOrWhiteSpace(request.Farm.Location))
+        var suppliedCoordinates = ValidCoordinates(request.Farm.Latitude, request.Farm.Longitude);
+        if ((request.Farm.Latitude.HasValue || request.Farm.Longitude.HasValue) && !suppliedCoordinates)
         {
-            return Results.BadRequest(new
-            {
-                error = "Farm location is required."
-            });
+            return Results.BadRequest(new { error = "Provide both latitude (-90 to 90) and longitude (-180 to 180)." });
         }
+
+        if (string.IsNullOrWhiteSpace(request.Farm.Location) && !suppliedCoordinates)
+            return Results.BadRequest(new { error = "Search for a farm location or provide precise coordinates." });
 
         if (request.Farm.SizeHectares <= 0)
         {
@@ -268,11 +271,19 @@ public static class FarmerOnboardingEndpoints
         // We use a separate HttpClient here so the Supabase service-role key
         // is NOT sent to Open-Meteo.
 
-        var location = request.Farm.Location.Trim();
+        var location = request.Farm.Location?.Trim() ?? "";
 
         (string Location, double Latitude, double Longitude)? coordinates;
 
-        try
+        if (suppliedCoordinates)
+        {
+            var readable = string.IsNullOrWhiteSpace(location)
+                ? $"Coordinates: {request.Farm.Latitude:0.#####}, {request.Farm.Longitude:0.#####}"
+                : location;
+            coordinates = (readable, request.Farm.Latitude!.Value, request.Farm.Longitude!.Value);
+            location = readable;
+        }
+        else try
         {
             var geocodingClient =
                 httpClientFactory.CreateClient();
@@ -310,6 +321,8 @@ public static class FarmerOnboardingEndpoints
             });
         }
 
+        location = coordinates.Value.Location;
+
         var (supabaseUrl, serviceRoleKey) =
             GetSupabaseAdminConfig(configuration);
 
@@ -345,7 +358,8 @@ public static class FarmerOnboardingEndpoints
                 location = location,
                 total_area = request.Farm.SizeHectares,
 
-                // These values come from Open-Meteo geocoding.
+                // Explicit coordinates take precedence; otherwise these come
+                // from Open-Meteo geocoding of the readable locality.
                 latitude = coordinates.Value.Latitude,
                 longitude = coordinates.Value.Longitude,
 
@@ -763,6 +777,9 @@ public static class FarmerOnboardingEndpoints
             first.Longitude
         );
     }
+
+    private static bool ValidCoordinates(double? latitude, double? longitude) =>
+        latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180;
 
     // ========================================================================
     // EXISTING CREATE FARMER

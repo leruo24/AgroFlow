@@ -110,7 +110,8 @@ test("Set up the farm opens the wizard prefilled from the request, and saving it
   await wiz.locator("[data-wizard-next]").click();
 
   await expect(wiz.locator('[data-field="zone_crop_0"]')).toHaveValue("potato");
-  await wiz.locator('[data-field="zone_area_preset_0"]').selectOption("bed");
+  await wiz.locator('[data-field="zone_area_preset_0"]').selectOption("field");
+  await wiz.locator('[data-field="zone_area_m2_0"]').fill("200");
   await wiz.locator("[data-wizard-next]").click();
   await wiz.locator("[data-wizard-confirm]").click();
 
@@ -134,7 +135,7 @@ test("Add the zone adds it to the farm, prefilled, and completes the request", a
   await expect(page.locator("body")).toContainText("Choose how big zone 1 is.");
   await expect(box.locator('[data-field="zone_name_0"]')).toHaveValue("Tub 2");
 
-  await box.locator('[data-field="zone_area_preset_0"]').selectOption("tub");
+  await box.locator('[data-field="zone_area_preset_0"]').selectOption("small");
   await page.locator("[data-drawer-confirm]").click();
 
   await expect.poll(() => writes.map((w) => `${w.method} ${w.path}`)).toEqual([

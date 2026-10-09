@@ -109,7 +109,7 @@ public class WeatherCollectionService : BackgroundService
         // The farm's own local date, not UTC - what counts as "today" for a
         // farm in SAST is not what counts as today in UTC for eight hours of
         // the day, and is_forecast is decided by that comparison.
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
 
         foreach (var farm in farms)
         {

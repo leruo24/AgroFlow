@@ -211,11 +211,25 @@ public class OpenMeteoDailyParserTests
         Assert.Contains("precipitation_sum", url);
         Assert.Contains("past_days=2", url);
         Assert.Contains("forecast_days=8", url);
+        Assert.Contains("wind_speed_10m_mean", url);
+        Assert.DoesNotContain("wind_speed_10m_max", url);
 
         // No API key, no token, no account. Keeping it that way is deliberate.
         Assert.DoesNotContain("apikey", url, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("key=", url, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", url, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ParsesDailyMeanWind_NotDailyMaximum()
+    {
+        const string json = """
+        {"daily":{"time":["2026-01-20"],"temperature_2m_max":[30],"temperature_2m_min":[15],
+        "wind_speed_10m_mean":[2.4],"wind_speed_10m_max":[9.8]}}
+        """;
+        var row = OpenMeteoDailyParser.Parse(json, Today).Single();
+        Assert.Equal(2.4, row.WindMs);
+        Assert.Equal(10, row.WindHeightM);
     }
 
     [Fact]

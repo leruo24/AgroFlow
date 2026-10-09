@@ -88,7 +88,7 @@ public sealed class WeatherAlertService : BackgroundService
 
     private async Task SweepAsync(CancellationToken cancellationToken)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
         var horizon = today.AddDays(Math.Max(1, _options.ForecastDays));
 
         // Only farms with somebody listening are considered, so a farm nobody

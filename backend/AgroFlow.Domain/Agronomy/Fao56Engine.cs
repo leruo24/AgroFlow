@@ -39,6 +39,7 @@ namespace AgroFlow.Business.Agronomy
     public sealed class ZoneWeatherDay
     {
         public DateOnly Date { get; set; }
+        public bool HasWeatherRow { get; set; } = true;
         public double? TMinC { get; set; }
         public double? TMaxC { get; set; }
         public double? RainMm { get; set; }
@@ -73,7 +74,7 @@ namespace AgroFlow.Business.Agronomy
         public double? DesiredMoisture { get; set; }
 
         public double? FarmLatitudeDegrees { get; set; }
-        public double FarmElevationM { get; set; }
+        public double? FarmElevationM { get; set; }
 
         // Today in Africa/Johannesburg, decided by the caller.
         public DateOnly Today { get; set; }
@@ -103,6 +104,52 @@ namespace AgroFlow.Business.Agronomy
         // Item 6: the farmer's own soil checks, newest last. Each corrects the
         // balance on its day (WaterRules.SoilFeelDepletion).
         public List<ZoneSoilFeelCheck> SoilFeelChecks { get; set; } = new List<ZoneSoilFeelCheck>();
+
+        // The last persisted end-of-day state immediately before the replay
+        // window. This keeps Dr continuous without querying an unbounded amount
+        // of history on every run. It is derived state, never a weekly reset.
+        public DateOnly? InitialDepletionDate { get; set; }
+        public double? InitialDepletionMm { get; set; }
+        public DateOnly? BalanceStartDate { get; set; }
+    }
+
+    public enum IrrigationPrimaryAction
+    {
+        WaterNow,
+        WaterNowReduced,
+        WaterSoon,
+        PostponeForRain,
+        NoWaterNeeded,
+        CheckField,
+        CheckSensor,
+        CheckIrrigationSystem,
+        FinishSetup,
+        InsufficientData,
+        CropNotPlanted,
+        SeasonComplete,
+    }
+
+    public enum SoilMoistureDomain
+    {
+        Unknown,
+        RelativePercent,
+        LegacyRawAdc,
+        InvalidMixedCalibration,
+    }
+
+    public sealed class RollingIrrigationDay
+    {
+        public DateOnly Date { get; set; }
+        public IrrigationPrimaryAction Action { get; set; }
+        public double? RequiredDepthMm { get; set; }
+        public double? Litres { get; set; }
+        public double? RuntimeSeconds { get; set; }
+        public double? ForecastRainMm { get; set; }
+        public double? ProjectedDepletionMm { get; set; }
+        public double? RawMm { get; set; }
+        public string Confidence { get; set; } = "low";
+        public bool Tentative { get; set; }
+        public string Advice { get; set; } = string.Empty;
     }
 
     // One row of the water balance, matching zone_water_balance.
@@ -152,16 +199,26 @@ namespace AgroFlow.Business.Agronomy
         public double? KcToday { get; set; }
 
         public double? RecommendedLitres { get; set; }
-        public int? RecommendedMinutes { get; set; }
+        public double? RecommendedMinutes { get; set; }
+        public double? RecommendedRuntimeSeconds { get; set; }
 
         public double? RelativeMoisturePercent { get; set; }
         public double? LatestRawReading { get; set; }
         public DateTime? LatestReadingAtUtc { get; set; }
+        public SoilMoistureDomain SensorDomain { get; set; }
+        public bool CalibrationValid { get; set; }
+        public string? SensorModifier { get; set; }
 
         // Days until Dr reaches RAW, projected on the forecast. Null when there is
         // no forecast to project onto.
         public int? DaysToNextWatering { get; set; }
         public DateOnly? NextWateringDate { get; set; }
+
+        public IrrigationPrimaryAction PrimaryAction { get; set; } = IrrigationPrimaryAction.InsufficientData;
+        public double? ProjectedPostRainDepletionMm { get; set; }
+        public double? ForecastRainTodayMm { get; set; }
+        public string? EquipmentWarning { get; set; }
+        public List<RollingIrrigationDay> Outlook { get; } = new List<RollingIrrigationDay>();
 
         // Whether the balance could run at all.
         public bool BalanceRan { get; set; }
@@ -205,7 +262,7 @@ namespace AgroFlow.Business.Agronomy
 
         public WaterBalanceDay? Today
         {
-            get { return Days.FirstOrDefault(d => !d.IsForecast || d.DrEndMm.HasValue); }
+            get { return Days.OrderBy(d => d.Day).LastOrDefault(); }
         }
     }
 
@@ -221,11 +278,31 @@ namespace AgroFlow.Business.Agronomy
         // treated as implausible: 10% of (wet - dry), per spec 3b.
         public const double CalibrationToleranceFraction = 0.10;
 
+        public static SoilMoistureDomain DetectSensorDomain(
+            double? calibrationWet, double? calibrationDry)
+        {
+            if (calibrationWet.HasValue && calibrationDry.HasValue)
+            {
+                var wetPercent = calibrationWet.Value >= 0.0 && calibrationWet.Value <= 100.0;
+                var dryPercent = calibrationDry.Value >= 0.0 && calibrationDry.Value <= 100.0;
+                if (wetPercent != dryPercent) return SoilMoistureDomain.InvalidMixedCalibration;
+                return wetPercent ? SoilMoistureDomain.RelativePercent : SoilMoistureDomain.LegacyRawAdc;
+            }
+
+            // A lone value cannot identify its domain: a legacy ADC can also be
+            // between 0 and 100. Only same-domain wet/dry calibration points make
+            // the distinction safe; otherwise keep and display the raw signal.
+            return SoilMoistureDomain.Unknown;
+        }
+
         public static bool IsPlausibleReading(
             double raw, double? calibrationWet, double? calibrationDry)
         {
             if (double.IsNaN(raw) || double.IsInfinity(raw)) return false;
             if (raw < 0.0 || raw > MaxAdcReading) return false;
+
+            if (DetectSensorDomain(calibrationWet, calibrationDry) == SoilMoistureDomain.InvalidMixedCalibration)
+                return false;
 
             if (calibrationWet.HasValue && calibrationDry.HasValue)
             {
@@ -304,12 +381,18 @@ namespace AgroFlow.Business.Agronomy
                 result.Limitations.Add("This zone has no flow rate recorded, so watering times in minutes cannot be worked out.");
             }
 
-            var calibrated = input.CalibrationWet.HasValue && input.CalibrationDry.HasValue;
+            var sensorDomain = DetectSensorDomain(input.CalibrationWet, input.CalibrationDry);
+            result.SensorDomain = sensorDomain;
+            var calibrated = input.CalibrationWet.HasValue && input.CalibrationDry.HasValue
+                             && sensorDomain != SoilMoistureDomain.InvalidMixedCalibration
+                             && Math.Abs(input.CalibrationWet.Value - input.CalibrationDry.Value) > 1e-9;
+            result.CalibrationValid = calibrated;
             if (!calibrated)
             {
                 result.MissingSetup.Add("the wet/dry soil setup");
-                result.Limitations.Add(
-                    "This zone's sensor has not had its wet and dry setup done, so soil readings are shown as raw numbers and cannot be turned into a moisture percentage. Watering advice still works from the weather and the crop.");
+                result.Limitations.Add(sensorDomain == SoilMoistureDomain.InvalidMixedCalibration
+                    ? "The saved wet and dry sensor points use different value domains (percentage and legacy ADC). The sensor is excluded until both points are recorded in the same domain."
+                    : "This zone's sensor has not had a valid wet and dry setup, so it is supporting evidence only. Watering advice still works from the weather and the crop.");
             }
 
             if (!input.FarmLatitudeDegrees.HasValue)
@@ -339,8 +422,11 @@ namespace AgroFlow.Business.Agronomy
             {
                 result.LatestRawReading = latest.RawValue;
                 result.LatestReadingAtUtc = latest.RecordedAtUtc;
-                result.RelativeMoisturePercent = SoilWaterBalance.RelativeMoisturePercent(
-                    latest.RawValue, input.CalibrationWet, input.CalibrationDry);
+                result.RelativeMoisturePercent = sensorDomain == SoilMoistureDomain.RelativePercent
+                    ? Math.Max(0.0, Math.Min(100.0, latest.RawValue))
+                    : calibrated
+                        ? SoilWaterBalance.RelativeMoisturePercent(latest.RawValue, input.CalibrationWet, input.CalibrationDry)
+                        : null;
 
                 if (result.RelativeMoisturePercent.HasValue)
                 {
@@ -348,7 +434,10 @@ namespace AgroFlow.Business.Agronomy
                         "Relative moisture",
                         result.RelativeMoisturePercent.Value.ToString("F0", CultureInfo.InvariantCulture) + "%",
                         "soil sensor reading " + latest.RawValue.ToString("F0", CultureInfo.InvariantCulture) +
-                        " against this zone's wet/dry setup - relative only, not a volume of water"));
+                        (sensorDomain == SoilMoistureDomain.RelativePercent
+                            ? " in the current firmware's 0-100 relative-moisture domain"
+                            : " against this zone's legacy ADC wet/dry setup") +
+                        " - relative only, not volumetric water content"));
                 }
                 else
                 {
@@ -400,29 +489,64 @@ namespace AgroFlow.Business.Agronomy
                 "Stage lengths come from FAO-56 Table 11 (" + crop.Table11Row +
                 "), which the book says are indicative only - a real season may run shorter or longer.");
 
-            // ---- Run the balance over every day we have, oldest first ---------
-            var days = input.Weather
-                .Where(w => w.Date <= input.Today)
-                .OrderBy(w => w.Date)
-                .ToList();
+            // A future planting and a completed annual crop are explicit terminal
+            // states. They must never inherit an ordinary Kc watering schedule.
+            if (input.PlantingDate.HasValue && input.PlantingDate.Value > input.Today)
+            {
+                result.PrimaryAction = IrrigationPrimaryAction.CropNotPlanted;
+                result.DayOfSeason = (input.Today.DayNumber - input.PlantingDate.Value.DayNumber) + 1;
+                return Finish(input, result, calibrated);
+            }
+
+            if (input.PlantingDate.HasValue)
+            {
+                var currentDay = (input.Today.DayNumber - input.PlantingDate.Value.DayNumber) + 1;
+                if (CropRules.SeasonComplete(crop, currentDay))
+                {
+                    result.PrimaryAction = IrrigationPrimaryAction.SeasonComplete;
+                    result.DayOfSeason = currentDay;
+                    result.Stage = SeasonStage.SeasonComplete;
+                    return Finish(input, result, calibrated);
+                }
+            }
+
+            // ---- Reconstruct actual history in calendar order -----------------
+            // Today's Open-Meteo row is still a forecast. It belongs in the
+            // projection, never in historical truth.
+            var observedByDate = input.Weather
+                .Where(w => !w.IsForecast && w.Date <= input.Today)
+                .GroupBy(w => w.Date)
+                .ToDictionary(g => g.Key, g => g.Last());
+
+            var firstObserved = observedByDate.Count > 0 ? observedByDate.Keys.Min() : input.Today;
+            var start = input.BalanceStartDate ?? firstObserved;
+            var lastObservedDate = input.Weather.Any(w => w.Date == input.Today && !w.IsForecast)
+                ? input.Today
+                : input.Today.AddDays(-1);
+
+            var days = new List<ZoneWeatherDay>();
+            for (var date = start; date <= lastObservedDate; date = date.AddDays(1))
+            {
+                days.Add(observedByDate.TryGetValue(date, out var observed)
+                    ? observed
+                    : new ZoneWeatherDay { Date = date, HasWeatherRow = false, IsForecast = false });
+            }
 
             var forecastDays = input.Weather
-                .Where(w => w.Date > input.Today)
+                .Where(w => w.IsForecast && w.Date >= input.Today)
+                .GroupBy(w => w.Date)
+                .Select(g => g.Last())
                 .OrderBy(w => w.Date)
                 .ToList();
 
-            // Starting depletion. Anchored to the sensor when the zone is
-            // calibrated, otherwise starting from a full profile - spec 6.10.
-            double dr;
-            if (calibrated && result.RelativeMoisturePercent.HasValue && !result.ReadingStale)
+            // Continue from the persisted day immediately before this bounded
+            // replay. A fresh sensor is deliberately not used as a historical
+            // starting state: doing so would replay old weather after a current
+            // observation. The point sensor remains supporting evidence below.
+            var dr = Math.Max(0.0, Math.Min(taw, input.InitialDepletionMm ?? 0.0));
+            if (input.InitialDepletionMm.HasValue)
             {
-                dr =SoilWaterBalance.DepletionFromRelativeMoistureMm(result.RelativeMoisturePercent.Value, taw);
-                result.Limitations.Add(
-                    "How dry the soil is was worked out from the sensor reading in proportion to what the soil can hold. The sensor measures relative wetness, not an actual volume of water, so this is an approximation.");
-            }
-            else
-            {
-                dr = 0.0;
+                result.Limitations.Add("The running water balance continued from the previous persisted field state; calendar weeks do not reset it.");
             }
 
             var depthMeasurable = input.AreaM2.HasValue && input.AreaM2.Value > 0.0
@@ -459,14 +583,6 @@ namespace AgroFlow.Business.Agronomy
                 dr = day.DrEndMm!.Value;
                 result.Days.Add(day);
 
-                // A valid reading at or wetter than the wet calibration point
-                // means the profile was refilled: reset Dr to zero (spec 6.10).
-                if (calibrated && WasRefilledOn(input, w.Date))
-                {
-                    dr = 0.0;
-                    day.DrEndMm = 0.0;
-                }
-
                 // Item 6: the farmer's own soil check on this day corrects the
                 // estimate - the latest one that day wins.
                 var feel = input.SoilFeelChecks
@@ -500,13 +616,27 @@ namespace AgroFlow.Business.Agronomy
             if (balanceStopped)
             {
                 result.BalanceRan = false;
+                result.PrimaryAction = IrrigationPrimaryAction.InsufficientData;
                 return Finish(input, result, calibrated);
             }
 
-            result.BalanceRan = result.Days.Count > 0;
+            result.BalanceRan = input.InitialDepletionMm.HasValue
+                                || result.Days.Any(d => d.DrEndMm.HasValue)
+                                || forecastDays.Count > 0;
             result.DepletionMm = dr;
 
-            var todayRow = result.Days.LastOrDefault();
+            // Today's agronomic inputs come from the observed row when it exists,
+            // otherwise from today's forecast row. Forecast rain remains a
+            // projection and does not mutate the historical Dr above.
+            var todayWeather = input.Weather
+                .Where(w => w.Date == input.Today)
+                .OrderBy(w => w.IsForecast ? 1 : 0)
+                .FirstOrDefault();
+            WaterBalanceDay? todayRow = result.Days.LastOrDefault(d => d.Day == input.Today);
+            if (todayRow == null && todayWeather != null)
+            {
+                todayRow = BuildDay(input, crop, soil, taw, rootDepth, todayWeather, dr, isForecast: true);
+            }
             if (todayRow != null)
             {
                 result.EtoTodayMm = todayRow.EtoMm;
@@ -554,42 +684,27 @@ namespace AgroFlow.Business.Agronomy
                 result.Facts.Add(new AdviceFact(
                     "How dry the soil is now",
                     dr.ToString("F0", CultureInfo.InvariantCulture) + " mm short of full",
-                    "FAO-56 Eq. 85 water balance" + (calibrated && !result.ReadingStale ? ", started from the soil sensor reading" : ", started from a full profile")));
-            }
+                    "FAO-56 Eq. 85 continuous water balance; the point sensor is supporting evidence, not a root-zone volume measurement"));
 
-            // ---- Amount to apply ---------------------------------------------
-            // Net irrigation never exceeds the depletion: more than that drains
-            // away (spec 6.12).
-            result.RecommendedLitres = SoilWaterBalance.IrrigationLitres(dr, input.AreaM2);
-            result.RecommendedMinutes = SoilWaterBalance.IrrigationMinutes(result.RecommendedLitres, input.FlowRateLpm);
-            result.RecommendedDepthMm = Math.Round(dr, 1);
-            if (!result.RecommendedLitres.HasValue)
-            {
-                result.RecommendedMinutesPerSquareMetre = WaterRules.MinutesPerSquareMetre(dr, input.FlowRateLpm);
-            }
-
-            // ---- Project forward to the next watering ------------------------
-            if (forecastDays.Count > 0 && result.RawMm.HasValue)
-            {
-                var projected = dr;
-                for (var i = 0; i < forecastDays.Count; i++)
+                if (todayRow.Incomplete)
                 {
-                    var f = forecastDays[i];
-                    var fday = BuildDay(input, crop, soil, taw, rootDepth, f, projected, isForecast: true);
-                    result.Days.Add(fday);
-
-                    if (!fday.DrEndMm.HasValue) break;
-                    projected = fday.DrEndMm.Value;
-
-                    if (!result.DaysToNextWatering.HasValue
-                        && fday.RawMm.HasValue && projected >= fday.RawMm.Value)
-                    {
-                        result.DaysToNextWatering = i + 1;
-                        result.NextWateringDate = f.Date;
-                    }
+                    result.Limitations.Add(
+                        "One or more reference-water-use inputs were estimated or defaulted. Technical details retain the input provenance.");
                 }
             }
-            else if (forecastDays.Count == 0)
+
+            if (!result.BalanceRan || todayRow?.RawMm == null)
+            {
+                result.PrimaryAction = IrrigationPrimaryAction.InsufficientData;
+            }
+            else
+            {
+                BuildRollingOutlook(input, result, crop, soil, taw, rootDepth, dr, todayRow, forecastDays);
+                ApplySensorModifier(result);
+                EnforceDecisionInvariants(result);
+            }
+
+            if (forecastDays.Count == 0)
             {
                 result.Limitations.Add(
                     "There is no weather forecast saved for this farm, so no advice could be given on when the next watering will be needed.");
@@ -602,6 +717,256 @@ namespace AgroFlow.Business.Agronomy
             }
 
             return Finish(input, result, calibrated);
+        }
+
+        private static void BuildRollingOutlook(
+            ZoneEngineInput input, ZoneEngineResult result, Fao56EngineCrop crop,
+            Fao56SoilClass soil, double taw, double rootDepth, double currentDr,
+            WaterBalanceDay todayRow, List<ZoneWeatherDay> forecastDays)
+        {
+            var forecastByDate = forecastDays.ToDictionary(d => d.Date);
+            var projected = currentDr;
+
+            for (var offset = 0; offset < 7; offset++)
+            {
+                var date = input.Today.AddDays(offset);
+                WaterBalanceDay? projectedDay;
+                WaterBalanceDay? withoutRainDay;
+
+                if (offset == 0 && !todayRow.IsForecast)
+                {
+                    projectedDay = todayRow;
+                    withoutRainDay = todayRow;
+                }
+                else if (forecastByDate.TryGetValue(date, out var weather))
+                {
+                    projectedDay = BuildDay(input, crop, soil, taw, rootDepth, weather, projected, isForecast: true);
+                    withoutRainDay = BuildDay(input, crop, soil, taw, rootDepth,
+                        CopyWithoutRain(weather), projected, isForecast: true);
+                    if (!result.Days.Any(d => d.Day == date && d.IsForecast)) result.Days.Add(projectedDay);
+                }
+                else
+                {
+                    result.Outlook.Add(new RollingIrrigationDay
+                    {
+                        Date = date,
+                        Action = IrrigationPrimaryAction.InsufficientData,
+                        Tentative = offset > 0,
+                        Advice = "Forecast data unavailable; reassess when weather updates.",
+                    });
+                    break;
+                }
+
+                if (!projectedDay.DrEndMm.HasValue || !projectedDay.RawMm.HasValue
+                    || withoutRainDay == null || !withoutRainDay.DrEndMm.HasValue)
+                {
+                    result.Outlook.Add(new RollingIrrigationDay
+                    {
+                        Date = date,
+                        Action = IrrigationPrimaryAction.InsufficientData,
+                        Tentative = offset > 0,
+                        Advice = "Not enough weather data for a reliable irrigation decision.",
+                    });
+                    break;
+                }
+
+                if (projectedDay.Stage == SeasonStage.SeasonComplete)
+                {
+                    result.Outlook.Add(new RollingIrrigationDay
+                    {
+                        Date = date,
+                        Action = IrrigationPrimaryAction.SeasonComplete,
+                        Tentative = offset > 0,
+                        Advice = "Crop cycle complete; no normal crop irrigation is scheduled.",
+                    });
+                    break;
+                }
+
+                var postRain = projectedDay.DrEndMm.Value;
+                var withoutRain = withoutRainDay.DrEndMm.Value;
+                var raw = projectedDay.RawMm.Value;
+                var usefulRain = Math.Max(0.0, withoutRain - postRain);
+                var dueWithoutRain = WaterRules.ShouldWaterToday(withoutRain, raw);
+                IrrigationPrimaryAction action;
+                double? depth = null;
+
+                if (dueWithoutRain && usefulRain > 0.0 && postRain < raw)
+                {
+                    action = IrrigationPrimaryAction.PostponeForRain;
+                }
+                else if (dueWithoutRain && usefulRain > 0.0 && postRain >= raw)
+                {
+                    action = IrrigationPrimaryAction.WaterNowReduced;
+                    depth = postRain;
+                }
+                else if (dueWithoutRain)
+                {
+                    action = IrrigationPrimaryAction.WaterNow;
+                    depth = withoutRain;
+                }
+                else
+                {
+                    action = IrrigationPrimaryAction.NoWaterNeeded;
+                }
+
+                var litres = depth.HasValue ? SoilWaterBalance.IrrigationLitres(depth.Value, input.AreaM2) : null;
+                var seconds = SoilWaterBalance.IrrigationRuntimeSeconds(litres, input.FlowRateLpm);
+                var outlook = new RollingIrrigationDay
+                {
+                    Date = date,
+                    Action = action,
+                    RequiredDepthMm = depth.HasValue ? Math.Round(depth.Value, 1) : null,
+                    Litres = litres,
+                    RuntimeSeconds = seconds,
+                    ForecastRainMm = projectedDay.IsForecast ? projectedDay.RainMm : (double?)null,
+                    ProjectedDepletionMm = postRain,
+                    RawMm = raw,
+                    Tentative = offset > 1,
+                    Advice = AdviceFor(action, depth, offset),
+                };
+                result.Outlook.Add(outlook);
+
+                if (!result.NextWateringDate.HasValue
+                    && (action == IrrigationPrimaryAction.WaterNow || action == IrrigationPrimaryAction.WaterNowReduced))
+                {
+                    result.NextWateringDate = date;
+                    result.DaysToNextWatering = offset;
+                }
+
+                // The projection assumes a recommended irrigation is performed,
+                // solely to avoid showing the same event on every following day.
+                // Only real irrigation_event rows alter the next actual run.
+                projected = depth.HasValue ? Math.Max(0.0, postRain - depth.Value) : postRain;
+            }
+
+            var today = result.Outlook.FirstOrDefault(d => d.Date == input.Today);
+            if (today == null)
+            {
+                result.PrimaryAction = IrrigationPrimaryAction.InsufficientData;
+                return;
+            }
+
+            result.PrimaryAction = today.Action;
+            result.ProjectedPostRainDepletionMm = today.ProjectedDepletionMm;
+            result.ForecastRainTodayMm = today.ForecastRainMm;
+
+            if (today.Action == IrrigationPrimaryAction.NoWaterNeeded
+                && result.DaysToNextWatering is > 0 and <= WaterRules.WaterSoonDays)
+            {
+                result.PrimaryAction = IrrigationPrimaryAction.WaterSoon;
+                today.Action = IrrigationPrimaryAction.WaterSoon;
+                today.Advice = result.DaysToNextWatering == 1
+                    ? "Irrigation is likely tomorrow."
+                    : "Irrigation is likely within the next 2 days.";
+            }
+
+            if (result.PrimaryAction == IrrigationPrimaryAction.WaterNow
+                || result.PrimaryAction == IrrigationPrimaryAction.WaterNowReduced)
+            {
+                result.RecommendedDepthMm = today.RequiredDepthMm;
+                result.RecommendedLitres = today.Litres;
+                result.RecommendedRuntimeSeconds = today.RuntimeSeconds;
+                result.RecommendedMinutes = today.RuntimeSeconds.HasValue
+                    ? Math.Round(today.RuntimeSeconds.Value / 60.0, 2)
+                    : null;
+                if (!result.RecommendedLitres.HasValue && result.RecommendedDepthMm.HasValue)
+                {
+                    result.RecommendedMinutesPerSquareMetre = WaterRules.MinutesPerSquareMetre(
+                        result.RecommendedDepthMm.Value, input.FlowRateLpm);
+                }
+
+                if (today.RuntimeSeconds is > 0.0 and < WaterRules.ImpracticallyShortRuntimeSeconds)
+                {
+                    result.EquipmentWarning = "Water is required, but the configured pump may be too large for accurate dosing in this zone.";
+                }
+                else if (today.RuntimeSeconds > WaterRules.ImpracticallyLongRuntimeSeconds)
+                {
+                    result.EquipmentWarning = "The configured flow rate may be too low for this zone. Check the irrigation setup.";
+                }
+            }
+        }
+
+        private static ZoneWeatherDay CopyWithoutRain(ZoneWeatherDay day)
+        {
+            return new ZoneWeatherDay
+            {
+                Date = day.Date, HasWeatherRow = day.HasWeatherRow,
+                TMinC = day.TMinC, TMaxC = day.TMaxC, RainMm = 0.0,
+                RhMinPct = day.RhMinPct, RhMaxPct = day.RhMaxPct, RhMeanPct = day.RhMeanPct,
+                WindMs = day.WindMs, WindHeightM = day.WindHeightM, IsForecast = day.IsForecast,
+                DhtTMinC = day.DhtTMinC, DhtTMaxC = day.DhtTMaxC, DhtRhMeanPct = day.DhtRhMeanPct,
+            };
+        }
+
+        private static string AdviceFor(IrrigationPrimaryAction action, double? depth, int offset)
+        {
+            switch (action)
+            {
+                case IrrigationPrimaryAction.WaterNowReduced:
+                    return "Rain partially helps; irrigation is still likely at about " + depth?.ToString("0.#", CultureInfo.InvariantCulture) + " mm.";
+                case IrrigationPrimaryAction.WaterNow:
+                    return offset == 0
+                        ? "Irrigate today at about " + depth?.ToString("0.#", CultureInfo.InvariantCulture) + " mm."
+                        : "Irrigation likely at about " + depth?.ToString("0.#", CultureInfo.InvariantCulture) + " mm.";
+                case IrrigationPrimaryAction.PostponeForRain:
+                    return "Rain is expected to move the field below the watering trigger; reassess after rain.";
+                default:
+                    return "No irrigation currently expected.";
+            }
+        }
+
+        private static void ApplySensorModifier(ZoneEngineResult result)
+        {
+            if (!result.LatestReadingAtUtc.HasValue)
+            {
+                result.SensorModifier = "Field sensor unavailable. Advice uses the crop, soil and weather balance.";
+                return;
+            }
+            if (result.ReadingStale)
+            {
+                result.SensorModifier = "The field sensor is stale, so the recommendation relies mainly on crop, soil and weather.";
+                return;
+            }
+            if (!result.RelativeMoisturePercent.HasValue || !result.DepletionMm.HasValue || !result.TawMm.HasValue)
+            {
+                result.SensorModifier = "Calibrate the field sensor in one value domain to improve confidence.";
+                return;
+            }
+
+            var modelMoisture = 100.0 * (1.0 - result.DepletionMm.Value / result.TawMm.Value);
+            var difference = result.RelativeMoisturePercent.Value - modelMoisture;
+            if (Math.Abs(difference) >= 25.0)
+            {
+                result.SensorModifier = difference > 0
+                    ? "Check the field before irrigating: the local sensor indicates wetter conditions than the weather-based estimate."
+                    : "Inspect the zone: the local sensor is considerably drier than the weather-based estimate.";
+            }
+            else
+            {
+                result.SensorModifier = result.PrimaryAction is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced
+                    ? "The field sensor also indicates relatively dry conditions."
+                    : "The field sensor supports the current recommendation.";
+            }
+        }
+
+        private static void EnforceDecisionInvariants(ZoneEngineResult result)
+        {
+            var waters = result.PrimaryAction is IrrigationPrimaryAction.WaterNow or IrrigationPrimaryAction.WaterNowReduced;
+            if (!waters)
+            {
+                result.RecommendedDepthMm = null;
+                result.RecommendedLitres = null;
+                result.RecommendedMinutes = null;
+                result.RecommendedRuntimeSeconds = null;
+                result.RecommendedMinutesPerSquareMetre = null;
+            }
+
+            if (result.PrimaryAction == IrrigationPrimaryAction.PostponeForRain
+                && result.ProjectedPostRainDepletionMm.HasValue && result.RawMm.HasValue
+                && result.ProjectedPostRainDepletionMm.Value >= result.RawMm.Value)
+            {
+                throw new InvalidOperationException("POSTPONE_FOR_RAIN cannot leave projected depletion at or above RAW.");
+            }
         }
 
         // Item 2: every way out of Run says how sure it is and names one next step.
@@ -631,6 +996,15 @@ namespace AgroFlow.Business.Agronomy
             };
 
             result.Confidence = ConfidenceRules.For(result.Setup);
+            if (result.SensorModifier != null
+                && (result.SensorModifier.StartsWith("Check", StringComparison.Ordinal)
+                    || result.SensorModifier.StartsWith("Inspect", StringComparison.Ordinal))
+                && result.Confidence.Level == ConfidenceLevel.High)
+            {
+                result.Confidence = new Confidence(ConfidenceLevel.Medium,
+                    "Medium: the crop/weather balance and local field sensor disagree; inspect the zone before acting.");
+            }
+            foreach (var day in result.Outlook) day.Confidence = result.Confidence.Key;
             result.NextStep = ConfidenceRules.NextStep(result.Setup);
             return result;
         }
@@ -659,7 +1033,7 @@ namespace AgroFlow.Business.Agronomy
                 WeatherWindMs = w.WindMs,
                 WeatherWindHeightM = w.WindHeightM,
                 WeatherIsForecast = w.IsForecast,
-                HasWeatherRow = true,
+                HasWeatherRow = w.HasWeatherRow,
                 DhtTMinC = w.DhtTMinC,
                 DhtTMaxC = w.DhtTMaxC,
                 DhtRhMeanPct = w.DhtRhMeanPct,

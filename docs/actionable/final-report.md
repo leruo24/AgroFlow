@@ -15,7 +15,7 @@ is [progress.md](progress.md); the plan with every acceptance criterion is
 | 2 - advice never blocked | done | 68ce29d | Engine advises with only crop + weather, labelled Medium/Low with the one next step; High only with full setup and a fresh calibrated reading. `AdviceNeverBlockedTests`. |
 | 2b - the rule book | done | 6888586 | Every rule in `RuleBook/` with an FAO-56 page or a DATA RULE; `docs/rule-book.md` generated from code; `RuleBookTests`. |
 | 2c - "Why am I seeing this?" | done | 70a1c31, d3040c3, 86ad320, 41d351e, 4342ef4 | Explanations for every insight, alert, KPI and report line; Telegram Why button; admin and mobile Why sheets; no jargon outside the technical line (scanned). |
-| 3 - action reports | done | 154025b | One action-led report for all three types; real period wording; weather comparison only with tub data; samples in `docs/sample-reports/`. |
+| 3 - action reports | done | 154025b | One action-led report for all three types; real period wording; weather comparison only with local sensor data; samples in `docs/sample-reports/`. |
 | 4 - Reports page and automatic reports | done | 74efb2d | Daily / weekly on a chosen day / monthly, per zone, recipients, test send, one retry then an admin alert. |
 | 5 - accountability | done | 5e067d0 | Claim / take over with a reason / let go; real alert and maintenance actions; actor only from the login; `/assign` refuses anyone else's id (403). |
 | 6 - practical with little setup | done | 77b9533, be80a1a | Wizard asks soil (Loam default), size presets, planting weeks, optional flow and depth; Home card per zone; Finish setup with the 500 mL bottle helper; "I watered" and soil feel in the balance, reports and history. |

@@ -14,6 +14,7 @@ import {
   issueLinkCodeForFarmer,
   regenerateTelegramCode,
   registerFarm,
+  updateFarmLocation,
   sendTemporaryPasswordViaTelegram,
   resetTemporaryPassword,
   deviceChangeWifi,
@@ -63,6 +64,7 @@ import { ZONE_CROPS } from "@/data/referenceData";
 import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
 import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
+import { formatDecimal, formatDms, validCoordinates } from "@/lib/coordinates";
 import { telegramState } from "@/pages/users";
 import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
@@ -615,6 +617,10 @@ async function openFarmDetail(id: number): Promise<void> {
     items.length ? `<ul class="drawer-list">${items.map((i) => `<li>${i}</li>`).join("")}</ul>`
                  : `<p class="muted">None recorded.</p>`;
 
+  const preciseLocation = f.latitude !== null && f.longitude !== null
+    ? `${formatDms(f.latitude, f.longitude)}<br><small>Decimal: ${formatDecimal(f.latitude, f.longitude)}</small>`
+    : "Coordinates not set";
+
   openDrawer({
     intent,
     // Not healthDot(f.health) here - openDrawer's title is HTML-escaped by
@@ -630,12 +636,15 @@ async function openFarmDetail(id: number): Promise<void> {
           <div class="detail-row"><span>Health status</span><b>${esc(f.health)}</b></div>
           <div class="detail-row"><span>Account status</span><b>${esc(f.status)}</b></div>
           <div class="detail-row"><span>Size</span><b>${fmtInt(f.hectares)} ha</b></div>
+          <div class="detail-row"><span>Nearest locality</span><b>${esc(f.location || "Not set")}</b></div>
+          <div class="detail-row"><span>Farm location</span><b>${preciseLocation}</b></div>
           <div class="detail-row"><span>Registered</span><b>${esc(fmtDate(f.registered))}</b></div>
           <div class="detail-row"><span>Last activity</span><b>${esc(f.lastActivity)}</b></div>
           <div class="detail-row"><span>Device connectivity</span><b>${fmtPct(f.healthFactors.deviceConnectivity)}</b></div>
           <div class="detail-row"><span>Gateway</span><b>${f.healthFactors.gatewayOnline ? "Online" : "Offline"}</b></div>
           <div class="detail-row"><span>Sensor availability</span><b>${fmtPct(f.healthFactors.sensorsAvailable)}</b></div>
-        </div>`),
+        </div>
+        <button class="btn ghost sm" data-act="edit-farm-location" data-id="${f.id}">View / adjust on map</button>`),
       section(`Users (${farmUsers.length})`, list(farmUsers.map((u) =>
         `${esc(u.name)} <span class="muted">${esc(u.email)}</span> — <b>${esc(u.status)}</b>`))),
       section(`Installed hardware (${farmHw.length})`, list(farmHw.map((h) =>
@@ -761,6 +770,45 @@ async function openFarmDetail(id: number): Promise<void> {
         toast(`Choose ${f.name} under Reports to produce a report for it.`, "info");
         void navigate("reports");
       }
+    },
+  });
+}
+
+function openFarmLocationEditor(id: number): void {
+  const farm = api.findFarm(id);
+  if (!farm) return;
+  openDrawer({
+    title: `Farm location · ${farm.name}`,
+    subtitle: "Precise coordinates are used for weather and agronomy.",
+    wide: true,
+    bodyHtml: `
+      <label class="f">Nearest locality (optional)
+        <input type="text" data-field="location" value="${esc(farm.location)}" placeholder="e.g. Sesobe, North West" />
+      </label>
+      ${locationPickerHtml({ name: `farmLocation${farm.id}`, latitude: farm.latitude, longitude: farm.longitude })}`,
+    confirmLabel: "Save farm location",
+    onOpen: () => {
+      const host = document.querySelector<HTMLElement>(`[data-map-pick="farmLocation${farm.id}"]`);
+      if (host) void mountLocationPicker(host);
+    },
+    onConfirm: (values) => {
+      const latitude = Number(values["latitude"]);
+      const longitude = Number(values["longitude"]);
+      if (!validCoordinates(latitude, longitude)) {
+        toast("Enter a valid latitude and longitude before saving.", "warn");
+        return false;
+      }
+      void updateFarmLocation(farm.id, {
+        location: (values["location"] ?? "").trim(),
+        latitude,
+        longitude,
+      }).then(async () => {
+        toast(`${farm.name}'s location is updated.`, "success");
+        await refresh();
+      }).catch((error: unknown) => showErrorModal(
+        "Could not update the farm location",
+        plainError(error, "The farm location was not changed."),
+      ));
     },
   });
 }
@@ -1059,6 +1107,7 @@ case "delete-user": {
 
     /* farms */
     case "view-farm": return openFarmDetail(numId);
+    case "edit-farm-location": return openFarmLocationEditor(numId);
     /* Register a kit, as five steps instead of a zone id typed from memory.
      *
      * WHAT WAS WRONG BEFORE
@@ -1258,6 +1307,13 @@ case "delete-user": {
 
       const latitude = v["latitude"] ? Number(v["latitude"]) : null;
       const longitude = v["longitude"] ? Number(v["longitude"]) : null;
+      const hasCoordinates = latitude !== null && longitude !== null && validCoordinates(latitude, longitude);
+      if ((latitude !== null || longitude !== null) && !hasCoordinates) {
+        return void toast("Enter both latitude and longitude in their valid ranges.", "warn");
+      }
+      if (!(v["location"] ?? "").trim() && !hasCoordinates) {
+        return void toast("Search for a farm location or enter its coordinates.", "warn");
+      }
 
       try {
         await registerFarm({
@@ -3353,12 +3409,10 @@ async function openRegisterFarmWizard(fromRequest: ServiceRequest | null): Promi
                 />
               </label>
               <label class="f">
-                Nearest town or district
+                Nearest locality (optional when coordinates are supplied)
                 <input
                   type="text"
                   data-field="location"
-                  data-required
-                  data-required-message="Say roughly where the farm is."
                   placeholder="Ceres, Western Cape"
                 />
               </label>
@@ -3577,16 +3631,17 @@ function wireRegisterFarmReview(): void {
       };
     });
 
-    const coords =
-      v["latitude"] && v["longitude"]
-        ? `${Number(v["latitude"]).toFixed(5)}, ${Number(v["longitude"]).toFixed(5)}`
-        : "Not set - the weather lookup will fall back to the district";
+    const latitude = Number(v["latitude"]);
+    const longitude = Number(v["longitude"]);
+    const coords = v["latitude"] && v["longitude"] && validCoordinates(latitude, longitude)
+      ? `${formatDms(latitude, longitude)} · Decimal: ${formatDecimal(latitude, longitude)}`
+      : "Not set";
 
     pane.innerHTML = `
       ${detailList([
         ["Farmer", esc(ownerName ?? "Not chosen")],
         ["Farm name", esc(v["farmName"] ?? "")],
-        ["Where", esc(v["location"] ?? "")],
+        ["Nearest locality", esc(v["location"] || "Coordinates supplied")],
         ["Size", v["farmSize"] ? `${esc(v["farmSize"])} ha` : ""],
         ["Coordinates", esc(coords)],
         ["Zones", String(zones.length)],

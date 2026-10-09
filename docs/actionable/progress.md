@@ -291,7 +291,7 @@ zone or all zones - are now one report, `ActionReportPdf`, laid out from
 words composed in `ActionReport.Compose`:
 
 1. **This week, do this** - 1-5 actions, each with when and how much, a
-   confidence badge and a grey "Why:" line ("Water Tub 1 today (Tue 10 Feb):
+   confidence badge and a grey "Why:" line ("Water North Plot today (Tue 10 Feb):
    about 39 minutes (about 58 L).").
 2. **How your farm did {period}** - one row per zone with a verdict: Watered
    about right / Too much / Too little / Not enough data.
@@ -299,10 +299,10 @@ words composed in `ActionReport.Compose`:
    past 14 days), "Was my soil in the healthy range?" (only when calibrated;
    otherwise one line saying why), "What's coming this week?" (seven day
    cards with an action each).
-4. **Area weather vs at your plants** - only days the tub sensor reported;
+4. **Area weather vs at your plants** - only days the local field sensor reported;
    none -> one sentence.
 5. **Improve your advice** - one step per zone, grouped so the same sentence
-   is never printed per zone ("Tub 1, Tub 2 and Tub 3: Add the planting date").
+   is never printed per zone ("North Plot, Orchard and Seedling Block: Add the planting date").
 6. **Technical appendix** on its own page - FAO-56 figures with printed page
    numbers, notes every zone shares printed once, assumptions, and the
    numbered "Why we said this" notes.
@@ -330,7 +330,7 @@ endpoints the apps read are unchanged.
 813 -> 854 (`ActionReportTests`: actions have when/how much/badge/why; never
 more than 5; rain -> skip with the rain in it; overwatering says by how much
 and what to shorten to; period words for 7/14/30 days and past periods;
-weekly past 14 days; weather section only with tub data; jargon/ISO scan over
+weekly past 14 days; weather section only with local sensor data; jargon/ISO scan over
 every farmer sentence for full/partial/no-kit x 7/14/30 days x one/two zones
 (mutation-checked); no sentence repeated across three zones; shared notes
 once; length: one zone 3-4 pages = 2 farmer pages + appendix, about a page
@@ -493,8 +493,8 @@ silently.
 
 - **Register a farm / Onboard a farmer**: each zone row has soil as three
   cards with Loam already chosen ("Not sure? Pick Loam." - the engine assumes
-  loam anyway, so the default is honest), a size preset (Small tub ~0.2 m²,
-  Bed 1×2 m, Custom m²), hectares only for bigger plots, and an optional
+  loam anyway, so the default is honest), a size preset (Small growing area
+  ~0.2 m², Field/plot ~200 m², Custom), hectares for field-scale areas, and an optional
   "planted about how many weeks ago?". The review step shows soil and
   planting. Both register routes write `soil_type`, `area_m2`,
   `planting_date` (and take `root_depth_limit_m`, `flow_rate_lpm`); all
@@ -547,9 +547,9 @@ spec and fixed.
 
 - The older "Onboard a Farmer" page uses the same zone row and checks, but
   only the Register-a-farm wizard has a browser test.
-- Root depth is never guessed: the wizard asks for the soil depth in cm as an
-  optional field (tubs and raised beds) and leaves it empty otherwise, since
-  no source gives a tub's usable depth. Flow rate is optional there too - the
+- Root depth is never guessed: the wizard asks for the usable root-zone depth
+  in cm as an optional field for shallow beds or other constrained root zones,
+  and leaves it empty otherwise. Flow rate is optional there too - the
   app's bottle helper measures it on site. (Follow-up be80a1a: both fields
   were missing from the first item 6 commit; the zone page also gained a
   "Finish setup" row.)
@@ -564,14 +564,14 @@ spec and fixed.
   climate in Mafikeng and since you want to grow potato on loam soil, we
   recommend: water when the soil reaches about 65% (relative), stop at 100%;
   expect to water about every 2–3 days in October, about 3 minutes each time
-  for a 0.2 m² tub." With a confidence badge.
+  for this 0.2 m² irrigation zone." With a confidence badge.
   - Water at = (1 − p × soil factor) × 100 - the same number "Reset to
     recommended" saves (tested equal for all three soils), so **Use these
     settings** is that existing route and the card can never disagree with
     what is saved. It needs the wet/dry setup (thresholds are in the
     sensor's units); without it the button is off and says so.
   - How often = RAW ÷ ETc; how long = RAW × area ÷ flow; RAW is the daily
-    balance's own, root depth capped by the tub depth.
+    balance's own, root depth capped by the configured root-zone boundary.
   - Climate: the last 30 days of measured ETo when there are at least 14,
     else the forecast, else what history there is. With no weather (a farm
     being registered) RAW uses Table 22's own basis, ETc ≈ 5 mm/day
@@ -608,7 +608,7 @@ history in two.
 
 Backend 922 → 935 (`RecommendationTests`: the card's numbers equal the rule
 calculation for potato/loam/0.2 m²/1.5 L/min/ETo 5; threshold equals what
-Reset saves; tub depth cap; known stage; missing inputs and confidence;
+Reset saves; root-depth cap; known stage; missing inputs and confidence;
 climate source; crop-change checks; crop history for past reports; the
 Activity sentence; 403 for another farmer's zone). The 403 is tested on the
 route's decision function: the ownership lookup itself needs a database.

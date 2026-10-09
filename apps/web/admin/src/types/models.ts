@@ -207,6 +207,9 @@ export interface Farm {
       show one farmer another's farms. Null for a farm with no owner on
       file. */
   ownerId: string | null;
+  location: string;
+  latitude: number | null;
+  longitude: number | null;
   province: string;
   region: string;
   health: FarmHealth;

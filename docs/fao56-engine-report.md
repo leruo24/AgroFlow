@@ -168,7 +168,7 @@ Numbered 0027 because 0024–0026 already exist, so a new 0022 would sort before
 
 **`ai_recommendation`** — added `insight_type`, `severity` (CHECK act_now/heads_up/info), `data jsonb`, `valid_for`, `dismissed_at`. Partial unique index on `(zone_id, insight_type, valid_for)`. `priority` left in place so anything reading it keeps working. **No FK to irrigation commands — BR 6.9.**
 
-**`report_daily_weather`** (view, `security_invoker = true`) — observed weather days beside the tub sensor, with the difference, for §9c.
+**`report_daily_weather`** (view, `security_invoker = true`) — observed weather days beside the local crop sensor, with the difference, for §9c.
 
 **Security** — RLS on `zone_water_balance` reading through `zone → farm` via `app_can_access_farm()`; admin-all policy; `GRANT SELECT` to `authenticated`; writes service_role only (the API owns the tables and bypasses RLS). Farmers get **column-level** `GRANT UPDATE (dismissed_at)` on `ai_recommendation`, so they can dismiss an insight but cannot rewrite its message or severity. Both views grant SELECT to `authenticated`. No `$$` dollar-quoting anywhere; policies are made idempotent with `DROP POLICY IF EXISTS`, and views use DROP-then-CREATE.
 
@@ -349,7 +349,7 @@ All changes additive — sections added, nothing rewritten or removed, and her `
 
 | File | What changed |
 |---|---|
-| `backend/AgroFlow.Api/Endpoints/ReportEndpoints.cs` | `GetScheduleAsync`, `GetMoistureAsync`, `GetWaterUsageAsync` and the three PDF endpoints take the engine controller. `insights` is now `{ text, source }`; `plainSummary`, `waterBalance` and `weatherComparison` added to the schedule response; `insights` and `calibrationNote` added to the moisture and water-usage responses; insight blocks and the "Weather: area vs tub" table added to the PDFs. `CollectInsights`, `ReadWeatherComparisonAsync`, `WriteInsightsBlock`, `Round1` added |
+| `backend/AgroFlow.Api/Endpoints/ReportEndpoints.cs` | `GetScheduleAsync`, `GetMoistureAsync`, `GetWaterUsageAsync` and the three PDF endpoints take the engine controller. `insights` is now `{ text, source }`; `plainSummary`, `waterBalance` and `weatherComparison` added to the schedule response; `insights` and `calibrationNote` added to the moisture and water-usage responses; insight blocks and the "Weather: area vs at your plants" table added to the PDFs. `CollectInsights`, `ReadWeatherComparisonAsync`, `WriteInsightsBlock`, `Round1` added |
 | `apps/web/admin/src/app/interactions.ts` | `liveInsight`, `liveInsights`, `liveWeatherComparison` added; `liveRender` renders insights in all three reports and the weather table under the schedule's 7-day table |
 | `apps/web/admin/src/pages/analytics.ts` | One label: "Volume delivered" → **"Estimated volume delivered"** (§9d). The mock card itself was **not** removed — your call |
 | `apps/web/admin/src/styles/main.css` | Appended styles for the insight list and weather table, using existing tokens only |
