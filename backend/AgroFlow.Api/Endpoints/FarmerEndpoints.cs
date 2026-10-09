@@ -408,6 +408,9 @@ public static class FarmerEndpoints
         return await command.ExecuteScalarAsync() is null ? Results.NotFound() : Results.NoContent();
     }
 
+    // The app's Irrigate button lands here. We only save the command row; a
+    // database trigger wakes IrrigationCommandNotifyService, which publishes it
+    // to the board over MQTT.
     private static async Task<IResult> CreateManualCommandAsync(
         long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource)
     {

@@ -78,6 +78,8 @@ export async function fetchAlertHistory(
   const items: AlertHistoryItem[] = [];
 
   // ---- alerts ------------------------------------------------------------
+  // Read straight from Supabase with the farmer's own login. Row Level
+  // Security (migration 0011) only returns alerts for their own farm.
   try {
     let query = supabase
       .from('alert')

@@ -11,11 +11,6 @@ public record CalibrationRequest(string? Point);
 // The farmer-facing engine endpoints: reset a zone's watering levels to the
 // FAO-56 recommendation, save a wet/dry calibration point, and set the soil type.
 //
-// These are NEW endpoints in a NEW file. Luba's
-// PUT /api/farmer/zones/{zoneId}/settings is in flight and is deliberately not
-// touched or extended - the soil type gets its own PUT rather than another field
-// on hers.
-//
 // Every one checks that the caller can reach the zone's farm, using the same rule
 // the report endpoints use: owner, farm member, or an admin profile.
 public static class Fao56EngineEndpoints

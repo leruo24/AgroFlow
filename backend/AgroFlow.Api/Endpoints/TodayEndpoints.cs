@@ -6,8 +6,8 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Item 6: one card per zone - today's single action, how sure, and the one
-// setup step that would help. The mobile Home screen and the admin farm page
+// GET /api/farmer/farms/{farmId}/today: one card per zone with today's single
+// action, how sure we are, and the one setup step that would help. The mobile Home screen and the admin farm page
 // read the same thing, so an officer on the phone sees what the farmer sees.
 //
 // Read-only: the engine is run without persisting, exactly like the
@@ -28,6 +28,7 @@ public static class TodayEndpoints
             return Results.Unauthorized();
         }
 
+        // 1. Only the farm's owner, a member or an admin may see this farm.
         await using (var connection = await dataSource.OpenConnectionAsync(ct))
         await using (var cmd = new NpgsqlCommand(
             """
@@ -49,6 +50,8 @@ public static class TodayEndpoints
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Today");
         var cards = new List<object>();
 
+        // 2. Run the engine for each zone: the XDB loads the rows, the
+        //    controller builds the input, and Fao56Engine works out the advice.
         foreach (var zone in engine.Data.GetZonesForFarm(farmId))
         {
             try
@@ -56,6 +59,8 @@ public static class TodayEndpoints
                 var input = engine.BuildInput(zone, today);
                 var result = Fao56Engine.Run(input);
                 var insights = ZoneInsightBuilder.Build(input, result, engine.BuildFaultSignals(zone, today));
+
+                // 3. Turn the result into the plain-language card the app shows.
                 var action = TodayRules.For(result, insights);
 
                 cards.Add(new
@@ -101,7 +106,7 @@ public static class TodayEndpoints
         return Results.Ok(new { farmId, day = today.ToString("yyyy-MM-dd"), zones = cards });
     }
 
-    // Farmers never get the technical line; admins do (item 2c).
+    // Farmers never get the technical line; admins do.
     private static Explanation Plain(Explanation e, bool isAdmin)
     {
         if (!isAdmin) e.Technical = string.Empty;

@@ -24,10 +24,10 @@ export default function HomeScreen() {
   // (homeStyles) - kept as separate factories so Home can change without
   // touching what Alerts/History/Irrigation share.
   const styles = useMemo(() => ({ ...createScreenStyles(colors), ...createHomeStyles(colors) }), [colors]);
-  // Item 2: set-up zones only - a sensor number is not a percentage.
+  // Set-up zones only: an uncalibrated sensor number is not a percentage.
   const moisture = averageSoilText(zones.map(z => z.sensors.soilMoisture));
   const unread = alerts.filter(a => !a.read).length;
-  // Item 6: one card per zone - today's action, how sure, "I watered".
+  // Today's cards come from GET /api/farmer/farms/{id}/today on the API.
   const [today, setToday] = useState<TodayZone[] | null>(null);
   const [todayFailed, setTodayFailed] = useState(false);
   const loadToday = useCallback(() => {

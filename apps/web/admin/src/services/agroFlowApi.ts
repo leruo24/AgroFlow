@@ -369,8 +369,8 @@ export async function getReportFarms(): Promise<ReportFarm[]> {
   return (await reportFetch("/api/farms")).json() as Promise<ReportFarm[]>;
 }
 
-/* Item 4: the report PDF as a blob, for the on-screen Preview - the same
-   file the PDF button downloads, so the two cannot differ. */
+/* The report PDF as a blob, for the on-screen Preview. It is the same file
+   the PDF button downloads, so the two cannot differ. */
 export async function fetchReportPdfBlob(path: string): Promise<Blob> {
   return (await reportFetch(`/api/farmer/reports/${path}`)).blob();
 }

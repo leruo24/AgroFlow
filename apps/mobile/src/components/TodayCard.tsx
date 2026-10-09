@@ -14,9 +14,9 @@ type Props = {
   onLogged: () => void;
 };
 
-// Item 6: one card per zone on Home - today's one action, how sure, and
-// one tap to say "I watered". The text is the server's; nothing is
-// worked out here.
+// One card per zone on Home: today's action, how sure we are, and one tap
+// to say "I watered". The text comes from the server's engine; nothing is
+// worked out on the phone.
 export function TodayCard({ zone, onLogged }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);

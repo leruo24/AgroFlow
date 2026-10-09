@@ -155,6 +155,8 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         return Task.CompletedTask;
     }
 
+    // Every sensor reading a board publishes arrives here: work out which
+    // device sent it from the topic, then hand it to SensorReadingProcessor.
     private async Task OnMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs args)
     {
         try
