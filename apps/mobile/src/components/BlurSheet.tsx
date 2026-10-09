@@ -1,13 +1,8 @@
-// Reusable modal sheet, matching the Webex reference (docs/ui_reference):
-// the content behind is dimmed by a scrim, and the sheet itself sits on a
-// solid surface with a bold left-aligned title and a top-right dismiss control.
-//
-// This previously used expo-blur for a frosted backdrop. That was removed: the
-// blur layer crashed the app natively on startup in Expo Go (SDK 57) on both
-// iOS and Android, with no JS error to catch. The scrim below is the permanent
-// replacement - it needs no native module, behaves identically on every
-// platform and Android API level, and costs nothing to composite. Do not
-// reintroduce expo-blur here without re-testing a native startup crash.
+// Reusable modal sheet (see docs/ui_reference): a scrim dims the content behind, and the
+// sheet has a solid surface, a bold left-aligned title and a top-right close control.
+// Do not add expo-blur here: its blur layer crashed the app natively on startup in Expo
+// Go (SDK 57) on iOS and Android with no JS error. The scrim needs no native module and
+// looks the same everywhere.
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
@@ -43,9 +38,8 @@ type BlurSheetProps = {
   onClose: () => void;
   title?: string;
   children: ReactNode;
-  // Sheets vary a lot in content length (a two-row confirmation vs. a farm
-  // picker list) - cap height as a fraction of the screen rather than
-  // forcing every sheet to the same size.
+  // Sheets vary a lot in length (a two-row confirmation vs a farm list), so the height is
+  // capped as a fraction of the screen.
   maxHeightRatio?: number;
 };
 

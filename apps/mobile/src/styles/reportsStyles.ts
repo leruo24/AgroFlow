@@ -2,13 +2,9 @@ import { StyleSheet } from 'react-native';
 import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
-// Styles for the Reports screen: a short request form, then the list of what
-// has been asked for.
-//
-// The form is chips rather than dropdowns, matching the alert-history
-// filters: three or four options per question, each visible without opening
-// anything. A farmer filling this in is making three quick choices, and three
-// modals would make it feel like paperwork.
+// Styles for the Reports screen: a short request form, then the list of requests.
+// The form uses chips instead of dropdowns, like the alert-history filters: three or four
+// visible options per question, so it feels like three quick choices, not paperwork.
 export function createReportsStyles(colors: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
@@ -80,7 +76,7 @@ export function createReportsStyles(colors: AppColors) {
     itemTitle: { flex: 1, fontSize: Type.body, fontWeight: '600', color: colors.text },
     itemMeta: { fontSize: Type.caption, color: colors.textSecondary },
 
-    // Status never rests on colour: each state carries its own word.
+    // Status never relies on colour: each state has its own word.
     statusReady: { fontSize: Type.label, fontWeight: '700', color: colors.success },
     statusPreparing: { fontSize: Type.label, color: colors.textSecondary },
     statusFailed: { fontSize: Type.label, fontWeight: '700', color: colors.error },

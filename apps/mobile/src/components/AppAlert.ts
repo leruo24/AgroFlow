@@ -1,6 +1,6 @@
 import { Alert, Platform, type AlertButton, type AlertOptions } from 'react-native';
 
-// React Native's Alert is a no-op on web. Keep the same confirmations there.
+// React Native's Alert does nothing on web, so we show the same confirmations there ourselves.
 export const AppAlert = {
   alert(title: string, message?: string, buttons?: AlertButton[], options?: AlertOptions) {
     if (Platform.OS !== 'web') return Alert.alert(title, message, buttons, options);

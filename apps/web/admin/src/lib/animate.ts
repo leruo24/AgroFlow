@@ -1,9 +1,6 @@
-/* ============================================================================
-   Animation utilities.
-   All motion respects prefers-reduced-motion: when the user has it enabled,
-   animations resolve instantly to their final state instead of being skipped
-   entirely (so nothing is ever left blank or mid-transition).
-   ========================================================================== */
+/* Animation utilities.
+ * All motion respects prefers-reduced-motion: animations jump to their final state instead
+ * of being skipped, so nothing is left blank or half-way. */
 
 export const prefersReducedMotion = (): boolean =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -108,11 +105,9 @@ export function revealStagger(root: ParentNode = document, stepMs = 45): void {
 }
 
 /** Fades the content container out, swaps HTML, fades back in. */
-/* `stillCurrent` is asked after the leave animation and before anything is
-   written. The 140 ms pause is itself a window in which the admin can click
-   again; without the check, an older navigation would wake up and paint its
-   page over the newer one - and toggle the transition classes underneath it,
-   which is part of what made the page look like it was vibrating. */
+/* We ask `stillCurrent` after the leave animation and before writing anything. The 140 ms
+ * pause is a window where the admin can click again; without the check an older navigation
+ * would paint its page over the newer one. */
 export async function swapContent(
   container: HTMLElement,
   html: string,

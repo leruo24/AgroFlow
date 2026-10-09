@@ -26,19 +26,18 @@ type HelperZone = { id: string; name: string };
 type Props = {
   zones: HelperZone[];
   unreadAlertCount: number;
-  // Home passes true once its own data has loaded. The helper waits for it, so
-  // the drop never greets the farmer over a half-drawn screen.
+  // Home passes true once its data has loaded, so the drop never appears over a
+  // half-drawn screen.
   ready: boolean;
 };
 
-// How long the greeting wave is held before the mood switches to match the
-// message, and how long the whole thing stays up.
+// How long the greeting wave lasts before the mood matches the message, and how long
+// the whole thing stays up.
 const WAVE_MS = 2000;
 const AUTO_HIDE_MS = 8000;
 
-// Shown once per app open or login. Module-level rather than component state
-// because Home remounts on tab changes and the farmer should not be greeted
-// again each time they come back to it.
+// Shown once per app open or login. Module-level, not state, because Home remounts on tab
+// changes and the farmer should not be greeted every time.
 let shownThisSession = false;
 
 /** Called on sign-out so the next farmer to log in gets their own greeting. */
@@ -46,20 +45,12 @@ export function resetDripHelperSession(): void {
   shownThisSession = false;
 }
 
-// Whether the opening loading animation has finished.
-//
-// Drip waits for it. Without this, the greeting fires while the full-screen
-// animation is still up, its one-per-session flag is spent on a bubble nobody
-// saw, and the farmer never gets greeted at all.
-//
-// Module-level and NOT reset on sign-out: the animation plays once per app
-// launch, not once per login, so a farmer who signs out and back in should not
-// have Drip wait for an animation that is not going to play again.
+// Whether the opening loading animation has finished. Drip waits for it, otherwise the
+// greeting would play under the animation and use up its one showing.
+// Not reset on sign-out: the animation plays once per launch, not per login.
 let loadingAnimationFinished = false;
 
-// Lets a listener wake up when the flag flips. A plain module variable cannot
-// trigger a re-render on its own, and Drip may well have mounted and bailed
-// out before the animation ended.
+// Lets listeners know when the flag flips; a plain variable cannot trigger a re-render.
 const loadingAnimationListeners = new Set<() => void>();
 
 /** Called by LoadingAnimation once the overlay is really gone. */
@@ -78,16 +69,13 @@ type Decision = {
   mood: DripMood;
   // Where tapping the bubble goes. null means there is nothing to open.
   target: { kind: 'alerts' } | { kind: 'zone'; zoneId: string } | null;
-  // Item 2c: the explanation of the insight behind the message, if any.
+  // The explanation of the insight behind the message, if any.
   explanation?: Explanation | null;
 };
 
-// The priority order from the spec. The first rule that matches wins, so the
-// farmer is shown the single most important thing rather than a digest.
-//
-// Note setup_missing is itself an act_now insight, so it is excluded from rule 1
-// and handled by rule 4 - that is what gives it its own, gentler wording
-// instead of the raw "add the area and the flow rate" list.
+// The priority order: the first rule that matches wins, so the farmer sees the single
+// most important thing. setup_missing is an act-now insight but is handled by rule 4,
+// which gives it gentler wording.
 export function decideMessage(
   insights: ZoneInsightRow[],
   unreadAlertCount: number,
@@ -134,9 +122,8 @@ export function decideMessage(
     };
   }
 
-  // 4. Setup still unfinished. Item 2: advice comes either way, so this is
-  // the server's ONE next step ("Add the planting date for ..."), not a
-  // claim that advice is waiting on it.
+  // 4. Setup still unfinished. Advice comes either way, so this is the server's one next
+  // step ("Add the planting date for ..."), not a claim that advice is waiting on it.
   const setupMissing = insights.find((i) => i.insightType === 'setup_missing');
   if (setupMissing) {
     return {
@@ -155,11 +142,9 @@ export function decideMessage(
   };
 }
 
-// Drip: a small raindrop in the bottom-right corner that greets the farmer once
-// per app open and points at the one thing that needs them most.
-//
-// It is decoration over real data. Every data path falls back rather than
-// failing: no insights means alerts only, no alerts means "all good".
+// Drip: a small raindrop in the bottom-right corner that greets the farmer once per app
+// open and points at the one thing that needs them most. Every data path falls back
+// instead of failing: no insights means alerts only, no alerts means "all good".
 export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createDripHelperStyles(colors), [colors]);
@@ -172,18 +157,14 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
   const opacity = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
 
-  // Cancels the mood-switch and auto-hide timers. Declared before the effect
-  // that fills it so the ordering is obvious rather than relying on the async
-  // body running after render.
+  // Cancels the mood-switch and auto-hide timers. Declared before the effect that fills it.
   const cleanupTimers = useRef<(() => void) | null>(null);
 
-  // Stable primitive so the effect does not re-run when Home rebuilds an
-  // equivalent zones array on every render.
+  // A stable string, so the effect does not re-run when Home rebuilds an equal zones array.
   const zoneKey = zones.map((z) => z.id).join(',');
 
-  // Re-runs the effect below when the opening animation finishes. Drip
-  // usually mounts while it is still playing, so without this the greeting
-  // would be decided against a flag that was false and never reconsidered.
+  // Re-runs the effect below when the opening animation finishes. Drip usually mounts while
+  // it is still playing.
   const [animationDone, setAnimationDone] = useState(isLoadingAnimationFinished());
 
   useEffect(() => {
@@ -199,8 +180,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
 
   useEffect(() => {
     if (!ready || !preferencesReady) return;
-    // Wait for the opening animation. Greeting the farmer underneath it would
-    // spend the one-per-session flag on a bubble nobody saw.
+    // Wait for the opening animation, so the greeting is not wasted under it.
     if (!animationDone) return;
     if (!preferences.showRaindropHelper) return;
     if (shownThisSession) return;
@@ -209,8 +189,8 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
     let active = true;
 
     (async () => {
-      // Insight reads never throw - fetchTodayZoneInsights swallows its own
-      // failures and returns [] - so alerts alone still produce a message.
+      // Insight reads never throw (fetchTodayZoneInsights returns [] on failure), so alerts
+      // alone still give a message.
       const insights = await fetchTodayZoneInsights(zones.map((z) => z.id));
       if (!active) return;
 
@@ -244,8 +224,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
           useNativeDriver: true,
         }).start();
 
-        // Three small wiggles over about a second, then idle. Deliberately
-        // gentle - this is a greeting, not an alarm.
+        // Three small wiggles over about a second, then idle: a greeting, not an alarm.
         Animated.sequence([
           wiggle(shake, 1),
           wiggle(shake, -1),
@@ -371,8 +350,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
   );
 }
 
-// One wiggle: out and back. Kept tiny (the interpolation above maps 1 to 5 px)
-// so it reads as a friendly nudge rather than a shudder.
+// One wiggle out and back, kept tiny (1 maps to 5 px) so it feels like a friendly nudge.
 function wiggle(value: Animated.Value, direction: 1 | -1) {
   return Animated.sequence([
     Animated.timing(value, {

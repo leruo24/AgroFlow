@@ -1,9 +1,9 @@
 /// <reference types="jest" />
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
-/* Admin polish, item 1, in the app: × dismisses (recorded on the server,
- * never deleted), Undo restores within 5 s, an important item asks for an
- * optional note, and Dismissed lists what was dismissed with Restore. */
+/* Dismiss in the app: x dismisses (recorded on the server, never deleted), Undo restores
+ * within 5 s, an important item asks for an optional note, and Dismissed lists what was
+ * dismissed with Restore. */
 
 import type { ReactNode } from 'react';
 

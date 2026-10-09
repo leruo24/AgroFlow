@@ -1,19 +1,12 @@
-/* Plain words when the network fails (admin polish, item 7).
- *
- * A browser that cannot complete a request says "Failed to fetch" (Chrome),
- * "NetworkError when attempting to fetch resource." (Firefox) or "Load failed"
- * (Safari), and supabase-js passes that on as "TypeError: Failed to fetch".
- * None of that tells an admin what to do. Every request goes through
- * navigationAwareFetch (lib/navigation.ts), which turns such a failure into a
- * NetworkFailure carrying one of the two sentences below; the places that
- * show an error (error cards, toasts, the login and enquiry forms) pass their
- * text through plainError(), which also catches any raw browser wording that
- * reached them another way. The technical detail goes to the console only.
- *
- * Telling an ad blocker from a dead server: a browser does not let a page see
- * "blocked by client", so after a failure AgroFlow asks the API's anonymous
- * /api/public/ping - a different path. If that answers, the server is up and
- * something in the browser stopped the first request. */
+/* Plain words when the network fails.
+ * Browsers say "Failed to fetch", "NetworkError when attempting to fetch resource." or
+ * "Load failed", which does not tell an admin what to do. navigationAwareFetch
+ * (lib/navigation.ts) turns such a failure into a NetworkFailure with one of the sentences
+ * below, and everywhere that shows an error passes it through plainError(). The technical
+ * detail goes to the console only.
+ * A page cannot see "blocked by client", so after a failure we ask the API's anonymous
+ * /api/public/ping. If that answers, the server is up and something in the browser blocked
+ * the first request. */
 
 export const SERVER_UNREACHABLE =
   "AgroFlow's server can't be reached right now. Check your internet, then press Retry.";

@@ -1,9 +1,7 @@
 // Crop and planting date. Reached as /zone-crop?zoneId=123&cropType=potato&plantingDate=2026-09-01
-//
-// Item 6b: the farmer changes what is growing. On save the zone updates in
-// the shared database (the admin sees it straight away), an activity entry
-// "Crop changed from Citrus to Potato by {name}" is recorded on the server,
-// and "Recommended for you" shows the new crop's settings.
+// On save the zone updates in the shared database (the admin sees it straight away), the
+// server records "Crop changed from Citrus to Potato by {name}", and "Recommended for you"
+// shows the new crop's settings.
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

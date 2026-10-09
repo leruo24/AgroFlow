@@ -2,9 +2,8 @@ import { StyleSheet } from 'react-native';
 import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
-// Item 6: the Home screen's one card per zone, the "I watered" / soil-feel
-// sheet and the Finish setup checklist. Same type steps and hairlines as the
-// insights card, so the three read as one family.
+// Home's one card per zone, the "I watered" / soil-feel sheet and the Finish setup
+// checklist. Same text sizes and hairlines as the insights card, so they look like one family.
 export function createTodayStyles(colors: AppColors) {
   return StyleSheet.create({
     card: {
@@ -49,7 +48,7 @@ export function createTodayStyles(colors: AppColors) {
     ghostText: { fontSize: Type.body, fontWeight: '600', color: colors.primaryDark },
     busy: { opacity: 0.6 },
 
-    // ---- Sheet ----
+    // Sheet
     sheet: { gap: Spacing.three },
     intro: { fontSize: Type.body, lineHeight: 23, color: colors.textSecondary },
     choices: { ...sharedLayout.inlineRow, flexWrap: 'wrap', gap: Spacing.two },
@@ -81,7 +80,7 @@ export function createTodayStyles(colors: AppColors) {
     message: { fontSize: Type.caption, color: colors.success },
     error: { fontSize: Type.caption, color: colors.error },
 
-    // ---- Checklist ----
+    // Checklist
     item: {
       gap: Spacing.two,
       paddingVertical: Spacing.three,

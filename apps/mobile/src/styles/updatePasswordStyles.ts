@@ -90,7 +90,7 @@ export function createUpdatePasswordStyles(
         colors.error,
     },
 
-    // No card around the form - inputs carry their own boundaries.
+    // No card around the form; the inputs have their own borders.
     form: {
       paddingTop: Spacing.one,
     },
@@ -125,7 +125,7 @@ export function createUpdatePasswordStyles(
         colors.text,
     },
 
-    // Matches the app's single filled accent CTA treatment.
+    // Same filled accent button as the rest of the app.
     primaryButton: {
       height: 56,
       marginTop: Spacing.four,

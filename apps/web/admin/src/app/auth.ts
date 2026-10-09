@@ -1,11 +1,8 @@
-/* Admin session state - the vanilla-TS equivalent of
-   apps/mobile/src/context/AuthContext.tsx. Same Supabase Auth patterns
-   (getSession on boot, onAuthStateChange to stay in sync, an explicit
-   signIn() that also sets state directly), adapted to this app's
-   module-level-state-plus-listeners style instead of React context.
-
-   Gating is strictly on profile.role === 'admin', never on session alone -
-   see the rejection path in signIn() for why that matters. */
+/* Admin session state, like apps/mobile/src/context/AuthContext.tsx but in plain
+ * TypeScript: getSession on boot, onAuthStateChange to stay in sync, and a signIn() that
+ * also sets state directly, using module-level state and listeners instead of React context.
+ * Security: access depends on profile.role === 'admin', never on a session alone (see the
+ * rejection path in signIn()). */
 
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
@@ -42,12 +39,11 @@ export function getAdminProfile(): AdminProfile | null {
   return profile;
 }
 
-/** Re-reads the signed-in admin's own profile row.
- *
- * Needed after they edit their own name in Settings: the header greets them
- * by it, and without this it would keep showing the old one until the next
- * sign-in. Deliberately silent on failure - the save itself has already
- * succeeded, and a stale header is not worth an error dialog over. */
+/**
+ * Re-reads the signed-in admin's own profile row, e.g. after they change their name in
+ * Settings, so the header greeting updates. Silent on failure: the save already worked,
+ * and a stale header is not worth an error.
+ */
 export async function refreshAdminProfile(): Promise<void> {
   const userId = session?.user?.id;
   if (!userId) return;
@@ -59,12 +55,11 @@ export async function refreshAdminProfile(): Promise<void> {
   notify();
 }
 
-/** Changes the signed-in admin's password through Supabase Auth.
- *
- * Supabase Auth owns credentials - there is no password column in `profile`
- * and the API has no endpoint for this - so it goes straight to the auth
- * client. The current session stays valid, which is why the page can tell
- * them they are still signed in here. */
+/**
+ * Changes the signed-in admin's password through Supabase Auth, which owns credentials
+ * (there is no password column or API endpoint for it). The current session stays valid,
+ * so the page can say they are still signed in.
+ */
 export async function changeMyPassword(password: string): Promise<void> {
   const { error } = await supabase.auth.updateUser({ password });
   if (error) throw new Error(error.message);
@@ -86,9 +81,10 @@ async function loadProfile(userId: string): Promise<AdminProfile | null> {
   return data as AdminProfile;
 }
 
-/** Call once at startup - restores any persisted session and starts
-    listening for auth changes (sign-out in another tab, token refresh,
-    etc.). Resolves once the initial state is known either way. */
+/**
+ * Call once at startup: restores any saved session and starts listening for auth changes
+ * (sign-out in another tab, token refresh, etc.). Resolves once the initial state is known.
+ */
 export async function initAuth(): Promise<void> {
   if (initialized) return;
   initialized = true;
@@ -97,12 +93,9 @@ export async function initAuth(): Promise<void> {
   session = data.session;
   profile = session ? await loadProfile(session.user.id) : null;
 
-  // Mirrors AuthContext's onAuthStateChange listener: keeps state in sync
-  // with events signIn() didn't cause directly (restored/refreshed
-  // sessions, sign-out triggered elsewhere). It also re-fires for the same
-  // SIGNED_IN event signIn() below already handled - redundantly setting
-  // the same values is harmless, same as the React version double-setting
-  // state from both places.
+  // Like AuthContext's onAuthStateChange listener: keeps state in sync with events signIn()
+  // did not cause (restored or refreshed sessions, sign-out elsewhere). It also fires again
+  // for signIn()'s own SIGNED_IN event, which is harmless.
   supabase.auth.onAuthStateChange((_event, newSession) => {
     void (async () => {
       session = newSession;
@@ -119,11 +112,9 @@ export async function signIn(email: string, password: string): Promise<void> {
 
   const signedInProfile = await loadProfile(data.session.user.id);
   if (!signedInProfile || signedInProfile.role !== "admin") {
-    // Sign back out immediately - a valid Supabase login (farmer or
-    // otherwise) is not, by itself, admin access. Deliberately not setting
-    // module state before this check, so isAdminAuthenticated() never
-    // reports true for the rejected session even for the instant before
-    // the SIGNED_OUT event above lands.
+    // Security: sign straight back out, because a valid Supabase login (farmer or otherwise)
+    // is not admin access by itself. Module state is not set before this check, so
+    // isAdminAuthenticated() never reports true for the rejected session, even for an instant.
     await supabase.auth.signOut();
     throw new Error("This account is not an administrator.");
   }
@@ -133,10 +124,9 @@ export async function signIn(email: string, password: string): Promise<void> {
   notify();
 }
 
-/* Log out (admin polish, item 4). supabase-js keeps the stored session when
-   its call to the server fails (offline, server down), so a failed global
-   sign-out falls back to a local one: pressing Log out must always end the
-   session on this computer. */
+/* Log out. supabase-js keeps the stored session when its server call fails (offline,
+ * server down), so a failed global sign-out falls back to a local one: Log out must always
+ * end the session on this computer. */
 export async function signOut(): Promise<void> {
   try {
     const { error } = await supabase.auth.signOut();

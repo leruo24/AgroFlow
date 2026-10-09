@@ -1,10 +1,9 @@
 /// <reference types="jest" />
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
-/* Part 2: the app's screens, rendered with their real code and only the
- * network and context faked - Finish setup (with the 500 mL bottle helper),
- * the login screen's "Ask for a call", Reports, the forecast, alerts history
- * and help. */
+/* The app's screens rendered with their real code, with only the network and context faked:
+ * Finish setup (with the 500 mL bottle helper), the login screen's "Ask for a call",
+ * Reports, the forecast, alerts history and help. */
 
 import type { ReactNode } from 'react';
 
@@ -59,7 +58,7 @@ jest.mock('@/services/agroFlowApi', () => ({
   openReportPdf: jest.fn(() => Promise.resolve()),
   stopAutoReports: jest.fn(),
   fetchForecast: jest.fn(),
-  // Admin polish: the Alerts screen reads this farm's dismissals.
+  // The Alerts screen reads this farm's dismissals.
   fetchDismissals: jest.fn(() => Promise.resolve([])),
   dismissNotification: jest.fn(),
   restoreNotification: jest.fn(),

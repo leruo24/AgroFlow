@@ -1,11 +1,7 @@
-//gives the chosen color combination a consistent typescript structure and allows for type checking and autocompletion when using the colors in the application. The AppColors type is defined as a mapped type that takes each key from the lightColors object and assigns it a string type, ensuring that all color properties are present and correctly typed in both light and dark color schemes.
+// Gives the colour palette a TypeScript type (AppColors), so every colour exists in both
+// the light and dark themes and gets type checking and autocompletion.
 
-// Fonts and Spacing folded in from the old (unused) constants/theme.ts -
-// that file also defined its own separate, orphaned Colors object nothing
-// imported; this file is the one real theme source now. Font family
-// selection and the spacing scale are both still worth keeping - neither
-// duplicated anything here, they just weren't wired into the live theme
-// module before.
+// This file is the app's one theme source, including the font families and spacing scale.
 import { Platform } from 'react-native';
 
 export const Fonts = Platform.select({
@@ -43,14 +39,10 @@ export const Spacing = {
   six: 64,
 } as const;
 
-// Named type steps replacing the ~13 ad hoc font sizes previously scattered
-// across the screen stylesheets (9-40px) - hierarchy comes from which named
-// step is used, not from a card/box around the text. See docs/ui_reference
-// (the Webex screenshots) for the source: label ~11sp small-caps, caption
-// ~12-13sp, body ~15-16sp, title ~17-18sp. `display` has no reference
-// equivalent (Webex's own screens don't show a hero numeral) - it's kept as
-// the one deliberate large-type moment per screen (a stat, a temperature),
-// consistent with "hierarchy through typography," not decoration.
+// Named text sizes, so hierarchy comes from which step is used, not from boxes around text.
+// Based on docs/ui_reference (the Webex screenshots): label ~11sp small-caps, caption
+// ~12-13sp, body ~15-16sp, title ~17-18sp. `display` is the one large number per screen
+// (a stat or a temperature).
 export const Type = {
   label: 11,
   caption: 13,
@@ -59,10 +51,8 @@ export const Type = {
   display: 32,
 } as const;
 
-// Flat by default. `full` is for genuinely circular elements (avatars) via
-// width/2, not a corner-rounding step. `sm`/`md` are for the rare remaining
-// boxed element (a text input) - list/status content uses `none` and relies
-// on `divider` instead, matching the reference's hairline-row model.
+// Flat by default. `full` is for truly circular things (avatars) via width/2. `sm`/`md` are
+// for the few boxed elements (a text input); lists use `none` and a `divider` instead.
 export const Radius = {
   none: 0,
   sm: 8,
@@ -70,22 +60,15 @@ export const Radius = {
   full: 9999,
 } as const;
 
-// Fixed heights for embedded media that must render at a concrete pixel
-// size regardless of theme or screen density - a MapView needs real height
-// to lay out, it isn't a layout gap from the Spacing scale. Deliberately
-// its own small scale, not folded into Spacing, so a reviewer doesn't
-// mistake `farmMap: 190` for a spacing value and "fix" it to the nearest
-// Spacing step.
+// Fixed heights for embedded media that need a real pixel size (a MapView needs height to
+// lay out). Kept apart from Spacing so nobody mistakes `farmMap: 190` for a spacing value.
 export const FixedMediaHeight = {
   farmMap: 190,
 } as const;
 
-// Colours for chrome drawn ON TOP of map tiles/imagery - the pin, the tile
-// attribution strip. These must stay legible against real-world map tile
-// colours in both light and dark theme, so they live outside AppColors on
-// purpose and are NOT theme-aware. Do not swap these for a themed token or
-// move them into lightColors/darkColors - that would make the pin invisible
-// against tiles in whichever theme it stops matching.
+// Colours for things drawn on top of map tiles (the pin, the attribution strip). They must
+// stay readable on real map colours in both themes, so they are not theme-aware. Do not
+// move them into lightColors/darkColors, or the pin disappears in one theme.
 export const MapChrome = {
   pinColor: '#168F99',
   attributionBackground: '#FFFFFF',
@@ -106,13 +89,10 @@ export type AppColors = {
   background: string;
   surface: string;
   surfaceSecondary: string;
-  // Solid surface for the floating tab bar. Was a pair of translucent
-  // "frosted" tokens backing an expo-blur layer; blur is gone, so this is
-  // one opaque colour and the bar is separated from the canvas by a
-  // hairline border and a soft shadow instead.
+  // Solid surface for the floating tab bar, separated from the page by a hairline border
+  // and a soft shadow.
   tabBarSurface: string;
-  // Dim behind modal sheets. Replaces the blurred backdrop - the reference
-  // backdrop reads as darkened, which a scrim delivers on its own.
+  // Dim behind modal sheets.
   scrim: string;
 
   text: string;
@@ -120,10 +100,8 @@ export type AppColors = {
   textMuted: string;
 
   border: string;
-  // Hairline row separator - the reference's one constant structural
-  // element. Deliberately distinct from `border`: `border` is for the rare
-  // real boundary (a text input, an avatar ring); `divider` is for
-  // separating rows within an unboxed list.
+  // Hairline row separator. Different from `border`, which is for the few real boundaries
+  // (a text input, an avatar ring); `divider` separates rows in an unboxed list.
   divider: string;
 
   white: string;
@@ -161,10 +139,8 @@ export const lightColors: AppColors = {
   navigationText: '#253126',
   navigationMuted: '#637064',
 
-  // Was '#F1F8F3' - a pale green tint every screen sat on. The Webex
-  // reference canvas is flat white with no tint; `surface` now equals this
-  // exactly, since the reference has no "card sits on a different plane
-  // than the page" model.
+  // Flat white page background, the same as `surface`: cards do not sit on a different
+  // plane from the page.
   background: '#FFFFFF',
 
   surface: '#FFFFFF',
@@ -176,9 +152,7 @@ export const lightColors: AppColors = {
   textSecondary: '#637064',
   textMuted: '#879187',
 
-  // Was '#DDE9DF' - green-tinted, and doing double duty as both card
-  // outline and row divider. Neutralised and narrowed to the rare real
-  // boundary; `divider` below now carries the row-separator job.
+  // A neutral grey for the few real boundaries; `divider` below separates rows.
   border: '#E4E7E4',
   divider: 'rgba(20,26,20,0.08)',
 

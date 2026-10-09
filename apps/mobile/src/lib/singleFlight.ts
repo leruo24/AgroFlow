@@ -1,24 +1,11 @@
-/* One request for one intention (item 0b).
- *
- * WHY THIS IS IN THE DATA LAYER AND NOT ON EACH BUTTON
- * The screens that guard their buttons do it with React state: tap → set
- * `saving` → re-render → button disabled. But a second tap that lands before
- * that re-render sees `saving` still false and goes straight through. On a
- * phone that is not hypothetical - a double tap is two events inside one
- * frame.
- *
- * The case that mattered most: "Water now". startManualIrrigation checks
- * whether the pump is already running, but that flag is only set AFTER the
- * command's request returns. Two quick taps both passed the check and sent
- * two pump-start commands.
- *
- * So writes are deduplicated where they are made. If an IDENTICAL write -
- * same method, same path, same body - is already in flight, the second caller
- * gets the first one's promise instead of a second request. Different writes
- * are untouched, and a write repeated after the first has finished goes
- * through normally: this is about two taps, not about refusing to do the same
- * thing twice on purpose.
- */
+/* One request for one intention.
+ * Screens guard their buttons with React state (tap -> set `saving` -> re-render -> disabled),
+ * but a second tap before that re-render still goes through; on a phone a double tap is two
+ * events in one frame. This mattered most for "Water now": two quick taps both passed the
+ * "pump already running" check and sent two start commands.
+ * So writes are deduplicated where they are made: if an identical write (same method, path
+ * and body) is already in flight, the second caller gets the first one's promise. Different
+ * writes are untouched, and repeating a write after the first one finishes works normally. */
 
 const inFlight = new Map<string, Promise<unknown>>();
 

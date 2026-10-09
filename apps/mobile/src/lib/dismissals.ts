@@ -1,8 +1,7 @@
-/* Admin polish, item 1: the app's side of dismiss and history.
-
-   An alert's key is its database id; an insight's is zone:type:day (one
-   insight per zone, type and day). Local notices the app makes itself have
-   no server record, so they cannot be dismissed into history. */
+/* The app's side of dismiss and history.
+ * An alert's key is its database id; an insight's is zone:type:day (one per zone, type and
+ * day). Notices the app makes locally have no server record, so they cannot be dismissed
+ * into history. */
 import type { Dismissal } from '@/services/agroFlowApi';
 
 export type DismissView = 'active' | 'dismissed' | 'all';

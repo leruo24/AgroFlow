@@ -1,4 +1,5 @@
-//root of the app that sets up the main navigation structure and provides context providers for theme, authentication, and farm state. It uses Expo Router's Stack navigator to define protected routes based on the user's authentication status. The RootLayout component wraps the RootNavigator with ThemeProvider, AuthProvider, and AgroFlowProvider to make the respective contexts available throughout the application.
+// Root of the app: sets up the stack navigation and the theme, auth and farm-data providers.
+// Routes are protected based on whether the user is signed in.
 import {//creates stack navigation
   router,
   Stack,
@@ -29,13 +30,9 @@ import {
   setLoadingAnimationFinished,
 } from '@/components/DripHelper';
 
-// Hold the native splash until the loading animation is ready to take over.
-// Called at module scope, before any component renders, because the splash
-// auto-hides as soon as the first frame is drawn otherwise - and then there
-// IS no splash left to hand over from.
-//
-// It never rejects in a way that matters (already-hidden, or a platform
-// without a splash), and a failure here must not stop the app booting.
+// Keep the native splash up until the loading animation is ready to take over. Called at
+// module scope because the splash hides itself as soon as the first frame is drawn.
+// A failure here (already hidden, or no splash on this platform) must not stop the app.
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 import {
@@ -55,15 +52,10 @@ function RootNavigator() {//decides which screens the user is permitted to acces
     mustChangePassword,
   } = useAuth();
 
-  //A farmer still on their onboarding password goes straight to the
-  //password screen and nowhere else. That password was read off an admin's
-  //screen or sent over Telegram, where it stays in the chat history, so it
-  //must not remain the thing guarding the account.
-  //
-  //The guard on the tab routes below is what actually enforces this - this
-  //effect only performs the navigation. Both are needed: the guard stops the
-  //farmer navigating back into the app, the redirect gets them somewhere
-  //useful rather than a blank stack.
+  // Security: a farmer still on their onboarding password goes straight to the password
+  // screen. That password was read off an admin's screen or sent over Telegram, so it must
+  // not keep guarding the account. The guard on the tab routes below enforces this; this
+  // effect only does the navigation.
   useEffect(
     () => {
       if (
@@ -121,7 +113,7 @@ function RootNavigator() {//decides which screens the user is permitted to acces
         },
       }}
     >
-{/* Protects login screens from authenticated users */}
+{/* Keeps signed-in users away from the login screens */}
       <Stack.Protected
         guard={
           !isAuthenticated
@@ -135,7 +127,7 @@ function RootNavigator() {//decides which screens the user is permitted to acces
           name="forgot-password"
         />
 
-        {/* Item 6c: "Ask for a call" - for people not on AgroFlow yet. */}
+        {/* "Ask for a call", for people not on AgroFlow yet. */}
         <Stack.Screen
           name="enquiry"
         />
@@ -156,7 +148,7 @@ function RootNavigator() {//decides which screens the user is permitted to acces
         />
       </Stack.Protected>
 
-{/* The recovery route remains registered while Supabase changes the temporary authentication state. It is placed after the normal protected routes so it does not become the default screen. */}
+{/* The recovery route stays registered while Supabase changes the temporary auth state. It comes after the protected routes so it is never the default screen. */}
       <Stack.Screen
         name="update-password"
       />
@@ -164,10 +156,9 @@ function RootNavigator() {//decides which screens the user is permitted to acces
   );
 }
 
-// Sits INSIDE AuthProvider so it can read isLoading - "the app has finished
-// starting" means the Supabase session has been restored and the app knows
-// whether to show login or the tabs. A separate component because hooks
-// cannot be called above the provider that supplies them.
+// Inside AuthProvider so it can read isLoading ("the app has finished starting" means the
+// Supabase session has been restored). A separate component because hooks cannot be used
+// above the provider that supplies them.
 function RootShell() {
   const { isLoading } = useAuth();
 
@@ -194,12 +185,12 @@ function RootShell() {
 export default function RootLayout() {/*wraps the application with ThemeProvider, AuthProvider, and AgroFlowProvider to provide theme, authentication, and farm state contexts throughout the app. It renders the RootNavigator component, which defines the main navigation structure of the app using Expo Router's Stack navigator.*/
   return (
     <ThemeProvider>
-      {/* Authentication provider - checks if user has a saved session*/}
+      {/* Auth provider: checks for a saved session */}
       <AuthProvider>
         {/* Farm data provider */}
         <AgroFlowProvider>
           <RootShell />
-          {/*reads authentication state */}
+          {/* Reads the auth state */}
         </AgroFlowProvider>
       </AuthProvider>
     </ThemeProvider>

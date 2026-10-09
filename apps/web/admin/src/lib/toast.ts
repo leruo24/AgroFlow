@@ -31,8 +31,8 @@ export function toast(message: string, kind: ToastKind = "info", ms = 3200): voi
   const node = document.createElement("div");
   node.className = `toast toast-${kind}`;
   node.innerHTML = `<span class="toast-ico">${ICONS[kind]}</span><span class="toast-msg"></span>`;
-  // textContent avoids any HTML injection from message strings; plainError
-  // turns a browser's "Failed to fetch" into a sentence (admin polish, item 7).
+  // textContent avoids HTML injection from message strings; plainError turns a browser's
+  // "Failed to fetch" into a sentence.
   const msgEl = node.querySelector<HTMLElement>(".toast-msg");
   if (msgEl) msgEl.textContent = kind === "error" || kind === "warn" ? plainError(message) : message;
 
@@ -56,8 +56,8 @@ export function toast(message: string, kind: ToastKind = "info", ms = 3200): voi
   });
 }
 
-/* Admin polish: a toast with one action - "Undo" for 5 s after a dismiss.
-   The action runs at most once; the toast closes when it is pressed. */
+/* A toast with one action: "Undo" for 5 s after a dismiss. The action runs at most once,
+ * and the toast closes when it is pressed. */
 export function toastWithUndo(message: string, onUndo: () => void, ms = 5000): void {
   const host = container();
   const node = document.createElement("div");

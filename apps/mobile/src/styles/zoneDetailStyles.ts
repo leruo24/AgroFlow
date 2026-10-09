@@ -60,9 +60,7 @@ content: {
       fontWeight: '500',
       color: colors.text,
     },
-    // Was a translucent-white pill with a translucent-white border, left
-    // over from the dark-green header. On the now-white header that made the
-    // chip invisible - neutral surface + hairline restores it.
+    // A neutral surface and hairline border, so the chip is visible on the white header.
     statusBadge: {
       minWidth: 54,
       paddingHorizontal: Spacing.two,
@@ -255,8 +253,8 @@ content: {
     modeButtonTextSelected: {
       color: colors.white,
     },
-    // Start/Stop are the most important controls on this screen, so they get
-    // the app's filled CTA treatment at a generous outdoor touch height.
+    // Start/Stop are the most important controls here, so they get the filled button style at
+    // a large touch height for outdoor use.
     primaryButton: {
       minHeight: 56,
       paddingHorizontal: Spacing.three,
@@ -374,10 +372,8 @@ content: {
     inputColumn: {
       flex: 1,
     },
-    // The Kit / Soil type / Teach-the-sensor rows. Modelled on switchRow
-    // below - same height, same hairline, same two-line copy - but with a
-    // chevron instead of a switch, because each one is a door to somewhere
-    // else rather than a setting toggled in place.
+    // The Kit / Soil type / Teach-the-sensor rows. Same height, hairline and two-line text as
+    // switchRow below, but with a chevron, because each opens another screen.
     linkRow: {
       minHeight: 56,
       marginBottom: 10,

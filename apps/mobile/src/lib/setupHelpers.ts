@@ -1,4 +1,4 @@
-/* Item 6: the arithmetic behind "Finish setup" and "I watered". */
+/* The arithmetic behind "Finish setup" and "I watered". */
 
 /** The bottle used for the flow-rate test: a 500 mL cooldrink bottle. */
 export const BOTTLE_LITRES = 0.5;
@@ -25,9 +25,10 @@ export const AREA_PRESETS: { key: 'small' | 'plot'; label: string; m2: number }[
 /** Quick choices for "I watered". */
 export const WATERED_MINUTES = [5, 10, 15, 20, 30];
 
-/** The crops the engine has figures for - the same list, in the same order,
-    as the admin console's ZONE_CROPS (apps/web/admin/src/data/referenceData.ts).
-    A test keeps the two equal. */
+/**
+ * The crops the engine has figures for, in the same order as the admin console's ZONE_CROPS
+ * (apps/web/admin/src/data/referenceData.ts). A test keeps the two equal.
+ */
 export const ZONE_CROPS: { value: string; label: string }[] = [
   { value: 'maize', label: 'Maize' },
   { value: 'potato', label: 'Potato' },

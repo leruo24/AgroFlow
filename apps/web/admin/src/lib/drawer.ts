@@ -31,18 +31,16 @@ export interface DrawerOptions {
   /** Return false to keep the drawer open (a check failed - what was typed stays). */
   onConfirm?: (values: Record<string, string>) => void | boolean;
   onOpen?: () => void;
-  /** From currentPanelIntent(), taken BEFORE the opener's first await. If a
-      newer panel was asked for in the meantime, this one is not opened. */
+  /**
+   * From currentPanelIntent(), taken before the opener's first await. If a newer panel was
+   * asked for meanwhile, this one is not opened.
+   */
   intent?: number;
 }
 
-/* Which detail panel the admin asked for LAST.
- *
- * Opening a farm or a farmer reads from the network first. Click two rows
- * quickly and both reads are in flight; without this, whichever answered
- * last would open - not the one clicked last. Every "view-" click and every
- * page navigation takes a new intent; an opener that finds a newer one when
- * its data arrives quietly does nothing. */
+/* Which detail panel the admin asked for last. Opening a farm or farmer reads from the
+ * network first, so after two quick clicks the slower answer could open. Every "view-" click
+ * and page navigation takes a new intent; an opener that finds a newer one does nothing. */
 let panelIntent = 0;
 
 export function beginPanelIntent(): number {
@@ -121,9 +119,9 @@ export function openDrawer(opts: DrawerOptions): void {
 
   overlay.classList.add("open");
 
-  // Any picker in a drawer is bound before the caller's own onOpen runs, so
-  // a drawer that only needs a picker does not have to supply a hook. Set on
-  // window rather than imported, because lib/ must not depend on app/.
+  // Any picker in a drawer is bound before the caller's onOpen runs, so a drawer that only
+  // needs a picker needs no hook. Set on window, not imported, because lib/ must not depend
+  // on app/.
   window.agroflowBindDrawerPickers?.();
 
   opts.onOpen?.();
@@ -132,8 +130,7 @@ export function openDrawer(opts: DrawerOptions): void {
     b.addEventListener("click", () => closeDrawer()));
 
   panel.querySelector<HTMLButtonElement>("[data-drawer-confirm]")?.addEventListener("click", (e) => {
-    // Once. A double-click used to call onConfirm twice before closeDrawer
-    // had taken effect - two farms, two codes, two of whatever it creates.
+    // Only once, so a double-click cannot call onConfirm twice (two farms, two codes).
     const button = e.currentTarget as HTMLButtonElement;
     if (button.disabled) return;
     button.disabled = true;

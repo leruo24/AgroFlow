@@ -1,8 +1,8 @@
 /// <reference types="jest" />
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
-/* Item 6: one card per zone on Home - the server's action, a confidence
- * badge, and "I watered" / "How does the soil feel?" that log by hand. */
+/* One card per zone on Home: the server's action, a confidence badge, and "I watered" /
+ * "How does the soil feel?" for logging by hand. */
 
 jest.mock('@/context/ThemeContext', () => {
   const { lightColors } = jest.requireActual('@/constants/colors');
@@ -42,8 +42,8 @@ const zone: TodayZone = {
   nextStep: { field: 'planting_date', ask: 'Add the planting date.' },
 };
 
-// The first render pulls in react-native's Modal and friends, which on a cold
-// jest cache takes longer than one test's 5 s. Warm up once, outside the tests.
+// The first render loads react-native's Modal and friends, which can take longer than
+// one test's 5 s on a cold jest cache, so we warm up once outside the tests.
 beforeAll(async () => {
   await render(<TodayCard zone={zone} onLogged={jest.fn()} />);
 }, 60000);

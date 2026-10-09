@@ -3,22 +3,17 @@ import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Styles for the Kit screen.
-//
-// Status first, big and in words. The one thing a farmer opens this screen to
-// find out is whether the box in their field is talking to us, so that answer
-// is a single line at the top in title type, not a coloured dot they have to
-// interpret.
-//
-// Status never rests on colour alone: every state carries its own words
-// ("Online", "Offline, last seen ...", "Working", "Not responding") so the
-// screen reads correctly in sunlight, in greyscale and to a colour-blind
-// farmer.
+// Status first, big and in words: a farmer opens this to find out whether the box in their
+// field is talking to us, so the answer is one line in title type, not a coloured dot.
+// Status never relies on colour alone: every state has its own words ("Online", "Offline,
+// last seen ...", "Working", "Not responding"), so it reads correctly in sunlight, in
+// greyscale and for colour-blind farmers.
 export function createZoneHardwareStyles(colors: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
     content: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.six },
 
-    // ---- Status ---------------------------------------------------------
+    // Status
     statusCard: {
       gap: Spacing.one,
       padding: Spacing.three,
@@ -33,12 +28,12 @@ export function createZoneHardwareStyles(colors: AppColors) {
     statusHeadline: { fontSize: Type.title, fontWeight: '700', color: colors.text },
     statusDetail: { fontSize: Type.body, lineHeight: 22, color: colors.textSecondary },
 
-    // ---- Sections -------------------------------------------------------
+    // Sections
     section: { gap: Spacing.two },
     sectionTitle: { fontSize: Type.title, fontWeight: '600', color: colors.text },
 
-    // Hairline rows rather than boxed cards - the app's established pattern
-    // for a list of facts (see `divider` in constants/colors.ts).
+    // Hairline rows instead of boxed cards, the app's usual pattern for a list of facts (see
+    // `divider` in constants/colors.ts).
     row: {
       ...sharedLayout.inlineRow,
       justifyContent: 'space-between',
@@ -56,7 +51,7 @@ export function createZoneHardwareStyles(colors: AppColors) {
     rowValueWarning: { fontSize: Type.body, fontWeight: '600', color: colors.warning, textAlign: 'right' },
     rowNote: { fontSize: Type.caption, lineHeight: 19, color: colors.textSecondary },
 
-    // ---- Change WiFi ----------------------------------------------------
+    // Change WiFi
     primaryButton: {
       ...sharedLayout.inlineRow,
       justifyContent: 'center',
@@ -67,7 +62,7 @@ export function createZoneHardwareStyles(colors: AppColors) {
     primaryButtonBusy: { opacity: 0.6 },
     primaryButtonText: { fontSize: Type.body, fontWeight: '600', color: colors.white },
 
-    // ---- The instructions sheet -----------------------------------------
+    // The instructions sheet
     sheetBody: { gap: Spacing.three, paddingBottom: Spacing.three },
     sheetIntro: { fontSize: Type.body, lineHeight: 23, color: colors.text },
 
@@ -86,8 +81,8 @@ export function createZoneHardwareStyles(colors: AppColors) {
     },
     stepText: { flex: 1, fontSize: Type.body, lineHeight: 23, color: colors.text },
 
-    // The network name and password are the two things that have to be typed
-    // exactly, so they are set apart from the sentence around them.
+    // The network name and password must be typed exactly, so they stand apart from the
+    // sentence around them.
     credential: {
       fontSize: Type.body,
       fontWeight: '700',
@@ -103,7 +98,7 @@ export function createZoneHardwareStyles(colors: AppColors) {
     },
     credentialLabel: { fontSize: Type.label, color: colors.textMuted, textTransform: 'uppercase' },
 
-    // ---- Messages -------------------------------------------------------
+    // Messages
     offlineBlock: {
       gap: Spacing.two,
       padding: Spacing.three,

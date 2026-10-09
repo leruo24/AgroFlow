@@ -12,15 +12,11 @@ type Props = {
   onSaved?: (point: 'wet' | 'dry', reading: number) => void;
 };
 
-// Teaches the sensor what wet and dry look like in this particular soil.
-//
-// The two points are saved on separate days by design - soaked soil and properly
-// dry soil are a day or more apart - so this is two independent buttons rather
-// than a wizard that has to be finished in one sitting.
-//
-// The reading itself comes from the server (the latest valid one for the zone);
-// the app never sends a number, so there is nothing here that can fabricate a
-// calibration point.
+// Teaches the sensor what wet and dry look like in this soil.
+// The two points are usually saved a day or more apart (soaked soil vs properly dry
+// soil), so they are two separate buttons, not a wizard.
+// The reading comes from the server (the zone's latest valid one); the app never sends a
+// number, so it cannot fake a calibration point.
 export function CalibrateSoilSheet({ zoneId, visible, onClose, onSaved }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneInsightsStyles(colors), [colors]);
@@ -41,8 +37,7 @@ export function CalibrateSoilSheet({ zoneId, visible, onClose, onSaved }: Props)
           onSaved?.(point, result.reading);
         })
         .catch((e: unknown) => {
-          // The backend's own words, including "Wet and dry readings are too
-          // close. Try again."
+          // The backend's own words, e.g. "Wet and dry readings are too close. Try again."
           setError(
             e instanceof Error && e.message
               ? e.message

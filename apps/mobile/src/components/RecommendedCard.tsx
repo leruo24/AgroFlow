@@ -12,14 +12,13 @@ const LEVEL_LABEL = { high: 'High', medium: 'Medium', low: 'Low' } as const;
 
 type Props = {
   zoneId: number;
-  // Supply it to skip the fetch - the crop screen gets one back on save.
+  // Pass it in to skip the fetch; the crop screen gets one back on save.
   recommendation?: RecommendedSettings | null;
 };
 
-// Item 6b: "Recommended for you" - the server's sentence, how sure it is,
-// and Use these settings / Keep my own. Use these settings saves the same
-// level through the existing "Reset to recommended", so the card and the
-// saved threshold can never disagree.
+// "Recommended for you": the server's sentence, how sure it is, and Use these settings /
+// Keep my own. Use these settings saves through "Reset to recommended", so the card and
+// the saved threshold always match.
 export function RecommendedCard({ zoneId, recommendation }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);

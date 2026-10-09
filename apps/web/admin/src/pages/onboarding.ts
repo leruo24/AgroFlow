@@ -1,23 +1,17 @@
 import { pageHeader, panel } from "@/ui/components";
-/* The crop list is the engine-resolvable one, not free text: a crop the
-   FAO-56 engine cannot resolve means the zone silently never gets advice.
-   See data/referenceData.ts. */
+/* The crop list is the one the engine can resolve, not free text: an unknown crop means the
+ * zone never gets advice. See data/referenceData.ts. */
 import { ZONE_CROPS } from "@/data/referenceData";
 
-/* ============================================================================
-Farmer Onboarding — two-step wizard.
-Step 1: farmer account details. Step 2: farm details + dynamic zones.
-Step switching and zone rows are handled client-side (see
-wireOnboardingSteps / wireOnboardingZones in src/app/interactions.ts) — this
-page never needs to re-fetch or re-render itself to move between steps or add
-a zone row.
-============================================================================ */
+/* Farmer Onboarding: two-step wizard.
+ * Step 1: farmer account details. Step 2: farm details and zones. Steps and zone rows are
+ * handled in the browser (wireOnboardingSteps / wireOnboardingZones in
+ * src/app/interactions.ts), so the page never re-renders to change step or add a zone. */
 
-/* Item 6: what the advice needs, asked for here instead of later.
-   Soil is three cards with Loam already chosen ("Not sure? Pick Loam" -
-   the engine assumes loam anyway, so the default is honest). Size is a
-   preset; hectares are also available for field-scale zones. Planting is "about how
-   many weeks ago?", which a farmer can answer when a date is a guess. */
+/* What the advice needs, asked here instead of later. Soil is three cards with Loam chosen
+ * ("Not sure? Pick Loam"; the engine assumes loam anyway). Size is a preset, with hectares
+ * for field-scale zones. Planting is "about how many weeks ago?", which a farmer can answer
+ * when a date would be a guess. */
 export const SOILS: { value: string; label: string; hint: string }[] = [
   { value: "sandy", label: "Sandy", hint: "Gritty, water runs straight through" },
   { value: "loam", label: "Loam", hint: "Crumbly, holds together a little" },
@@ -197,11 +191,10 @@ export function zoneSetupProblem(v: Record<string, string>, i: number): string |
   return null;
 }
 
-/* After rows are rebuilt and values put back: highlight the chosen soil
-   card and show the m² box for a custom size. */
-/* Item 6b: the zone's "Recommended for you" card in the wizard. There is no
-   sensor yet, so nothing can be saved from here - the card says where to
-   apply it later rather than offering a button that does nothing. */
+/* After rows are rebuilt and values put back: highlight the chosen soil card and show the
+ * m² box for a custom size. */
+/* The zone's "Recommended for you" card in the wizard. There is no sensor yet, so nothing
+ * can be saved here; the card says where to apply it later. */
 export function recommendHtml(r: { available: boolean; text: string; confidence?: { level: string; reason: string } }): string {
   if (!r.available) return "";
   const level = r.confidence ? r.confidence.level.charAt(0).toUpperCase() + r.confidence.level.slice(1) : null;

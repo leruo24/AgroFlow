@@ -1,11 +1,9 @@
-/* Admin polish, item 1: dismiss and history for the console's notifications -
-   Home's "Needs attention" cards, the Alerts list and the health warnings.
-
-   A dismissal hides an item from its list; it is never deleted. Who and when
-   come from the login on the server. History ("Dismissed" / "All") shows each
-   dismissed item with when it was raised, when and by whom it was dismissed,
-   the note, and Restore. A critical item asks for an optional note, and comes
-   back when its condition happens again (its condition key changes). */
+/* Dismiss and history for the console's notifications: Home's "Needs attention" cards,
+ * the Alerts list and the health warnings.
+ * A dismissal hides an item and never deletes it; who and when come from the login on the
+ * server. History shows when each item was raised and dismissed, by whom, the note, and
+ * Restore. A critical item asks for an optional note and comes back if its condition
+ * happens again (its condition key changes). */
 
 import { esc, fmtDateTimeSast } from "@/lib/format";
 

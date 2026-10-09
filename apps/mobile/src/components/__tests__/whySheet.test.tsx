@@ -1,12 +1,9 @@
 /// <reference types="jest" />
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
-/* Item 2c: "Why am I seeing this?" in the app.
- *
- * The sheet shows the server's own explanation - summary, what we used, the
- * rule, how sure, what would change it - and never the technical line. No
- * explanation means no link at all, rather than a generic one.
- */
+/* "Why am I seeing this?" in the app.
+ * The sheet shows the server's own explanation (summary, what we used, the rule, how sure,
+ * what would change it) and never the technical line. No explanation means no link. */
 
 jest.mock('@/context/ThemeContext', () => {
   const { lightColors } = jest.requireActual('@/constants/colors');
@@ -19,13 +16,12 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('@/lib/supabase', () => ({ supabase: {} }));
 
-// DripHelper reads its on/off preference from AsyncStorage; the package ships
-// its own jest stand-in.
+// DripHelper reads its on/off preference from AsyncStorage, which has its own jest mock.
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
-// Icons are not under test, and lucide ships ESM jest does not transform.
+// Icons are not under test, and lucide ships ESM that jest does not transform.
 jest.mock('lucide-react-native', () =>
   new Proxy({}, { get: (_target, name) => (name === '__esModule' ? false : () => null) })
 );
@@ -143,8 +139,8 @@ describe('ZoneInsightsCard', () => {
 
     await waitFor(() => expect(screen.getByText('Water Tub 1 now.')).toBeTruthy());
 
-    // Two insights with explanations + the confidence badge = three links;
-    // the old row without one gets none.
+    // Two insights with explanations + the confidence badge = three links; the older row
+    // without one gets none.
     expect(screen.getAllByRole('button', { name: WHY_LINK_TEXT })).toHaveLength(3);
     expect(screen.getByText('Medium confidence')).toBeTruthy();
     expect(screen.getByText('Improve your advice')).toBeTruthy();

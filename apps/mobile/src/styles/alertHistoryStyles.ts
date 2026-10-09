@@ -2,11 +2,8 @@ import { StyleSheet } from 'react-native';
 import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 
 // Styles for the Alerts section of the History screen.
-//
-// The filters are chips rather than dropdowns: there are only a few options
-// per row, and a chip shows the current choice without being opened. On a
-// phone in a field, a dropdown is two taps and a modal to answer "am I
-// looking at 7 days or 30?".
+// The filters are chips, not dropdowns: there are only a few options, and a chip shows the
+// current choice without opening anything.
 export function createAlertHistoryStyles(colors: AppColors) {
   return StyleSheet.create({
     filterGroup: { gap: Spacing.two, marginBottom: Spacing.two },
@@ -27,8 +24,8 @@ export function createAlertHistoryStyles(colors: AppColors) {
       minHeight: 36,
       justifyContent: 'center',
     },
-    // Selection is carried by the border weight and the text weight as well
-    // as the fill, so it survives greyscale and sunlight.
+    // Selection is shown by border and text weight as well as the fill, so it works in
+    // greyscale and sunlight.
     chipSelected: {
       borderWidth: 2,
       borderColor: colors.primaryDark,
@@ -40,9 +37,7 @@ export function createAlertHistoryStyles(colors: AppColors) {
     itemHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
     itemTitle: { flex: 1, fontSize: Type.body, fontWeight: '600', color: colors.text },
 
-    // The status word. Never colour alone - "New", "Seen" and "Dismissed" are
-    // spelled out, because the difference between them is the whole point of
-    // the column.
+    // The status word ("New", "Seen", "Dismissed") is always written out, never colour alone.
     statusNew: {
       fontSize: Type.label,
       fontWeight: '700',

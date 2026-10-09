@@ -38,18 +38,10 @@ export const supabase = createClient(
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: false,
-      // `lock: processLock` was removed here.
-      //
-      // GoTrueClient's `lock` option is deprecated in supabase-js 2.116 and
-      // goes away in v3 - the client now coordinates session refreshes on its
-      // own, so passing one is both unnecessary and a console warning on every
-      // app start. Nothing replaces it: there is no option to set, and the
-      // behaviour it protected is now the client's own responsibility.
-      //
-      // Everything else here is unchanged and still needed: AsyncStorage
-      // (native only - the web build uses the client's default
-      // localStorage), autoRefreshToken, persistSession and
-      // detectSessionInUrl: false.
+      // No `lock` option: GoTrueClient's `lock` is deprecated in supabase-js 2.116 (gone in v3), and
+      // the client now coordinates session refreshes itself.
+      // The rest is still needed: AsyncStorage (native only; web uses the default localStorage),
+      // autoRefreshToken, persistSession and detectSessionInUrl: false.
     },
   },
 );

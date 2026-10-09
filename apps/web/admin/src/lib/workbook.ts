@@ -1,22 +1,9 @@
 /* Spreadsheet exports.
- *
- * WHY THIS REPLACED THE CSV
- * The old "Export summary" produced a CSV that opened in Excel with every
- * value crammed into column A, headers included - `Metric,"Value"` sitting in
- * one cell. That is not a bug in the file: Excel splits a CSV on the list
- * separator from the machine's locale, and in South Africa that is a
- * SEMICOLON, not a comma. A comma-separated file is therefore one long string
- * per row to the person opening it.
- *
- * It also exported raw keys - `farmersNotReceivingAlerts` - which is a
- * property name, not a label anybody should have to read.
- *
- * So: a real .xlsx, where there is no separator to guess, numbers are
- * numbers, percentages are percentages, and the labels are sentences.
- *
- * CSV is kept for the ad-hoc table exports, but written properly - see
- * `toExcelSafeCsv` at the bottom.
- */
+ * A real .xlsx: Excel splits a CSV on the locale's list separator, which in South Africa is
+ * a semicolon, so a comma CSV opens with everything in column A. A workbook has no separator
+ * to guess, numbers stay numbers, and the labels are sentences, not property names.
+ * CSV is kept for the quick table exports, written so Excel opens it; see `toExcelSafeCsv`
+ * at the bottom. */
 
 import ExcelJS from "exceljs";
 import { fmtDateTimeSast } from "@/lib/format";
@@ -43,9 +30,8 @@ function styleSection(row: ExcelJS.Row): void {
   row.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BRAND_LIGHT } };
 }
 
-/* Browsers cannot write a file; they can follow a link to one. The object URL
-   is revoked on a delay rather than immediately, because revoking it in the
-   same tick races the download starting in some browsers. */
+/* Browsers cannot write a file, only follow a link to one. The object URL is revoked after
+ * a delay, because revoking it straight away races the download in some browsers. */
 async function download(workbook: ExcelJS.Workbook, filename: string): Promise<void> {
   const buffer = await workbook.xlsx.writeBuffer();
 
@@ -68,9 +54,7 @@ function stamp(): string {
   return fmtDateTimeSast(new Date().toISOString());
 }
 
-/* ------------------------------------------------------------------ *
- * The platform summary (item 7)
- * ------------------------------------------------------------------ */
+/* The platform summary */
 
 export type SummarySection = {
   title: string;
@@ -96,7 +80,7 @@ export async function exportSummaryWorkbook(input: SummaryWorkbookInput): Promis
   wb.creator = "AgroFlow";
   wb.created = new Date();
 
-  /* ---- Summary ---------------------------------------------------- */
+  /* Summary */
   const summary = wb.addWorksheet("Summary");
   summary.columns = [{ width: 52 }, { width: 18 }];
 
@@ -126,7 +110,7 @@ export async function exportSummaryWorkbook(input: SummaryWorkbookInput): Promis
     summary.addRow([]);
   }
 
-  /* ---- Farms ------------------------------------------------------ */
+  /* Farms */
   const farms = wb.addWorksheet("Farms");
   farms.columns = [
     { header: "Farm", key: "name", width: 28 },
@@ -147,7 +131,7 @@ export async function exportSummaryWorkbook(input: SummaryWorkbookInput): Promis
   }
   farms.views = [{ state: "frozen", ySplit: 1 }];
 
-  /* ---- Alerts ----------------------------------------------------- */
+  /* Alerts */
   const alerts = wb.addWorksheet("Open alerts");
   alerts.columns = [
     { header: "Raised (SAST)", key: "raised", width: 22 },
@@ -160,7 +144,7 @@ export async function exportSummaryWorkbook(input: SummaryWorkbookInput): Promis
   for (const a of input.alerts) alerts.addRow(a);
   alerts.views = [{ state: "frozen", ySplit: 1 }];
 
-  /* ---- Requests, with the who/when chain -------------------------- */
+  /* Requests, with the who/when chain */
   const requests = wb.addWorksheet("Requests");
   requests.columns = [
     { header: "Farmer", key: "farmer", width: 24 },
@@ -179,9 +163,7 @@ export async function exportSummaryWorkbook(input: SummaryWorkbookInput): Promis
   await download(wb, `agroflow-summary-${new Date().toISOString().slice(0, 10)}`);
 }
 
-/* ------------------------------------------------------------------ *
- * The activity log (item 5)
- * ------------------------------------------------------------------ */
+/* The activity log */
 
 export async function exportActivityWorkbook(rows: AuditRow[]): Promise<void> {
   const wb = new ExcelJS.Workbook();
@@ -214,29 +196,17 @@ export async function exportActivityWorkbook(rows: AuditRow[]): Promise<void> {
   await download(wb, `agroflow-activity-${new Date().toISOString().slice(0, 10)}`);
 }
 
-/* ------------------------------------------------------------------ *
- * A plain table, as a workbook
- * ------------------------------------------------------------------ */
+/* A plain table, as a workbook */
 
-/* For the places that already have headers and rows and just need a real
-   .xlsx instead of a CSV. Same freeze and filter treatment as the sheets
-   above, so every export in the console behaves the same way when opened. */
+/* For places that already have headers and rows and need a real .xlsx instead of a CSV.
+ * Same freeze and filter setup as the sheets above, so every export behaves the same. */
 
-/* ------------------------------------------------------------------ *
- * CSV, written so Excel can actually open it
- * ------------------------------------------------------------------ */
+/* CSV that Excel can open */
 
 /* Two things make a CSV open correctly in Excel anywhere:
- *
- *   1. A `sep=,` first line. Excel reads this as an instruction and stops
- *      guessing from the locale, which is what put every value in column A
- *      on a South African machine.
- *   2. A UTF-8 BOM. Without it Excel decodes the file as the system
- *      codepage, and any non-ASCII character in a farm name arrives mangled.
- *
- * Both are ignored by every other tool that reads CSV, so this costs nothing
- * elsewhere.
- */
+ * 1. A `sep=,` first line, so Excel stops guessing from the locale.
+ * 2. A UTF-8 BOM, so non-ASCII characters in farm names are not mangled.
+ * Other CSV readers ignore both. */
 export function toExcelSafeCsv(csv: string): string {
   return `sep=,\r\n${csv}`;
 }

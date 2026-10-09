@@ -1,38 +1,19 @@
-/* The public landing page - what anyone who opens the AgroFlow link sees.
-
-   WHY THIS IS NOT A LOGIN SCREEN
-   The console link is shared with people who are not administrators: a
-   lecturer, an examiner, a partner at the Cisco Edge Centre, a farmer curious
-   about what the app is. Greeting them with an email and password field tells
-   them nothing about AgroFlow and gives them nothing to do. This page explains
-   the product and keeps "Admin login" as one button for the handful of people
-   who need it.
-
-   It is a mutually exclusive state in main.ts's render(), alongside
-   loading / signed-out / signed-in - deliberately NOT a PageId in the router
-   (see app/router.ts), because like the login screen it sits outside the
-   authenticated app shell entirely.
-
-   It changes nothing about how signing in works. "Admin login" only asks
-   main.ts to render the existing login screen; auth.ts and pages/login.ts are
-   untouched, so a visitor who already has a valid admin session never sees
-   this page at all - render() sends them straight to the dashboard.
-
-   The public structure and light navy/green identity preserve Phili's website
-   direction, adapted into this existing Vite entry so public and admin remain
-   distinct without introducing a second deployment. */
+/* The public landing page: what anyone who opens the AgroFlow link sees.
+ * The console link is shared with people who are not admins (a lecturer, an examiner, a
+ * partner at the Cisco Edge Centre, a curious farmer), so the page explains the product and
+ * keeps "Admin login" as one button.
+ * It is one of the states in main.ts's render() and not a PageId in the router (see
+ * app/router.ts), because like the login screen it is outside the signed-in shell. It does
+ * not change signing in: "Admin login" only asks main.ts to show the login screen, and a
+ * visitor with a valid admin session goes straight to the dashboard. */
 
 import { Icon } from "@/lib/icons";
 import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
 import { initHardwareShowcase } from "@/features/hardware3d";
 
-/* Download links come from configuration so the page can ship before the
-   files exist. Each one is HIDDEN ENTIRELY when its variable is unset -
-   a "Download" button that 404s is worse than no button, especially on the
-   page a lecturer is looking at.
-
-   Vite inlines these at build time, so they are baked into the static site
-   and need no runtime lookup. */
+/* Download links come from configuration, so the page can ship before the files exist. A
+ * button is hidden when its variable is unset, because a Download button that 404s is worse
+ * than none. Vite inlines these at build time. */
 const ANDROID_APK_URL = (import.meta.env["VITE_DOWNLOADS_ANDROID_APK_URL"] ?? "").trim();
 const WEB_APP_URL = (import.meta.env["VITE_DOWNLOADS_WEB_APP_URL"] ?? "").trim();
 
@@ -310,9 +291,8 @@ export const WELCOME_HTML = `
     <footer class="landing-footer"><span>AgroFlow</span><span>Smart irrigation for real growing areas.</span></footer>
   </div>`;
 
-/* onLogin is called by BOTH login buttons - the one in the header and the one
-   at the end of the page. A visitor who has read the whole page should not
-   have to scroll back up to act on it. */
+/* onLogin is called by both login buttons, in the header and at the end of the page, so a
+ * visitor does not have to scroll back up. */
 export function wireWelcome(root: HTMLElement, onLogin: () => void): void {
   root.querySelectorAll<HTMLButtonElement>("#welcomeLogin, #welcomeLoginBottom")
     .forEach((button) => button.addEventListener("click", onLogin));

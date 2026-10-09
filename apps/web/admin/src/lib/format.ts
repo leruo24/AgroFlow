@@ -18,16 +18,10 @@ export const fmtPct = (n: number | null | undefined): string =>
 export const fmtPct2 = (n: number | null | undefined): string =>
   `${Number(n ?? 0).toFixed(2)}%`;
 
-// Every water volume in AgroFlow is INFERRED from pump runtime and the zone's
-// configured flow_rate_lpm - there is no flow meter on any node. The "(est.)"
-// suffix is applied here, in the one formatter every caller goes through,
-// rather than at each call site, so a new table or card cannot accidentally
-// present an inferred number as a measured one.
-//
-// null/undefined is a genuinely absent estimate (a zone with no flow rate
-// configured, which the API stores as NULL) and renders as an em dash, not as
-// "0 L" - zero would claim the cycle delivered no water, which is a different
-// and false statement.
+// Every water volume is estimated from pump runtime and the zone's flow_rate_lpm; no node
+// has a flow meter. We add "(est.)" here, in the one formatter everything uses, so no table
+// can show an estimate as a measurement. null means no estimate (no flow rate) and shows an
+// em dash, not "0 L", which would claim the cycle delivered no water.
 export const fmtLitres = (n: number | null | undefined): string => {
   if (n == null) return "—";
   const v = Number(n);
@@ -37,28 +31,15 @@ export const fmtLitres = (n: number | null | undefined): string => {
   return `${Math.round(v)} L (est.)`;
 };
 
-/* Kept as the name every page already calls, but no longer a string slice.
- *
- * `iso.slice(0, 10)` took the UTC date off a timestamptz, so anything that
- * happened between midnight and 02:00 South African time was dated to the
- * previous day - and the same event was dated differently depending on which
- * column a page happened to read. It now goes through the one SAST formatter
- * below, so every date in the console agrees. A plain "yyyy-mm-dd" passed in
- * still comes back as that same day. */
+/* Formats through the SAST formatter below, so every date in the console agrees (a UTC
+ * slice would date anything between midnight and 02:00 SAST to the day before). A plain
+ * "yyyy-mm-dd" comes back as the same day. */
 export const fmtDate = (iso: string | null | undefined): string => fmtDateSast(iso);
 
-/* ONE date format for the whole console, in SAST.
- *
- * Pages were showing three different things: a raw ISO string
- * ("2026-10-03T14:05:22.481Z"), a bare yyyy-mm-dd, and whatever
- * toLocaleString() produced on that admin's machine. An admin comparing an
- * alert's time against a request's time could not tell whether they were in
- * the same timezone, let alone the same minute.
- *
- * South Africa has no daylight saving, so a fixed +2 offset is exact and
- * needs no timezone database - the same choice the API and the FAO-56 engine
- * already make. The offset is applied explicitly rather than relying on the
- * browser's locale, so the console reads the same on a laptop set to UTC. */
+/* One date format for the whole console, in SAST, so times on different pages can be
+ * compared. South Africa has no daylight saving, so a fixed +2 offset is exact and needs no
+ * timezone database, the same as the API and the FAO-56 engine. We apply it ourselves
+ * instead of using the browser's locale, so it reads the same on a laptop set to UTC. */
 const SAST_OFFSET_MS = 2 * 60 * 60 * 1000;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -124,9 +105,8 @@ export function healthTone(health: string): BadgeTone {
   return "bad";
 }
 
-// Reuses the dot-r/dot-good/dot-bad pattern already established for the
-// system-health panel (dashboard.ts) instead of an emoji or a new icon -
-// a plain status dot has no real "icon" to derive from lucide anyway.
+// Uses the dot-r/dot-good/dot-bad style from the system-health panel (dashboard.ts)
+// instead of an emoji or a new icon.
 export const healthDot = (health: string): string => {
   const tone = health === "Healthy" ? "good" : health === "Attention Required" ? "warn" : "bad";
   return `<span class="dot-r dot-${tone}"></span>`;

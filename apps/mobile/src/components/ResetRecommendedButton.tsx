@@ -10,13 +10,9 @@ type Props = {
   onReset?: (threshold: number, desired: number) => void;
 };
 
-// Sets this zone's watering levels back to the FAO-56 recommendation for its crop
-// and soil.
-//
-// When something is missing the backend answers with the plain sentence saying
-// what to add ("Do the wet and dry soil setup first"), and that sentence is shown
-// as-is. The component does not try to work out what is missing itself - there
-// would then be two places that could disagree about it.
+// Sets this zone's watering levels back to the FAO-56 recommendation for its crop and soil.
+// When something is missing the backend replies with a plain sentence saying what to add
+// ("Do the wet and dry soil setup first"), and we show it as is instead of working it out here.
 export function ResetRecommendedButton({ zoneId, onReset }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneInsightsStyles(colors), [colors]);

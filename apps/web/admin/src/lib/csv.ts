@@ -1,10 +1,9 @@
 /* CSV export helpers. */
 
-/* Part 2 (found in the adversarial sweep): a farm or farmer called
-   "=HYPERLINK(...)" became a live formula when the export was opened in
-   Excel. Text that a spreadsheet would read as a formula gets a leading
-   apostrophe (the OWASP advice for CSV injection). A plain negative number
-   such as "-12%" is left alone; numbers passed as numbers are never touched. */
+/* A farm or farmer called "=HYPERLINK(...)" would become a live formula when the export is
+ * opened in Excel. Text a spreadsheet would read as a formula gets a leading apostrophe
+ * (the OWASP advice for CSV injection). A plain negative like "-12%" is left alone, and
+ * numbers passed as numbers are never touched. */
 export function neutraliseFormula(text: string): string {
   if (/^[=+@\t\r]/.test(text)) return `'${text}`;
   if (text.startsWith("-") && !/^-[\d.,\s]+%?$/.test(text)) return `'${text}`;

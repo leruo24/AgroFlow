@@ -77,8 +77,7 @@ export function createLoginStyles(
         colors.text,
     },
 
-    // Tint without an outline: still a non-colour-only affordance for the
-    // error, without the heavy bordered container the rest of the app dropped.
+    // A tint without an outline, so the error does not rely on colour alone without a heavy box.
     errorBox: {
       marginBottom: 14,
       paddingHorizontal: 12,
@@ -95,8 +94,7 @@ export function createLoginStyles(
         colors.error,
     },
 
-    // No card around the form - the inputs carry their own boundaries, so
-    // wrapping them in a second bordered surface was a nested container.
+    // No card around the form; the inputs have their own borders.
     form: {
       paddingTop: Spacing.one,
     },
@@ -176,8 +174,8 @@ export function createLoginStyles(
         colors.primaryDark,
     },
 
-    // Matches the single filled accent CTA used on Home (screenStyles
-    // primaryAction): primaryDark fill, Radius.sm, no outline.
+    // Same filled accent button as Home (screenStyles primaryAction): primaryDark fill,
+    // Radius.sm, no outline.
     loginButton: {
       height: 56,
       marginTop: Spacing.two,

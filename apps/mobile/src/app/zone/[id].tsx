@@ -2,16 +2,14 @@ import { DataState } from '@/components/DataState';
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { BlurSheet } from '@/components/BlurSheet';
 
-// The FAO-56 engine's farmer-facing pieces, and page help. All of these were
-// built and merged but never mounted anywhere - this screen is where they
-// belong, and until now the engine had no farmer-visible surface at all.
+// The FAO-56 engine's farmer-facing pieces and page help, shown on this screen.
 import { HelpButton } from '@/components/HelpButton';
 import { ZoneInsightsCard } from '@/components/ZoneInsightsCard';
 import { ZoneGrowthBar } from '@/components/ZoneGrowthBar';
 import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
 import { CalibrateSoilSheet } from '@/components/CalibrateSoilSheet';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
-// Dynamic Expo route: the same screen manages every irrigation zone using its route ID.
+// Dynamic Expo route: one screen for every irrigation zone, by route ID.
 import {
   ArrowLeft,
   ChevronRight,
@@ -242,9 +240,8 @@ export default function ZoneControlScreen() {
   ] =
     useState('20');
 
-  // Growth + insights for the engine components below. Fetched here rather
-  // than inside ZoneInsightsCard so that one request fills both it and the
-  // growth bar - the endpoint returns the two together.
+  // Growth and insights for the engine components below, fetched here so one request fills
+  // both ZoneInsightsCard and the growth bar.
   const [zoneGrowth, setZoneGrowth] =
     useState<ZoneGrowth | null>(null);
 
@@ -258,7 +255,7 @@ export default function ZoneControlScreen() {
       ? id[0]
       : id;
 
-  // String conversion keeps numeric Supabase IDs compatible with Expo Router parameters.
+  // Convert to string so numeric Supabase IDs match Expo Router parameters.
   const zone =
     zones.find(
       (
@@ -290,10 +287,8 @@ export default function ZoneControlScreen() {
     zone?.irrigation.override.active,
   ]);
 
-  // The growth summary for the bar below. Failure is silent and leaves it
-  // null, which renders nothing - the engine's advice is additional to this
-  // screen, never a precondition for it, so a dead engine must not take the
-  // whole zone page down with it.
+  // The growth summary for the bar below. A failure is silent and shows nothing: the
+  // engine's advice is extra on this screen, so it must never take the page down.
   useEffect(() => {
     const numericId =
       Number(routeId);
@@ -433,9 +428,8 @@ export default function ZoneControlScreen() {
         environment.status === 'Online' ? `${environment.humidity}${environment.humidityUnit}` : 'Unavailable',
     },
     {
-      // "(est.)" is not decoration: no AgroFlow node has a flow meter, so this
-      // is runtime multiplied by the zone's configured flow_rate_lpm. Showing
-      // a bare litre figure would present an inference as a measurement.
+      // "(est.)" matters: there is no flow meter, so this is runtime x the zone's flow_rate_lpm.
+      // A bare litre figure would look like a measurement.
       label:
         'Used Today',
       value:
@@ -459,7 +453,7 @@ export default function ZoneControlScreen() {
     },
   ];
 
-  // Manual is temporary, so it never replaces the saved Automatic/Scheduled base mode.
+  // Manual is temporary, so it never replaces the saved Automatic/Scheduled mode.
   const displayedBaseMode =
     selectedMode ===
     'manual'
@@ -570,7 +564,7 @@ export default function ZoneControlScreen() {
       return;
     }
 
-    // Leaving the Manual preview for the already-saved base mode is only a local UI change.
+    // Leaving the Manual preview for the saved mode is only a local UI change.
     if (
       mode ===
       selectedZone.irrigation.mode
@@ -1302,7 +1296,7 @@ export default function ZoneControlScreen() {
             )}
           />
 
-          {/* ---- Kit, soil and setup rows ---------------------------- */}
+          {/* Kit, soil and setup rows */}
           {/* Three navigation/action rows rather than three cards: each is
               a door to somewhere else, and a farmer scanning this screen
               should be able to tell them apart from the readings above at a
@@ -1406,7 +1400,7 @@ export default function ZoneControlScreen() {
             />
           </TouchableOpacity>
 
-          {/* Item 6b: the farmer changes the crop and planting date. */}
+          {/* The farmer changes the crop and planting date. */}
           <TouchableOpacity
             style={styles.linkRow}
             onPress={() =>
@@ -1430,7 +1424,7 @@ export default function ZoneControlScreen() {
             <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
           </TouchableOpacity>
 
-          {/* Item 6: the checklist of what this zone's advice is missing. */}
+          {/* The checklist of what this zone's advice is missing. */}
           <TouchableOpacity
             style={styles.linkRow}
             onPress={() =>

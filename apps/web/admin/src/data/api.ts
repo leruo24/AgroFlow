@@ -1,41 +1,17 @@
-/* ============================================================================
-   AgroFlow Admin — API LAYER
-   ----------------------------------------------------------------------------
-   The UI talks ONLY to this module. Direct Supabase queries, protected by
-   RLS (supabase/migrations/0011_row_level_security.sql) - no wrapping REST
-   API, per the architecture decision (AgroFlow.Api is only for what a
-   client can't do: device ingestion, MQTT, service_role work).
-
-   READS are real for every table that has one: profile, farm, hardware,
-   alert, maintenance, irrigation_event. Tables with no writer anywhere in
-   the codebase (alert, maintenance - see the Phase 6 audit) still get
-   real queries; they just currently return empty, which the UI shows as
-   an honest empty state, never mock rows.
-
-   NOT real, and deliberately not pretending to be:
-   - getTrends() / getGrowth(): would need stored historical snapshots we
-     don't have. Return flat/empty rather than fabricated deltas.
-   - getSystemHealth() / getActivity(): no monitoring table and no
-     activity-log table exist in the schema at all - not "empty", they
-     have literally nothing to query. Return an explicit not-implemented
-     sentinel; the pages that render these show a labelled placeholder,
-     not empty cards pretending everything's fine.
-   - Irrigation Schedules (getSchedules/updateSchedule/deleteSchedule):
-     the real irrigation_schedule table was dropped in
-     0010_zone_schema_realignment.sql - schedules now live as columns
-     directly on zone (one per zone, not a list). Left on the mock
-     working copy for this pass, per an explicit decision to scope that
-     redesign separately (it overlaps with reporting work).
-   - Mutations (setUserStatus, restartDevice, assignTechnician, etc.):
-     several correspond to columns/tables that don't exist at all
-     (profile has no "disabled" column, there's no support-ticket or
-     notes table) or to grants RLS doesn't currently extend to
-     (0011 only grants authenticated SELECT, not UPDATE, on hardware/
-     maintenance). They still mutate the in-memory working copy - now
-     seeded from real rows instead of mock ones - for session-local UI
-     feedback, but that mutation does NOT persist to Postgres. This is a
-     real, itemised gap, not a cop-out; see the Phase 6 summary.
-   ========================================================================== */
+/* AgroFlow Admin: API layer
+ * The UI talks only to this module. Reads go straight to Supabase, protected by RLS
+ * (supabase/migrations/0011_row_level_security.sql). AgroFlow.Api is only for what a client
+ * cannot do: device ingestion, MQTT and service_role work.
+ * Reads are real for every table that has one (profile, farm, hardware, alert, maintenance,
+ * irrigation_event). Tables with no writer yet return empty, shown as an honest empty state.
+ * Not real, on purpose:
+ * - getTrends() / getGrowth(): need stored history we do not have, so they return flat or empty.
+ * - getSystemHealth() / getActivity(): no table to query, so they return a "not implemented"
+ * value and the pages show a labelled placeholder.
+ * - Irrigation schedules: irrigation_schedule was dropped in 0010 and schedules are columns
+ * on zone, so these stay on the local working copy.
+ * - Some mutations (setUserStatus, restartDevice, assignTechnician, ...) have no column or RLS
+ * grant behind them. They change the in-memory copy for feedback but do not save to Postgres. */
 
 import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
@@ -57,7 +33,7 @@ import type {
   ServiceRequest, ServiceRequestStatus,
 } from "@/types/models";
 
-/* ------------------------------- real row shapes ------------------------------- */
+/* real row shapes */
 
 
 type ZoneRow = { id: number; farm_id: number; name: string | null; crop_type: string | null };
@@ -83,11 +59,9 @@ type ServiceRequestRow = {
   created_at: string;
   updated_at: string;
 
-  /* Migration 0037. Optional on the TYPE as well as nullable in the column,
-     because before that migration PostgREST does not return them at all -
-     so `undefined` is "the column is not there yet" and `null` is "there,
-     but nobody has done this step". The timeline says something different
-     for each. */
+  /* Migration 0037. Optional on the type as well as nullable, because without the migration
+   * PostgREST does not return them: `undefined` means "no column yet" and `null` means "not
+   * done yet". The timeline says something different for each. */
   assigned_to_profile_id?: string | null;
   scheduled_by_profile_id?: string | null;
   scheduled_at?: string | null;
@@ -95,9 +69,10 @@ type ServiceRequestRow = {
   completed_at?: string | null;
 };
 
-/** location is stored as one text field ("Region, Province" by
-    convention - see onboardFarmer's own use of this split further down);
-    there's no separate province/region column on farm. */
+/**
+ * location is one text field ("Region, Province" by convention, as onboardFarmer splits it);
+ * farm has no separate province/region column.
+ */
 function splitLocation(location: string): { province: string; region: string } {
   const parts = location.split(",").map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) return { region: parts[0] ?? location, province: parts[parts.length - 1] ?? location };
@@ -141,15 +116,13 @@ async function fetchZoneMap(): Promise<Map<number, ZoneRow>> {
 }
 
 
-/* Mutable working copies so admin actions persist for the session only -
-   see the file header: this is NOT a substitute for real writes, it's
-   optimistic UI feedback until the corresponding backend work exists. */
+/* Working copies so admin actions last for the session only. Not a replacement for real
+ * writes (see the file header). */
 let users: User[] = [];
 let farms: Farm[] = [];
 
-/* "Show archived" on the Farms page. Archived farms are hidden from the
-   default list, from reports and from automatic reports - but nothing about
-   them is deleted, so they have to stay reachable. */
+/* "Show archived" on the Farms page. Archived farms are hidden from the list, reports and
+ * automatic reports, but nothing is deleted, so they stay reachable. */
 let showArchivedFarms = false;
 
 export function getShowArchivedFarms(): boolean {
@@ -160,10 +133,8 @@ export function setShowArchivedFarms(value: boolean): void {
   showArchivedFarms = value;
 }
 
-/* farm.status has no CHECK constraint and has always defaulted to 'Active'
-   with a capital A, so both spellings exist in the live data. Every status
-   comparison added here is case-insensitive rather than rewriting the rows -
-   see migration 0036's note on why. */
+/* farm.status has no CHECK constraint and defaults to 'Active' with a capital A, so both
+ * spellings exist. We compare case-insensitively instead of rewriting rows (see migration 0036). */
 export function isArchived(status: string | null | undefined): boolean {
   return (status ?? "").trim().toLowerCase() === "inactive";
 }
@@ -172,18 +143,17 @@ let alerts: AdminAlert[] = [];
 let maintenance: MaintenanceJob[] = [];
 let schedules: IrrigationSchedule[] = [];
 
-/** Platform Activity has no real table anywhere in the schema - this is
-    now a no-op, not a local fake feed. Kept so every existing call site
-    doesn't need to change; getActivity() always reports "not implemented"
-    regardless of what this would have recorded. */
+/**
+ * Platform Activity has no table, so this does nothing. Kept so call sites need no change;
+ * getActivity() always reports "not implemented".
+ */
 export function recordActivity(): void {
-  // intentionally empty - see file header
+  // Empty on purpose; see the file header.
 }
 
-/* Counts per calendar month for the last twelve months, oldest first, from
-   ISO-ish date strings ("2026-05-14" or a timestamp). Months with none are 0,
-   so the line shows a quiet month as quiet rather than skipping it. Returns
-   [] when no date falls in the window - the chart then says so. */
+/* Counts per calendar month for the last twelve months, oldest first, from date strings
+ * ("2026-05-14" or a timestamp). Months with none are 0, so a quiet month shows as quiet.
+ * Returns [] when no date falls in the window, and the chart says so. */
 export function monthlyCounts(dates: (string | null | undefined)[], now = new Date()): SeriesPoint[] {
   const months: { key: string; label: string }[] = [];
   for (let i = 11; i >= 0; i--) {
@@ -202,8 +172,8 @@ export function monthlyCounts(dates: (string | null | undefined)[], now = new Da
   return any ? months.map((m) => ({ label: m.label, value: counts.get(m.key) ?? 0 })) : [];
 }
 
-/* Item 5: alert severity -> priority. The alert table has no priority
-   column; its severity is the honest source. */
+/* Alert severity -> priority. The alert table has no priority column; severity is the
+ * honest source. */
 function priorityOf(severity: string | null | undefined): AlertPriority {
   switch ((severity ?? "").toLowerCase()) {
     case "critical": return "Critical";
@@ -213,9 +183,8 @@ function priorityOf(severity: string | null | undefined): AlertPriority {
   }
 }
 
-/* Item 5: who is handling what, from the API. An older API or a missing
-   migration answers nothing - every item then reads as unclaimed, which is
-   true: nobody can have claimed it. */
+/* Who is handling what, from the API. An older API or missing migration answers nothing,
+ * so every item reads as unclaimed, which is true. */
 async function handlingMap(kind: HandlingKind): Promise<Map<string, HandlingState>> {
   try {
     return new Map((await getHandling(kind)).map((h) => [h.id, h]));
@@ -234,11 +203,11 @@ function applyHandling(item: Handling, h: HandlingState): void {
 }
 
 export const api = {
-  /* ------------------------------- reads ------------------------------- */
+  /* reads */
   async getKpis(): Promise<Kpis> {
     const [u, f, h, a, m] = await Promise.all([
-      // getFarmerAccounts, not getUsers: "Farmer accounts" must not count
-      // the administrators /api/users now also returns.
+      // getFarmerAccounts, not getUsers: "Farmer accounts" must not count the administrators
+      // that /api/users also returns.
       api.getFarmerAccounts(), api.getFarms(), api.getHardware(), api.getAlerts(), api.getMaintenance(),
     ]);
     return {
@@ -251,9 +220,8 @@ export const api = {
       totalHardware: h.length,
       activeAlerts: a.filter((x) => !["Resolved", "Closed"].includes(x.status)).length,
       openMaintenance: m.filter((x) => x.status !== "Completed").length,
-      // No monitoring/telemetry table exists for these three - see
-      // getSystemHealth(). 0 is the honest "we don't know" value, not a
-      // measurement.
+      // No monitoring table exists for these three (see getSystemHealth()). 0 means "we don't
+      // know", not a measurement.
       systemUptime: 0,
       deviceConnectivity: h.length ? Math.round((h.filter((x) => x.status === "Online").length / h.length) * 1000) / 10 : 0,
       platformAvailability: 0,
@@ -261,15 +229,12 @@ export const api = {
       newUsersThisWeek: 0,
     };
   },
-  /** No stored historical snapshots to diff against - flat, not fabricated. */
+  /** No stored history to compare against, so flat, not made up. */
   getTrends(): Promise<Trends> {
     return Promise.resolve({});
   },
-  /* Item 4: new farmers, farms and maintenance jobs per month over the last
-     twelve months, counted from the records themselves - the charts used to
-     be permanently empty because this returned nothing. Connectivity stays
-     empty on purpose: no history of kit uptime is stored anywhere, so there
-     is nothing honest to plot (the Reports page no longer shows that chart). */
+  /* New farmers, farms and maintenance jobs per month over the last twelve months, counted
+   * from the records. Connectivity stays empty on purpose: kit uptime history is not stored. */
   async getGrowth(): Promise<GrowthSeries> {
     const [users, farmList, jobs] = await Promise.all([
       api.getFarmerAccounts().catch(() => []),
@@ -283,10 +248,10 @@ export const api = {
       maintenance: monthlyCounts(jobs.map((m) => m.scheduledFor)),
     };
   },
-  /** No monitoring/health-check table exists anywhere in the schema - not
-      empty, genuinely nothing to query. Empty object is the
-      "not implemented" sentinel; dashboard.ts renders that as a labelled
-      placeholder instead of iterating zero service cards silently. */
+  /**
+   * No monitoring table exists. An empty object means "not implemented"; dashboard.ts shows
+   * a labelled placeholder for it.
+   */
   getSystemHealth(): Promise<SystemHealth> {
     return Promise.resolve({});
   },
@@ -302,10 +267,8 @@ export const api = {
     for (const h of list) dist[h.status] = (dist[h.status] ?? 0) + 1;
     return dist;
   },
-  /* FARMERS ONLY. /api/users returns administrators too, because the Assign
-     pickers need them - but the Farmers page and every farmer count must not
-     include staff accounts, or the platform looks like it has more farmers
-     than it does. getAdministrators() below is the other half. */
+  /* Farmers only. /api/users also returns administrators for the Assign pickers, but the
+   * Farmers page and farmer counts must not include staff. getAdministrators() is the other half. */
   async getFarmerAccounts(): Promise<User[]> {
     return (await api.getUsers()).filter((u) => u.role !== "admin");
   },
@@ -333,29 +296,25 @@ export const api = {
 
   users = rows.map((u) => ({
     id: u.id,
-    // The email when there is no name: "(no name on file)" is a label about
-    // our data, not a way to identify the person in front of you (item 8).
+    // The email when there is no name: "(no name on file)" does not identify anyone.
     name: u.name || u.email,
     email: u.email,
     role: u.role ?? "farm_user",
     phone: u.phone ?? "",
     farm: u.farm_name ?? "Unassigned",
 
-    // profile has no disabled/status column - every real account reads
-    // as Active. There is currently no way to represent Disabled/
-    // Pending for a real user; see setUserStatus()'s note.
+    // profile has no disabled/status column, so every real account reads as Active. See
+    // setUserStatus()'s note.
     status: "Active" as UserStatus,
 
-    /* Real columns, unlike status above: a farmer either connected Telegram
-       or did not, and that is the difference between receiving alerts and
-       receiving nothing at all. */
+    /* Real columns, unlike status: a farmer either connected Telegram or did not, which decides
+     * whether they get alerts at all. */
     telegramLinked: u.telegram_linked,
     telegramAlerts: u.telegram_alerts_enabled,
 
     dateJoined: u.created_at?.slice(0, 10) ?? "",
 
-    // auth.users.last_sign_in_at isn't exposed through profile/RLS -
-    // no real value to show.
+    // auth.users.last_sign_in_at is not exposed through profile/RLS, so there is no real value.
     lastActive: "Unknown",
 
     hardware: [],
@@ -380,10 +339,8 @@ export const api = {
     longitude: number | null;
   };
 
-  // Archived farms are excluded by the API unless asked for. The toggle is
-  // module state rather than a filter value because it changes WHAT IS
-  // FETCHED, not how a fetched list is filtered - applyFilters cannot bring
-  // back rows the server never sent.
+  // The API leaves out archived farms unless asked. The toggle is module state, not a filter,
+  // because it changes what is fetched: applyFilters cannot bring back rows never sent.
   const rows = await getAuthorized<ApiFarmRow[]>(
     `/api/farms${showArchivedFarms ? "?includeArchived=true" : ""}`,
   );
@@ -423,9 +380,8 @@ export const api = {
   async getServiceRequests(): Promise<ServiceRequest[]> {
     const { data, error } = await supabase
       .from("service_request")
-      // One string literal on purpose: supabase-js infers the row shape from
-      // the select text, and a concatenated expression defeats that. The tail
-      // after updated_at is the who/when chain from migration 0037.
+      // One string literal on purpose: supabase-js infers the row shape from the select text.
+      // The columns after updated_at are the who/when chain from migration 0037.
       .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at, assigned_to_profile_id, scheduled_by_profile_id, scheduled_at, completed_by_profile_id, completed_at")
       .order("created_at", { ascending: false });
 
@@ -448,9 +404,8 @@ export const api = {
     if (farmerError) throw farmerError;
     if (farmError) throw farmError;
 
-    /* The admins named in the chain. A separate lookup rather than three
-       joins because the same person usually appears in several columns of
-       several rows, and one `in` query answers all of them. */
+    /* The admins named in the chain. One `in` query instead of three joins, because the same
+     * person usually appears in several columns and rows. */
     const adminIds = [...new Set(
       rows.flatMap((r) => [
         r.assigned_to_profile_id,
@@ -494,9 +449,8 @@ export const api = {
       return {
         id: row.id,
         farmerId: row.farmer_id,
-        // Admin polish, item 2: the name, else the email, else the phone. With
-        // none of them the request is named by its id and flagged, so an admin
-        // can see it needs chasing - never "Farmer without a name or email".
+        // The name, else the email, else the phone. With none, the request is named by its id so
+        // an admin can see it needs chasing.
         farmerName: name || email || phone || `Request #${row.id}`,
         farmerEmail: email,
         farmerPhone: phone,
@@ -512,9 +466,8 @@ export const api = {
         createdAt: row.created_at,
         updatedAt: row.updated_at,
 
-        // The who/when chain. Undefined rather than null when the column is
-        // absent (0037 not applied), so the timeline can tell "not recorded"
-        // from "not done yet" and say the right thing for each.
+        // The who/when chain. Undefined instead of null when the column is missing (0037 not
+        // applied), so the timeline can tell "not recorded" from "not done yet".
         assignedToProfileId: row.assigned_to_profile_id ?? null,
         assignedToName: row.assigned_to_profile_id
           ? adminMap.get(row.assigned_to_profile_id) ?? "Unknown"
@@ -531,15 +484,10 @@ export const api = {
     });
   },
 
-  /* Through AgroFlow.Api, not straight to Supabase.
-     The direct write worked - an admin's JWT satisfies
-     service_request_all_admin (0021) - but nothing server-side ever learned
-     the status had changed, so there was no moment at which the farmer's
-     "your hardware kit is booked" message could be sent, and putting the bot
-     token in the browser is not an option.
-
-     The RLS policy and the direct route both still exist, so an older build
-     of this dashboard keeps working, silently, without the messages. */
+  /* Through AgroFlow.Api, not straight to Supabase: the server has to know the status
+   * changed so it can send the farmer's "your hardware kit is booked" message, and the bot
+   * token cannot be in the browser. The RLS policy (0021) and direct route still exist, so an
+   * older build of the dashboard keeps working, without the messages. */
   async updateServiceRequestStatus(
     id: number,
     status: ServiceRequestStatus,
@@ -549,11 +497,8 @@ export const api = {
   },
 
   async getHardware(): Promise<Hardware[]> {
-    // The API call supplies what RLS deliberately cannot: token status and
-    // the assigned MQTT login username. It is allowed to FAIL - the table
-    // then renders exactly as it did before v1.3.0 rather than not at all,
-    // because an admin who cannot see their fleet is worse off than one who
-    // cannot see its token column.
+    // The API adds what RLS cannot: token status and the MQTT login username. It may fail;
+    // the table then shows without those columns instead of not at all.
     const [{ data, error }, zoneMap, farmNames, enriched] = await Promise.all([
       supabase.from("hardware").select("hardware_id, device_name, device_type, zone_id, status, last_seen, created_at"),
       fetchZoneMap(),
@@ -574,23 +519,20 @@ export const api = {
         type: h.device_type,
         farm: zone ? farmNames.get(zone.farm_id) ?? "Unassigned" : "Unassigned",
         province: "",
-        // hardware.firmware_version, reported by the board at claim and on
-        // every 4-hourly firmware-check. Empty until a board on 1.3.0 has
-        // called in - there was no column to read before 0028.
+        // hardware.firmware_version, reported by the board at claim and on every 4-hourly
+        // firmware check. Empty until a board on 1.3.0 has called in (column added in 0028).
         firmware: extra.get(String(h.hardware_id))?.firmwareVersion ?? "",
         // No battery/uptime telemetry column exists on hardware.
         battery: null,
         uptimePct: 0,
         status: (h.status as Hardware["status"]) ?? "Offline",
-        // enrollment_status is the real lifecycle column; maintenanceState
-        // as modelled here (OK/Due/Overdue/Scheduled) has no real source -
-        // defaulting to OK rather than fabricating a due/overdue signal.
+        // enrollment_status is the real lifecycle column. maintenanceState (OK/Due/Overdue/
+        // Scheduled) has no real source, so it defaults to OK instead of a made-up signal.
         maintenanceState: "OK",
         installed: h.created_at.slice(0, 10),
         lastSeen: h.last_seen,
 
-        // v1.3.0 additions, from the API. Undefined when the enrichment
-        // call failed; every consumer treats that as "not known".
+        // From the API. Undefined when that call failed; everything treats that as "not known".
         zoneId: h.zone_id,
         deviceId: extra.get(String(h.hardware_id))?.deviceId ?? null,
         zoneName: zone?.name ?? null,
@@ -602,25 +544,10 @@ export const api = {
     });
     return hardware;
   },
-  /* Alerts, with the farm and the farmer they concern (item 8).
-   *
-   * THREE COLUMNS WERE EMPTY OR UNREADABLE.
-   *
-   * - FARM resolved through two separate unfiltered selects, the same chain
-   *   that made every irrigation row read "Unassigned": past supabase-js's
-   *   default 1000-row cap, or for any zone the second select happened not to
-   *   return, the lookup missed and the cell fell back to nothing. It is now
-   *   one query with the zone and farm embedded.
-   *
-   * - USER was hardcoded null, so the column was a page of dashes. The
-   *   person an alert concerns is the farm's owner, which the same join
-   *   already brings back.
-   *
-   * - RAISED was the raw timestamp, rendered straight into the table, so the
-   *   page showed "2026-10-03T14:05:12.345Z". The ISO string is kept in the
-   *   model - it is what sorting and the date filter need - and the pages
-   *   format it in SAST at the point of display.
-   */
+  /* Alerts, with the farm and farmer they concern. One query with the zone and farm embedded
+   * (two separate selects missed rows past supabase-js's 1000-row cap). The person is the
+   * farm's owner from the same join. `raised` stays as the ISO string for sorting and the date
+   * filter; the pages format it in SAST. */
   async getAlerts(): Promise<AdminAlert[]> {
     type EmbeddedAlertRow = {
       id: number;
@@ -640,8 +567,7 @@ export const api = {
       } | null;
     };
 
-    // One string literal: supabase-js infers the row shape from the select
-    // text, and a concatenated expression defeats that inference.
+    // One string literal: supabase-js infers the row shape from the select text.
     const { data, error } = await supabase
       .from("alert")
       .select("id, severity, message, status, created_at, zone:zone_id(id, name, farm:farm_id(farm_id, name, status, owner:owner_id(name, email)))")
@@ -650,9 +576,8 @@ export const api = {
     if (error) throw error;
 
     alerts = ((data as unknown as EmbeddedAlertRow[] | null) ?? [])
-      // An archived farm's alerts are archived with it. Leaving them in meant
-      // retired test farms kept raising the Critical and Unassigned counts on
-      // a page whose whole job is to show what needs attention now.
+      // An archived farm's alerts are archived with it, so retired test farms do not raise the
+      // Critical and Unassigned counts.
       .filter((a) => !isArchived(a.zone?.farm?.status))
       .map((a) => {
         const farm = a.zone?.farm ?? null;
@@ -660,16 +585,15 @@ export const api = {
 
         return {
           id: String(a.id),
-          /** ISO, formatted for display by the page - see the note above. */
+          /** ISO, formatted for display by the page; see the note above. */
           raised: a.created_at,
           category: a.severity,
           title: a.message,
           farm: farm?.name ?? null,
           user: owner?.name || owner?.email || null,
 
-          // Item 5: who is handling it comes from the API (merged below).
-          // Priority is the alert's own severity - it used to be a
-          // hard-coded "Medium", so no alert could ever count as critical.
+          // Who is handling it comes from the API (merged below). Priority comes from the alert's
+          // own severity.
           assignedTo: null,
           priority: priorityOf(a.severity),
 
@@ -713,7 +637,7 @@ export const api = {
       reportUploaded: false,
     }));
 
-    // Item 5: who is handling each job, and who completed it.
+    // Who is handling each job, and who completed it.
     const handling = await handlingMap("maintenance");
     for (const m of maintenance) {
       const h = handling.get(m.id);
@@ -725,41 +649,17 @@ export const api = {
     return maintenance;
   },
   getSchedules(): Promise<IrrigationSchedule[]> {
-    // Untouched - irrigation_schedule was dropped (0010); real schedules
-    // now live as columns on zone (one per zone, not a list). Left as the
-    // pre-existing working copy, per an explicit decision to scope that
-    // redesign separately rather than guess at it here.
+    // irrigation_schedule was dropped (0010) and schedules are columns on zone, so this stays
+    // on the working copy until that redesign is scoped.
     return Promise.resolve(schedules);
   },
-  /* Irrigation events, with the farm they belong to and an honest volume.
-   *
-   * THREE THINGS WERE WRONG HERE (item 8).
-   *
-   * 1. EVERY ROW SAID "Unassigned". The farm was resolved by looking the
-   *    event's zone up in one map and that zone's farm_id up in another. Both
-   *    maps are built by separate unfiltered selects, and supabase-js caps a
-   *    select at 1000 rows by default - so past that, or for any zone the
-   *    second select happened not to return, the chain broke and the row fell
-   *    through to the fallback. The fallback then read as a farm name, which
-   *    is why the page looked like it had data about nothing.
-   *
-   *    It is now one query with the zone and farm embedded, so the farm
-   *    either comes back on the row or the row genuinely has no zone.
-   *
-   * 2. LITRES CAME FROM estimated_litres. That column is written by whatever
-   *    produced the row and has gone stale against zone.flow_rate_lpm; the
-   *    canonical formula, documented in migration 0018, is
-   *    runtime_seconds / 60 * flow_rate_lpm. It is computed here so one
-   *    answer comes out of one place.
-   *
-   *    A zone with NO flow rate yields null, not 0. 0018 is explicit about
-   *    this: a zone whose rate nobody has entered must read as "no estimate
-   *    available" rather than as a confident zero, which would look like a
-   *    pump that ran and delivered nothing.
-   *
-   * 3. ARCHIVED FARMS WERE INCLUDED, so retired test farms kept appearing in
-   *    the totals and the charts.
-   */
+  /* Irrigation events, with their farm and an honest volume.
+   * 1. One query with the zone and farm embedded, so the farm comes back on the row (separate
+   * selects missed rows past supabase-js's 1000-row cap).
+   * 2. Litres are runtime_seconds / 60 * flow_rate_lpm (migration 0018), worked out here, not
+   * read from estimated_litres. A zone with no flow rate gives null, not 0, so it reads as
+   * "no estimate" and not as a pump that delivered nothing.
+   * 3. Archived farms are left out of the totals and charts. */
   async getIrrigationEvents(): Promise<IrrigationEvent[]> {
     type EmbeddedRow = {
       id: number;
@@ -780,8 +680,7 @@ export const api = {
       } | null;
     };
 
-    // One string literal: supabase-js infers the row shape from the select
-    // text, and a concatenated expression defeats that inference.
+    // One string literal: supabase-js infers the row shape from the select text.
     const { data, error } = await supabase
       .from("irrigation_event")
       .select("id, started_at, runtime_seconds, zone:zone_id(id, name, crop_type, flow_rate_lpm, status, farm:farm_id(farm_id, name, location, status))")
@@ -793,9 +692,8 @@ export const api = {
     const rows = (data as unknown as EmbeddedRow[] | null) ?? [];
 
     return rows
-      // Archived farms are hidden here rather than filtered by the page,
-      // because applyFilters cannot remove rows from a total the page has
-      // already summed.
+      // Archived farms are left out here, not by the page, because applyFilters cannot remove
+      // rows from a total the page has already added up.
       .filter((e) => !isArchived(e.zone?.farm?.status))
       .map((e) => {
         const zone = e.zone;
@@ -807,16 +705,16 @@ export const api = {
 
         return {
           date: e.started_at.slice(0, 10),
-          // "No farm on record" rather than "Unassigned": it describes our
-          // data, and it cannot be mistaken for the name of a farm.
+          // "No farm on record" instead of "Unassigned": it describes our data and cannot be
+          // mistaken for a farm name.
           farm: farm?.name ?? "No farm on record",
           zone: zone?.name ?? (zone ? `Zone ${zone.id}` : "Zone not on record"),
           crop: zone?.crop_type ?? "",
           province,
           region,
 
-          // The formula from 0018, never the stored column. Null when the
-          // zone has no flow rate - see the note above.
+          // The formula from 0018, never the stored column. Null when the zone has no flow rate;
+          // see the note above.
           litres:
             flowRate === null || flowRate === undefined
               ? null
@@ -824,29 +722,28 @@ export const api = {
 
           durationMin: Math.round(runtimeSeconds / 60),
 
-          // There is no schedule-adherence column anywhere in the schema, so
-          // this cannot be computed. It used to be hardcoded true, which read
-          // as "every irrigation ran on schedule" - a claim nothing supports.
+          // There is no schedule-adherence column, so this cannot be worked out and stays null.
           onSchedule: null,
         };
       });
   },
-  /** No activity-log table exists anywhere in the schema - not empty,
-      genuinely nothing to query (see recordActivity() above). Empty
-      array is the "not implemented" sentinel. */
+  /**
+   * No activity-log table exists (see recordActivity() above). An empty array means
+   * "not implemented".
+   */
   getActivity(): Promise<ActivityEntry[]> {
     return Promise.resolve([]);
   },
 
-  /* --------------------------- single lookups --------------------------- */
+  /* single lookups */
   findUser(id: string): User | undefined { return users.find((u) => u.id === id); },
   findFarm(id: number): Farm | undefined { return farms.find((f) => f.id === id); },
   findFarmByName(name: string): Farm | undefined { return farms.find((f) => f.name === name); },
   findHardware(id: string): Hardware | undefined { return hardware.find((h) => h.id === id); },
   findAlert(id: string): AdminAlert | undefined { return alerts.find((a) => a.id === id); },
 
-  /* Item 2c: an alert's "Why am I seeing this?" (table explanation, 0039).
-     Null when there is none - including before the migration is applied. */
+  /* An alert's "Why am I seeing this?" (table explanation, 0039). Null when there is none,
+   * including before the migration is applied. */
   async getAlertExplanation(alertId: string): Promise<Explanation | null> {
     const numeric = Number(alertId);
     if (!Number.isFinite(numeric) || numeric <= 0) return null;
@@ -863,11 +760,10 @@ export const api = {
   findMaintenance(id: string): MaintenanceJob | undefined { return maintenance.find((m) => m.id === id); },
   findSchedule(id: number): IrrigationSchedule | undefined { return schedules.find((s) => s.id === id); },
 
-  /* ------------------------------ user actions -------------------------- */
-  // profile has no "disabled" column and RLS/grants don't currently allow
-  // an admin to write other users' profile rows at all (0011 only grants
-  // UPDATE on name/phone, to the OWNING user). These mutate the
-  // session-local working copy only - see the file header.
+  /* user actions */
+  // profile has no "disabled" column, and RLS does not let an admin write other users'
+  // profile rows (0011 only grants UPDATE on name/phone to the owner). These change the
+  // session-local working copy only; see the file header.
   async setUserStatus(id: string, status: UserStatus): Promise<User[]> {
     const u = users.find((x) => x.id === id);
     if (u) u.status = status;
@@ -882,7 +778,7 @@ export const api = {
     users = users.filter((x) => x.id !== id);
     return users;
   },
-  /* ------------------------------ farm actions -------------------------- */
+  /* farm actions */
   async approveFarm(id: number): Promise<Farm[]> {
     const f = farms.find((x) => x.id === id);
     if (f) f.status = "Active";
@@ -894,11 +790,10 @@ export const api = {
     return farms;
   },
 
-  /* ---------------------------- hardware actions ------------------------ */
-  // hardware's real enrollment/claim lifecycle is
-  // backend/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs - these
-  // remain working-copy-only (see file header); 0011 grants SELECT on
-  // hardware to authenticated, not UPDATE/DELETE.
+  /* hardware actions */
+  // The real enrollment/claim lifecycle is in
+  // backend/AgroFlow.Api/Endpoints/DeviceEnrollmentEndpoints.cs. These change the working
+  // copy only: 0011 grants SELECT on hardware, not UPDATE/DELETE.
   async restartDevice(id: string): Promise<Hardware[]> {
     const h = hardware.find((x) => x.id === id);
     if (h) { h.status = "Online"; h.lastSeen = "just now"; }
@@ -919,17 +814,15 @@ export const api = {
     return hardware;
   },
 
-  /* ------------------------------ alert actions ------------------------- */
-  // Unlike hardware/maintenance, 0011 DOES grant authenticated
-  // SELECT+UPDATE on alert, and admin has an all-commands policy - a real
-  // write is possible here. Left as working-copy-only in this pass
-  // anyway, matching every other mutation, since alert has no writer
-  // populating real rows yet either (Phase 7); revisit once it does.
+  /* alert actions */
+  // 0011 does grant SELECT+UPDATE on alert, and admins have an all-commands policy, so a
+  // real write is possible. We keep it on the working copy like the other mutations, because
+  // nothing writes real alert rows yet.
 
-  /* --------------------------- maintenance actions ---------------------- */
+  /* maintenance actions */
 
-  /* ---------------------------- schedule actions ------------------------ */
-  // Untouched - see getSchedules().
+  /* schedule actions */
+  // See getSchedules().
   async updateSchedule(id: number, patch: Partial<IrrigationSchedule>): Promise<IrrigationSchedule[]> {
     const s = schedules.find((x) => x.id === id);
     if (s) Object.assign(s, patch);
@@ -940,27 +833,17 @@ export const api = {
     return schedules;
   },
 
-  /* -------------------------------- reports ----------------------------- */
+  /* reports */
   async logReportGenerated(_name: string): Promise<void> {
-    // report/ai_recommendation deliberately untouched beyond this - real
-    // report generation is scoped separately.
+    // report/ai_recommendation are not touched here; real report generation is separate.
     return undefined;
   },
 };
-/* ---------------- Alert history (step 2b) ----------------
-
-   Every alert and every piece of engine advice for one farm's zones, with
-   whether the farmer ever looked at it.
-
-   WHY THE ADMIN NEEDS THIS
-   The whole point of the alert channel is that somebody acts on it, and
-   until migration 0033 there was no way to check that it was working: the
-   mobile app's "read" flag lived only in that phone's AsyncStorage and never
-   reached the database.
-
-   Read-only by design. Nothing here writes - an admin marking a farmer's
-   alert as read would destroy the only evidence of whether the farmer saw
-   it. */
+/* Alert history
+ * Every alert and piece of engine advice for one farm's zones, with whether the farmer
+ * looked at it. This is how the team checks the alert channel works (read_at, migration 0033).
+ * Read-only on purpose: an admin marking a farmer's alert as read would destroy the only
+ * evidence of whether the farmer saw it. */
 
 export type AdminAlertHistoryItem = {
   id: string;
@@ -996,10 +879,9 @@ export async function getFarmAlertHistory(farmId: number): Promise<AdminAlertHis
 
   const items: AdminAlertHistoryItem[] = [];
 
-  // read_at may not exist yet if 0033 has not been applied. A missing column
-  // comes back as an error rather than an exception, so fall back to the
-  // columns that have always been there - the team still sees the alerts,
-  // just without the status that makes them useful.
+  // read_at may not exist if 0033 is not applied. A missing column comes back as an error,
+  // not an exception, so we fall back to the older columns: the team still sees the alerts,
+  // just without the status.
   const withRead = await supabase
     .from("alert")
     .select("id, zone_id, severity, message, status, created_at, read_at")
@@ -1051,9 +933,8 @@ export async function getFarmAlertHistory(farmId: number): Promise<AdminAlertHis
       message: r.message,
       severity: r.severity,
       createdAt: r.created_at ?? "",
-      // An insight has no "read" concept - the farmer dismisses it or it
-      // expires with the day. Claiming "Seen" for an undismissed one would
-      // be inventing a fact.
+      // An insight has no "read": the farmer dismisses it or it expires with the day. Showing
+      // "Seen" for an undismissed one would be made up.
       status: describeSeen("Dismissed", r.dismissed_at),
       seen: Boolean(r.dismissed_at),
     });
@@ -1062,11 +943,9 @@ export async function getFarmAlertHistory(farmId: number): Promise<AdminAlertHis
   return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
-/* ---------------- Home's attention queue (item A) ----------------
-
-   Each of these answers one card on Home. They are separate calls rather
-   than one endpoint so that a failure in any single queue leaves the rest of
-   Home working - see dashboard.ts, which catches each one on its own. */
+/* Home's attention queue
+ * Each of these fills one card on Home. Separate calls, not one endpoint, so one failing
+ * queue leaves the rest of Home working (dashboard.ts catches each one). */
 
 export type ZoneNeedingSetup = {
   zoneId: number;
@@ -1077,12 +956,9 @@ export type ZoneNeedingSetup = {
   missing: string[];
 };
 
-/* Zones the FAO-56 engine cannot fully advise on.
-
-   These are the ones where a farmer is getting less than the system can
-   actually give them, and - unlike an alert - nothing raises them on its
-   own. Read straight from Supabase under RLS, like the rest of the farm
-   data the console shows. */
+/* Zones the FAO-56 engine cannot fully advise on. Here the farmer gets less than the
+ * system can give, and nothing raises it on its own. Read straight from Supabase under RLS,
+ * like the rest of the farm data. */
 export async function getFarmsNeedingSetup(): Promise<ZoneNeedingSetup[]> {
   const [{ data: zones, error }, farmNames] = await Promise.all([
     supabase
@@ -1097,12 +973,12 @@ export async function getFarmsNeedingSetup(): Promise<ZoneNeedingSetup[]> {
   try {
     const { data } = await supabase.from("farm").select("farm_id, latitude, longitude, status");
     for (const f of (data ?? []) as { farm_id: number; latitude: number | null; longitude: number | null; status: string | null }[]) {
-      // Archived farms are not work anybody should be doing.
+      // Archived farms are not outstanding work.
       if (isArchived(f.status)) continue;
       farmCoords.set(f.farm_id, f.latitude !== null && f.longitude !== null);
     }
   } catch {
-    // Coordinates unknown - the other checks below still stand.
+    // Coordinates unknown; the other checks below still apply.
   }
 
   const out: ZoneNeedingSetup[] = [];
@@ -1143,8 +1019,8 @@ export async function getMqttPoolHealth(): Promise<{ freeCount: number; runningL
   return { freeCount: pool.freeCount, runningLow: pool.runningLow };
 }
 
-/* Reports a farmer asked for that could not be made. Nothing else surfaces
-   these - the farmer sees "try again later" and the team never hears. */
+/* Reports a farmer asked for that could not be made. The farmer sees "try again later",
+ * and without this the team never hears. */
 export async function getFailedReportCount(): Promise<number> {
   const { count, error } = await supabase
     .from("report_request")
@@ -1155,11 +1031,10 @@ export async function getFailedReportCount(): Promise<number> {
   return count ?? 0;
 }
 
-/* ---------------- Farms needing attention this week (item 4) ----------------
-
-   Built from the SAME stored insights the farmers see (ai_recommendation,
-   item 2c explanations included), grouped into a few things an admin acts on.
-   A farm is counted once per group however many zones or days raised it. */
+/* Farms needing attention this week
+ * Built from the same stored insights the farmers see (ai_recommendation, explanations
+ * included), grouped into a few things an admin acts on. A farm is counted once per group,
+ * however many zones or days raised it. */
 
 export type AttentionItem = {
   farmId: number;

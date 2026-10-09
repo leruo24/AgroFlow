@@ -81,7 +81,7 @@ export default function LoginScreen() {
   const {
     colors,
   } = useTheme();
-//styles are created using the useMemo hook to ensure that they are only recalculated when the colors object changes. This optimizes performance by preventing unnecessary re-renders and style recalculations when the theme colors remain the same.
+// Styles are memoised so they are only rebuilt when the theme colours change.
   const styles =
     useMemo(
       () =>
@@ -496,7 +496,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Item 6c: for someone who is not a farmer on AgroFlow yet. */}
+            {/* For someone who is not a farmer on AgroFlow yet. */}
             <TouchableOpacity
               accessibilityRole="link"
               onPress={() => router.push('/enquiry')}

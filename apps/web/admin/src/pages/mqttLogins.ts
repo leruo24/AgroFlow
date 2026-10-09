@@ -5,26 +5,15 @@ import { Icon } from "@/lib/icons";
 import { getMqttLogins } from "@/services/agroFlowApi";
 import { plainError } from "@/lib/plainError";
 
-/* ============================== MQTT LOGINS ==============================
-
-   WHY THIS PAGE EXISTS AT ALL
-
-   Every board used to connect to HiveMQ as the same `agroflow-device` user,
-   so the broker could not tell two kits apart and one leaked password let
-   anyone publish readings for any farm or subscribe to any zone's commands.
-
-   The obvious fix is to create a broker credential per board at claim time.
-   HiveMQ Cloud's credential management API needs the paid Starter plan, and
-   this project is on the free tier - so the logins are created BY HAND in the
-   HiveMQ console in batches, pasted in here, and handed out one per board
-   automatically inside the claim transaction. The installer never sees any of
-   it; the board asks the API for its login on every boot.
-
-   WHAT IS DELIBERATELY NOT ON THIS PAGE: the passwords. There is no endpoint
-   that returns one - the list query does not even SELECT the encrypted
-   column. A pool password leaves the server by exactly one route, to the
-   device that owns it, proving ownership with its device token.
-*/
+/* MQTT LOGINS
+ * Each board gets its own HiveMQ login, so the broker can tell kits apart and one leaked
+ * password cannot publish for every farm. HiveMQ Cloud's credential API needs the paid plan
+ * and we are on the free tier, so logins are made by hand in the HiveMQ console in batches,
+ * pasted in here, and handed out one per board in the claim transaction. The board asks the
+ * API for its login on every boot.
+ * Security: passwords are never shown here. No endpoint returns one and the list query does
+ * not select the encrypted column. A password only goes to the device that owns it, which
+ * proves ownership with its device token. */
 
 export async function mqttLoginsPage(): Promise<string> {
   let pool;
@@ -38,7 +27,7 @@ export async function mqttLoginsPage(): Promise<string> {
       ${pageHeader("MQTT logins", "Per-kit broker logins, created by hand in HiveMQ and handed out automatically.")}
       ${errorState({
         title: "The MQTT login pool could not be loaded",
-        // Part 2: the same error panel, with Retry, as every other page.
+        // The same error panel, with Retry, as every other page.
         detail: `${plainError(error, "The login list could not be retrieved.")} ` +
           "If this keeps happening, check that Mqtt__PoolEncryptionKey is set on the server - " +
           "pooled passwords are encrypted at rest, so the pool cannot be read without it.",
@@ -104,8 +93,8 @@ export async function mqttLoginsPage(): Promise<string> {
       pool.entries,
       (e) => [
         `<span class="mono">${esc(e.username)}</span>`,
-        // "assigned to <kit>" arrives as one phrase from the server, which
-        // already prefers the zone or device name over the raw efuse ID.
+        // "assigned to <kit>" comes as one phrase from the server, which already prefers the zone
+        // or device name over the raw efuse ID.
         badge(
           e.status.startsWith("assigned") ? "assigned" : e.status,
           e.status === "free" ? "good" : e.status === "burned" ? "warn" : "neutral",

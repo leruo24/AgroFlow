@@ -72,12 +72,10 @@ import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary,
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
-/* ------------------------------- pickers -------------------------------- */
+/* Pickers */
 
-/* A picker is a search box over a list of real options. Choosing one writes
-   its value into the hidden field the wizard reads, so a form can never end
-   up holding a farm name that does not exist - which is the whole reason
-   these replaced the free-text fields. */
+/* A picker is a search box over a list of real options. Choosing one writes its value into
+ * the hidden field the wizard reads, so a form can never hold a farm name that does not exist. */
 function wirePickers(): void {
   document.querySelectorAll<HTMLElement>("[data-picker]").forEach((host) => {
     if (host.dataset["bound"]) return;
@@ -110,8 +108,8 @@ function wirePickers(): void {
 
         if (hidden) hidden.value = opt.dataset["value"] ?? "";
 
-        // Tell the wizard a choice was made, so a later step can rebuild
-        // itself from it (zones depend on the farm, farms on the farmer).
+        // Tell the wizard a choice was made, so a later step can rebuild from it (zones depend on
+        // the farm, farms on the farmer).
         host.dispatchEvent(
           new CustomEvent("picker:change", {
             bubbles: true,
@@ -123,11 +121,10 @@ function wirePickers(): void {
   });
 }
 
-/* ------------------------------- wizards -------------------------------- */
+/* Wizards */
 
-/* Steps, validation per step, and Back that keeps what was entered.
-   Validation is deliberately per step: one long form that validates at the
-   end tells the admin about a mistake they made six fields ago. */
+/* Steps, validation per step, and Back that keeps what was entered. Validating per step
+ * means the admin hears about a mistake straight away, not six fields later. */
 function wireWizards(): void {
   document.querySelectorAll<HTMLElement>("[data-wizard]").forEach((wiz) => {
     if (wiz.dataset["bound"]) return;
@@ -170,8 +167,8 @@ function wireWizards(): void {
       showError(null);
     };
 
-    /* Every field marked data-required must have a value before Next.
-       Returns the first problem in plain words, or null. */
+    /* Every field marked data-required needs a value before Next. Returns the first problem in
+     * plain words, or null. */
     const validateSection = (section: HTMLElement | null): string | null => {
       if (!section) return null;
 
@@ -191,11 +188,9 @@ function wireWizards(): void {
       return validateSection(wiz.querySelector<HTMLElement>('[data-wizard-step="' + step + '"]'));
     };
 
-    /* Confirm re-checks EVERY step, not just the review step it sits on.
-       A field can be emptied after it was passed - clearing a farm name and
-       walking forward again would otherwise write a nameless farm. The
-       listener is on capture so it can stop the click before the delegated
-       data-act handler on document sees it. */
+    /* Confirm re-checks every step, not just the review step: a field can be emptied after it
+     * was passed. The listener uses capture so it can stop the click before the delegated
+     * data-act handler on document sees it. */
     const findFirstProblem = (): { step: number; message: string } | null => {
       const sections = Array.from(
         wiz.querySelectorAll<HTMLElement>("[data-wizard-step]"),
@@ -218,8 +213,8 @@ function wireWizards(): void {
         event.preventDefault();
         event.stopPropagation();
 
-        // Jump back to the step that is actually wrong rather than reporting
-        // it on the review screen, where the field is not even visible.
+        // Jump back to the step that is wrong, instead of reporting it on the review screen where
+        // the field is not visible.
         wiz.dataset["step"] = String(problem.step);
         render();
         showError(problem.message);
@@ -240,9 +235,7 @@ function wireWizards(): void {
     });
 
     back?.addEventListener("click", () => {
-      // Nothing is cleared: going back and forward keeps every value,
-      // because re-typing a farm details is exactly the frustration this
-      // whole pattern exists to remove.
+      // Nothing is cleared: going back and forward keeps every value, so nobody retypes farm details.
       const step = Number(wiz.dataset["step"] ?? "0");
       wiz.dataset["step"] = String(Math.max(step - 1, 0));
       render();
@@ -252,7 +245,7 @@ function wireWizards(): void {
   });
 }
 
-/* ----------------------------- filter toolbar ---------------------------- */
+/* Filter toolbar */
 
 let filterDebounce: number | undefined;
 
@@ -289,7 +282,7 @@ function wireFilters(): void {
       setFilter(page, { [key]: value } as Partial<FilterState>);
 
       if (isText) {
-        // Debounce free-text so typing stays smooth, and keep focus/caret.
+        // Debounce free text so typing stays smooth, and keep focus and caret.
         window.clearTimeout(filterDebounce);
         filterDebounce = window.setTimeout(() => {
           const caret = (el as HTMLInputElement).selectionStart;
@@ -308,7 +301,7 @@ function wireFilters(): void {
   });
 }
 
-/* -------------------------------- exports -------------------------------- */
+/* Exports */
 
 async function exportCurrent(kind: string): Promise<void> {
   const page = appState.activePage;
@@ -316,9 +309,8 @@ async function exportCurrent(kind: string): Promise<void> {
 
   switch (kind) {
     case "users": {
-      /* The telegram mapper has to be here too, or filtering the list to
-         "Not connected" and hitting Export would quietly hand back every
-         user - and that export is exactly the chase list someone wants. */
+      /* The Telegram mapper is needed here too, or filtering to "Not connected" and exporting
+       * would return every user, when that export is the follow-up list someone wants. */
       const rows = applyFilters(await api.getUsers(), f, {
         search: (u) => `${u.name} ${u.email} ${u.farm}`,
         date: (u) => u.dateJoined, farm: (u) => u.farm, status: (u) => u.status,
@@ -341,8 +333,8 @@ async function exportCurrent(kind: string): Promise<void> {
         search: (h) => `${h.id} ${h.type} ${h.farm}`, date: (h) => h.installed,
         farm: (h) => h.farm, deviceType: (h) => h.type, status: (h) => h.status,
         maintenanceState: (h) => h.maintenanceState,
-      // Uptime and battery are not measured anywhere, so they say so
-      // rather than exporting 0 and an assumed "Mains".
+      // Uptime and battery are not measured anywhere, so the export says so instead of 0 and an
+      // assumed "Mains".
       }).map((h) => [h.id, h.type, h.farm, h.province, h.firmware,
                      h.battery === null ? "Not reported" : h.battery,
                      "Not measured", h.status, h.maintenanceState, h.installed]);
@@ -371,11 +363,8 @@ async function exportCurrent(kind: string): Promise<void> {
       const rows = applyFilters(await api.getIrrigationEvents(), f, {
         date: (e) => e.date, farm: (e) => e.farm, province: (e) => e.province,
         region: (e) => e.region, crop: (e) => e.crop,
-        // "No estimate" rather than an empty cell or a 0: the person reading
-        // the file has to be able to tell a zone with no flow rate from a
-        // pump that ran and delivered nothing. The "On schedule" column is
-        // gone - nothing in the schema records it, and it was exporting a
-        // hardcoded "Yes" for every row.
+        // "No estimate" instead of an empty cell or 0, so the reader can tell a zone with no flow
+        // rate from a pump that delivered nothing.
       }).map((e) => [
         e.date, e.farm, e.zone, e.crop, e.province, e.region,
         e.litres === null ? "No estimate" : e.litres,
@@ -395,18 +384,9 @@ async function exportCurrent(kind: string): Promise<void> {
       downloadExcelSafeCsv("agroflow-platform-activity.csv", toCSV(["Timestamp", "Administrator", "Action", "Farm", "Affected", "Outcome"], rows));
       break;
     }
-    /* The platform summary, as a real .xlsx.
-     *
-     * WHAT THIS REPLACED
-     * `Object.entries(kpis)` straight into a two-column CSV. The labels were
-     * therefore property names - "farmersNotReceivingAlerts" - and the file
-     * opened in Excel with both columns crammed into column A, because Excel
-     * splits a CSV on the locale's list separator and ours is a semicolon.
-     * It was, in practice, unreadable.
-     *
-     * A workbook has no separator to guess, numbers stay numbers and
-     * percentages stay percentages, so whoever opens it can chart or average
-     * the figures instead of re-typing them. */
+    /* The platform summary as a real .xlsx. A workbook has no list separator to guess (Excel
+     * splits CSVs on the locale's separator), numbers stay numbers and percentages stay
+     * percentages, so the figures can be charted or averaged. */
     case "dashboard": {
       const profile = getAdminProfile();
 
@@ -414,8 +394,8 @@ async function exportCurrent(kind: string): Promise<void> {
         api.getKpis(),
         api.getFarms(),
         api.getAlerts(),
-        // A summary is still worth having if the request list is the one
-        // thing that fails; the Requests sheet simply comes out empty.
+        // The summary is still worth having if only the request list fails; the Requests sheet is
+        // then empty.
         api.getServiceRequests().catch(() => [] as ServiceRequest[]),
       ]);
 
@@ -431,9 +411,8 @@ async function exportCurrent(kind: string): Promise<void> {
               { label: "Farmer accounts", value: k.totalUsers, format: "int" },
               { label: "Accounts active", value: k.activeUsers, format: "int" },
               {
-                // The one figure on this sheet that is a problem rather than
-                // a statistic: these farmers receive nothing at all - no
-                // weather warning, no equipment failure, no password reset.
+                // The one figure here that is a problem, not a statistic: these farmers get no messages at
+                // all (no weather warning, equipment failure or password reset).
                 label: "Farmers who would receive no alerts (Telegram not connected)",
                 value: k.farmersNotReceivingAlerts,
                 format: "int",
@@ -447,8 +426,7 @@ async function exportCurrent(kind: string): Promise<void> {
               { label: "Kits reporting in", value: k.connectedHardware, format: "int" },
               {
                 label: "Share of kits online",
-                // Excel's percent format multiplies by 100, so the value
-                // stored has to be the fraction, not the figure shown.
+                // Excel's percent format multiplies by 100, so we store the fraction.
                 value: k.totalHardware > 0 ? k.connectedHardware / k.totalHardware : 0,
                 format: "pct",
               },
@@ -498,16 +476,16 @@ async function exportCurrent(kind: string): Promise<void> {
         })),
       });
 
-      // Its own message: this export ignores the page filters, unlike every
-      // other one here, because it is a snapshot of the whole platform.
+      // Its own message, because unlike the other exports this one ignores the page filters: it
+      // is a snapshot of the whole platform.
       return void toast("Platform summary exported.", "success");
     }
   }
   toast(`Export complete — filters applied (${rangeLabel(f)}).`, "success");
 }
 
-/* The same summary as a PDF, for printing, filing or attaching to an email.
-   Built by the API, not here - see downloadSummaryPdf. */
+/* The same summary as a PDF, for printing, filing or email. Built by the API (see
+ * downloadSummaryPdf). */
 async function exportSummaryPdf(): Promise<void> {
   try {
     await downloadSummaryPdf();
@@ -520,7 +498,7 @@ async function exportSummaryPdf(): Promise<void> {
   }
 }
 
-/* ------------------------------ detail views ----------------------------- */
+/* Detail views */
 
 async function openUserProfile(id: string): Promise<void> {
   const intent = currentPanelIntent();
@@ -561,11 +539,8 @@ async function openUserProfile(id: string): Promise<void> {
       section("Administrator notes", list(u.notes.map((n) =>
         `${esc(n.note)} <span class="muted">— ${esc(n.author)}, ${esc(n.when)}</span>`))),
     ].join(""),
-    /* No confirm button. This drawer is a read of one farmer's record, and
-       its "Add note" claimed to save a note that was never written anywhere -
-       profile has no notes column and nothing was holding it even for the
-       session. The Administrator notes section above still shows whatever is
-       on the record. */
+    /* No confirm button: this drawer only shows one farmer's record. The Administrator notes
+     * section above shows whatever is on the record. */
   });
 }
 
@@ -575,28 +550,25 @@ async function openFarmDetail(id: number): Promise<void> {
   if (!f) return;
   const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones, today] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
-    // Read-only, and allowed to fail: the rest of the drawer must still open
-    // if 0033 has not been applied or the query is refused.
+    // Read-only and allowed to fail: the drawer must still open if 0033 is not applied or the
+    // query is refused.
     getFarmAlertHistory(id).catch((e: unknown) => {
       console.warn("Could not load alert history for farm", id, e);
       return [];
     }),
-    // A farm with no schedule row is the NORMAL state - automatic reports are
-    // off until an admin turns them on - so this failing must not stop the
-    // drawer opening either.
+    // A farm with no schedule row is normal (automatic reports are off until an admin turns
+    // them on), so this failing must not stop the drawer opening either.
     getReportSchedule(id).catch((e: unknown) => {
       console.warn("Could not load the report schedule for farm", id, e);
       return null;
     }),
-    // REAL zones, from the API. The "Irrigation schedules" section below is
-    // still the pre-existing mock working copy (irrigation_schedule was
-    // dropped in 0010), so its ids are not zone ids and cannot be used to
-    // run the engine against anything.
+    // Real zones from the API. The "Irrigation schedules" section below is still local mock
+    // data (irrigation_schedule was dropped in 0010), so its ids are not zone ids.
     getReportZones(id).catch((e: unknown) => {
       console.warn("Could not load zones for farm", id, e);
       return [];
     }),
-    // Item 6: what the farmer is told today, per zone. Allowed to fail too.
+    // What the farmer is told today, per zone. Allowed to fail too.
     getFarmToday(id).catch((e: unknown) => {
       console.warn("Could not load today's advice for farm", id, e);
       return null;
@@ -623,10 +595,8 @@ async function openFarmDetail(id: number): Promise<void> {
 
   openDrawer({
     intent,
-    // Not healthDot(f.health) here - openDrawer's title is HTML-escaped by
-    // design (see lib/drawer.ts's escapeText), so it can't safely carry the
-    // dot's markup. Health status is already shown explicitly in the
-    // "Farm summary" section below.
+    // Not healthDot(f.health): openDrawer's title is HTML-escaped (see escapeText in
+    // lib/drawer.ts), so it cannot carry the dot's markup. Health is shown in "Farm summary" below.
     title: f.name,
     subtitle: `${f.owner} · ${f.province} · ${f.region}`,
     wide: true,
@@ -656,11 +626,10 @@ async function openFarmDetail(id: number): Promise<void> {
       section(`Alerts (${farmAlerts.length})`, list(farmAlerts.map((a) =>
         `<span class="mono">${esc(a.id)}</span> ${esc(a.title)} — <b>${esc(a.status)}</b>`))),
 
-      // What the farmer has actually been told, and whether they looked at
-      // it. The section above is the OPEN alert queue; this is the record,
-      // and the "Seen"/"Dismissed" column is the only way to tell whether the
-      // channel is working at all. Read-only on purpose: an admin marking a
-      // farmer's alert as read would destroy that evidence.
+      // What the farmer has been told, and whether they looked at it. The section above is the
+      // open alert queue; this is the record, and "Seen"/"Dismissed" is the only way to tell if
+      // the channel works. Read-only on purpose: an admin marking a farmer's alert read would
+      // destroy that evidence.
       section(
         `Alerts & advice seen by the farmer (${alertHistory.length})`,
         alertHistory.length
@@ -687,10 +656,8 @@ async function openFarmDetail(id: number): Promise<void> {
              </p>
            </div>`
           : `<p class="muted">Nothing has been sent to this farm yet.</p>`),
-      // The engine, per zone, on demand. Placed above the auto-report
-      // summary because during a setup visit this is the thing somebody
-      // actually clicks - it is how you prove the installation works before
-      // leaving the farm.
+      // The engine, per zone, on demand. Placed above the auto-report summary because during a
+      // setup visit this is what proves the installation works before leaving the farm.
       section(`Zones (${farmZones.length})`,
         farmZones.length
           ? `<div class="table-wrap"><table>
@@ -723,10 +690,8 @@ async function openFarmDetail(id: number): Promise<void> {
              </p></div>`
           : `<p class="muted">No zones on this farm yet.</p>`),
 
-      // AUTO REPORTS. Shown as a summary with an Edit action rather than an
-      // inline form: the drawer is already long, and this is a setting
-      // changed once when a farm is set up, not something read on every
-      // visit.
+      // Automatic reports, as a summary with an Edit action instead of an inline form: the drawer
+      // is already long, and this is set once when a farm is set up.
       section("Automatic reports", `
         <div class="detail-list">
           <div class="detail-row">
@@ -763,10 +728,7 @@ async function openFarmDetail(id: number): Promise<void> {
           void refresh();
         });
       } else {
-        // This used to say a report had been generated. Nothing was: the
-        // call it made is a no-op. Real farm reports are produced by the
-        // live report section of the Reports page, against the API, so this
-        // takes the admin there instead of claiming work it did not do.
+        // Real farm reports are made on the Reports page against the API, so this takes the admin there.
         toast(`Choose ${f.name} under Reports to produce a report for it.`, "info");
         void navigate("reports");
       }
@@ -813,29 +775,21 @@ function openFarmLocationEditor(id: number): void {
   });
 }
 
-/* ------------------------------ action router ---------------------------- */
+/* Action router */
 
-/* An alert's history as a timeline.
- *
- * Built from the alert's own fields and its notes rather than from the audit
- * log, for the same reason requests.ts does it: this is the CURRENT state of
- * one alert, and the audit log is the history of admin actions across the
- * platform. The two answer different questions.
- *
- * Steps that have not happened are still shown, greyed, so an admin can see
- * what is outstanding rather than only what is done. */
+/* An alert's history as a timeline, built from the alert's own fields and notes (like
+ * requests.ts), because this is the current state of one alert, while the audit log is the
+ * history of admin actions across the platform.
+ * Steps that have not happened yet are shown greyed, so the admin can see what is outstanding. */
 
-/* Today as yyyy-mm-dd in SAST (UTC+2, no DST).
-   Shifting before slicing the ISO string is what makes this right: at 01:30
-   on the 6th in Johannesburg, toISOString() still reads the 5th, so a visit
-   booked late at night would default to yesterday. */
+/* Today as yyyy-mm-dd in SAST (UTC+2, no daylight saving). We shift before slicing the ISO
+ * string: at 01:30 on the 6th in Johannesburg, toISOString() still says the 5th. */
 function todayIso(): string {
   return new Date(Date.now() + 2 * 60 * 60_000).toISOString().slice(0, 10);
 }
 
-/* Re-points an element at a different action so one case can delegate to
-   another without duplicating it. The clone is not inserted in the document;
-   handleAction only ever reads data-act and data-id off it. */
+/* Points an element at a different action so one case can reuse another. The clone is not
+ * added to the document; handleAction only reads its data-act and data-id. */
 function withAct(el: HTMLElement, act: string): HTMLElement {
   const proxy = document.createElement("span");
   proxy.dataset["act"] = act;
@@ -850,20 +804,20 @@ async function handleAction(el: HTMLElement): Promise<void> {
   const numId = Number(idAttr);
 
   switch (act) {
-    /* item 2c: "Why am I seeing this?" - every link in the console opens here */
+    /* "Why am I seeing this?": every link in the console opens here */
     case "why": {
       const e = getWhy(idAttr);
       if (!e) return;
       return openDrawer({ title: WHY_LINK_TEXT, subtitle: e.summary, wide: true, bodyHtml: whyHtml(e) });
     }
 
-    /* filters */
+    /* Filters */
     case "clear-filters":
       resetFilter(appState.activePage);
       toast("Filters cleared.", "info");
       return void refresh();
 
-    /* users */
+    /* Users */
     case "view-user": return openUserProfile(idAttr);
     case "edit-user": {
       const u = api.findUser(idAttr);
@@ -895,10 +849,8 @@ async function handleAction(el: HTMLElement): Promise<void> {
       toast("Account enabled.", "success");
       return void refresh();
     case "send-link-code": {
-      /* Follow-up for a farmer who never pressed Start in the bot. Reuses the
-         handover screen's QR renderer so the team sees exactly what the
-         farmer needs to scan, and can read the link out over the phone
-         instead if that is easier. */
+      /* Follow-up for a farmer who never pressed Start in the bot. Reuses the handover screen's QR
+       * renderer, so the team sees what the farmer must scan and can read the link out by phone. */
       const u = api.findUser(idAttr);
 
       try {
@@ -923,10 +875,8 @@ async function handleAction(el: HTMLElement): Promise<void> {
       }
     }
     case "reset-password": {
-      /* Used to call a no-op that toasted "Password reset link sent." while
-         sending nothing at all. It now really does send: the bot delivers a
-         new temporary password to the farmer's own Telegram, and the app
-         forces them to change it at their next sign-in. */
+      /* The bot sends a new temporary password to the farmer's own Telegram, and the app forces a
+       * change at their next sign-in. */
       try {
         const result = await sendTemporaryPasswordViaTelegram(idAttr);
 
@@ -1028,9 +978,7 @@ case "delete-user": {
 
 
 
-    /* farmer onboarding — real calls to AgroFlow.Api, not demo/mock like the
-       rest of this file. Requires an admin to be signed in via Supabase Auth
-       (no login flow exists in this dashboard yet - see agroFlowApi.ts). */
+    /* Farmer onboarding: real calls to AgroFlow.Api. Needs an admin signed in through Supabase Auth. */
     case "create-farmer-direct": {
       const farmList = await api.getFarms().catch(() => []);
 
@@ -1042,9 +990,8 @@ case "delete-user": {
           { label: "Email", value: "", editable: true, name: "email" },
           { label: "Temporary password", value: "", editable: true, name: "password" },
         ],
-        // A farm id is a bigint nobody knows by heart. Typed wrong - and a
-        // digit out is easy - the new account is attached to a stranger's
-        // farm, with access to their readings.
+        // Security: a farm id is a bigint nobody knows by heart, and one wrong digit would attach
+        // the new account to a stranger's farm with access to its readings, so we use a picker.
         bodyHtml: picker({
           name: "farmId",
           label: "Farm",
@@ -1105,22 +1052,14 @@ case "delete-user": {
       });
     }
 
-    /* farms */
+    /* Farms */
     case "view-farm": return openFarmDetail(numId);
     case "edit-farm-location": return openFarmLocationEditor(numId);
-    /* Register a kit, as five steps instead of a zone id typed from memory.
-     *
-     * WHAT WAS WRONG BEFORE
-     * An enrollment code could only be made from a scheduled request, and
-     * only ever for a zone chosen out of one farm's list. Registering a kit
-     * for anything else meant going to the request queue and finding a row
-     * that fitted - or there was no route at all. The zone is what the claim
-     * resolves, so getting it wrong attaches a farmer's kit to somebody
-     * else's block and the soil readings arrive against the wrong crop.
-     *
-     * Each picker narrows the next: a farmer's farms, that farm's zones. The
-     * farm list is filtered on ownerId, not on the owner's name - two
-     * farmers can share a name. */
+    /* Register a kit in five steps instead of typing a zone id from memory. The claim attaches
+     * the kit to this zone, so a wrong zone would put a farmer's readings against someone
+     * else's crop.
+     * Each picker narrows the next: the farmer's farms, then that farm's zones. Farms are
+     * filtered on ownerId, not the owner's name, because two farmers can share a name. */
     case "register-hardware": {
       let farmers;
       let farms;
@@ -1134,8 +1073,7 @@ case "delete-user": {
         return;
       }
 
-      // Only farmers who have somewhere to put a kit. Offering the rest
-      // leads to an empty farm step with nothing to explain it.
+      // Only farmers who have somewhere to put a kit; the rest would get an empty farm step.
       const withFarms = farmers.filter((f) => farms.some((farm) => farm.ownerId === f.id));
 
       if (withFarms.length === 0) {
@@ -1245,8 +1183,8 @@ case "delete-user": {
 
         closeDrawer();
 
-        // A modal, not a toast. This is a credential the installer has to
-        // write down, and a toast disappears while they look for a pen.
+        // A modal, not a toast: this is a credential the installer has to write down, and a toast
+        // disappears while they look for a pen.
         showErrorModal(
           "Enrollment code",
           `${result.enrollmentCode}\n\n` +
@@ -1264,27 +1202,17 @@ case "delete-user": {
       }
     }
 
-    /* Register a new farm, as four steps instead of one long form.
-     *
-     * WHAT WAS WRONG WITH THE FORM IT REPLACES
-     * Nine fields in one drawer, the owner as a <select> of every farmer, the
-     * location as free text, and the crop as a text input. Three things went
-     * wrong routinely: a mistyped crop ("Grapes") produced a zone the FAO-56
-     * engine cannot advise on and nothing said so; a farm got no coordinates
-     * at all, so its weather lookup had nothing to go on; and a validation
-     * error arrived after all nine fields were filled.
-     *
-     * Now: pick the farmer, place the farm on a map, describe the zones from
-     * a crop list the engine actually knows, and see all of it before
-     * anything is written. */
+    /* Register a new farm in four steps: pick the farmer, place the farm on a map, describe the
+     * zones from a crop list the engine knows, and review everything before anything is saved.
+     * This avoids crops the engine cannot advise on, farms without coordinates for weather, and
+     * validation errors after a long form. */
     case "add-farm":
       return openRegisterFarmWizard(null);
 
-    /* The wizard's Confirm. wireWizards has already re-validated every step,
-       so what is missing here can only be something the steps do not mark
-       required - the zone arithmetic the API also enforces. Checked here too
-       so the admin is told in the drawer rather than by a 400. */
-    /* Item 6: a soil card sets its zone's hidden soil field. */
+    /* The wizard's Confirm. wireWizards has already re-checked every step, so only the zone
+     * arithmetic the API also checks can be missing here; we check it so the admin sees it in
+     * the drawer instead of a 400. */
+    /* A soil card sets its zone's hidden soil field. */
     case "zone-soil": {
       const row = el.closest<HTMLElement>("[data-zone-row]");
       const hidden = row?.querySelector<HTMLInputElement>(`[data-field="zone_soil_${el.dataset["zone"]}"]`);
@@ -1340,7 +1268,7 @@ case "delete-user": {
         return;
       }
     }
-        /* onboarding */
+        /* Onboarding */
     case "onboarding-next": {
       const v = collectFields();
       const err = validateOnboardingStep1(v);
@@ -1391,15 +1319,13 @@ case "delete-user": {
       "success",
     );
 
-    /* Do NOT navigate away. The temporary password in this response exists
-       nowhere else - the server never stored it - so leaving this screen
-       without reading it means it is gone for good, and the only recovery is
-       to reset it. The handover step is where the installer finishes the
-       job. */
+    /* Do not navigate away: the temporary password exists nowhere else (the server never
+     * stored it), so leaving now loses it and the only fix is a reset. The handover step is
+     * where the installer finishes. */
     handoverProfileId = result.profileId;
 
-    // Item 6c: onboarding started from an enquiry completes it and links
-    // the new farmer. A failure here leaves the enquiry open, and says so.
+    // Onboarding started from an enquiry completes it and links the new farmer. If this fails
+    // the enquiry stays open and we say so.
     if (onboardingFromEnquiry) {
       const enquiryId = onboardingFromEnquiry.id;
       onboardingFromEnquiry = null;
@@ -1464,7 +1390,7 @@ case "delete-user": {
     case "handover-done":
       handoverProfileId = null;
       return void navigate("farms");
-    /* hardware */
+    /* Hardware */
     case "view-device": {
       const h = api.findHardware(idAttr);
       if (!h) return;
@@ -1476,9 +1402,8 @@ case "delete-user": {
           { label: "Maintenance", value: h.maintenanceState },
           { label: "Firmware", value: h.firmware },
           { label: "Battery", value: h.battery === null ? "Mains powered" : `${h.battery}%` },
-          // Never "0.0%". Nothing measures per-kit uptime - there is no
-          // telemetry table for it - and a zero reads as a kit that has
-          // never once been up, which is a fault report, not a blank.
+          // Never "0.0%": nothing measures per-kit uptime, and a zero would look like a kit that was
+          // never up.
           { label: "Uptime", value: "Not measured" },
           { label: "Installed", value: fmtDate(h.installed) },
           { label: "Last seen", value: h.lastSeen },
@@ -1494,15 +1419,11 @@ case "delete-user": {
       toast(`${idAttr} restart command sent.`, "success");
       return void refresh();
 
-    /* ---- firmware v1.3.0 device actions -------------------------------
-       All three are addressed by ZONE, not hardware id: the commands go
-       into irrigation_commands, which is keyed on zone. The table omits
-       these links for a board with no zone, so findHardware always has one
-       here - the guard is for a stale render, not an expected state.
-
-       Each one confirms first. Change WiFi takes a kit off the network,
-       open setup exposes a local setup page, and revoke cuts a board off
-       permanently: none of them should happen on a mis-click. */
+    /* Device actions
+     * All three go by zone, not hardware id: the commands go into irrigation_commands, which is
+     * keyed on zone. A board with no zone has no links, so the guard is only for a stale render.
+     * Each one asks first: Change WiFi takes a kit off the network, open setup exposes a local
+     * setup page, and revoke cuts a board off for good. */
     case "device-change-wifi": {
       const h = api.findHardware(idAttr);
       if (!h?.zoneId) return void toast("This device is not assigned to a zone.", "warn");
@@ -1521,8 +1442,7 @@ case "delete-user": {
         onConfirm: () => {
           void deviceChangeWifi(h.zoneId as number)
             .then((result) => {
-              // The network name and password are the whole point of the
-              // success message: whoever is standing at the kit needs them.
+              // Whoever is standing at the kit needs the network name and password, so they go in the message.
               toast(
                 `Sent. Join "${result.setupNetworkName}" (password ${result.setupNetworkPassword}) to finish.`,
                 "success",
@@ -1594,9 +1514,7 @@ case "delete-user": {
         onConfirm: () => {
           void deviceRevoke(h.zoneId as number)
             .then((result) => {
-              // Shown as a modal, not a toast: the HiveMQ step is a manual
-              // job the admin has to actually go and do, and a toast
-              // disappears.
+              // A modal, not a toast: the HiveMQ step is a manual job the admin has to go and do.
               showErrorModal("Device revoked", result.notice);
               void refresh();
             })
@@ -1621,9 +1539,8 @@ case "delete-user": {
 
       const types = current?.reportTypes ?? ["water_usage"];
       const chosenZones = current?.zoneIds ?? null;
-      // Item 4: daily, a chosen day, per-zone PDFs and extra recipients need
-      // migration 0040. Until then the controls are shown, disabled, with
-      // the reason - never silently ignored on save.
+      // Daily, a chosen day, per-zone PDFs and extra recipients need migration 0040. Until then
+      // the controls show, disabled, with the reason, and are never silently ignored on save.
       const extras = current?.optionsAvailable !== false;
       const off = extras ? "" : "disabled";
       const frequency = current?.enabled ? current.frequency : "off";
@@ -1751,9 +1668,8 @@ case "delete-user": {
 
           const zoneSelect = document.getElementById("autoReportsZones") as HTMLSelectElement | null;
           const picked = [...(zoneSelect?.selectedOptions ?? [])].map((o) => o.value);
-          // "All zones" wins if it is selected at all - null means every
-          // zone, including ones added later, which is almost always what is
-          // meant. An empty array would mean "no zones" and send nothing.
+          // "All zones" wins if it is selected at all: null means every zone, including ones added
+          // later. An empty array would mean "no zones" and send nothing.
           const zoneIds = picked.includes("all") || picked.length === 0
             ? null
             : picked.map(Number).filter(Number.isFinite);
@@ -1799,10 +1715,9 @@ case "delete-user": {
       setShowArchivedFarms(!getShowArchivedFarms());
       return void refresh();
 
-    /* ARCHIVE, not delete. The confirm text spells out the difference
-       because the two buttons sit next to each other and the farm being
-       archived is usually test data somebody is trying to tidy away - which
-       is exactly the moment a mis-click is most likely and most costly. */
+    /* Archive, not delete. The confirm text explains the difference because the two buttons
+     * sit next to each other, and an archive is usually test data being tidied away, when a
+     * mis-click is most likely. */
     case "archive-farm": {
       const farmId = Number(idAttr);
       const farm = api.findFarm(farmId);
@@ -1853,13 +1768,11 @@ case "delete-user": {
       return void refresh();
     }
 
-    /* "Run advice now" on a zone. The point is to be able to SHOW the
-       engine working during setup and the presentation, so the result is
-       laid out as the numbers somebody checking it reads in order - and,
-       when it cannot answer, the named missing fields rather than a blank
-       panel. */
-    /* Item 6b: the zone's "Recommended for you", with Use these settings
-       (the existing Reset to recommended) or Keep my own. */
+    /* "Run advice now" on a zone, to show the engine working during setup and the
+     * presentation. The result shows the numbers in reading order, or the missing fields by
+     * name when it cannot answer. */
+    /* The zone's "Recommended for you", with Use these settings (Reset to recommended) or
+     * Keep my own. */
     case "zone-recommend": {
       const zoneId = Number(idAttr);
       if (!zoneId) return void toast("No zone selected.", "warn");
@@ -1988,9 +1901,8 @@ case "delete-user": {
       }
     }
 
-    /* ---- Home: the attention queue and the KPI tiles ----------------
-       Each one lands on the list it counts, already filtered, so the admin
-       never arrives at a page and has to find the thing again. */
+    /* Home: the attention queue and the KPI tiles
+     * Each one opens the list it counts, already filtered. */
     case "go-requests-pending":
       setFilter("requests", { status: "pending" });
       return void showPage("requests");
@@ -2004,8 +1916,7 @@ case "delete-user": {
       return void showPage("hardware");
 
     case "go-zones-setup":
-      // Farms and zones, where the list itself highlights which field each
-      // zone is missing.
+      // Farms and zones, where the list shows which field each zone is missing.
       return void navigate("farms");
 
     case "go-users-no-telegram":
@@ -2026,10 +1937,9 @@ case "delete-user": {
     case "go-maintenance":
       return void navigate("maintenance");
 
-    /* ---- Health ------------------------------------------------------ */
+    /* Health */
     case "open-health":
-      // Home holds the card. If we are already there, scroll to it rather
-      // than re-rendering the page under the admin.
+      // Home holds the card. If we are already there, scroll to it instead of re-rendering.
       if (appState.activePage === "dashboard") {
         document.getElementById("systemHealth")?.scrollIntoView({ behavior: "smooth", block: "center" });
         return;
@@ -2040,16 +1950,13 @@ case "delete-user": {
       await refreshHealthPanel();
       return;
 
-    /* The one rule this enforces: never a frozen page. Any page that failed
-       to load renders a Retry that comes back here. */
+    /* Never a frozen page: any page that failed to load shows a Retry that comes back here. */
     case "retry-page":
       return void refresh();
 
-    /* One request, end to end: what was asked for, who has touched it, and
-       every recorded change to it.
-       The state chain comes off the row (service_request's own columns); the
-       history below it comes from the audit log, which is the only place that
-       knows a status was changed twice or set back. */
+    /* One request from start to end: what was asked for, who has worked on it, and every
+     * recorded change. The state chain comes from service_request's own columns; the history
+     * comes from the audit log, the only place that knows a status was changed twice. */
     case "view-request": {
       const requestId = Number(idAttr);
       if (!requestId) return;
@@ -2065,8 +1972,7 @@ case "delete-user": {
         request.claimedAt = handledBy.claimedAt;
       }
 
-      // The log is a nicety on this panel, not the panel itself: if 0037 has
-      // not been applied the details must still open.
+      // The log is extra on this panel: if 0037 is not applied, the details must still open.
       const history = await getEntityTimeline("service_request", String(requestId))
         .catch(() => [] as AuditRow[]);
 
@@ -2104,15 +2010,13 @@ case "delete-user": {
       });
     }
 
-    /* Who is dealing with a request.
-       A picker over real admin profiles, not a text field - the whole point
-       of recording an owner is that the name means a specific person. */
+    /* Who is dealing with a request: a picker over real admin profiles, so the name always
+     * means a specific person. */
     case "export-activity-csv": {
       const log = await getActivityLog();
 
-      // downloadExcelSafeCsv, not downloadCSV: the plain one produced a file
-      // Excel opened with every value in column A on a South African
-      // machine. See lib/workbook.ts.
+      // downloadExcelSafeCsv, not downloadCSV: the plain one opens in Excel with every value in
+      // column A on a South African machine. See lib/workbook.ts.
       downloadExcelSafeCsv(
         "agroflow-activity",
         toCSV(
@@ -2142,8 +2046,8 @@ case "delete-user": {
     case "go-mqtt-logins":
       return void navigate("mqttLogins");
 
-    /* Admin polish, item 1: dismiss a notification. Critical ones ask for an
-       optional note first. Undo (5 s) restores it; both steps are recorded. */
+    /* Dismiss a notification. Critical ones ask for an optional note first. Undo (5 s)
+     * restores it; both steps are recorded. */
     case "dismiss-item": {
       const d = el.dataset;
       const critical = d["critical"] === "1";
@@ -2186,7 +2090,7 @@ case "delete-user": {
       setDismissView(el.dataset["surface"] ?? "", el.dataset["view"] ?? "active");
       return void refresh();
 
-    /* Item 6c: the Enquiries & sales follow-up report. */
+    /* The Enquiries & sales follow-up report. */
     case "enquiry-report": {
       const val = (sel: string): string =>
         (document.querySelector<HTMLInputElement | HTMLSelectElement>(sel)?.value ?? "").trim();
@@ -2208,12 +2112,12 @@ case "delete-user": {
       }
     }
 
-    /* Item 6c: the two tabs on Requests. */
+    /* The two tabs on Requests. */
     case "requests-tab":
       setRequestsTab(el.dataset["tab"] ?? "requests");
       return void refresh();
 
-    // Admin polish, item 2: Open / Completed / All.
+    // Open / Completed / All.
     case "requests-filter":
       setRequestFilter(el.dataset["filter"] ?? "all");
       return void refresh();
@@ -2335,7 +2239,7 @@ case "delete-user": {
       });
     }
 
-    /* Item 6c: [Mark complete], with an optional note. */
+    /* [Mark complete], with an optional note. */
     case "request-complete": {
       const requestId = Number(idAttr);
       return openDrawer({
@@ -2351,7 +2255,7 @@ case "delete-user": {
       });
     }
 
-    /* Item 6c: carry the request out - prefilled, and saving completes it. */
+    /* Carry out the request: prefilled, and saving completes it. */
     case "request-setup": {
       const r = (await api.getServiceRequests()).find((x) => String(x.id) === idAttr);
       if (!r) return void toast("That request could not be found.", "warn");
@@ -2360,15 +2264,13 @@ case "delete-user": {
     }
 
     case "go-onboarding":
-      // A new_farm request has no farm yet, so there is no zone to enrol a
-      // kit onto. Send the admin through the existing zone setup flow first
-      // rather than offering an action that cannot work.
+      // A new_farm request has no farm yet, so there is no zone to enrol a kit onto. We send the
+      // admin through zone setup first.
       toast("Set up the farm and its zones first, then create the enrollment code.", "warn");
       return void navigate("onboarding");
 
-    /* The code the installer types into the kit's setup page.
-       Uses the EXISTING generator (POST /api/devices/enroll) unchanged -
-       single-use, 24 hours, and the only authorisation the claim needs. */
+    /* The code the installer types into the kit's setup page. Uses the existing generator
+     * (POST /api/devices/enroll): single-use, 24 hours, and the only authorisation the claim needs. */
     case "create-enrollment-code": {
       const requests = await api.getServiceRequests();
       const request = requests.find((r) => String(r.id) === idAttr);
@@ -2392,9 +2294,8 @@ case "delete-user": {
       }
 
       if (zones.length === 0) {
-        // The farm exists but has no zones. Same answer as a new_farm
-        // request: the zone has to exist before a kit can be enrolled onto
-        // it, because hardware.zone_id is what the claim resolves.
+        // The farm has no zones. Same answer as a new_farm request: the claim resolves
+        // hardware.zone_id, so the zone must exist first.
         toast("This farm has no zones yet. Add one first, then create the code.", "warn");
         return void navigate("onboarding");
       }
@@ -2429,9 +2330,8 @@ case "delete-user": {
 
           void createEnrollmentCode({ zoneId })
             .then((result) => {
-              // A modal, not a toast. This is a credential the installer has
-              // to write down or type, and a toast disappears while they are
-              // still looking for a pen.
+              // A modal, not a toast: this is a credential the installer has to write down, and a toast
+              // disappears while they look for a pen.
               showErrorModal(
                 "Enrollment code",
                 `${result.enrollmentCode}
@@ -2464,8 +2364,7 @@ case "delete-user": {
       try {
         const result = await addMqttLogins(pasted);
 
-        // Clear the box on success, so a second click cannot re-submit the
-        // same batch and make the duplicate count look like a problem.
+        // Clear the box on success, so a second click cannot re-submit the same batch.
         if (box) box.value = "";
 
         toast(result.message, result.added > 0 ? "success" : "warn");
@@ -2505,9 +2404,8 @@ case "delete-user": {
         },
       });
     }
-    // Item 5: a real maintenance job for this kit, booked by - and handled
-    // by - the caller. There is no technician picker: the list it offered
-    // was four invented names.
+    // A real maintenance job for this kit, booked and handled by the caller. There is no
+    // technician picker.
     case "schedule-device-maint":
       return openDrawer({
         title: `Schedule service — ${idAttr}`,
@@ -2522,13 +2420,11 @@ case "delete-user": {
             .catch((e: unknown) => showErrorModal("Could not book the visit", e instanceof Error ? e.message : "Not saved."));
         },
       });
-    // The old free-text version of this wrote nothing at all - it toasted
-    // "registered (demo)" and the kit never existed. Kept as an alias so an
-    // older bookmark or button still reaches the real wizard.
+    // Kept as an alias so an old bookmark or button still reaches the real kit wizard.
     case "add-device":
       return handleAction(withAct(el, "register-hardware"));
 
-    /* item 5: handling - always the caller's own name */
+    /* Handling: always the caller's own name */
     case "claim-item": {
       const kind = (el.dataset["kind"] ?? "") as HandlingKind;
       try {
@@ -2569,9 +2465,8 @@ case "delete-user": {
     case "view-alert": {
       const a = api.findAlert(idAttr);
       if (!a) return;
-      // Item 2c: the alert's own explanation, if it has one (migration 0039).
-      // The panel intent is taken BEFORE the await (item 0b): if another
-      // panel is asked for meanwhile, this one must not open over it.
+      // The alert's own explanation, if it has one (migration 0039). We take the panel intent
+      // before the await: if another panel is asked for meanwhile, this one must not open over it.
       const alertIntent = currentPanelIntent();
       const [alertWhy, history] = await Promise.all([
         api.getAlertExplanation(a.id).catch(() => null),
@@ -2671,23 +2566,14 @@ case "delete-user": {
         },
       });
 
-    /* The view/edit/delete-schedule handlers are gone with the table that
-       linked to them. They read api.findSchedule, which reads a working copy
-       that is permanently empty: irrigation_schedule was dropped in migration
-       0010 and schedules live as columns on the zone now. Nothing could ever
-       reach them, and the Edit one offered to save a "cadence" no part of the
-       system has had for several migrations. */
-
     /* reports */
     case "run-comparison": return runComparison();    
     case "farm-report-preview": return farmReportPreview();
     case "farm-report-pdf": return farmReportPdf();
     case "farm-report-xlsx": return farmReportXlsx();
     case "view-attention": return openAttentionGroup(idAttr);
-    /* A real file, from what is on screen. The comparison table is rendered
-       into #cmpResult by runComparison; reading it back is what makes
-       this export match exactly what the admin is looking at, rather than
-       re-running the comparison and risking a different answer. */
+    /* A real file from what is on screen. We read back the table runComparison put in
+     * #cmpResult, so the export matches what the admin sees instead of re-running the comparison. */
     case "export-comparison": {
       const rows = collectComparisonRows();
 
@@ -2714,10 +2600,7 @@ case "delete-user": {
     case "export-dashboard": return exportCurrent("dashboard");
 
     /* settings */
-    /* Settings that actually write somewhere (item 2).
-       The twenty-odd fake fields they replace are gone, along with
-       save-settings, manage-roles, backup-now, restore and download-backup -
-       each of which reported a success for work nothing did. */
+    /* Settings that save to the database. */
     // The Retry on either Settings panel's error state.
     case "go-settings-account":
       return void refreshMyTelegramStatus();
@@ -2752,9 +2635,8 @@ case "delete-user": {
       const password = v["newPassword"] ?? "";
       const again = v["newPasswordAgain"] ?? "";
 
-      // Checked here as well as by Supabase so the answer arrives in the
-      // page rather than as an API error, and so the mismatch case - which
-      // Supabase cannot see at all - is caught.
+      // Checked here as well as by Supabase, so the answer shows in the page instead of as an
+      // API error, and so a mismatch (which Supabase cannot see) is caught.
       if (password.length < 8) {
         return void toast("Use at least 8 characters.", "warn");
       }
@@ -2766,8 +2648,8 @@ case "delete-user": {
       try {
         await changeMyPassword(password);
 
-        // Cleared from the DOM immediately. A password sitting in an input
-        // survives every later screenshot and shoulder-glance.
+        // Cleared from the page straight away: a password left in an input shows up in every later
+        // screenshot.
         document.querySelectorAll<HTMLInputElement>(
           '[data-field="newPassword"], [data-field="newPasswordAgain"]',
         ).forEach((el) => { el.value = ""; });
@@ -2787,8 +2669,7 @@ case "delete-user": {
       try {
         const result = await requestMyTelegramCode();
 
-        // A modal, not a toast: this is a code somebody has to read and use,
-        // and a toast disappears while they are still finding the app.
+        // A modal, not a toast: this is a code someone has to read and use.
         showErrorModal(
           "Connect Telegram",
           `${result.code}\n\n` +
@@ -2834,7 +2715,7 @@ case "delete-user": {
   }
 }
 
-/* ---------------------------- comparison report -------------------------- */
+/* comparison report */
 
 async function runComparison(): Promise<void> {
   const get = (id: string): string =>
@@ -2856,9 +2737,8 @@ async function runComparison(): Promise<void> {
     for (const e of events) {
       if (!inWindow(e.date, from, to)) continue;
 
-      // Skipped, not counted as zero. A comparison between two periods is
-      // exactly where a silent zero does the most damage: it reads as a real
-      // drop in water use rather than as a zone nobody set a flow rate on.
+      // Skipped, not counted as zero. In a comparison a silent zero looks like a real drop in
+      // water use, not a zone with no flow rate.
       if (e.litres === null) continue;
 
       acc[keyOf(e)] = (acc[keyOf(e)] ?? 0) + e.litres;
@@ -2899,12 +2779,9 @@ async function runComparison(): Promise<void> {
   toast("Comparison generated.", "success");
 }
 
-/* The Settings page's two asynchronous panels.
- *
- * Rendered empty by settingsTabBody and filled here, because a tab body is a
- * synchronous string and both of these need the network. Each one handles its
- * own failure in place: a Telegram status that cannot be fetched must not
- * take the rest of the page down with it. */
+/* The Settings page's two async panels. settingsTabBody renders them empty and we fill them
+ * here, because a tab body is a plain string and both need the network. Each handles its
+ * own failure, so a Telegram status that cannot load does not break the page. */
 export async function refreshMyTelegramStatus(): Promise<void> {
   const host = document.getElementById("myTelegramStatus");
   if (!host) return;
@@ -2932,13 +2809,8 @@ export async function refreshMyTelegramStatus(): Promise<void> {
   }
 }
 
-/* The comparison table's rows, read back out of the DOM.
- *
- * Reading the rendered table rather than recomputing is deliberate: the
- * export then matches exactly what the admin is looking at. Recomputing would
- * re-read the filters, and if anything had changed since they pressed Compare
- * the file would disagree with the screen - which is the one thing an export
- * must never do. */
+/* The comparison table's rows, read back from the page. We do not recompute, so the export
+ * matches what the admin sees even if the filters changed after they pressed Compare. */
 function collectComparisonRows(): string[][] {
   const host = document.getElementById("cmpResult");
   if (!host) return [];
@@ -2956,8 +2828,7 @@ function collectFields(): Record<string, string> {
   return values;
 }
 
-/* The farmer whose handover screen is currently open - needed by Regenerate
-   code and Reset password, which act on that profile. */
+/* The farmer whose handover screen is open, used by Regenerate code and Reset password. */
 let handoverProfileId: string | null = null;
 
 async function renderHandover(result: {
@@ -2982,9 +2853,8 @@ async function renderHandover(result: {
   }
 }
 
-/* Draws the t.me deep link as a QR code. A null link means the server has no
-   bot username configured - the farmer is then onboarded by reading the
-   credentials out, so the QR area says so instead of rendering a dead code. */
+/* Draws the t.me deep link as a QR code. A null link means the server has no bot username;
+ * the farmer then gets the credentials read out, so the QR area says so. */
 async function renderQr(
   deepLink: string | null,
   expiresAt: string | null,
@@ -3019,8 +2889,7 @@ async function renderQr(
   try {
     await QRCode.toCanvas(canvas, deepLink, { width: 240, margin: 1 });
   } catch {
-    /* A QR that will not draw is not a failed onboarding - the link text
-       above it still works, and so does the password. */
+    /* A QR that will not draw is not a failed onboarding: the link text and the password still work. */
     canvas.style.display = "none";
   }
 }
@@ -3123,8 +2992,8 @@ function wireOnboardingZones(): void {
   wireZoneChoices(container);
 }
 
-/* Item 6: a custom size shows its m² box. Soil cards go through the
-   delegated "zone-soil" action. Bound once per container. */
+/* A custom size shows its m² box. Soil cards go through the delegated "zone-soil" action.
+ * Bound once per container. */
 function wireZoneChoices(container: HTMLElement): void {
   if (container.dataset["choicesBound"]) return;
   container.dataset["choicesBound"] = "1";
@@ -3142,8 +3011,8 @@ function wireZoneChoices(container: HTMLElement): void {
   });
 }
 
-/* Item 6b: the wizard's card for one zone, once a crop is chosen. The latest
-   request wins - an answer for an older crop choice is dropped. */
+/* The wizard's card for one zone, once a crop is chosen. The latest request wins; an
+ * answer for an older crop choice is dropped. */
 async function refreshRecommendation(row: HTMLElement): Promise<void> {
   const i = Number(row.dataset["zoneIndex"]);
   const box = row.querySelector<HTMLElement>(`[data-recommend="${i}"]`);
@@ -3168,7 +3037,7 @@ async function refreshRecommendation(row: HTMLElement): Promise<void> {
   }
 }
 
-/* --------------------------- binding after render ------------------------ */
+/* binding after render */
 function wireRegisterFarmZones(): void {
   const countInput =
     document.querySelector<HTMLInputElement>("[data-register-farm-zone-count]");
@@ -3185,8 +3054,8 @@ function wireRegisterFarmZones(): void {
   const renderZones = () => {
     const count = registerFarmZoneCount();
 
-    // What was already typed is read before the rebuild and put back after.
-    // Nudging the count from 3 to 4 used to wipe the first three zones.
+    // What was already typed is read before the rebuild and put back after, so changing the
+    // count keeps the zones already filled in.
     const existing = collectFields();
 
     container.innerHTML = Array.from(
@@ -3210,13 +3079,9 @@ function wireRegisterFarmZones(): void {
 }
 
 
-/* The kit wizard's two dependent steps.
- *
- * Each one is rebuilt when the step before it changes, rather than rendered
- * once from everything: a farm list that still shows the previous farmer's
- * farms is how a kit ends up on the wrong property. Rebuilding also clears
- * the hidden field, so a stale zone id cannot survive a change of farm and
- * be submitted. */
+/* The kit wizard's two dependent steps. Each is rebuilt when the step before it changes, so
+ * a farm list never shows the previous farmer's farms. Rebuilding also clears the hidden
+ * field, so a stale zone id cannot be submitted. */
 function wireKitWizard(farms: Farm[]): void {
   const wiz = document.querySelector<HTMLElement>('[data-wizard="register-hardware"]');
   if (!wiz) return;
@@ -3276,8 +3141,7 @@ function wireKitWizard(farms: Farm[]): void {
         })),
       });
 
-      // The new picker's own markup has to be bound; wirePickers skips what
-      // it has already bound, so this does not rebind the rest.
+      // The new picker's markup has to be bound; wirePickers skips what it already bound.
       wirePickers();
       return;
     }
@@ -3290,9 +3154,8 @@ function wireKitWizard(farms: Farm[]): void {
       void getReportZones(farmId)
         .then((zones) => {
           if (zones.length === 0) {
-            // A farm with no zones cannot take a kit at all: hardware.zone_id
-            // is what the claim resolves. Saying so here beats a picker with
-            // nothing in it.
+            // A farm with no zones cannot take a kit (the claim resolves hardware.zone_id), so we say
+            // so instead of showing an empty picker.
             renderZonePlaceholder(
               "This farm has no zones yet. Add one before registering a kit to it.",
             );
@@ -3338,8 +3201,8 @@ function wireKitWizard(farms: Farm[]): void {
   renderReview();
 }
 
-/* The register-farm wizard. Item 6c: given a request, it is prefilled from it
-   (farmer, location, size, crop) and saving it completes the request. */
+/* The register-farm wizard. Given a request, it is prefilled from it (farmer, location,
+ * size, crop) and saving completes the request. */
 let completeRequestOnSave: number | null = null;
 
 async function openRegisterFarmWizard(fromRequest: ServiceRequest | null): Promise<void> {
@@ -3362,7 +3225,7 @@ async function openRegisterFarmWizard(fromRequest: ServiceRequest | null): Promi
     return;
   }
 
-  // Item 6c: launched from a request, saving completes that request.
+  // Launched from a request, saving completes that request.
   completeRequestOnSave = fromRequest?.id ?? null;
 
   return openDrawer({
@@ -3461,10 +3324,8 @@ async function openRegisterFarmWizard(fromRequest: ServiceRequest | null): Promi
       wireWizards();
       wireRegisterFarmReview();
 
-      /* The map lives on step 2, which is display:none when the drawer
-         opens, so it is mounted now and told to re-measure when the step
-         becomes visible. Mounting it lazily on first reveal would be
-         neater but needs an observer per wizard; this is one call. */
+      /* The map is on step 2, which is hidden when the drawer opens, so we mount it now and tell
+       * it to re-measure when the step becomes visible. */
       const mapHost = document.querySelector<HTMLElement>("[data-map-pick]");
       if (mapHost) void mountLocationPicker(mapHost);
 
@@ -3473,8 +3334,8 @@ async function openRegisterFarmWizard(fromRequest: ServiceRequest | null): Promi
   });
 }
 
-/* Fill the wizard from what the farmer asked for. Only what the request says;
-   anything it does not say is left for the admin to fill in. */
+/* Fill the wizard from what the farmer asked for. Anything the request does not say is
+ * left for the admin. */
 function prefillFromRequest(r: ServiceRequest): void {
   const set = (field: string, value: string | number | null | undefined): void => {
     const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-field="${field}"]`);
@@ -3487,8 +3348,8 @@ function prefillFromRequest(r: ServiceRequest): void {
   set("zone_size_0", r.roughSize);
 }
 
-/* Item 6c: after a wizard launched from a request has saved, the request is
-   done - completed by whoever saved it (the API takes them from the login). */
+/* After a wizard launched from a request saves, the request is done, completed by whoever
+ * saved it (the API takes them from the login). */
 async function completeLaunchingRequest(note: string): Promise<void> {
   const id = completeRequestOnSave;
   completeRequestOnSave = null;
@@ -3501,7 +3362,7 @@ async function completeLaunchingRequest(note: string): Promise<void> {
   }
 }
 
-/* Item 6c: Add zones to an existing farm, for a "new zone" request. */
+/* Add zones to an existing farm, for a "new zone" request. */
 function openAddZonesWizard(r: ServiceRequest): void {
   completeRequestOnSave = r.id;
   openDrawer({
@@ -3566,17 +3427,15 @@ function openAddZonesWizard(r: ServiceRequest): void {
   });
 }
 
-/* The count, clamped to what the API will accept (1-50). Read from the DOM
-   rather than passed around, because the repeater and the confirm handler
-   both need it and the input is the only thing that knows. */
+/* The zone count, clamped to what the API accepts (1-50). Read from the input because the
+ * repeater and the confirm handler both need it. */
 function registerFarmZoneCount(): number {
   const input = document.querySelector<HTMLInputElement>("[data-register-farm-zone-count]");
   return Math.max(1, Math.min(50, Number(input?.value) || 1));
 }
 
-/* The two rules the wizard's per-field validation cannot express.
-   Both are enforced by the API as well; checked here so the answer arrives
-   in the drawer the admin is looking at rather than as a 400. */
+/* The two rules the per-field validation cannot express. The API checks them too; we check
+ * here so the admin sees the answer in the drawer instead of a 400. */
 function validateRegisterFarmZones(
   zones: { name: string; sizeHectares: number; cropType: string; areaM2?: number | null }[],
   farmSize: number,
@@ -3596,11 +3455,8 @@ function validateRegisterFarmZones(
   return null;
 }
 
-/* The review step, rebuilt every time it is shown.
- *
- * Rebuilt rather than filled once, because the admin can go back and change
- * anything - a review screen showing stale values is worse than no review
- * screen, since it is the thing they are trusting before they commit. */
+/* The review step, rebuilt every time it is shown, because the admin can go back and change
+ * anything. A review showing stale values is worse than none. */
 function wireRegisterFarmReview(): void {
   const wiz = document.querySelector<HTMLElement>('[data-wizard="register-farm"]');
   const pane = document.getElementById("registerFarmReview");
@@ -3664,8 +3520,8 @@ function wireRegisterFarmReview(): void {
       </table>`;
   };
 
-  // The wizard has no "step changed" event, so the two buttons that can
-  // reach the review step both trigger a rebuild.
+  // The wizard has no "step changed" event, so both buttons that reach the review step
+  // trigger a rebuild.
   wiz.querySelector("[data-wizard-next]")?.addEventListener("click", () => {
     window.setTimeout(render, 0);
   });
@@ -3676,7 +3532,7 @@ function wireRegisterFarmReview(): void {
   render();
 }
 
-/* ---- Farm reports, attention, automatic reports (item 4) ---------------- */
+/* Farm reports, attention, automatic reports */
 
 function liveEsc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -3687,8 +3543,8 @@ function liveVal(id: string): string {
   return (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? "";
 }
 
-/* The chosen period as dates: the last N days ending today (SAST), or the
-   two date fields when "Choose dates" is picked. */
+/* The chosen period as dates: the last N days ending today (SAST), or the two date fields
+ * when "Choose dates" is picked. */
 function livePeriod(): { from: string; to: string } {
   const choice = liveVal("livePeriod");
   if (choice === "custom") return { from: liveVal("liveFrom"), to: liveVal("liveTo") };
@@ -3754,8 +3610,7 @@ async function farmReportPdf(): Promise<void> {
   }
 }
 
-/* The water-usage figures as a workbook - the one report with a table of
-   numbers somebody wants to chart or paste. */
+/* The water-usage figures as a workbook, the one report with a table people want to chart. */
 async function farmReportXlsx(): Promise<void> {
   const farmId = Number(liveVal("liveFarm"));
   const zoneId = Number(liveVal("liveZone"));
@@ -3841,8 +3696,8 @@ function wireLiveReports(): void {
   });
 }
 
-/* One "Farms needing attention" line, opened: every farm and zone behind it,
-   each with its own "Why am I seeing this?". */
+/* One "Farms needing attention" line, opened: every farm and zone behind it, each with its
+ * own "Why am I seeing this?". */
 function openAttentionGroup(key: string): void {
   const group = findAttentionGroup(key);
   if (!group) return;
@@ -3859,23 +3714,18 @@ function openAttentionGroup(key: string): void {
   });
 }
 
-/* ---------------------- delegated clicks (item 0b) ----------------------- */
+/* delegated clicks */
 
 let delegatedBound = false;
 
-/* Elements whose action is still running. A second click on one of them is
- * dropped, so a double-click on Save, Confirm or Create sends ONE request.
- * Keyed on the element rather than the action, so two different rows' Save
- * buttons are still independent. A WeakSet, so a re-rendered page's old
- * buttons are simply forgotten. */
+/* Elements whose action is still running. A second click on one is dropped, so a
+ * double-click on Save, Confirm or Create sends one request. Keyed on the element so two
+ * rows' Save buttons stay independent; a WeakSet forgets a re-rendered page's old buttons. */
 const busy = new WeakSet<HTMLElement>();
 
-/* One listener for every action in the console, registered once.
- *
- * The innermost [data-act] under the pointer wins, which is what lets an
- * action link inside a clickable card do its own thing instead of opening the
- * card. preventDefault matters: most actions are `<a href="#">`, and letting
- * that through would set the hash to "#" - which is a navigation to Home. */
+/* One listener for every action in the console, registered once. The innermost [data-act]
+ * wins, so an action link inside a clickable card does its own thing. preventDefault matters:
+ * most actions are `<a href="#">`, and a hash of "#" would navigate to Home. */
 function bindDelegatedClicks(): void {
   if (delegatedBound) return;
   delegatedBound = true;
@@ -3896,9 +3746,8 @@ function bindDelegatedClicks(): void {
       document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
       tab.classList.add("active");
       positionTabUnderline();
-      // Synchronous, so the last tab clicked is the one shown. Its network
-      // panels guard themselves against late answers (see the settings
-      // loaders), so a slow tab cannot paint over a fast one.
+      // Synchronous, so the last tab clicked is the one shown. Its network panels ignore late
+      // answers (see the settings loaders), so a slow tab cannot paint over a fast one.
       renderSettingsTab(tab.dataset["tab"] ?? "My account");
       return;
     }
@@ -3910,8 +3759,8 @@ function bindDelegatedClicks(): void {
 
     if (busy.has(el)) return;
 
-    // A newer click supersedes any detail panel still loading from an older
-    // one - see beginPanelIntent().
+    // A newer click replaces any detail panel still loading from an older one; see
+    // beginPanelIntent().
     if ((el.dataset["act"] ?? "").startsWith("view-")) beginPanelIntent();
 
     busy.add(el);
@@ -3924,7 +3773,7 @@ function bindDelegatedClicks(): void {
   });
 }
 
-/* Item 6c: onboarding launched from an enquiry starts filled in from it. */
+/* Onboarding launched from an enquiry starts filled in from it. */
 let onboardingFromEnquiry: Enquiry | null = null;
 let onboardingPrefilled = false;
 
@@ -3945,8 +3794,8 @@ function prefillOnboardingFromEnquiry(): void {
   toast("Filled in from the enquiry. Finishing onboarding completes it.", "info");
 }
 
-/* Item 6c: the Requests entry in the sidebar shows how many enquiries need a
-   person - nobody has them yet, or a call-back is due. */
+/* The Requests entry in the sidebar shows how many enquiries need a person: nobody has
+ * them yet, or a call-back is due. */
 async function refreshEnquiryBadge(): Promise<void> {
   const button = document.querySelector<HTMLElement>('#nav button[data-page="requests"]');
   if (!button) return;
@@ -3967,10 +3816,10 @@ async function refreshEnquiryBadge(): Promise<void> {
 }
 
 export function wirePageInteractions(): void {
-  // The drawer calls this after it writes its HTML - see lib/drawer.ts.
+  // The drawer calls this after it writes its HTML; see lib/drawer.ts.
   window.agroflowBindDrawerPickers = wirePickers;
 
-  // And the router calls this after a Settings tab renders.
+  // The router calls this after a Settings tab renders.
   onSettingsTabRendered((tab) => {
     if (tab === "My account") void refreshMyTelegramStatus();
   });
@@ -3983,11 +3832,8 @@ export function wirePageInteractions(): void {
   wirePickers();
   wireWizards();
 
-  // [data-go], [data-act] and .tab clicks are handled by ONE delegated
-  // listener on the document - see bindDelegatedClicks() below. They used to
-  // be bound element by element after every render, which never double-bound
-  // (each element was flagged) but missed anything rendered later: a drawer's
-  // buttons, a picker rebuilt in place, a timeline loaded after the page.
+  // [data-go], [data-act] and .tab clicks are handled by one delegated listener on the
+  // document (bindDelegatedClicks() below), so buttons rendered later, like a drawer's, work too.
   bindDelegatedClicks();
 
   document.querySelectorAll<HTMLElement>("[data-toggle]").forEach((t) => {
@@ -4025,16 +3871,11 @@ export function wirePageInteractions(): void {
   }
 }
 
-/* ------------------------------ header chrome ---------------------------- */
+/* header */
 
-// main.ts's render() rebuilds the whole shell (a fresh #avatarBtn/
-// #avatarMenu) on every sign-in, so initHeader() runs again each time too
-// - correct for btn/menu's own listeners (bound to brand-new nodes each
-// call), but this one's on `document`, which persists across #root
-// clears. Bound at most once, and re-queries the CURRENT avatar elements
-// on every firing rather than closing over whichever ones existed the
-// first time this ran - those could belong to a shell that's since been
-// torn down and rebuilt.
+// main.ts's render() rebuilds the shell (a new #avatarBtn/#avatarMenu) on every sign-in, so
+// initHeader() runs again too. This listener is on `document`, which stays, so we bind it
+// once and look up the current avatar elements on every click.
 let outsideClickBound = false;
 
 export function initHeader(): void {
@@ -4059,16 +3900,16 @@ export function initHeader(): void {
     });
   }
 
-  // Log out (#logoutBtn here and the sidebar's) is wired in main.ts, which
-  // owns what is shown after it: the landing page (admin polish, item 4).
+  // Log out (#logoutBtn here and the sidebar's) is wired in main.ts, which decides what shows
+  // after it: the landing page.
 
   updateHeaderIdentity();
 }
 
-/** Reflects the signed-in admin's real name/initials in the header avatar,
-    replacing the static "Aisha Patel" placeholder that used to be
-    hardcoded in index.html. Called from initHeader() and again by
-    main.ts whenever auth state changes. */
+/**
+ * Shows the signed-in admin's real name and initials in the header avatar. Called from
+ * initHeader() and again by main.ts whenever auth state changes.
+ */
 export function updateHeaderIdentity(): void {
   const profile = getAdminProfile();
   const btn = document.getElementById("avatarBtn");
@@ -4088,8 +3929,8 @@ export function updateHeaderIdentity(): void {
   nameEl.textContent = profile.name || profile.email;
 }
 
-/* Item 5: one action on an alert, a job or a request, sent to the API. The
-   actor is never sent - the API takes it from the login. */
+/* One action on an alert, a job or a request, sent to the API. The actor is never sent:
+ * the API takes it from the login. */
 async function runItemAction(kind: HandlingKind, id: string, action: string, note?: string, date?: string): Promise<void> {
   try {
     const r = await itemAction(kind, id, action, note, date);

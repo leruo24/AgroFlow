@@ -1,9 +1,7 @@
-/* Item 6c: "Interested in AgroFlow? Get a call back" on the landing page.
-
-   No login: it posts to POST /api/public/enquiries, which checks every field
-   again, limits each connection to a few enquiries an hour, and drops what a
-   bot fills in the hidden "website" field. The checks here are only so a
-   person is told at once; the server's word is final and is shown as-is. */
+/* "Interested in AgroFlow? Get a call back" on the landing page.
+ * No login: it posts to POST /api/public/enquiries, which checks every field again, limits
+ * each connection to a few enquiries an hour, and drops anything a bot fills into the hidden
+ * "website" field. The checks here only give quick feedback; the server's answer is final. */
 
 import { ZONE_CROPS } from "@/data/referenceData";
 import { isRawNetworkError, networkFailureFor, plainError } from "@/lib/plainError";
@@ -161,8 +159,7 @@ export function wireEnquiry(root: HTMLElement): void {
         thanks.hidden = false;
       })
       .catch((err: unknown) => {
-        // Admin polish, item 7: plain words, and everything typed stays in
-        // the form - the button becomes Retry and sends it again.
+        // Plain words, and everything typed stays in the form; the button becomes Retry.
         error.textContent = plainError(err, "We could not send your enquiry. Please try again.");
         error.hidden = false;
         if (submit) submit.textContent = "Retry";

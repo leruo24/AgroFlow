@@ -7,16 +7,10 @@ import type { AppColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeContext';
 import type { Explanation } from '@/services/agroFlowApi';
 
-// Item 2c: "Why am I seeing this?" under every piece of advice, alert, badge
-// and Drip message.
-//
-// The words come from the server - built by the same rule that produced the
-// message - and are shown as they are: summary, what we used, the rule, how
-// sure, what would change it. The technical line is for admins and report
-// appendices and is never shown here.
-//
-// No explanation, no link. A generic "this is based on your data" would be
-// exactly the hand-written text the brief rules out.
+// "Why am I seeing this?" under every piece of advice, alert, badge and Drip message.
+// The words come from the server (built by the same rule as the message) and are shown as
+// they are: summary, what we used, the rule, how sure, what would change it. The technical
+// line is never shown here. No explanation means no link, never a generic text.
 
 export const WHY_LINK_TEXT = 'Why am I seeing this?';
 

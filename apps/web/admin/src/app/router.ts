@@ -20,19 +20,10 @@ import { esc } from "@/lib/format";
 import { Icon } from "@/lib/icons";
 import { plainError } from "@/lib/plainError";
 
-/* The sidebar, in the order an admin actually works.
- *
- * Home first because it is the queue of what needs a person. Requests
- * second because that is the inbound work. Then the things those requests
- * are ABOUT, from people outward: farmers, their farms and zones, the kits
- * in those zones. Then the things that happen to them - alerts, maintenance.
- * Then the outputs: reports. Then the record: activity. Settings last,
- * where settings always are.
- *
- * "Irrigation Data" and "MQTT logins" are gone as top-level entries. They
- * were never destinations in their own right - irrigation data is part of
- * Reports, and MQTT logins are part of looking after kits. Both still have
- * their routes (see PAGES and REDIRECTS below), so no old link breaks. */
+/* The sidebar, in the order an admin works: Home (the queue), Requests (incoming work),
+ * then farmers, farms and zones, kits, then alerts and maintenance, reports, activity and
+ * Settings last. Irrigation data and MQTT logins are not in the sidebar but keep their
+ * routes (see PAGES and REDIRECTS), so old links still work. */
 export const NAV: NavItem[] = [
   { id: "dashboard", label: "Home", icon: Icon.layoutDashboard },
   { id: "requests", label: "Requests", icon: Icon.inbox },
@@ -46,14 +37,10 @@ export const NAV: NavItem[] = [
   { id: "settings", label: "Settings", icon: Icon.settings },
 ];
 
-/* Old route -> where it lives now.
- *
- * Bookmarks, the browser's back button and any link written down in a
- * handover note all still work: go() sends them on rather than falling back
- * to the dashboard, which would silently lose the admin's place. */
+/* Old route -> where it lives. Bookmarks, the back button and links in handover notes keep
+ * working: go() forwards them instead of dropping the admin on the dashboard. */
 const REDIRECTS: Record<string, PageId> = {
-  // Irrigation data is a Reports concern - it is the same data the water
-  // usage report is built from.
+  // Irrigation data belongs to Reports: it is the same data the water usage report uses.
   irrigation: "reports",
 };
 
@@ -64,9 +51,8 @@ const PAGES: Record<PageId, PageRenderer> = {
   requests: () => requestsPage(),
   farms: () => farmsPage(),
   hardware: () => hardwarePage(),
-  // Reached from a button on the Hardware page rather than the sidebar, the
-  // same way `requests` and `onboarding` are: it is a once-a-batch
-  // administrative chore, not a place anyone needs to be one click from.
+  // Opened from a button on the Hardware page, like `requests` and `onboarding`: it is a
+  // once-a-batch admin job.
   mqttLogins: () => mqttLoginsPage(),
   alerts: () => alertsPage(),
   maintenance: () => maintenancePage(),
@@ -91,27 +77,14 @@ export function setAfterRender(fn: () => void): void {
   afterRender = fn;
 }
 
-/* Renders a page. Called ONLY by the hashchange listener (bootRouter) and by
- * refresh() - never by a click handler directly. See navigate() below.
- *
- * THE TWO RULES THAT FIX ITEM 0b
- *
- * 1. A NAVIGATION THAT HAS BEEN SUPERSEDED STOPS. Every await below is
- *    followed by a check that this is still the newest navigation. A page
- *    that answers after the admin has already clicked elsewhere is dropped,
- *    not painted over the page they moved to. Its outstanding reads are
- *    cancelled too (lib/navigation.ts).
- *
- * 2. RENDERING NEVER WRITES location.hash. Only a deliberate navigation does
- *    (navigate(), the address bar, back/forward). This was the loop: a stale
- *    page finished, wrote its own hash, which fired hashchange, which started
- *    a navigation to a page nobody wanted - eight clicks produced seventy-five
- *    hash changes in the test that found it. Where the address needs
- *    correcting (a redirect, an unknown page), history.replaceState does it
- *    without firing anything. */
+/* Renders a page. Called only by the hashchange listener (bootRouter) and refresh(), never
+ * by a click handler; see navigate() below. Two rules:
+ * 1. A navigation that has been replaced stops. After every await we check this is still
+ * the newest navigation, and its outstanding reads are cancelled (lib/navigation.ts).
+ * 2. Rendering never writes location.hash, which would fire hashchange and start another
+ * navigation. Where the address needs correcting, history.replaceState does it quietly. */
 export async function go(pageId: string, opts: PageOptions = {}): Promise<void> {
-  // An old route is forwarded, not dropped. Falling through to the
-  // dashboard would lose the admin's place without telling them why.
+  // An old route is forwarded, not dropped, so the admin does not lose their place.
   const redirected = REDIRECTS[pageId];
   if (redirected) {
     history.replaceState(null, "", `#${redirected}`);
@@ -123,10 +96,8 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
 
   const token = beginNavigation();
 
-  // A panel still loading from the page being LEFT must not open on top of
-  // the page being arrived at. Only on a real change of page: refresh()
-  // re-renders the same page after an action, and must leave alone whatever
-  // the admin has open on it.
+  // A panel still loading from the page being left must not open on the new page. Only on a
+  // real page change: refresh() re-renders the same page and must leave open panels alone.
   if (id !== appState.activePage) {
     beginPanelIntent();
     closeDrawer();
@@ -139,18 +110,16 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
   const title = document.getElementById("headerTitle");
   if (!content) return;
 
-  // The sidebar and the title change on the click, not when the page
-  // arrives. Feedback that waits for the network reads as a missed click,
-  // and a missed click is what makes people click again.
+  // The sidebar and title change on the click, not when the page arrives, so the click
+  // never looks missed.
   setNavigationChrome(id, title);
 
   content.setAttribute("aria-busy", "true");
   content.innerHTML = skeletonPage();
 
-  /* A page that throws gets an error state with a Retry, never an endless
-     skeleton - and never a content area left marked busy, which would make
-     it unclickable. Most pages already catch their own failures through
-     withErrorState; this is for the ones that do not. */
+  /* A page that throws gets an error state with a Retry, never an endless skeleton or a
+   * content area left busy (unclickable). Most pages catch their own failures through
+   * withErrorState; this is for the rest. */
   let html: string;
   try {
     html = await PAGES[id](opts);
@@ -169,8 +138,7 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
 
   content.removeAttribute("aria-busy");
 
-  // For tests and for anyone debugging a report: which page is actually on
-  // screen, as opposed to which one was last asked for.
+  // For tests and debugging: which page is on screen, not which was last asked for.
   content.dataset["page"] = id;
 
   endNavigation(token);
@@ -203,23 +171,20 @@ function setNavigationChrome(id: PageId, title: HTMLElement | null): void {
   });
 }
 
-/** A deliberate navigation: a click, a button, a link.
- *
- * It only changes the hash. The hashchange listener does the rendering, so
- * there is exactly one path into go() for a user's navigation - two paths is
- * how every click used to render twice.
- *
- * Asking for the page you are already on does nothing. It used to re-render
- * it, and five clicks on the current item produced ten content swaps. */
+/**
+ * A navigation from a click, button or link. It only changes the hash; the hashchange
+ * listener renders, so there is one path into go(). Asking for the current page does nothing.
+ */
 export function navigate(pageId: string): void {
   if (location.hash === `#${pageId}`) return;
   location.hash = pageId;
 }
 
-/** Go to a page AND show its current filters, even if it is the page you are
- *  already on. For the "Needs attention" cards and their like, which set a
- *  filter and then navigate: navigate() alone does nothing on the current
- *  page, so the new filter would be set and never shown. */
+/**
+ * Go to a page and show its current filters, even if it is the current page. For the
+ * "Needs attention" cards, which set a filter then navigate: navigate() alone does nothing
+ * on the current page.
+ */
 export function showPage(pageId: string): void {
   if (location.hash === `#${pageId}`) void refresh();
   else navigate(pageId);
@@ -242,15 +207,13 @@ export function renderSettingsTab(tab: string): void {
   animateIn(body);
   afterRender?.();
 
-  // Two of the three tabs have a panel that needs the network, and a tab
-  // body is a synchronous string. Router-level rather than inside
-  // settingsTabBody so the page stays a pure function of its inputs.
+  // Two of the three tabs have a panel that needs the network, and a tab body is a plain
+  // string. Done here so settingsTabBody stays a pure function of its inputs.
   settingsTabLoader?.(safe);
 }
 
-/* Set by app/interactions.ts at startup. Here rather than imported because
-   router already imports the pages, and the pages import interactions - a
-   direct import would close that loop. */
+/* Set by app/interactions.ts at startup. Not imported, because router imports the pages and
+ * the pages import interactions, which would make a loop. */
 let settingsTabLoader: ((tab: SettingsTab) => void) | null = null;
 
 export function onSettingsTabRendered(fn: (tab: SettingsTab) => void): void {
@@ -271,9 +234,8 @@ export function initNav(): void {
   nav.innerHTML = NAV.map(
     (n) => `<button data-page="${esc(n.id)}"><span class="nav-ico">${n.icon}</span>${esc(n.label)}</button>`,
   ).join("");
-  // One delegated listener on the nav, for every button in it. The nav
-  // element is created fresh with each signed-in shell (app/shell.ts), so
-  // this cannot accumulate across sign-ins.
+  // One delegated listener on the nav for every button in it. The nav is created new with
+  // each signed-in shell (app/shell.ts), so listeners cannot pile up across sign-ins.
   nav.addEventListener("click", (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-page]");
     if (btn?.dataset["page"]) navigate(btn.dataset["page"]);
@@ -282,11 +244,9 @@ export function initNav(): void {
 
 let hashListenerBound = false;
 
-// Idempotent: main.ts's startAppShell() can now run more than once per
-// page life (sign-out unmounts the shell, a later sign-in remounts and
-// re-boots it - see app/shell.ts), but `window` itself is never torn down
-// in between, so a second, unguarded addEventListener here would leave two
-// listeners both calling go() on every future hash change.
+// Safe to call more than once: startAppShell() runs again after sign-out and sign-in (see
+// app/shell.ts), but `window` stays, so without the guard two listeners would call go() on
+// every hash change.
 export function bootRouter(): void {
   const fromHash = (): void => {
     const raw = (location.hash || "#dashboard").replace(/^#/, "") || "dashboard";

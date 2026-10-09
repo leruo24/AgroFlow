@@ -11,20 +11,9 @@ import { attentionQueue, withErrorState, type AttentionCard } from "@/ui/pattern
 import { healthPanelHtml } from "@/app/health";
 import { Icon } from "@/lib/icons";
 
-/* HOME — the queue of what needs a person, then the numbers.
- *
- * WHY THIS CHANGED
- * The dashboard used to open on twelve KPI tiles. Every one of them was a
- * fact and none of them was a task: an admin arriving in the morning could
- * read "3 Active Alerts" and still have no idea what to do first, or where
- * the alerts were. The tiles were also inert - the number told you something
- * was there, and then made you go and find it.
- *
- * So the first thing on the page is now a list of things WAITING FOR A
- * PERSON, each one a button that opens exactly that work. The KPI tiles are
- * still here, below, and every one of them is now clickable and lands on the
- * matching filtered list.
- */
+/* HOME: the queue of what needs a person, then the numbers.
+ * The page opens on a list of things waiting for a person, each a button that opens that
+ * work. The KPI tiles are below it, and each one opens the matching filtered list. */
 export async function dashboardPage(): Promise<string> {
   return withErrorState("Home", renderDashboard);
 }
@@ -44,10 +33,9 @@ async function renderDashboard(): Promise<string> {
     getMqttPoolHealth().catch(() => null),
     getFailedReportCount().catch(() => 0),
   ]);
-  // Item 6c: people waiting for a call, and call-backs that are due.
+  // People waiting for a call, and call-backs that are due.
   const enquiries = await getEnquirySummary().catch(() => null);
-  // Admin polish: dismissed cards leave the queue (and come back when what
-  // they count changes, for the critical ones).
+  // Dismissed cards leave the queue (critical ones come back when what they count changes).
   const dismissals = await getAdminDismissals().catch(() => []);
   const ids = (xs: { id: string | number }[]): string => xs.map((x) => String(x.id)).sort().join(",");
   const enquiriesWaiting = Number(enquiries?.waiting) || 0;
@@ -61,19 +49,17 @@ async function renderDashboard(): Promise<string> {
 
   const newRequests = requests.filter((r) => r.status === "pending");
 
-  // "Offline" here is the monitor service's judgement (hardware.status),
-  // which is the one an admin should act on - a kit quiet long enough to be
-  // worth a phone call, not one that missed a single reading.
+  // "Offline" here is the monitor service's judgement (hardware.status): a kit quiet long
+  // enough to be worth a phone call, not one that missed a single reading.
   const kitsNeedingHelp = hardware.filter(
     (h) => h.status === "Offline" || h.status === "Fault",
   );
 
   const openJobs = maintenance.filter((m) => m.status !== "Completed").slice(0, 5);
 
-  /* The queue. Order is by how much it costs to ignore: a farmer waiting on
-     a request, then a crop at risk, then equipment, then setup gaps, then
-     housekeeping. Cards with a count of zero are not rendered at all - an
-     empty queue should look empty, not like a list of things that are fine. */
+  /* The queue, ordered by the cost of ignoring it: a farmer waiting on a request, a crop at
+   * risk, equipment, setup gaps, then housekeeping. Cards with a count of zero are not shown,
+   * so an empty queue looks empty. */
   const attention: AttentionCard[] = [
     {
       title: "New requests waiting",
@@ -130,8 +116,7 @@ async function renderDashboard(): Promise<string> {
     {
       title: "Zones missing setup",
       count: zonesNeedingSetup.length,
-      // Item 2: advice is never blocked by missing setup any more - it is
-      // only less certain - so this no longer says the engine cannot advise.
+      // Missing setup never blocks advice, it only makes it less certain, so the text says that.
       body: "No planting date, area, flow rate or location - advice is less certain until added.",
       act: "go-zones-setup",
       conditionKey: `zones:${zonesNeedingSetup.length}`,
@@ -151,7 +136,7 @@ async function renderDashboard(): Promise<string> {
     },
     {
       title: "MQTT logins running low",
-      // The card is about the shortage, so the count is how many are LEFT.
+      // The card is about the shortage, so the count is how many are left.
       count: mqttPool?.runningLow ? Math.max(mqttPool.freeCount, 1) : 0,
       body: mqttPool?.runningLow
         ? `Only ${mqttPool.freeCount} free. New kits will fall back to the shared login.`
@@ -174,9 +159,8 @@ async function renderDashboard(): Promise<string> {
     },
   ];
 
-  // Admin polish: a dismissed critical card whose condition has gone (count
-  // zero, or a different set behind it) is closed, so if it happens again
-  // it shows again. Recorded as AgroFlow, never deleted.
+  // A dismissed critical card whose condition has gone (count zero, or a different set behind
+  // it) is closed, so it shows again if it comes back. Recorded as AgroFlow, never deleted.
   const showing = new Map(attention.filter((c) => c.count > 0).map((c) => [c.key ?? c.act, c.conditionKey ?? ""]));
   for (const d of clearedConditions(dismissals, "attention", showing)) {
     void clearDismissalCondition(d.id).catch(() => undefined);

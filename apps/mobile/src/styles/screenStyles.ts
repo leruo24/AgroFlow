@@ -2,11 +2,9 @@ import { StyleSheet } from 'react-native';
 import { Spacing, Type, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
-// Shared vocabulary used by 2+ screens (currently Alerts, History,
-// Irrigation, and partially Home). Anything used by exactly one screen
-// belongs in that screen's own <name>Styles.ts instead - see homeStyles.ts
-// (primaryAction/actionRow) and irrigationStyles.ts (secondaryButton) for
-// styles that used to live here before they turned out to be single-screen.
+// Shared styles used by two or more screens (Alerts, History, Irrigation, and partly Home).
+// Anything used by only one screen goes in that screen's own <name>Styles.ts (see
+// homeStyles.ts and irrigationStyles.ts).
 export function createScreenStyles(colors: AppColors) {
   return StyleSheet.create({
     page: { flex: 1, backgroundColor: colors.background },

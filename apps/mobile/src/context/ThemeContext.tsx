@@ -1,4 +1,6 @@
-//centralises appearance and theme state and provides functions to manage that state. It uses React's context API to make the theme data and functions available throughout the application. The context includes information about the user's theme preference (light, dark, or system default), the resolved theme based on the preference and system settings, and the corresponding color palette. The theme preference is persisted using AsyncStorage, allowing the app to retain user theme settings across sessions.
+// Holds the appearance settings for the whole app: the user's theme choice (light, dark or
+// system), the resolved theme and its colour palette. The choice is saved in AsyncStorage
+// so it survives restarts.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,

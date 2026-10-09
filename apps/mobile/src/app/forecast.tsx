@@ -1,11 +1,8 @@
 // The 7-day Forecast screen. Reached as /forecast, or
 // /forecast?zoneId=123&zoneName=Tunnel%201 for one zone's advice.
-//
-// WHAT THIS SCREEN IS FOR
-// A farmer deciding whether to water tomorrow, or wait for the rain. The
-// weather numbers are the evidence; the one-line advice under each day is the
-// answer, and it is the reason the screen exists. Opened without a zone it is
-// just the weather - which is still useful, and is what Home links to.
+// It helps a farmer decide whether to water tomorrow or wait for rain: the weather is the
+// evidence and the advice line under each day is the answer. Without a zone it shows only
+// the weather, which is what Home links to.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,8 +22,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { createForecastStyles } from '@/styles/forecastStyles';
 import { fetchForecast, type ForecastDay, type ForecastResponse } from '@/services/agroFlowApi';
 
-// "3 Oct" - short enough to sit under the weekday without wrapping on a
-// small phone.
+// "3 Oct": short enough to fit under the weekday on a small phone.
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return '';
@@ -51,9 +47,8 @@ export default function ForecastScreen() {
       setError(null);
       setData(
         await fetchForecast({
-          // The farm is only sent when no zone is named - the server resolves
-          // the farm FROM the zone otherwise, so a farmer cannot pair their
-          // own farm with someone else's zone.
+          // Security: the farm is only sent when no zone is named. Otherwise the server takes the
+          // farm from the zone, so a farmer cannot pair their farm with someone else's zone.
           ...(zoneId ? { zoneId } : farm?.id ? { farmId: farm.id } : {}),
         })
       );
@@ -73,8 +68,7 @@ export default function ForecastScreen() {
   }, [load]);
 
   const renderIcon = (icon: ForecastDay['icon']) => {
-    // Colour is never the only signal - the rain figure is spelled out in
-    // words on its own line beside every icon.
+    // Colour is never the only signal: the rain figure is written out beside every icon.
     if (icon === 'rain') return <CloudRain size={26} color={colors.primaryDark} strokeWidth={1.8} />;
     if (icon === 'cloud') return <Cloud size={26} color={colors.textSecondary} strokeWidth={1.8} />;
     return <Sun size={26} color={colors.warning} strokeWidth={1.8} />;
@@ -106,8 +100,7 @@ export default function ForecastScreen() {
         ) : error ? (
           <Text style={styles.error}>{error}</Text>
         ) : !data || data.days.length === 0 ? (
-          // Says which of "nothing to show" and "something is broken" it is.
-          // An empty screen reads as the second even when it is the first.
+          // Says whether there is nothing to show or something is broken; an empty screen looks broken.
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>
               {data?.message ?? 'Forecast not available right now'}
@@ -170,7 +163,7 @@ export default function ForecastScreen() {
                           : `${day.rainMm} mm rain`}
                     </Text>
 
-                    {/* Only when the engine actually had something to say. */}
+                    {/* Only when the engine had something to say. */}
                     {day.advice && <Text style={styles.advice}>{day.advice}</Text>}
                   </View>
                 </View>

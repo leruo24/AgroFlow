@@ -1,11 +1,7 @@
-//Lets a farmer connect their Telegram account from the profile screen.
-//
-//New farmers are linked on-site: the installer shows a QR code and the farmer
-//scans it. This screen is the path for everyone else - farmers who were
-//already in AgroFlow before the bot existed, and anyone who changed phone or
-//disconnected. They are holding the phone already, so there is no QR code
-//involved: tapping the button opens Telegram with the single-use code
-//already in the link.
+// Lets a farmer connect their Telegram account from the profile screen.
+// New farmers are linked on-site with a QR code; this is for everyone else (existing farmers,
+// a new phone, or after disconnecting). They are holding the phone, so tapping the button
+// opens Telegram with the single-use code already in the link.
 
 import {
   useCallback,
@@ -165,9 +161,8 @@ export function TelegramSection() {
         code.deepLink
       );
 
-      //The link is only redeemed once the farmer actually presses Start
-      //inside Telegram, which happens outside this app. Re-checking when
-      //they come back is what turns this section green.
+      // The link only works once the farmer presses Start in Telegram, outside this app.
+      // Re-checking when they come back is what turns this section green.
       Alert.alert(
         'Finish in Telegram',
         'Press Start in Telegram, then come back here and pull to refresh.'
@@ -237,16 +232,14 @@ export function TelegramSection() {
   async function handleToggleAlerts(
     next: boolean
   ) {
-    // One save at a time (item 0b). Two quick flips sent `false` then `true`
-    // as two DIFFERENT writes, and if they reached the server out of order it
-    // kept the wrong one while the switch showed the other. A ref, not state:
-    // the second flip can arrive before the re-render that would disable it.
+    // One save at a time: two quick flips sent `false` then `true`, and if they arrived out of
+    // order the server kept the wrong one. A ref, not state, because the second flip can arrive
+    // before the re-render that would disable it.
     if (alertsSavingRef.current) return;
     alertsSavingRef.current = true;
     setAlertsSaving(true);
 
-    //Flip immediately so the switch feels responsive, then put it back if
-    //the server disagrees.
+    // Flip straight away so the switch feels responsive, then undo it if the server disagrees.
     setAlertsEnabled(
       next
     );

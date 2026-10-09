@@ -29,16 +29,10 @@ function statusTone(status: ServiceRequestStatus): "good" | "warn" | "neutral" {
   return "neutral";
 }
 
-/* The who/when chain as a timeline.
- *
- * Built from service_request's own columns rather than from the audit log,
- * because this is the CURRENT state of one request - "scheduled by Leruo on
- * Tuesday" - and the audit log is the history of changes to it. Both exist;
- * they answer different questions, and reading the chain off the row is one
- * query instead of one per request.
- *
- * Steps that have not happened yet are still shown, greyed, so the shape of
- * the whole process is visible rather than only the parts already done. */
+/* The who/when chain as a timeline. Built from service_request's own columns, not the
+ * audit log, because this is the current state of one request ("scheduled by Thabo on
+ * Tuesday") while the audit log is the history of changes. Steps that have not happened
+ * yet are shown greyed, so the whole process is visible. */
 export function requestTimeline(r: ServiceRequest): string {
   const step = (
     label: string,
@@ -64,11 +58,10 @@ export function requestTimeline(r: ServiceRequest): string {
   </ol>`;
 }
 
-/* Item 6c: what can be done next, in one place - the row and the side panel
-   both use it. [I'll handle this] lives in the Handled by cell; once it is
-   yours, this offers [Mark complete] and the step that carries the request
-   out: the register-farm wizard for a new farm, Add zones for a new zone
-   (each prefilled from the request, and saving it completes the request). */
+/* What can be done next, used by both the row and the side panel. [I'll handle this] is in
+ * the Handled by cell; once it is yours, this offers [Mark complete] and the step that
+ * carries the request out: the register-farm wizard for a new farm, or Add zones for a new
+ * zone (each prefilled, and saving completes the request). */
 export function requestActions(request: ServiceRequest, myId: string | undefined): string {
   if (request.status === "completed") {
     return `<span class="muted">Completed${request.completedByName ? ` by ${esc(request.completedByName)}` : ""}${
@@ -126,17 +119,16 @@ function requestRow(request: ServiceRequest, myId: string | undefined): string {
   `;
 }
 
-/* Item 6c: two tabs - the farmers' own requests, and enquiries from people
-   who are not on AgroFlow yet. Remembered for the session, not stored. */
+/* Two tabs: the farmers' own requests, and enquiries from people not on AgroFlow yet.
+ * Remembered for the session, not stored. */
 let activeTab: "requests" | "enquiries" = "requests";
 
 export function setRequestsTab(tab: string): void {
   activeTab = tab === "enquiries" ? "enquiries" : "requests";
 }
 
-/* Admin polish, item 2: Open requests first, then Completed, and a filter
-   for either or both. Open is anything not completed (pending or scheduled).
-   Remembered for the session, like the tab. */
+/* Open requests first, then Completed, with a filter for either or both. Open is anything
+ * not completed (pending or scheduled). Remembered for the session, like the tab. */
 export type RequestFilter = "open" | "completed" | "all";
 let requestFilter: RequestFilter = "all";
 
@@ -177,7 +169,7 @@ export async function requestsPage(): Promise<string> {
   try {
     const [requests, enquiries] = await Promise.all([
       api.getServiceRequests(),
-      // Allowed to fail: without migration 0044 there are simply none.
+      // Allowed to fail: without migration 0044 there are none.
       getEnquiries().catch(() => [] as Enquiry[]),
     ]);
     const myId = getAdminProfile()?.id;
@@ -207,8 +199,8 @@ export async function requestsPage(): Promise<string> {
         )}`;
     }
 
-    // Item 5: who is handling each request (from the API; nothing if 0041
-    // is not applied, which is true - nobody can have claimed one).
+    // Who is handling each request (from the API; nothing if 0041 is not applied, which is
+    // correct, since nobody can have claimed one).
     const handling = await getHandling("requests").catch(() => []);
     for (const h of handling) {
       const r = requests.find((x) => String(x.id) === h.id);

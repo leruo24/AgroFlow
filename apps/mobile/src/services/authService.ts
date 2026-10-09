@@ -1,6 +1,5 @@
-//Connects the AgroFlow mobile app to Supabase Authentication.
-//It signs farmers in using their email and password and converts
-//the Supabase user into the AuthUser structure used by the app.
+// Connects the mobile app to Supabase Authentication: signs farmers in with email and
+// password and converts the Supabase user into the app's AuthUser.
 
 import type {
   Session,
@@ -65,8 +64,7 @@ function getMetadataValue(
   return '';
 }
 
-//Converts the Supabase user structure into the
-//AuthUser structure already used throughout AgroFlow.
+// Converts the Supabase user into the AuthUser structure the app uses.
 export function mapSupabaseUser(
   user: User
 ): AuthUser {
@@ -131,8 +129,7 @@ export function mapSupabaseUser(
   };
 }
 
-//Sends the farmer's login details to Supabase.
-//Supabase checks whether the email and password are valid.
+// Sends the farmer's login details to Supabase, which checks them.
 export async function loginUser(
   email: string,
   password: string
@@ -186,8 +183,7 @@ export async function loginUser(
   };
 }
 
-//Updates the signed-in farmer's Supabase
-//authentication information and profile metadata.
+// Updates the signed-in farmer's Supabase auth details and profile metadata.
 export async function updateAuthenticatedUser(
   profile: UpdateProfileInput
 ): Promise<AuthUser> {
@@ -274,8 +270,7 @@ export async function updateAuthenticatedUser(
   );
 }
 
-//Ends the Supabase session and removes the
-//persisted session from the device.
+// Ends the Supabase session and removes the saved session from the device.
 export async function logoutUser() {
   const {
     error,
