@@ -515,7 +515,7 @@ const shadow = () => ({ type: "outer", color: "0F2A36", blur: 8, offset: 2, angl
     "This is where the project stands. In the field, each zone has a working kit that enrols with a one-time code, keeps watering on local rules if it loses its connection, and never runs the pump for more than five minutes in one go. " +
     "The platform handles MQTT, automatic irrigation, FAO-56 advice and Telegram alerts. Farmers get live readings, three irrigation modes, manual start and stop, and reports. Administrators get wizards to register farms and kits, kit status, alerts and exports. " +
     "We also want to be honest about what isn't finished: maintenance jobs and alert assignment only last for the browser session, per-kit uptime isn't measured, and two ideas from our Milestone 3 design — an ESP-NOW gateway and Supabase Realtime — weren't built.\n\n" +
-    "Sources: docs/final-finish-report.md 'Still not done'; docs/release-notes-v2.md 'What is not connected yet'; firmware v1.2–1.4 header; admin exports commit 2ff6594. " +
+    "Sources: docs/reports/final-finish-report.md 'Still not done'; docs/release-notes-v2.md 'What is not connected yet'; firmware v1.2–1.4 header; admin exports commit 2ff6594. " +
     "Not on the slide because it could not be verified here: the report states 650 domain tests pass (dotnet was not available in this environment), and the admin audit log depends on migration 0038 being applied and the dev branch being deployed."
   );
 

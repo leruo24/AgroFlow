@@ -10,7 +10,7 @@ Repository state: branch `dev` at `bb1c0a1` ("merge: final finish before the pre
 | M1 | `Milestone-1_Team-2.docx` | Team roles (Table 14), As-Is activity, early package diagram |
 | M2 | `Milestone2_URS_Team2.docx` (submitted 14 Aug 2026) | Project definition, To-Be activity diagrams, use cases, class, sequence and state diagrams |
 | M3 | `Milestone_3__Team_2.docx` (dated 28 Sep 2026 on its cover) | Latest milestone: business case, technology platform, network/deployment diagram, expanded class diagram, persona, wireframes |
-| REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/final-finish-report.md`, `showcase/presentation/presentation-runbook.md`, `docs/release-notes-v2.md`) |
+| REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/reports/final-finish-report.md`, `showcase/presentation/presentation-runbook.md`, `docs/release-notes-v2.md`) |
 | RUN | Apps run locally on 6 Oct 2026 | See "What was run" below |
 | SHOWCASE | `showcase/` and `showcase/walkthrough-video/` on `dev` (pushed 6 Oct 2026 while this deck was being built) | The team's system-demo video: narration, system audit and captured screens. Used for slide 10. |
 | OLD DECK | Original AgroFlow presentation | **Not supplied.** It could not be audited, and none of its images could be reused. |
@@ -27,7 +27,7 @@ Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the dec
 | Farmer app | `cd apps/mobile && npm ci && EXPO_PUBLIC_*=… npx expo start --web --port 8098` | **Ran** on Expo web; all screens rendered. Env values are the public ones already in `apps/mobile/eas.json`. No `.env` file was created or read. |
 | Live backend / database | `curl https://agroflow-production-998d.up.railway.app/`, `curl https://zcoalyxzvemiumnipufz.supabase.co/auth/v1/health`, `curl https://api.open-meteo.com/…` | **Failed:** `CONNECT tunnel failed, response 403`. This environment's network policy blocks these hosts, so no live data, sign-in, weather or map tiles could be reached. |
 | AgroFlow.Api locally | — | **Not attempted.** The .NET SDK is not installed here, the API refuses to start without secrets (connection string, ApiKey, MQTT password), and the database is unreachable anyway. |
-| Domain tests | — | **Not run** (no .NET SDK). `docs/final-finish-report.md` reports "650 passed". That figure **could not be confirmed here**, so it is not on any slide. |
+| Domain tests | — | **Not run** (no .NET SDK). `docs/reports/final-finish-report.md` reports "650 passed". That figure **could not be confirmed here**, so it is not on any slide. |
 | ESP32 firmware | — | No hardware in this environment. Firmware was read, not run. |
 
 **How the signed-in screens were captured.** Playwright intercepted the blocked network calls and returned a small local fixture. The fixture contains only the farm and zone **configuration** documented in `docs/demo-account.md`: farmer "Sponsor Demo", "AgroFlow Demo Farm", Mafikeng, one zone "Tub 1", tomato, loam. **No sensor readings, irrigation events, weather values or alerts were invented.** That is why the screens show "No reading", "Weather unavailable" and "Map unavailable"; the last two are caused by this sandbox, not by the product. The UI itself (layout, wording, validation, wizard) is the real current code. **Recommendation:** re-capture slides 1, 4, 8 and 10 from the live system on a phone with a kit reporting, using the same file names in `presentation-assets/ui/`.
@@ -125,7 +125,7 @@ Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the dec
 | Live readings and health; three modes; manual start/stop | mobile `zone/[id].tsx`, `irrigation.tsx`; `FarmerEndpoints.cs` |
 | Water-usage reports (PDF) | `Reports/DesignedWaterUsagePdf.cs`; `docs/release-notes-v2.md` |
 | Farm and kit wizards; kit online/offline; alerts and requests; Excel/PDF/CSV exports | admin `app/interactions.ts`; `DeviceStatusMonitorService.cs`; commit `2ff6594` ("exports people can actually open") |
-| **Not yet** list | `docs/final-finish-report.md` "Still not done" items 1–4; `docs/release-notes-v2.md` "What is not connected yet"; ESP-NOW and Realtime: see Contradictions |
+| **Not yet** list | `docs/reports/final-finish-report.md` "Still not done" items 1–4; `docs/release-notes-v2.md` "What is not connected yet"; ESP-NOW and Realtime: see Contradictions |
 
 The admin audit log ("Activity") is built (commit `47cf5b0`), but the final report says it depends on migration 0038 being applied and on Railway deploying `dev`. For that reason it is **not** listed as delivered on this slide; it appears only as a demo step on slide 10.
 
