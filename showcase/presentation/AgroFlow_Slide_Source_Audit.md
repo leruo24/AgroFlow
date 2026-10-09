@@ -10,9 +10,9 @@ Repository state: branch `dev` at `bb1c0a1` ("merge: final finish before the pre
 | M1 | `Milestone-1_Team-2.docx` | Team roles (Table 14), As-Is activity, early package diagram |
 | M2 | `Milestone2_URS_Team2.docx` (submitted 14 Aug 2026) | Project definition, To-Be activity diagrams, use cases, class, sequence and state diagrams |
 | M3 | `Milestone_3__Team_2.docx` (dated 28 Sep 2026 on its cover) | Latest milestone: business case, technology platform, network/deployment diagram, expanded class diagram, persona, wireframes |
-| REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/final-finish-report.md`, `docs/presentation-runbook.md`, `docs/release-notes-v2.md`) |
+| REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/reports/final-finish-report.md`, `showcase/presentation/presentation-runbook.md`, `docs/releases/release-notes-v2.md`) |
 | RUN | Apps run locally on 6 Oct 2026 | See "What was run" below |
-| SHOWCASE | `showcase/` and `walkthrough-video/` on `dev` (pushed 6 Oct 2026 while this deck was being built) | The team's system-demo video: narration, system audit and captured screens. Used for slide 10. |
+| SHOWCASE | `showcase/` and `showcase/walkthrough-video/` on `dev` (pushed 6 Oct 2026 while this deck was being built) | The team's system-demo video: narration, system audit and captured screens. Used for slide 10. |
 | OLD DECK | Original AgroFlow presentation | **Not supplied.** It could not be audited, and none of its images could be reused. |
 
 Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the deck follows the **code**, because the code is what will be demonstrated. Each disagreement is listed under "Contradictions".
@@ -27,10 +27,10 @@ Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the dec
 | Farmer app | `cd apps/mobile && npm ci && EXPO_PUBLIC_*=… npx expo start --web --port 8098` | **Ran** on Expo web; all screens rendered. Env values are the public ones already in `apps/mobile/eas.json`. No `.env` file was created or read. |
 | Live backend / database | `curl https://agroflow-production-998d.up.railway.app/`, `curl https://zcoalyxzvemiumnipufz.supabase.co/auth/v1/health`, `curl https://api.open-meteo.com/…` | **Failed:** `CONNECT tunnel failed, response 403`. This environment's network policy blocks these hosts, so no live data, sign-in, weather or map tiles could be reached. |
 | AgroFlow.Api locally | — | **Not attempted.** The .NET SDK is not installed here, the API refuses to start without secrets (connection string, ApiKey, MQTT password), and the database is unreachable anyway. |
-| Domain tests | — | **Not run** (no .NET SDK). `docs/final-finish-report.md` reports "650 passed". That figure **could not be confirmed here**, so it is not on any slide. |
+| Domain tests | — | **Not run** (no .NET SDK). `docs/reports/final-finish-report.md` reports "650 passed". That figure **could not be confirmed here**, so it is not on any slide. |
 | ESP32 firmware | — | No hardware in this environment. Firmware was read, not run. |
 
-**How the signed-in screens were captured.** Playwright intercepted the blocked network calls and returned a small local fixture. The fixture contains only the farm and zone **configuration** documented in `docs/demo-account.md`: farmer "Sponsor Demo", "AgroFlow Demo Farm", Mafikeng, one zone "Tub 1", tomato, loam. **No sensor readings, irrigation events, weather values or alerts were invented.** That is why the screens show "No reading", "Weather unavailable" and "Map unavailable"; the last two are caused by this sandbox, not by the product. The UI itself (layout, wording, validation, wizard) is the real current code. **Recommendation:** re-capture slides 1, 4, 8 and 10 from the live system on a phone with a kit reporting, using the same file names in `presentation-assets/ui/`.
+**How the signed-in screens were captured.** Playwright intercepted the blocked network calls and returned a small local fixture. The fixture contains only the farm and zone **configuration** documented in `docs/ops/demo-account.md`: farmer "Sponsor Demo", "AgroFlow Demo Farm", Mafikeng, one zone "Tub 1", tomato, loam. **No sensor readings, irrigation events, weather values or alerts were invented.** That is why the screens show "No reading", "Weather unavailable" and "Map unavailable"; the last two are caused by this sandbox, not by the product. The UI itself (layout, wording, validation, wizard) is the real current code. **Recommendation:** re-capture slides 1, 4, 8 and 10 from the live system on a phone with a kit reporting, using the same file names in `presentation-assets/ui/`.
 
 ---
 
@@ -39,7 +39,7 @@ Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the dec
 ### Slide 1: AgroFlow (title)
 | Content / visual | Type | Source | Path / section | Current or historical | Notes |
 |---|---|---|---|---|---|
-| AgroFlow logo | Brand asset | REPO | `assets/brand/agroflow-icon.png` | Current | Same artwork as the app icon (`apps/mobile/assets/images/icon.png`) |
+| AgroFlow logo | Brand asset | REPO | `showcase/assets/brand/agroflow-icon.png` | Current | Same artwork as the app icon (`apps/mobile/assets/images/icon.png`) |
 | Title, subtitle, course, team, year | Text | User brief; M2/M3 covers | — | Current | |
 | Sponsor line "Mafikeng Cisco Edge Centre (MDiHub)" | Text | M2 cover, M3 §1.1 | — | Current | |
 | Two phone screens (zone irrigation control, reports) | Real app screenshot | RUN | `apps/mobile/src/app/zone/[id].tsx`, `src/app/reports.tsx` | Current UI, fixture config | `ui/mobile-zone-manual-run.png`, `ui/mobile-reports.png` |
@@ -86,7 +86,7 @@ Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the dec
 | Supabase: PostgreSQL, Auth, RLS | Shape | REPO | `supabase/migrations/0011_row_level_security.sql`; README "The split that matters" | |
 | Apps read Supabase directly and call the API | Arrows | REPO, RUN | Observed requests: `/rest/v1/profile`, `/rest/v1/ai_recommendation` plus `/api/farmer/dashboard` | |
 | Command path band | Text | REPO | `FarmerEndpoints.CreateManualCommandAsync` → `irrigation_commands` insert → `pg_notify` trigger (0009) → `IrrigationCommandNotifyService` → MQTT → `handleMqttCommand` → `startPumpCycle` → `logIrrigationEvent` | |
-| **Not shown** | — | — | — | GitHub Pages hosting of the admin console (M3 §2.1.4). The workflow file sits at `docs/pages-workflow.yml` and is not active in `.github/workflows`, so the live hosting could not be confirmed. The slide says "web". |
+| **Not shown** | — | — | — | GitHub Pages hosting of the admin console (M3 §2.1.4). The workflow file sits at `docs/ops/pages-workflow.yml` and is not active in `.github/workflows`, so the live hosting could not be confirmed. The slide says "web". |
 
 ### Slide 6: From monitoring to irrigation (To-Be process)
 | Content | Type | Source | Path | Notes |
@@ -123,16 +123,16 @@ Priority applied: M3 → REPO → M2/M1. Where M3 and the code disagree, the dec
 | FAO-56 + Open-Meteo | `Agronomy/`, `WeatherCollectionService.cs` |
 | Telegram alerts | `Services/Notifications/` |
 | Live readings and health; three modes; manual start/stop | mobile `zone/[id].tsx`, `irrigation.tsx`; `FarmerEndpoints.cs` |
-| Water-usage reports (PDF) | `Reports/DesignedWaterUsagePdf.cs`; `docs/release-notes-v2.md` |
+| Water-usage reports (PDF) | `Reports/DesignedWaterUsagePdf.cs`; `docs/releases/release-notes-v2.md` |
 | Farm and kit wizards; kit online/offline; alerts and requests; Excel/PDF/CSV exports | admin `app/interactions.ts`; `DeviceStatusMonitorService.cs`; commit `2ff6594` ("exports people can actually open") |
-| **Not yet** list | `docs/final-finish-report.md` "Still not done" items 1–4; `docs/release-notes-v2.md` "What is not connected yet"; ESP-NOW and Realtime: see Contradictions |
+| **Not yet** list | `docs/reports/final-finish-report.md` "Still not done" items 1–4; `docs/releases/release-notes-v2.md` "What is not connected yet"; ESP-NOW and Realtime: see Contradictions |
 
 The admin audit log ("Activity") is built (commit `47cf5b0`), but the final report says it depends on migration 0038 being applied and on Railway deploying `dev`. For that reason it is **not** listed as delivered on this slide; it appears only as a demo step on slide 10.
 
 ### Slide 10: The journey we will demonstrate
 | Content | Type | Source | Notes |
 |---|---|---|---|
-| Seven steps (farmer opens app → Zone 2 critical → advice → manual run → command to kit → run recorded → admin follows up) | Text | `showcase/narration.md` and `showcase/storyboard.md` (the team's system-demo video, added to `dev` on 6 Oct 2026) | Matches the demo that follows the introduction. The admin-led `docs/presentation-runbook.md` is an older live-demo plan. **If you present the runbook demo live instead, change this slide.** |
+| Seven steps (farmer opens app → Zone 2 critical → advice → manual run → command to kit → run recorded → admin follows up) | Text | `showcase/narration.md` and `showcase/storyboard.md` (the team's system-demo video, added to `dev` on 6 Oct 2026) | Matches the demo that follows the introduction. The admin-led `showcase/presentation/presentation-runbook.md` is an older live-demo plan. **If you present the runbook demo live instead, change this slide.** |
 | Validation: 90 min → "Enter a duration between 1 and 60 minutes." → 5 min | Text | `apps/mobile/src/app/zone/[id].tsx` `handleStartManualRun`; demo narration 2:14 | The message is quoted exactly from the code. Five minutes fits the firmware's 5-minute cap. |
 | Three phone screens + admin Kits | **Real app screenshots with illustrative demo data** | `showcase/assets/screens/m-zone2.png`, `m-zone2-sent.png`, `m-history.png`, `a-kits.png` → copied to `ui/demo-*.png` | Captured by the team's showcase work from the unmodified apps, answering with labelled demo data (`showcase/capture/demo-data.mjs`, every farm marked "(demo)"). `showcase/system-audit.md` records that the team approved this approach. **The slide says so on screen:** "real app, illustrative demo data". The values shown (e.g. 19% moisture) are **not** measurements. |
 | "Now, let's see AgroFlow in action." | Text | Brief | |

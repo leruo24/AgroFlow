@@ -1,4 +1,4 @@
-import type { Recommendation, ScenarioId } from "../data/scenarios";
+import type { ScenarioId } from "../data/scenarios";
 
 export interface PlanDay {
   day: string;
@@ -77,13 +77,4 @@ export function rainScenarioUpdatedPlan(): PlanDay[] {
     { day: DAYS[5], action: "Monitor", tone: "monitor" },
     { day: DAYS[6], action: "Tentative", tone: "monitor" },
   ];
-}
-
-export function recommendationLabel(value: Recommendation): string {
-  return {
-    WATER_TODAY: "WATER TODAY",
-    WAIT_FOR_RAIN: "WAIT FOR RAIN",
-    CHECK_FIELD: "CHECK THE FIELD",
-    MONITOR: "MONITOR",
-  }[value];
 }

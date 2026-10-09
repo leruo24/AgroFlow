@@ -379,11 +379,6 @@ export async function getReportZones(farmId: number): Promise<ReportZone[]> {
   return (await reportFetch(`/api/farmer/reports/zones?farmId=${farmId}`)).json() as Promise<ReportZone[]>;
 }
 
-/* Fetches a report as JSON (for on-screen viewing). */
-export async function getReportJson<T = unknown>(path: string): Promise<T> {
-  return (await reportFetch(`/api/farmer/reports/${path}`)).json() as Promise<T>;
-}
-
 /* Downloads a report PDF. A plain link cannot be used because the endpoint
    needs the login token in a header, so the file is fetched as a blob and
    saved through a temporary link. */
@@ -456,9 +451,6 @@ export type PlatformConfigGroup = { title: string; setIn: string; values: Platfo
 /** The thresholds the running services actually use, read from the same
     configuration they read. Read-only: these are environment variables on the
     deployment, which is the right place for them. */
-export function getPlatformConfig(): Promise<{ groups: PlatformConfigGroup[] }> {
-  return authorizedJson<{ groups: PlatformConfigGroup[] }>("/api/admin/platform-config", "GET");
-}
 
 /** The signed-in admin's own name and phone. The endpoint lives under
     /api/farmer because that is where it was written, but it gates on the
@@ -1105,11 +1097,3 @@ export function getEntityTimeline(entityType: string, entityId: string): Promise
 
 /** Who is dealing with a request. Independent of status: somebody picks a
     request up before it is scheduled. */
-export function assignRequest(
-  requestId: number,
-  assignedToProfileId: string | null,
-): Promise<{ requestId: number; assignedTo: string | null; message: string }> {
-  return authorizedJson(`/api/admin/requests/${requestId}/assign`, "PUT", {
-    assignedToProfileId,
-  });
-}

@@ -8,7 +8,7 @@ using Xunit;
 namespace AgroFlow.Domain.Tests;
 
 // Part 2: the rule book, table-driven over every crop × soil × stage - the
-// combinations docs/rule-book.md's "Should I water today?" table stands for
+// combinations docs/engine/rule-book.md's "Should I water today?" table stands for
 // ("any soil, any stage") - at the boundaries: exactly at RAW, rain exactly
 // equal to the need. ETo 5 mm/day, a 1.5 m² zone on 1.5 L/min.
 public class RuleBookMatrixTests

@@ -27,7 +27,7 @@ behaviour must change gets a new route beside it.
 |---|---|
 | `docs/Fao56.pdf` | yes (11.3 MB) |
 | `backend/AgroFlow.Domain/Agronomy/fao56-crop-knowledge.json` | yes |
-| `assets/brand/agroflow-icon.png` | yes |
+| `showcase/assets/brand/agroflow-icon.png` | yes |
 | Report templates (`agroflow-report-template.pdf`, `agroflow-data-template.xlsx`) | in `Downloads`, already implemented in `backend/AgroFlow.Api/Reports/` |
 | Firmware `hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino` | yes — **v1.4.0** (`FIRMWARE_VERSION = "1.4.0"`) |
 

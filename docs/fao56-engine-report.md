@@ -16,7 +16,7 @@ dev                            (Phase A: three merges, then the stack below merg
                                 c7baf7d  feat(mobile): raindrop helper and soil icons
 ```
 
-See `merge-report.md` for the final `dev` hash and what was pushed.
+See `docs/reports/merge-report.md` for the final `dev` hash and what was pushed.
 
 ---
 
@@ -44,7 +44,7 @@ Separately, **Luba's `service_request` crop CHECK was left alone**, for a second
 
 ### 3. No live SELECT could be run
 
-The Supabase connection string lives in a gitignored user-secrets file. §0 says never to touch credential or secret files, and the sandbox blocked reading it as well. Every live-data item in Phase B — seeded row counts, live `crop_type` values, live column lists — is therefore answered **from the migrations and the code**, which give the schema authoritatively, with the exact SQL for you to run yourself. The queries are listed in `merge-report.md` §6 and §8.
+The Supabase connection string lives in a gitignored user-secrets file. §0 says never to touch credential or secret files, and the sandbox blocked reading it as well. Every live-data item in Phase B — seeded row counts, live `crop_type` values, live column lists — is therefore answered **from the migrations and the code**, which give the schema authoritatively, with the exact SQL for you to run yourself. The queries are listed in `docs/reports/merge-report.md` §6 and §8.
 
 **Migration 0027 has since been applied to live by Leruo.** A read-only verification script, to confirm the applied schema matches the code, is at the end of this report under **Verify the applied migration**.
 
@@ -501,8 +501,8 @@ Disease risk, yield prediction, and best time of day to water — as instructed.
 
 ## What Leruo must do
 
-1. **Review the merged local `dev`, then push it.** Also push your own unpushed `7985f85` (the OpenStreetMap commit) — see `merge-report.md`. Close PR #1 on `fix/expo-cors` once `dev` is up.
-2. **Run the live SELECTs** listed in `merge-report.md` §6 and §8 — seeded `estimated_litres` counts, `select distinct crop_type from public.zone`, and `select crop_type, count(*) from service_request group by 1`. I could not run them without touching the secrets file.
+1. **Review the merged local `dev`, then push it.** Also push your own unpushed `7985f85` (the OpenStreetMap commit) — see `docs/reports/merge-report.md`. Close PR #1 on `fix/expo-cors` once `dev` is up.
+2. **Run the live SELECTs** listed in `docs/reports/merge-report.md` §6 and §8 — seeded `estimated_litres` counts, `select distinct crop_type from public.zone`, and `select crop_type, count(*) from service_request group by 1`. I could not run them without touching the secrets file.
 3. **Decide the crop-list question** (§2 at the top of this report): keep eight crops, or narrow to six. If narrowing, the `service_request` CHECK statement is written out as a comment at the end of migration 0027.
 4. **Decide the maize/potato Table 11 divergence** between `fao56-crop-knowledge.json` and `Fao56EngineReference.cs`.
 5. **Migration `0027_fao56_engine.sql` is applied.** ✅ Run the read-only verification at the end of this report to confirm the applied schema matches the code.

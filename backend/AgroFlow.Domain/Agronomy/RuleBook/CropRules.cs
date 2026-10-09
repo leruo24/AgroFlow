@@ -123,7 +123,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         /// of maturity" (p. 96), and full cover "for many crops occurs at the
         /// initiation of flowering" (p. 95). Farmers see it as Peak growth.
         /// The crop-by-crop ranking of sensitive stages is FAO Paper 33, not
-        /// FAO-56 - see "Needs another source" in docs/rule-book.md.
+        /// FAO-56 - see "Needs another source" in docs/engine/rule-book.md.
         /// </remarks>
         public static bool SensitiveStage(SeasonStage stage)
         {

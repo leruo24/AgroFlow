@@ -242,7 +242,7 @@ twice links once.
 - **9b** Migration 0031 narrows `zone_water_balance_all_admin` from `FOR ALL` to
   `FOR SELECT`.
 - **9c** **Already done on `dev`** for the card label (`analytics.ts:158`), as
-  `docs/merge-report.md` records — verified and left alone. **Three further instances of the
+  `docs/reports/merge-report.md` records — verified and left alone. **Three further instances of the
   same unqualified claim were still in that file** and are now qualified: the regional
   comparison, the per-farm panel and the monthly trend. Same reason as the original fix:
   there is no flow meter anywhere in AgroFlow, so every litre figure is pump runtime ×

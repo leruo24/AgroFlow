@@ -71,7 +71,7 @@ public class ApiContractTests : IClassFixture<ApiHost>
     [Fact]
     public void Every_baseline_route_still_exists()
     {
-        var baseline = File.ReadAllText(Path.Combine(RepoRoot(), "docs", "actionable", "baseline.md"));
+        var baseline = File.ReadAllText(Path.Combine(RepoRoot(), "docs", "reports", "actionable", "baseline.md"));
         var block = baseline.Split("## API routes")[1].Split("```")[1];
         var expected = block.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(l => Regex.Match(l, @"^(GET|POST|PUT|DELETE|PATCH)\s+(\S+)$"))
@@ -193,7 +193,7 @@ public class ApiContractTests : IClassFixture<ApiHost>
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "docs", "actionable"))) dir = dir.Parent;
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "docs", "reports", "actionable"))) dir = dir.Parent;
         return dir!.FullName;
     }
 }

@@ -55,7 +55,7 @@ Data is in `capture/demo-data.mjs` and is chosen to obey the real backend rules.
 | Admin Activity (audit log) | Yes (needs migration 0038 applied) | `0037_admin_audit_log.sql`, `pages/analytics.ts activityPage` | Activity | Accountability |
 | Reports (designed PDF/XLSX) | Yes | `backend/AgroFlow.Api/Reports/*`, mobile `app/reports.tsx` | Admin live reports (v2) | — |
 | Responsive admin | Yes (5 breakpoints) | `apps/web/admin/src/styles/main.css` | Optional narrow view | — |
-| Automated tests | Yes — 650 domain tests per `docs/final-finish-report.md` | `backend/AgroFlow.Domain.Tests` (29 files) | Not shown (code walkthrough) | — |
+| Automated tests | Yes — 650 domain tests per `docs/reports/final-finish-report.md` | `backend/AgroFlow.Domain.Tests` (29 files) | Not shown (code walkthrough) | — |
 
 ## Not shown, and why
 
@@ -107,7 +107,7 @@ admin Reports "Platform Availability" is hard-coded 0 and the growth charts are 
 
 Branch `dev` at `54387ad` (fast-forwarded from `origin/dev`). The v2 notes above describe the
 Oct 6 code; the features listed as "not found" there were all built since (actionable-advice
-brief, `docs/actionable/final-report.md`) and are now shown.
+brief, `docs/reports/actionable/final-report.md`) and are now shown.
 
 ## Run status (v3)
 
@@ -143,7 +143,7 @@ brief, `docs/actionable/final-report.md`) and are now shown.
 |---|---|---|
 | Realistic Three.js 3D field controller | No `three` dependency or WebGL code on any branch | Labelled 2D illustration of the real components (scene 3) |
 | "Experience AgroFlow" interactive 3D demo | Not on any branch | Skipped; the sped-up irrigation visualisation in scene 9 is labelled as such |
-| Photos/renders of the kit | None exist (`presentation/presentation-assets/hardware/README.md`) | Illustration |
+| Photos/renders of the kit | None exist (`showcase/presentation/presentation-assets/hardware/README.md`) | Illustration |
 | IRRIGATE / ADJUST / POSTPONE / SKIP buttons | Not in the app | The real controls: I watered (any amount), soil feel, start a run, dismiss with a note |
 | "IRRIGATION PLAN UPDATED" notification | No such alert | Plan change shown on the real week-ahead screen + visualised balance |
 | "CHECK THE FIELD: sensor wetter than estimate" message | No such rule (a calibrated reading at the wet point resets Dr; stuck/drift/offline checks exist) | Scene 12 shows the real checks and the farmer's own soil check |

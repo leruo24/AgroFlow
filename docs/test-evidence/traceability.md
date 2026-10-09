@@ -8,7 +8,7 @@ Each major feature, and the tests that prove it. Backend tests are classes in
 |---|---|---|---|
 | FAO-56 engine (ETo, Kc, TAW/RAW, Ks, water balance) | `Fao56EngineVerificationTests` (Examples 14, 18, 28, 36, 37), `ReferenceEvapotranspirationTests`, `Fao56EngineDataRulesTests`, `GrowthStageCalculatorTests` | | |
 | Soil types | `SoilClassVerificationTests`, `RuleBookTests` (SoilRules), `RuleBookMatrixTests` (sand < loam < clay, every crop and stage) | `setup.spec.ts` (soil cards) | `screens.test.tsx` (Finish setup: soil step) |
-| **Rule book** | `RuleBookTests`, `RuleBookMatrixTests` (every crop × soil × stage at RAW, rain = need, ratio 1.2/0.8; every RuleBook method called by a test), `RuleBookDocument` (docs/rule-book.md) | | |
+| **Rule book** | `RuleBookTests`, `RuleBookMatrixTests` (every crop × soil × stage at RAW, rain = need, ratio 1.2/0.8; every RuleBook method called by a test), `RuleBookDocument` (docs/engine/rule-book.md) | | |
 | **Actionable insights** | `IrrigationAdvisorTests`, `ExplanationTests` (every insight type), `ManualLoggingTests` (TodayRules), `AdviceNeverBlockedTests` | `setup.spec.ts` (farm drawer: today's action) | `todayCard.test.tsx` |
 | **"Why am I seeing this?"** | `ExplanationTests`, `TelegramWhyTests`, `ReportWhyTests` | `why.spec.ts` | `whySheet.test.tsx` |
 | **Confidence and graceful degradation** | `AdviceNeverBlockedTests`, `ManualLoggingTests` (manual check named, never High), `EdgeCaseTests` (unknown crop, any planting date, sensor limits), `DependencyFailureTests` | `robustness.spec.ts` (every page empty / failing) | `todayCard.test.tsx`, `screens.test.tsx` |

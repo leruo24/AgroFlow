@@ -4,7 +4,7 @@ Part 1 (items 0b → 6c) is merged into `dev` (c16bfaf). Part 2 (the full test
 pass) is on `test/full-proof`, merged into `dev` with `--no-ff` (the merge commit following bf4bbad on `dev`). The
 detailed per-item record - what was wrong, what changed, tests, decisions -
 is [progress.md](progress.md); the plan with every acceptance criterion is
-[plan.md](plan.md). Evidence for Part 2 is [docs/test-evidence/](../test-evidence/README.md).
+[plan.md](plan.md). Evidence for Part 2 is [docs/test-evidence/](../../test-evidence/README.md).
 
 ## 1. Per item
 
@@ -13,7 +13,7 @@ is [progress.md](progress.md); the plan with every acceptance criterion is
 | Pre-flight | done | 116f773 | Clean tree on `dev`, branch cut, baseline recorded (650 tests, 73 routes, firmware v1.4.0 and mobile contracts) in `baseline.md`. |
 | 0b - one action per tap | done | 43a9ce0 | Panel intents, single-flight writes and a navigation lock; rapid-click Playwright and jest tests. |
 | 2 - advice never blocked | done | 68ce29d | Engine advises with only crop + weather, labelled Medium/Low with the one next step; High only with full setup and a fresh calibrated reading. `AdviceNeverBlockedTests`. |
-| 2b - the rule book | done | 6888586 | Every rule in `RuleBook/` with an FAO-56 page or a DATA RULE; `docs/rule-book.md` generated from code; `RuleBookTests`. |
+| 2b - the rule book | done | 6888586 | Every rule in `RuleBook/` with an FAO-56 page or a DATA RULE; `docs/engine/rule-book.md` generated from code; `RuleBookTests`. |
 | 2c - "Why am I seeing this?" | done | 70a1c31, d3040c3, 86ad320, 41d351e, 4342ef4 | Explanations for every insight, alert, KPI and report line; Telegram Why button; admin and mobile Why sheets; no jargon outside the technical line (scanned). |
 | 3 - action reports | done | 154025b | One action-led report for all three types; real period wording; weather comparison only with local sensor data; samples in `docs/sample-reports/`. |
 | 4 - Reports page and automatic reports | done | 74efb2d | Daily / weekly on a chosen day / monthly, per zone, recipients, test send, one retry then an admin alert. |
@@ -22,7 +22,7 @@ is [progress.md](progress.md); the plan with every acceptance criterion is
 | 6b - recommended settings; changing the crop | done | f079cde | Card numbers equal the RuleBook calculation (tested for potato/loam/0.2 m²/1.5 L/min/ETo 5); Use these settings = Reset to recommended; crop change recorded and denied on another farmer's zone (403); past reports keep the old crop; 0043 limits direct farmer zone edits. |
 | 6c - requests and enquiries | done | b8cf3a2, 6c4982b, 2d7a988, 77e392a | I'll handle this → Mark complete (note); wizards prefilled from a request complete it; public form with server checks, per-IP limit and honeypot; Telegram notice; Enquiries tab with outcomes, reasons, call-backs on Home, onboarding link, anonymise; Enquiries & sales follow-up report (counts tested against hand-worked data). |
 | Land Part 1 | done | c16bfaf | `--no-ff` merge into `dev`, all checks green on the merged tree, pushed. |
-| Part 2 - full test pass | done | 791215c … bf4bbad | Rule book table-driven over every crop × soil × stage; API contract and permissions on the real route table; adversarial sweep; admin robustness and coherence; mobile screens; firmware contract. **Ten bugs found and fixed** ([bugs-found.md](../test-evidence/bugs-found.md)). |
+| Part 2 - full test pass | done | 791215c … bf4bbad | Rule book table-driven over every crop × soil × stage; API contract and permissions on the real route table; adversarial sweep; admin robustness and coherence; mobile screens; firmware contract. **Ten bugs found and fixed** ([bugs-found.md](../../test-evidence/bugs-found.md)). |
 
 ## 2. Migrations to apply, in order
 
@@ -30,7 +30,7 @@ None has been applied (the brief forbids touching the live database). All are
 additive and safe to re-run. From the repository root:
 
 ```powershell
-.\scripts\apply-migrations.ps1 -From 39
+.\supabase\scripts\apply-migrations.ps1 -From 39
 ```
 
 | # | File | What it adds |
@@ -44,7 +44,7 @@ additive and safe to re-run. From the repository root:
 
 Until each is applied, the features that need it answer "needs migration
 00xx" (or keep working without it, read through `to_jsonb`); nothing breaks.
-`docs/verify-migrations.sql` and the startup schema check (and Health) report
+`docs/ops/verify-migrations.sql` and the startup schema check (and Health) report
 which are missing.
 
 ## 3. New configuration names
@@ -74,7 +74,7 @@ The firmware needs **no reflash**: the contract review found no mismatch
 ## 5. Rule book - "Needs another source"
 
 What FAO-56 cannot answer, kept out of the app until a source is found
-(full table in [docs/rule-book.md](../rule-book.md)):
+(full table in [docs/engine/rule-book.md](../../engine/rule-book.md)):
 
 - How slowly clay should be watered to avoid run-off (infiltration rates).
 - Which stage of each crop is most sensitive, and the yield lost (FAO Papers 33 / 66).
@@ -90,12 +90,12 @@ What FAO-56 cannot answer, kept out of the app until a source is found
 ## 6. Test evidence
 
 - Final runs: backend **1201/1201**, admin **76/76**, mobile **59/59**; admin and mobile typecheck and build clean.
-- [docs/test-evidence/README.md](../test-evidence/README.md) - summary, adversarial sweep, FAO-56 examples, manual test log, known limitations
-- [traceability.md](../test-evidence/traceability.md) - every feature → its tests
-- [bugs-found.md](../test-evidence/bugs-found.md) - ten bugs, root cause, fix commit, guarding test
-- [coherence.md](../test-evidence/coherence.md) - admin coherence review
+- [docs/test-evidence/README.md](../../test-evidence/README.md) - summary, adversarial sweep, FAO-56 examples, manual test log, known limitations
+- [traceability.md](../../test-evidence/traceability.md) - every feature → its tests
+- [bugs-found.md](../../test-evidence/bugs-found.md) - ten bugs, root cause, fix commit, guarding test
+- [coherence.md](../../test-evidence/coherence.md) - admin coherence review
 - `backend.trx`, `admin-playwright/` (HTML report), `admin-playwright.txt`, `mobile-jest.txt`, `admin-typecheck-build.txt`, `mobile-checks.txt`, `api-routes.md`, `fao56-worked-examples.txt`
-- Sample reports: [docs/sample-reports/](../sample-reports/)
+- Sample reports: [docs/sample-reports/](../../sample-reports/)
 
 ## 7. Honest notes
 

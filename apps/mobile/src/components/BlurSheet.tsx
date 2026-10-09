@@ -11,7 +11,6 @@
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  ChevronRight,
   X,
 } from 'lucide-react-native';
 
@@ -115,46 +114,6 @@ export function BlurSheet({
         </View>
       </View>
     </Modal>
-  );
-}
-
-// A ready-made row for BlurSheet content, matching the list pattern already
-// established on the home screen and propagated across the app: icon,
-// label, chevron, hairline divider.
-export function BlurSheetRow({
-  label,
-  onPress,
-  selected,
-  last,
-}: {
-  label: string;
-  onPress: () => void;
-  selected?: boolean;
-  last?: boolean;
-}) {
-  const {
-    colors,
-  } = useTheme();
-
-  const styles = createStyles(colors);
-
-  return (
-    <TouchableOpacity
-      style={[styles.row, last && styles.rowLast]}
-      onPress={onPress}
-      activeOpacity={0.6}
-    >
-      <Text
-        style={[
-          styles.rowLabel,
-          selected && { color: colors.primary, fontWeight: '600' },
-        ]}
-      >
-        {label}
-      </Text>
-
-      <ChevronRight size={18} color={colors.textMuted} strokeWidth={1.8} />
-    </TouchableOpacity>
   );
 }
 
