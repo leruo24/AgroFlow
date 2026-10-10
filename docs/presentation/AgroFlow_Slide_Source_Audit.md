@@ -3,7 +3,7 @@
 Deck: `AgroFlow_Showcase_Intro_2026.pptx` · Audit date: 6 October 2026
 Repository state: branch `dev` at `bb1c0a1` ("merge: final finish before the presentation")
 
-> The `showcase/` paths cited below (video narration, captured screens, demo data) were removed from `dev` on 10 Oct 2026. They are kept in the tag `archive/pre-tidy-2026-10-10` and on the `feature/showcase-v4` branch.
+> Some sources cited below were removed from `dev` on 10 Oct 2026: the `showcase/` video files, `docs/reports/` and `docs/ORIENTATION.md`. They are kept in the tag `archive/pre-tidy-2026-10-10` (the video work also on `feature/showcase-v4`).
 
 ## Sources examined
 

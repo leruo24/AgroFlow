@@ -75,6 +75,5 @@ that needs the service role.
 
 - What AgroFlow 2.0 does today: [docs/releases/release-notes-v2.md](docs/releases/release-notes-v2.md)
 - How the irrigation advice is worked out: [docs/fao56-engine-report.md](docs/fao56-engine-report.md), [docs/engine/rule-book.md](docs/engine/rule-book.md), [docs/engine/fao56-engine-audit.md](docs/engine/fao56-engine-audit.md)
-- Coming from an older branch: [docs/ORIENTATION.md](docs/ORIENTATION.md) (the RLS and schema-truth notes still apply; use this README for the current layout)
 - Demo day: [docs/presentation/presentation-runbook.md](docs/presentation/presentation-runbook.md), [docs/ops/demo-account.md](docs/ops/demo-account.md)
-- This layout and what is still open: [docs/repo-cleanup-plan.md](docs/repo-cleanup-plan.md)
+- Older reports, the September orientation notes and the showcase video project: tag `archive/pre-tidy-2026-10-10`
