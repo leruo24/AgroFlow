@@ -1,0 +1,62 @@
+// Throwaway harness (not committed): runs AgroFlow's real FAO-56 engine, insight builder,
+// TodayRules and Explanations on the v4 demo inputs, and prints JSON for the capture fixtures.
+using System.Globalization;
+using System.Text.Json;
+using AgroFlow.Business;
+using AgroFlow.Business.Agronomy;
+using AgroFlow.Business.Agronomy.RuleBook;
+
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+var today = DateOnly.Parse(args.Length > 0 ? args[0] : "2026-10-10");
+string scenario = args.Length > 1 ? args[1] : "A";
+var nowUtc = DateTime.SpecifyKind(today.ToDateTime(new TimeOnly(5, 0)), DateTimeKind.Utc);
+
+ZoneEngineInput Zone(long id, string name, int plantedDaysAgo, double? flow, double lastIrrigMm, int lastIrrigDaysAgo, double raw)
+{
+    var z = new ZoneEngineInput {
+        ZoneId = id, ZoneName = name, CropType = "tomato", PlantingDate = today.AddDays(-plantedDaysAgo), SoilType = "loam",
+        AreaM2 = 20, FlowRateLpm = scenario == "S" ? null : flow, CalibrationWet = scenario.StartsWith("S") ? null : 1200, CalibrationDry = scenario.StartsWith("S") ? null : 3000,
+        FarmLatitudeDegrees = -25.85, FarmElevationM = 1270, Today = today, NowUtc = nowUtc,
+    };
+    for (var i = 14; i >= 1; i--)
+        z.Weather.Add(new ZoneWeatherDay { Date = today.AddDays(-i), TMinC = 15, TMaxC = 31, RainMm = 0, RhMinPct = 20, RhMaxPct = 55, WindMs = 3, WindHeightM = 10 });
+    // today + 7 forecast days
+    for (var i = 0; i <= 7; i++)
+    {
+        double rain = 0; double tmax = 31, rhmin = 20, rhmax = 55;
+        if (scenario == "B" && i == 1) { rain = 24; tmax = 22; rhmin = 70; rhmax = 98; }
+        if (scenario == "B" && i == 2) { rain = 6; tmax = 24; rhmin = 55; rhmax = 92; }
+        if (scenario == "C4" && i == 0) { rain = 4; tmax = 28; rhmin = 35; rhmax = 85; }
+        if (scenario == "C" && i == 0) { rain = 12; tmax = 26; rhmin = 45; rhmax = 90; }
+        z.Weather.Add(new ZoneWeatherDay { Date = today.AddDays(i), TMinC = 15, TMaxC = tmax, RainMm = rain, RhMinPct = rhmin, RhMaxPct = rhmax, WindMs = 3, WindHeightM = 10, IsForecast = i > 0 || scenario != "A" });
+    }
+    z.IrrigationMmByDay[today.AddDays(-lastIrrigDaysAgo)] = lastIrrigMm;
+    for (var h = 30; h >= 1; h--)
+        z.Readings.Add(new ZoneMoistureReading { RecordedAtUtc = nowUtc.AddHours(-h), RawValue = raw - h * 1.5 });
+    z.Readings.Add(new ZoneMoistureReading { RecordedAtUtc = nowUtc.AddMinutes(-2), RawValue = raw });
+    return z;
+}
+
+var zones = new[] {
+    Zone(21, "Zone 1", 62, 15, 30, 4, 2300),
+    Zone(22, "Zone 2", 34, 15, 25, 1, 2000),
+};
+var outList = new List<object>();
+foreach (var input in zones)
+{
+    var r = Fao56Engine.Run(input);
+    var insights = ZoneInsightBuilder.Build(input, r, new ZoneFaultSignals());
+    var t = TodayRules.For(r, insights);
+    outList.Add(new {
+        zone = input.ZoneName, primary = r.PrimaryAction.ToString(), today = t.Text, kind = t.Kind,
+        why = t.Why, confidence = r.Confidence.Reason, confidenceLevel = r.Confidence.Key, confidenceWhy = Explanations.Confidence(r),
+        nextStep = r.NextStep?.Ask,
+        eto = r.EtoTodayMm, kc = r.KcToday, etc = r.EtcTodayMm, taw = r.TawMm, raw = r.RawMm, dr = r.DepletionMm, p = r.AdjustedP,
+        litres = r.RecommendedLitres, minutes = r.RecommendedMinutes, depth = r.RecommendedDepthMm, rel = r.RelativeMoisturePercent,
+        stage = r.Stage?.ToString(), day = r.DayOfSeason, total = r.Crop?.TotalDays, next = r.NextWateringDate?.ToString("yyyy-MM-dd"),
+        postRain = r.ProjectedPostRainDepletionMm, modifier = r.SensorModifier,
+        insights = insights.Select(i => new { i.InsightType, i.Severity, i.Message, i.Explanation }),
+        outlook = r.Outlook.Select(o => new { date = o.Date.ToString("yyyy-MM-dd"), action = o.Action.ToString(), o.Advice, o.Litres, o.RuntimeSeconds, o.ForecastRainMm, o.ProjectedDepletionMm, o.RawMm, o.Tentative, o.Confidence }).ToList(),
+    });
+}
+Console.WriteLine(JsonSerializer.Serialize(outList, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));

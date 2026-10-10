@@ -1,0 +1,97 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c06-root { position: absolute; inset: 0; }
+
+  #c06-hw { position: absolute; left: 820px; top: 110px; width: 1004px; height: 860px; border-radius: 18px; overflow: hidden; border: 1px solid #c9d3cb; box-shadow: 0 40px 90px rgba(24,77,53,.22); }
+  #c06-hw img { position: absolute; left: 0; bottom: 0; width: 1004px; height: 1138px; object-fit: cover; transform-origin: 50% 100%; }
+  #c06-list { position: absolute; left: 96px; top: 300px; width: 660px; }
+  .c06-l { margin-bottom: 16px; padding: 18px 22px; font-weight: 700; font-size: 26px; color: #253126; }
+  .c06-l small { display: block; margin-top: 4px; font-weight: 500; font-size: 18px; color: #637064; }
+  #c06-b, #c06-c { position: absolute; inset: 0; }
+  .wm { position: absolute; inset: 0; background: #f4f6f4; font-family: "Inter", sans-serif; padding: 70px 22px 0; }
+  .wm h3 { font-weight: 700; font-size: 22px; color: #1b1f1c; }
+  .wm .sub { margin-top: 4px; font-size: 14px; color: #637064; }
+  .wm label { display: block; margin-top: 18px; font-weight: 600; font-size: 14px; color: #253126; }
+  .wm .in { margin-top: 6px; padding: 12px; border: 1px solid #c9d3cb; border-radius: 8px; background: #fff; font-size: 16px; color: #1b1f1c; }
+  .wm .btn { margin-top: 24px; padding: 13px; border-radius: 8px; background: #168f99; color: #fff; text-align: center; font-weight: 700; font-size: 16px; }
+  #c06-flow { position: absolute; left: 96px; top: 330px; width: 1000px; }
+  .c06-f { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; font-weight: 600; font-size: 27px; color: #253126; }
+  .c06-f b { width: 40px; height: 40px; border-radius: 50%; background: #184d35; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; flex: none; }
+  #c06-ok { position: absolute; left: 96px; top: 760px; }
+
+</style>
+<div id="c06-root" data-composition-id="c06" data-width="1920" data-height="1080">
+  <div id="c06-in" class="layer">
+
+    <div id="c06-a" class="layer">
+      <div class="cap" id="c06-cap"><div class="k">The field kit</div><div class="t">What goes in the field.</div></div>
+      <div id="c06-list">
+        <div class="card c06-l" id="c06-l1">ESP32 board<small>reads the sensors, switches the pump</small></div>
+        <div class="card c06-l" id="c06-l2">Soil Moisture Sensor<small>how wet the soil is</small></div>
+        <div class="card c06-l" id="c06-l3">Temperature &amp; humidity sensor<small>conditions at the zone</small></div>
+        <div class="card c06-l" id="c06-l4">Relay for the pump<small>on and off, on command</small></div>
+      </div>
+      <div id="c06-hw"><img id="c06-h0" src="capture/raw/web-hw-closed.png" alt="" /><img id="c06-h1" src="capture/raw/web-hw-open.png" alt="" /></div>
+    </div>
+    <div id="c06-b" class="layer">
+      <div id="c06-br" class="browser" style="left:200px;top:120px"><div class="bbar"><i></i><i></i><i></i><b>AgroFlow admin console · Kits › Register a kit</b></div><div class="bscreen"><div class="bcam">
+<img id="c06-i0" src="capture/raw/a-kit-wizard-1.png" alt="" />
+<img id="c06-i1" src="capture/raw/a-kit-wizard-3.png" alt="" />
+<img id="c06-i2" src="capture/raw/a-kit-wizard-5.png" alt="" />
+<img id="c06-i3" src="capture/raw/a-kit-code.png" alt="" /><div class="hl" id="c06-hk" style="left:506px;top:236px;width:500px;height:380px"></div>
+</div></div></div>
+    </div>
+    <div id="c06-c" class="layer">
+      <div class="cap" id="c06-cap2"><div class="k">On site</div><div class="t">The kit links itself to the zone.</div></div>
+      <div id="c06-flow">
+        <div class="c06-f" id="c06-f1"><b>1</b>The kit opens its own setup Wi-Fi: AgroFlow-Setup-XXXX</div>
+        <div class="c06-f" id="c06-f2"><b>2</b>The installer enters the farm Wi-Fi and the code, once</div>
+        <div class="c06-f" id="c06-f3"><b>3</b>The kit claims its place: Thabo's Zone 1</div>
+      </div>
+      <div id="c06-ok" class="chip forest" style="font-size:22px">Kit linked to Zone 1</div>
+      <div id="c06-ph" class="phone" style="left:1300px;top:91px"><div class="pscreen"><div class="pcam">
+<div class="wm"><h3>AgroFlow-Setup-XXXX</h3><div class="sub">Kit setup page (illustration)</div>
+        <label>SSID</label><div class="in">FarmWiFi (demo)</div>
+        <label>Password</label><div class="in">••••••••</div>
+        <label>Enrollment Code (from admin)</label><div class="in" id="c06-code">DEMO-0000</div>
+        <div class="btn">Save</div></div>
+</div></div></div>
+    </div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  gsap.set(["#c06-b", "#c06-c"], { opacity: 0 });
+  INX("#c06-cap", 0.3); IN("#c06-hw", 0.4, 0.6);
+  tl.fromTo("#c06-hw img", { scale: 1.0 }, { scale: 1.08, duration: 9.4, ease: "none" }, 0);
+  SHOW("#c06-h1", 2.0, 0.6);
+  INX("#c06-l1", 2.0); INX("#c06-l2", 3.9); INX("#c06-l3", 5.6); INX("#c06-l4", 7.8);
+  OUT("#c06-a", 9.2);
+  tl.to("#c06-b", { opacity: 1, duration: 0.4 }, 9.5);
+  SHOW("#c06-i1", 11.0); SHOW("#c06-i2", 12.4); SHOW("#c06-i3", 13.4); HL("#c06-hk", 13.7, 1.6);
+  OUT("#c06-b", 15.6);
+  tl.to("#c06-c", { opacity: 1, duration: 0.4 }, 16.0);
+  INX("#c06-cap2", 16.0); INX("#c06-f1", 16.4); INX("#c06-f2", 19.0); INX("#c06-f3", 22.0);
+  IN("#c06-ph", 16.2, 0.6);
+  tl.fromTo("#c06-code", { backgroundColor: "#ffffff" }, { backgroundColor: "#d9f2f3", duration: 0.4 }, 20.0);
+  IN("#c06-ok", 23.2);
+
+  OUT("#c06-in", 25.71);
+  window.__timelines["c06"] = tl;
+})();
+</script>
+</template>
+</body></html>

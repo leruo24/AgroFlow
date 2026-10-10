@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c05-root { position: absolute; inset: 0; }
+
+  #c05-b { position: absolute; inset: 0; }
+  #c05-steps { position: absolute; left: 96px; top: 300px; width: 900px; }
+  .c05-s { margin-bottom: 26px; font-weight: 600; font-size: 30px; color: #253126; display: flex; gap: 16px; align-items: center; }
+  .c05-s b { width: 40px; height: 40px; border-radius: 50%; background: #184d35; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 20px; flex: none; }
+  #c05-tg .bub { font-size: 12.6px; }
+
+</style>
+<div id="c05-root" data-composition-id="c05" data-width="1920" data-height="1080">
+  <div id="c05-in" class="layer">
+
+    <div id="c05-br" class="browser" style="left:200px;top:120px"><div class="bbar"><i></i><i></i><i></i><b>AgroFlow admin console · Hand over</b></div><div class="bscreen"><div class="bcam">
+<img id="c05-a0" src="capture/raw/a-onb-handover.png" alt="" /><div class="hl" id="c05-h0" style="left:296px;top:366px;width:272px;height:268px"></div>
+</div></div></div>
+    <div id="c05-b" class="layer">
+      <div class="cap" id="c05-cap"><div class="k">Hand-over</div><div class="t">Sign-in details arrive in Telegram.</div></div>
+      <div id="c05-steps">
+        <div class="c05-s" id="c05-s1"><b>1</b>Thabo scans the QR code</div>
+        <div class="c05-s" id="c05-s2"><b>2</b>Presses Start in the AgroFlow bot</div>
+        <div class="c05-s" id="c05-s3"><b>3</b>Gets his email, a temporary password and the app link</div>
+        <div class="c05-s" id="c05-s4"><b>4</b>Chooses his own password at first sign-in</div>
+      </div>
+      <div id="c05-ph" class="phone" style="left:1300px;top:91px"><div class="pscreen"><div class="pcam">
+<div class="tg" id="c05-tg"><div class="top"><i></i><div><b>AgroFlow (demo bot)</b><small>bot</small></div></div><div class="msgs"><div class="bub me">/start</div><div class="bub">Welcome to AgroFlow, Thabo (demo).
+
+Your account is ready.
+
+Farm: Thabo's Farm (demo)
+Location: Mafikeng, North West
+
+Sign in with:
+Email: thabo@demo.invalid
+Temporary password: <span class="blur">DEMO-ONLY-0000</span>
+
+Download the AgroFlow app here:
+https://demo.invalid/agroflow.apk
+
+You will be asked to choose your own password the first time you sign in.
+Please do that as soon as you can - the temporary password above stays in this chat.<span class="t">12:41</span></div></div><div class="mock">Mock-up · demo values</div></div><img id="c05-m0" src="capture/raw/m-login-filled.png" alt="" />
+<img id="c05-m1" src="capture/raw/m-pw-change.png" alt="" />
+<img id="c05-m2" src="capture/raw/m-pw-done.png" alt="" /><div class="spot" id="c05-sp" style="left:14px;top:240px;width:376px;height:100px"></div>
+</div></div></div>
+    </div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  IN("#c05-br", 0.2, 0.5); HL("#c05-h0", 0.9, 2.6);
+  OUT("#c05-br", 3.7);
+  tl.fromTo("#c05-b", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 3.9);
+  INX("#c05-cap", 3.9); INX("#c05-s1", 4.1); INX("#c05-s2", 5.6); INX("#c05-s3", 8.0); INX("#c05-s4", 13.8);
+  tl.fromTo("#c05-tg .bub.me", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 5.6);
+  tl.fromTo("#c05-tg .bub:not(.me)", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 7.0);
+  SHOW("#c05-m0", 13.8); SHOW("#c05-m1", 15.6); HL("#c05-sp", 16.0, 2.4); SHOW("#c05-m2", 18.6);
+
+  OUT("#c05-in", 19.71);
+  window.__timelines["c05"] = tl;
+})();
+</script>
+</template>
+</body></html>

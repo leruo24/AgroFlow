@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c07-root { position: absolute; inset: 0; }
+
+  #c07-list { position: absolute; left: 96px; top: 300px; width: 760px; padding: 26px 30px; }
+  .c07-r { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid #e4e7e4; font-weight: 600; font-size: 26px; color: #253126; }
+  .c07-r:last-child { border-bottom: 0; }
+  .c07-r span { font-weight: 700; font-size: 17px; letter-spacing: .1em; text-transform: uppercase; padding: 6px 12px; border-radius: 999px; }
+  .todo { background: #fbecd2; color: #6f4510; }
+  .done { background: #e3f1ea; color: #184d35; }
+  .c07-r small { display: block; font-weight: 500; font-size: 18px; color: #637064; margin-top: 2px; }
+  .c07-stack { position: relative; width: 150px; height: 34px; }
+  .c07-stack span { position: absolute; right: 0; top: 0; }
+  #c07-conf { position: absolute; left: 96px; top: 860px; display: flex; gap: 16px; align-items: center; font-weight: 600; font-size: 24px; color: #4b5a4d; }
+  #c07-cm, #c07-ch { position: absolute; left: 260px; top: -6px; }
+
+</style>
+<div id="c07-root" data-composition-id="c07" data-width="1920" data-height="1080">
+  <div id="c07-in" class="layer">
+
+    <div class="cap" id="c07-cap"><div class="k">Zone setup in the app</div><div class="t">Thabo finishes each zone.</div></div>
+    <div class="card" id="c07-list">
+      <div class="c07-r">Planting date<span class="done">Done</span></div>
+      <div class="c07-r">Soil<span class="done">Done</span></div>
+      <div class="c07-r">Size<span class="done">Done</span></div>
+      <div class="c07-r"><div>Flow rate<small>500 mL bottle in 2 s = about 15 litres a minute</small></div><div class="c07-stack" data-layout-allow-overlap><span class="todo" id="c07-t1">To do</span><span class="done" id="c07-d1">Done</span></div></div>
+      <div class="c07-r"><div>Soil sensor wet/dry setup<small>one wet and one dry reading, on different days</small></div><div class="c07-stack" data-layout-allow-overlap><span class="todo" id="c07-t2">To do</span><span class="done" id="c07-d2">Done</span></div></div>
+    </div>
+    <div id="c07-conf">Advice confidence:<span class="chip warn" id="c07-cm">Medium</span><span class="chip forest" id="c07-ch">High</span></div>
+    <div id="c07-ph" class="phone" style="left:1300px;top:91px"><div class="pscreen"><div class="pcam">
+<img id="c07-m0" src="capture/raw/m-setup-home.png" alt="" />
+<img id="c07-m1" src="capture/raw/m-setup-top.png" alt="" />
+<img id="c07-m2" src="capture/raw/m-setup-flow.png" alt="" />
+<img id="c07-m3" src="capture/raw/m-setup-flow-saved.png" alt="" />
+<img id="c07-m4" src="capture/raw/m-cal-sheet.png" alt="" />
+<img id="c07-m5" src="capture/raw/m-cal-wet.png" alt="" />
+<img id="c07-m6" src="capture/raw/m-cal-dry.png" alt="" />
+<img id="c07-m7" src="capture/raw/m-setup-done.png" alt="" /><div class="spot" id="c07-s0" style="left:20px;top:708px;width:140px;height:52px"></div><div class="spot" id="c07-s1" style="left:12px;top:140px;width:140px;height:28px"></div><div class="spot" id="c07-s2" style="left:12px;top:540px;width:382px;height:220px"></div><div class="spot" id="c07-s3" style="left:0px;top:620px;width:404px;height:60px"></div><div class="spot" id="c07-s4" style="left:12px;top:140px;width:128px;height:28px"></div><div class="tap" id="c07-t0" style="left:88px;top:734px"></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  INX("#c07-cap", 0.3); IN("#c07-ph", 0.3, 0.6); IN("#c07-list", 1.0); IN("#c07-conf", 1.6);
+  gsap.set("#c07-ch", { opacity: 0 });
+  HL("#c07-s0", 0.9, 1.0); TAP("#c07-t0", 1.6);
+  SHOW("#c07-m1", 2.2); HL("#c07-s1", 2.5, 1.4);
+  SHOW("#c07-m2", 3.9); HL("#c07-s2", 4.4, 3.8);
+  SHOW("#c07-m3", 8.5); SHOW("#c07-d1", 8.6); OUT("#c07-t1", 8.5, 0.2);
+  SHOW("#c07-m4", 10.8); HL("#c07-s3", 11.4, 1.4);
+  SHOW("#c07-m5", 13.0); SHOW("#c07-m6", 15.5); SHOW("#c07-d2", 15.8); OUT("#c07-t2", 15.7, 0.2);
+  SHOW("#c07-m7", 18.1); HL("#c07-s4", 18.5, 3.4);
+  tl.to("#c07-cm", { opacity: 0, duration: 0.3 }, 18.1); SHOW("#c07-ch", 18.3);
+
+  OUT("#c07-in", 23.99);
+  window.__timelines["c07"] = tl;
+})();
+</script>
+</template>
+</body></html>

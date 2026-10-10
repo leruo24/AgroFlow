@@ -1,0 +1,55 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c11-root { position: absolute; inset: 0; }
+
+  #c11-pdf { position: absolute; left: 96px; top: 240px; width: 600px; height: 760px; overflow: hidden; border-radius: 10px; box-shadow: 0 30px 70px rgba(24,77,53,.2); border: 1px solid #c9d3cb; background: #fff; }
+  #c11-pdf img { width: 600px; display: block; }
+  #c11-a { position: absolute; inset: 0; }
+
+</style>
+<div id="c11-root" data-composition-id="c11" data-width="1920" data-height="1080">
+  <div id="c11-in" class="layer">
+
+    <div id="c11-a" class="layer">
+      <div class="cap" id="c11-cap"><div class="k">Reports</div><div class="t">What to do next comes first.</div></div>
+      <div id="c11-pdf"><img src="capture/raw/thabo-report-p1-1.png" alt="" /><div class="hl" id="c11-h0" style="left:28px;top:118px;width:544px;height:238px"></div></div>
+      <div id="c11-ph" class="phone" style="left:1300px;top:91px"><div class="pscreen"><div class="pcam">
+<img id="c11-m0" src="capture/raw/m-reports.png" alt="" />
+<img id="c11-m1" src="capture/raw/m-reports-ready.png" alt="" /><div class="spot" id="c11-s0" style="left:12px;top:720px;width:380px;height:100px"></div>
+</div></div></div>
+    </div>
+    <div id="c11-br" class="browser" style="left:200px;top:120px"><div class="bbar"><i></i><i></i><i></i><b>AgroFlow admin console · Reports</b></div><div class="bscreen"><div class="bcam">
+<img id="c11-i0" src="capture/raw/a-page-reports.png" alt="" />
+<img id="c11-i1" src="capture/raw/a-reports-auto.png" alt="" /><div class="hl" id="c11-h1" style="left:296px;top:304px;width:214px;height:46px"></div><div class="hl" id="c11-h2" style="left:860px;top:330px;width:632px;height:36px"></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  tl.set("#c11-cap", { left: 760, top: 240, width: 480 }, 0);
+  INX("#c11-cap", 0.3); IN("#c11-pdf", 0.4, 0.6); HL("#c11-h0", 1.2, 2.6);
+  IN("#c11-ph", 0.6, 0.6);
+  SHOW("#c11-m1", 4.6); HL("#c11-s0", 5.0, 3.6);
+  OUT("#c11-a", 9.6);
+  IN("#c11-br", 9.9, 0.5); HL("#c11-h1", 10.6, 2.6);
+  SHOW("#c11-i1", 13.6); HL("#c11-h2", 14.0, 3.0);
+
+  OUT("#c11-in", 17.56);
+  window.__timelines["c11"] = tl;
+})();
+</script>
+</template>
+</body></html>

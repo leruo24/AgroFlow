@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c03-root { position: absolute; inset: 0; }
+
+  #c03-a { position: absolute; inset: 0; }
+
+</style>
+<div id="c03-root" data-composition-id="c03" data-width="1920" data-height="1080">
+  <div id="c03-in" class="layer">
+
+    <div id="c03-a" class="layer">
+      <div class="cap" id="c03-cap"><div class="k">The call-back</div><div class="t">Naledi, our second persona,<br/>is a field officer.</div><div class="s">Admins with Telegram linked get a plain notice for each new enquiry.</div></div>
+      <div class="persona" id="c03-p" style="left:96px;top:400px"><b>N</b>Naledi <span>· field officer (persona)</span></div>
+      <div id="c03-ph" class="phone" style="left:1180px;top:91px"><div class="pscreen"><div class="pcam">
+<div class="tg" id="c03-tg"><div class="top"><i></i><div><b>AgroFlow (demo bot)</b><small>bot</small></div></div><div class="msgs"><div class="bub">New enquiry: Thabo (demo), Mafikeng, tomato, call in the morning<span class="t">11:44</span></div></div><div class="mock">Mock-up · demo values</div></div>
+</div></div></div>
+    </div>
+    <div id="c03-br" class="browser" style="left:200px;top:120px"><div class="bbar"><i></i><i></i><i></i><b>AgroFlow admin console · Requests › Enquiries</b></div><div class="bscreen"><div class="bcam">
+<img id="c03-i0" src="capture/raw/a-enq-list.png" alt="" />
+<img id="c03-i1" src="capture/raw/a-enq-claimed.png" alt="" />
+<img id="c03-i2" src="capture/raw/a-enq-logcall.png" alt="" />
+<img id="c03-i3" src="capture/raw/a-enq-wants.png" alt="" /><div class="hl" id="c03-h1" style="left:300px;top:336px;width:1172px;height:50px"></div><div class="hl" id="c03-h2" style="left:1060px;top:136px;width:200px;height:40px"></div><div class="hl" id="c03-h3" style="left:960px;top:342px;width:300px;height:40px"></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  INX("#c03-cap", 0.3);
+  tl.fromTo("#c03-p", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 0.8);
+  IN("#c03-ph", 0.6, 0.6);
+  tl.fromTo("#c03-tg .bub", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.45, ease: E }, 3.9);
+  OUT("#c03-a", 7.0);
+  IN("#c03-br", 7.3, 0.5);
+  HL("#c03-h1", 8.6, 4.2);
+  SHOW("#c03-i1", 10.6);
+  SHOW("#c03-i2", 13.3); HL("#c03-h2", 13.6, 1.8);
+  SHOW("#c03-i3", 15.6); HL("#c03-h3", 15.9, 2.0);
+
+  OUT("#c03-in", 17.99);
+  window.__timelines["c03"] = tl;
+})();
+</script>
+</template>
+</body></html>

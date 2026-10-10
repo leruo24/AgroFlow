@@ -145,3 +145,14 @@ Names are said without surnames in the voice-over; full names and roles are on s
 3. One narrator voice (`am_michael`), or a second voice for Naledi's scenes?
 4. OK to show the Experience AgroFlow field visual even though that demo's own example field (“North Field”) differs from
    Thabo's — cropped to the field and tagged “Website demo · visualisation”?
+
+---
+
+## Phase 2 outcome (supersedes the narration draft above)
+
+- Final narration, speaker split, timecodes and word counts: `VOICEOVER_SCRIPT.md` (606 words, about 140 wpm, 4:43).
+  It was trimmed from the draft to stay near 4:41; the story and the 14 scenes are unchanged.
+- Thabo's zones are 20 m² at 15 L/min (500 mL bottle in 2 s), so the bottle step is realistic; every advice
+  sentence is re-computed by AgroFlow's engine (`capture/engine/`).
+- Captures and their sources: `capture/README.md`. Build: `plan-timing.py` → `build-scenes.py` → `build-index.py`
+  → render → `finish.sh`. Team voices: `VOICEOVER_README.md` and `mux-voiceover.ps1`.

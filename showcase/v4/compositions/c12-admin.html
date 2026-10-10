@@ -1,0 +1,39 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c12-root { position: absolute; inset: 0; }
+
+</style>
+<div id="c12-root" data-composition-id="c12" data-width="1920" data-height="1080">
+  <div id="c12-in" class="layer">
+
+    <div id="c12-br" class="browser" style="left:200px;top:120px"><div class="bbar"><i></i><i></i><i></i><b>AgroFlow admin console</b></div><div class="bscreen"><div class="bcam">
+<img id="c12-i0" src="capture/raw/a-dashboard-after.png" alt="" />
+<img id="c12-i1" src="capture/raw/a-page-activity.png" alt="" /><div class="hl" id="c12-h1" style="left:284px;top:196px;width:396px;height:104px"></div><div class="hl" id="c12-h2" style="left:686px;top:196px;width:396px;height:104px"></div><div class="hl" id="c12-h3" style="left:1088px;top:196px;width:396px;height:104px"></div><div class="hl" id="c12-h4" style="left:300px;top:398px;width:1180px;height:170px"></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  IN("#c12-br", 0.2, 0.5);
+  HL("#c12-h1", 4.0, 3.9); HL("#c12-h2", 5.4, 2.5); HL("#c12-h3", 6.6, 1.3);
+  SHOW("#c12-i1", 8.2); HL("#c12-h4", 8.6, 5.6);
+
+  OUT("#c12-in", 15.42);
+  window.__timelines["c12"] = tl;
+})();
+</script>
+</template>
+</body></html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c13-root { position: absolute; inset: 0; }
+
+  #c13-val { position: absolute; left: 96px; top: 280px; width: 1728px; display: flex; gap: 20px; }
+  .c13-v { flex: 1; padding: 20px 24px; }
+  .c13-v .h { font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #4b5a4d; }
+  .c13-v .m { margin-top: 10px; font-weight: 600; font-size: 22px; color: #b9473e; }
+  .c13-v .s { margin-top: 6px; font-weight: 500; font-size: 17px; color: #637064; }
+  #c13-res { position: absolute; left: 96px; top: 480px; width: 1728px; display: flex; gap: 20px; }
+  .c13-r { flex: 1; padding: 22px 26px; }
+  .c13-r .h { font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #4b5a4d; }
+  .c13-r .n { margin-top: 8px; font-weight: 700; font-size: 50px; color: #184d35; }
+  .c13-r .s { margin-top: 4px; font-weight: 500; font-size: 18px; color: #637064; }
+  #c13-fail { position: absolute; left: 96px; top: 720px; width: 1728px; padding: 20px 26px; }
+  #c13-fail .h { font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #8c2f28; }
+  #c13-fail li { margin: 10px 0 0 22px; font-weight: 500; font-size: 18px; color: #253126; }
+  #c13-fail code { font-family: "JetBrains Mono", monospace; font-size: 16px; }
+
+</style>
+<div id="c13-root" data-composition-id="c13" data-width="1920" data-height="1080">
+  <div id="c13-in" class="layer">
+
+    <div class="cap" id="c13-cap"><div class="k">Testing and validation</div><div class="t">We tested as we built.</div></div>
+    <div id="c13-val">
+      <div class="card c13-v" id="c13-v1"><div class="h">Website enquiry form</div><div class="m">Please give a South African phone number, for example 082 123 4567.</div><div class="s">shown for “082 12”</div></div>
+      <div class="card c13-v" id="c13-v2"><div class="h">App · Start Manual Run</div><div class="m">Invalid Duration: Enter a duration between 1 and 60 minutes.</div><div class="s">shown for 90 minutes</div></div>
+      <div class="card c13-v" id="c13-v3"><div class="h">App · first sign-in</div><div class="m">Your new password must contain at least 8 characters.</div><div class="s">shown for a 5-character password</div></div>
+    </div>
+    <div id="c13-res">
+      <div class="card c13-r" id="c13-r1"><div class="h">Mobile app · Jest</div><div class="n">64 / 64</div><div class="s">11 suites, all passed</div></div>
+      <div class="card c13-r" id="c13-r2"><div class="h">Backend · xUnit</div><div class="n">1,299 / 1,301</div><div class="s">2 failed</div></div>
+      <div class="card c13-r" id="c13-r3"><div class="h">Admin console · Playwright</div><div class="n">111 / 112</div><div class="s">1 failed</div></div>
+    </div>
+    <div class="card" id="c13-fail"><div class="h">The three failures, as reported (10 Oct 2026)</div><ul>
+      <li>Backend: <code>EdgeCaseTests.Every_crop_list_is_the_same_and_the_engine_knows_every_one</code></li>
+      <li>Backend: <code>EdgeCaseTests.Numbers_in_charts_workbooks_and_advice_never_take_the_machine_s_decimal_comma(culture: "en-ZA")</code></li>
+      <li>Admin: <code>hardware-showcase.spec.ts</code> · the test's “AgroFlow” heading locator matches 4 elements (strict mode)</li></ul></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  INX("#c13-cap", 0.3);
+  IN("#c13-v1", 2.6); IN("#c13-v2", 5.2); IN("#c13-v3", 7.0);
+  IN("#c13-r1", 9.0); IN("#c13-r2", 11.6); IN("#c13-r3", 13.4);
+  IN("#c13-fail", 16.3);
+
+  OUT("#c13-in", 20.99);
+  window.__timelines["c13"] = tl;
+})();
+</script>
+</template>
+</body></html>

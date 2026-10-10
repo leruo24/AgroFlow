@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c02-root { position: absolute; inset: 0; }
+
+  #c02-field { position: absolute; left: 96px; top: 400px; width: 600px; padding: 26px 28px; }
+  #c02-field .h { font-weight: 700; font-size: 16px; letter-spacing: .16em; text-transform: uppercase; color: #184d35; }
+  #c02-plot { margin-top: 16px; display: flex; height: 170px; border-radius: 14px; overflow: hidden; border: 3px solid #4f8f62; }
+  #c02-plot div { flex: 1; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 26px; color: #fff; background: #4f8f62; }
+  #c02-plot div + div { border-left: 3px dashed #e3f1ea; background: #3f7d52; }
+  #c02-field .sm { margin-top: 14px; font-weight: 500; font-size: 21px; color: #4b5a4d; }
+  #c02-steps { position: absolute; left: 96px; top: 690px; width: 600px; }
+  .c02-s { margin-bottom: 14px; font-weight: 600; font-size: 24px; color: #253126; display: flex; gap: 14px; align-items: center; }
+  .c02-s b { width: 34px; height: 34px; border-radius: 50%; background: #184d35; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; flex: none; }
+
+</style>
+<div id="c02-root" data-composition-id="c02" data-width="1920" data-height="1080">
+  <div id="c02-in" class="layer">
+
+    <div class="cap" id="c02-cap"><div class="k">The enquiry</div><div class="t">Meet Thabo.</div></div>
+    <div class="persona" id="c02-p" style="left:96px;top:222px"><b>T</b>Thabo <span>· farmer (persona)</span></div>
+    <div class="card" id="c02-field"><div class="h">Tomato · near Mafikeng</div>
+      <div id="c02-plot"><div>Zone 1</div><div>Zone 2</div></div>
+      <div class="sm">One field, split into two irrigation zones.</div></div>
+    <div id="c02-steps">
+      <div class="c02-s" id="c02-s1"><b>1</b>Asks for a call back on the website</div>
+      <div class="c02-s" id="c02-s2"><b>2</b>A wrong phone number is caught at once</div>
+      <div class="c02-s" id="c02-s3"><b>3</b>“A representative will call you within 2 working days.”</div>
+    </div>
+    <div id="c02-br" class="browser" style="left:760px;top:180px;transform:scale(0.72);transform-origin:0 0"><div class="bbar"><i></i><i></i><i></i><b>AgroFlow website</b></div><div class="bscreen"><div class="bcam">
+<img id="c02-i0" src="capture/raw/web-hero.png" alt="" />
+<img id="c02-i1" src="capture/raw/web-enquiry-top.png" alt="" />
+<img id="c02-i2" src="capture/raw/web-enquiry-error.png" alt="" />
+<img id="c02-i3" src="capture/raw/web-enquiry-thanks.png" alt="" /><div class="hl" id="c02-h1" style="left:140px;top:810px;width:510px;height:36px"></div><div class="hl" id="c02-h2" style="left:140px;top:776px;width:470px;height:34px"></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  INX("#c02-cap", 0.3);
+  tl.fromTo("#c02-p", { opacity: 0, x: -20 }, { opacity: 1, x: 0, duration: 0.5, ease: E }, 0.7);
+  IN("#c02-field", 2.4);
+  IN("#c02-br", 0.6, 0.6);
+  SHOW("#c02-i1", 8.6); IN("#c02-s1", 8.6);
+  SHOW("#c02-i2", 12.9); IN("#c02-s2", 12.9); HL("#c02-h1", 13.3, 3.0);
+  SHOW("#c02-i3", 16.4); IN("#c02-s3", 16.4); HL("#c02-h2", 16.7, 1.6);
+
+  OUT("#c02-in", 18.42);
+  window.__timelines["c02"] = tl;
+})();
+</script>
+</template>
+</body></html>

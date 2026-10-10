@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c14-root { position: absolute; inset: 0; }
+
+  #c14-wrap { position: absolute; left: 0; right: 0; top: 200px; text-align: center; }
+  #c14-wrap img { width: 110px; height: 110px; border-radius: 26px; }
+  .c14-l { margin-top: 26px; font-weight: 700; font-size: 58px; letter-spacing: -.015em; color: #184d35; }
+  .c14-l2 { margin-top: 14px; font-weight: 600; font-size: 34px; color: #4b5a4d; }
+  #c14-team { margin-top: 44px; display: flex; justify-content: center; gap: 18px; }
+  .c14-n { padding: 18px 22px; min-width: 300px; }
+  .c14-n b { display: block; font-weight: 700; font-size: 25px; color: #253126; }
+  .c14-n span { display: block; margin-top: 4px; font-weight: 500; font-size: 17px; color: #637064; }
+  #c14-ty { margin-top: 40px; font-weight: 700; font-size: 40px; color: #0f6b73; }
+
+</style>
+<div id="c14-root" data-composition-id="c14" data-width="1920" data-height="1080">
+  <div id="c14-in" class="layer">
+
+    <div id="c14-wrap">
+      <img id="c14-logo" src="assets/brand/agroflow-icon-512.png" alt="" />
+      <div class="c14-l" id="c14-a">AgroFlow recommends. The farmer decides.</div>
+      <div class="c14-l2" id="c14-b">Every number traces back to its source.</div>
+      <div class="c14-l2" id="c14-c">Built by Team 2 · INF3003W</div>
+      <div id="c14-team">
+        <div class="card c14-n"><b>Lubaelihle Msuku</b></div>
+        <div class="card c14-n"><b>Leruo Matlhatsi</b></div>
+        <div class="card c14-n"><b>Philisile Tyobeka</b></div>
+        <div class="card c14-n"><b>Olwethu Nkabinde</b></div>
+      </div>
+      <div id="c14-ty">Thank you.</div>
+    </div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  IN("#c14-logo", 0.1);
+  IN("#c14-a", 0.6);
+  IN("#c14-b", 3.91);
+  IN("#c14-c", 7.36);
+  tl.fromTo("#c14-team > div", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: E, stagger: 0.25 }, 7.96);
+  IN("#c14-ty", 11.88);
+
+  OUT("#c14-in", 15.79);
+  window.__timelines["c14"] = tl;
+})();
+</script>
+</template>
+</body></html>

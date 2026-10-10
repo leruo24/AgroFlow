@@ -1,0 +1,66 @@
+// Throwaway harness (not committed): renders Thabo's demo farm report with AgroFlow's own
+// ActionReportPdf, from the same engine inputs as the v4 Today/forecast fixtures (scenario A).
+using System.Globalization;
+using AgroFlow.Api.Reports;
+using AgroFlow.Business;
+using AgroFlow.Business.Agronomy;
+using AgroFlow.Business.Agronomy.RuleBook;
+
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+var today = DateOnly.Parse("2026-10-10");
+string scenario = "A";
+var nowUtc = DateTime.SpecifyKind(today.ToDateTime(new TimeOnly(5, 0)), DateTimeKind.Utc);
+ZoneEngineInput Zone(long id, string name, int plantedDaysAgo, double? flow, double lastIrrigMm, int lastIrrigDaysAgo, double raw)
+{
+    var z = new ZoneEngineInput {
+        ZoneId = id, ZoneName = name, CropType = "tomato", PlantingDate = today.AddDays(-plantedDaysAgo), SoilType = "loam",
+        AreaM2 = 20, FlowRateLpm = scenario == "S" ? null : flow, CalibrationWet = scenario.StartsWith("S") ? null : 1200, CalibrationDry = scenario.StartsWith("S") ? null : 3000,
+        FarmLatitudeDegrees = -25.85, FarmElevationM = 1270, Today = today, NowUtc = nowUtc,
+    };
+    for (var i = 14; i >= 1; i--)
+        z.Weather.Add(new ZoneWeatherDay { Date = today.AddDays(-i), TMinC = 15, TMaxC = 31, RainMm = 0, RhMinPct = 20, RhMaxPct = 55, WindMs = 3, WindHeightM = 10 });
+    // today + 7 forecast days
+    for (var i = 0; i <= 7; i++)
+    {
+        double rain = 0; double tmax = 31, rhmin = 20, rhmax = 55;
+        if (scenario == "B" && i == 1) { rain = 24; tmax = 22; rhmin = 70; rhmax = 98; }
+        if (scenario == "B" && i == 2) { rain = 6; tmax = 24; rhmin = 55; rhmax = 92; }
+        if (scenario == "C4" && i == 0) { rain = 4; tmax = 28; rhmin = 35; rhmax = 85; }
+        if (scenario == "C" && i == 0) { rain = 12; tmax = 26; rhmin = 45; rhmax = 90; }
+        z.Weather.Add(new ZoneWeatherDay { Date = today.AddDays(i), TMinC = 15, TMaxC = tmax, RainMm = rain, RhMinPct = rhmin, RhMaxPct = rhmax, WindMs = 3, WindHeightM = 10, IsForecast = i > 0 || scenario != "A" });
+    }
+    z.IrrigationMmByDay[today.AddDays(-lastIrrigDaysAgo)] = lastIrrigMm;
+    for (var h = 30; h >= 1; h--)
+        z.Readings.Add(new ZoneMoistureReading { RecordedAtUtc = nowUtc.AddHours(-h), RawValue = raw - h * 1.5 });
+    z.Readings.Add(new ZoneMoistureReading { RecordedAtUtc = nowUtc.AddMinutes(-2), RawValue = raw });
+    return z;
+}
+
+WaterUsageReportModel Model(ZoneEngineInput input, int irrigDaysAgo, double irrigLitres, double moisture)
+{
+    var r = Fao56Engine.Run(input);
+    var insights = ZoneInsightBuilder.Build(input, r, new ZoneFaultSignals()).ToList();
+    var from = today.AddDays(-6);
+    var days = Enumerable.Range(0, 7).Select(i => {
+        var d = from.AddDays(i); var on = d == today.AddDays(-irrigDaysAgo);
+        return new WaterUsageReportModel.DayLine(d, on ? 1 : 0, on ? irrigLitres / 15.0 : 0, on ? irrigLitres : 0,
+            Math.Round((r.EtcTodayMm ?? 0) * 20, 0), moisture, 31, 31, 38, 38, 0, "");
+    }).ToList();
+    return new WaterUsageReportModel {
+        FarmName = "Thabo's Farm (demo)", ZoneName = input.ZoneName!, CropLabel = "Tomato", From = from, To = today,
+        GeneratedAtSast = new DateTimeOffset(today.ToDateTime(new TimeOnly(7, 0)), TimeSpan.FromHours(2)),
+        FlowRateLpm = 15, Days = days,
+        MoistureSeries = Enumerable.Range(0, 50).Select(i => new ChartSvg.MoisturePoint(i / 49.0, moisture + 8 - i * 0.16)).ToList(),
+        PumpPositions = Array.Empty<double>(),
+        Advice = insights.Take(4).Select(i => new WaterUsageReportModel.AdviceLine(i.Message, i.Source, i.Explanation)).ToList(),
+        Insights = insights, EngineInput = input, Engine = r, Calibrated = true,
+    };
+}
+var zones = new[] {
+    Model(Zone(21, "Zone 1", 62, 15, 30, 4, 2300), 4, 600, 39),
+    Model(Zone(22, "Zone 2", 34, 15, 25, 1, 2000), 1, 500, 56),
+};
+var pdf = ActionReportPdf.Render(ReportKind.WaterUsage, "Thabo's Farm (demo)", zones, today.AddDays(-6), today, today, zones[0].GeneratedAtSast);
+File.WriteAllBytes(args[0], pdf);
+Console.WriteLine(pdf.Length);

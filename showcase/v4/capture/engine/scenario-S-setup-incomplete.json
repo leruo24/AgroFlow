@@ -1,0 +1,698 @@
+[
+  {
+    "zone": "Zone 1",
+    "primary": "WaterNow",
+    "today": "Water about 996 L this morning",
+    "kind": "water",
+    "why": {
+      "summary": "By the end of today your soil will be drier than tomato can stand, and no rain is expected today.",
+      "facts": [
+        {
+          "label": "Crop",
+          "value": "Tomato",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Crop stage",
+          "value": "growing, day 63 of about 145",
+          "source": "your planting date"
+        },
+        {
+          "label": "Soil",
+          "value": "Loam / garden soil",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "How dry the soil is now",
+          "value": "about 44.8 mm short of full",
+          "source": "weather app"
+        },
+        {
+          "label": "How dry it will be by tonight",
+          "value": "about 49.8 mm short of full",
+          "source": "weather app and FAO crop water guide"
+        },
+        {
+          "label": "Watering point",
+          "value": "about 30.6 mm short of full",
+          "source": "FAO crop water guide"
+        },
+        {
+          "label": "Soil sensor",
+          "value": "sensor reading 2300 (not yet set up)",
+          "source": "your soil sensor"
+        },
+        {
+          "label": "Rain expected today",
+          "value": "0 mm",
+          "source": "weather app"
+        },
+        {
+          "label": "Water your crop will use today",
+          "value": "6.6 mm",
+          "source": "weather app and FAO crop water guide"
+        },
+        {
+          "label": "How much",
+          "value": "about 49.8 mm (49.8 L per square metre)",
+          "source": "FAO crop water guide"
+        }
+      ],
+      "rule": "We suggest watering once your crop has used about 34% of the water your soil can hold for it, counting any useful rain first.",
+      "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+      "whatWouldChangeIt": "More rain than forecast today could make this smaller or unnecessary. If it has rained heavily, check the soil before watering.",
+      "technical": "Dr 44.8 mm, RAW 30.6 mm, TAW 91 mm, p 0.34, Kc 1.05, ETo 6.3 mm, ETc 6.6 mm. FAO-56 Eq. 58 (p. 103), 82-85 (pp. 162-170). Fao56Engine PrimaryAction WaterNow: projected end-of-day Dr \u003E= RAW (FAO-56 p. 171)."
+    },
+    "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+    "confidenceLevel": "medium",
+    "confidenceWhy": {
+      "summary": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+      "facts": [
+        {
+          "label": "Crop",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Planting date",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Pump flow rate",
+          "value": "not set yet",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Zone size",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Soil type",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Sensor wet/dry setup",
+          "value": "not done yet",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Soil sensor",
+          "value": "reporting",
+          "source": "your kit"
+        },
+        {
+          "label": "Weather",
+          "value": "available",
+          "source": "weather app"
+        }
+      ],
+      "rule": "High needs every setup detail and a sensor reading from the last 24 hours. Medium is the weather and the crop with up to 2 details missing. Anything less is Low.",
+      "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+      "whatWouldChangeIt": "Add the pump\u0027s flow rate to get watering times in minutes.",
+      "technical": "ConfidenceRules.For / NextStep (DATA RULES)."
+    },
+    "nextStep": "Add the pump\u0027s flow rate to get watering times in minutes.",
+    "eto": 6.256536289533467,
+    "kc": 1.05375,
+    "etc": 6.5928251150958905,
+    "taw": 91,
+    "raw": 30.60211658105096,
+    "dr": 44.76291710117275,
+    "p": 0.3362869953961644,
+    "litres": 996.1999592220873,
+    "minutes": null,
+    "depth": 49.8,
+    "rel": null,
+    "stage": "Growing",
+    "day": 63,
+    "total": 145,
+    "next": "2026-10-10",
+    "postRain": 49.809997961104365,
+    "modifier": "Calibrate the field sensor in one value domain to improve confidence.",
+    "insights": [
+      {
+        "insightType": "setup_missing",
+        "severity": "heads_up",
+        "message": "Add the pump\u0027s flow rate to get watering times in minutes.",
+        "explanation": {
+          "summary": "The advice for Zone 1 would be more accurate with one more detail.",
+          "facts": [
+            {
+              "label": "Flow rate",
+              "value": "not set yet",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Wet/dry soil setup",
+              "value": "not set yet",
+              "source": "this zone\u0027s setup"
+            }
+          ],
+          "rule": "We ask for one thing at a time, in the order that improves the advice most: the crop, the planting date, the pump\u0027s flow rate, the zone\u0027s size, the soil type, then the soil sensor\u0027s wet/dry setup.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "Add the pump\u0027s flow rate to get watering times in minutes.",
+          "technical": "ConfidenceRules.NextStep; missing: the flow rate, the wet/dry soil setup"
+        }
+      },
+      {
+        "insightType": "water_now",
+        "severity": "act_now",
+        "message": "Water Zone 1 today: about 49.8 mm (~996 L).",
+        "explanation": {
+          "summary": "By the end of today your soil will be drier than tomato can stand, and no rain is expected today.",
+          "facts": [
+            {
+              "label": "Crop",
+              "value": "Tomato",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Crop stage",
+              "value": "growing, day 63 of about 145",
+              "source": "your planting date"
+            },
+            {
+              "label": "Soil",
+              "value": "Loam / garden soil",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "How dry the soil is now",
+              "value": "about 44.8 mm short of full",
+              "source": "weather app"
+            },
+            {
+              "label": "How dry it will be by tonight",
+              "value": "about 49.8 mm short of full",
+              "source": "weather app and FAO crop water guide"
+            },
+            {
+              "label": "Watering point",
+              "value": "about 30.6 mm short of full",
+              "source": "FAO crop water guide"
+            },
+            {
+              "label": "Soil sensor",
+              "value": "sensor reading 2300 (not yet set up)",
+              "source": "your soil sensor"
+            },
+            {
+              "label": "Rain expected today",
+              "value": "0 mm",
+              "source": "weather app"
+            },
+            {
+              "label": "Water your crop will use today",
+              "value": "6.6 mm",
+              "source": "weather app and FAO crop water guide"
+            },
+            {
+              "label": "How much",
+              "value": "about 49.8 mm (49.8 L per square metre)",
+              "source": "FAO crop water guide"
+            }
+          ],
+          "rule": "We suggest watering once your crop has used about 34% of the water your soil can hold for it, counting any useful rain first.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "More rain than forecast today could make this smaller or unnecessary. If it has rained heavily, check the soil before watering.",
+          "technical": "Dr 44.8 mm, RAW 30.6 mm, TAW 91 mm, p 0.34, Kc 1.05, ETo 6.3 mm, ETc 6.6 mm. FAO-56 Eq. 58 (p. 103), 82-85 (pp. 162-170). Fao56Engine PrimaryAction WaterNow: projected end-of-day Dr \u003E= RAW (FAO-56 p. 171)."
+        }
+      },
+      {
+        "insightType": "growth_status",
+        "severity": "info",
+        "message": "Tomato: Growing, day 63 of 145.",
+        "explanation": {
+          "summary": "Tomato is in its growing stage, day 63 of about 145.",
+          "facts": [
+            {
+              "label": "Crop",
+              "value": "Tomato",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Crop stage",
+              "value": "growing, day 63 of about 145",
+              "source": "your planting date"
+            },
+            {
+              "label": "Soil",
+              "value": "Loam / garden soil",
+              "source": "this zone\u0027s setup"
+            }
+          ],
+          "rule": "Growth stages and their lengths come from the FAO crop water guide for this crop, counted from the planting date.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "If the planting date is wrong, correct it in the zone\u0027s settings.",
+          "technical": "CropRules.StageFor: FAO-56 Table 11, Table 11, Apr/May, Mediterranean."
+        }
+      },
+      {
+        "insightType": "stress_days",
+        "severity": "heads_up",
+        "message": "Zone 1 was too dry on 5 day(s) this week.",
+        "explanation": {
+          "summary": "On 5 day(s) this week the soil was drier than tomato can easily draw water from.",
+          "facts": [
+            {
+              "label": "Crop",
+              "value": "Tomato",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Crop stage",
+              "value": "growing, day 63 of about 145",
+              "source": "your planting date"
+            },
+            {
+              "label": "Soil",
+              "value": "Loam / garden soil",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Dry days this week",
+              "value": "5",
+              "source": "weather app and pump run times"
+            }
+          ],
+          "rule": "A day counts when the soil had dried past the watering point, so the crop had to work harder for water.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "Watering when we suggest it keeps this at zero.",
+          "technical": "WaterRules.WasStressed: Ks \u003C 1, FAO-56 Eq. 84 p. 169."
+        }
+      }
+    ],
+    "outlook": [
+      {
+        "date": "2026-10-10",
+        "action": "WaterNow",
+        "advice": "Irrigate today at about 49.8 mm.",
+        "litres": 996.1999592220873,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 49.809997961104365,
+        "rawMm": 30.60211658105096,
+        "tentative": false,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-11",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 6.701170533295626,
+        "rawMm": 30.207739258803922,
+        "tentative": false,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-12",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 13.51097601326424,
+        "rawMm": 29.812308052914243,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-13",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 20.429690510418816,
+        "rawMm": 29.415879230357344,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-14",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 27.45757266112656,
+        "rawMm": 29.018508971423813,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-15",
+        "action": "WaterNow",
+        "advice": "Irrigation likely at about 34.6 mm.",
+        "litres": 691.8973141135141,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 34.5948657056757,
+        "rawMm": 28.62025331784111,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-16",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 7.246931834413206,
+        "rawMm": 28.221168122735932,
+        "tentative": true,
+        "confidence": "medium"
+      }
+    ]
+  },
+  {
+    "zone": "Zone 2",
+    "primary": "WaterSoon",
+    "today": "No watering today; next on Monday",
+    "kind": "soon",
+    "why": {
+      "summary": "At the rate tomato is using water, the soil will reach its watering point in about 2 days.",
+      "facts": [
+        {
+          "label": "Expected watering day",
+          "value": "Monday 12 Oct",
+          "source": "weather app"
+        },
+        {
+          "label": "Crop",
+          "value": "Tomato",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Crop stage",
+          "value": "growing, day 35 of about 145",
+          "source": "your planting date"
+        },
+        {
+          "label": "Soil",
+          "value": "Loam / garden soil",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "How dry the soil is now",
+          "value": "about 26.1 mm short of full",
+          "source": "weather app"
+        }
+      ],
+      "rule": "We look 2 days ahead using the weather forecast, so you can plan.",
+      "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+      "whatWouldChangeIt": "Rain before Monday would push this back.",
+      "technical": "Dr 26.1 mm, RAW 39.4 mm, TAW 91 mm, p 0.43, Kc 0.67, ETo 6.3 mm, ETc 4.2 mm. FAO-56 Eq. 58 (p. 103), 82-85 (pp. 162-170). Forecast projection of Eq. 85 to Dr \u003E= RAW."
+    },
+    "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+    "confidenceLevel": "medium",
+    "confidenceWhy": {
+      "summary": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+      "facts": [
+        {
+          "label": "Crop",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Planting date",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Pump flow rate",
+          "value": "not set yet",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Zone size",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Soil type",
+          "value": "set",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Sensor wet/dry setup",
+          "value": "not done yet",
+          "source": "this zone\u0027s setup"
+        },
+        {
+          "label": "Soil sensor",
+          "value": "reporting",
+          "source": "your kit"
+        },
+        {
+          "label": "Weather",
+          "value": "available",
+          "source": "weather app"
+        }
+      ],
+      "rule": "High needs every setup detail and a sensor reading from the last 24 hours. Medium is the weather and the crop with up to 2 details missing. Anything less is Low.",
+      "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+      "whatWouldChangeIt": "Add the pump\u0027s flow rate to get watering times in minutes.",
+      "technical": "ConfidenceRules.For / NextStep (DATA RULES)."
+    },
+    "nextStep": "Add the pump\u0027s flow rate to get watering times in minutes.",
+    "eto": 6.256536289533467,
+    "kc": 0.66875,
+    "etc": 4.184058643625506,
+    "taw": 91,
+    "raw": 39.37002653720316,
+    "dr": 26.08085811559053,
+    "p": 0.4326376542549798,
+    "litres": null,
+    "minutes": null,
+    "depth": null,
+    "rel": null,
+    "stage": "Growing",
+    "day": 35,
+    "total": 145,
+    "next": "2026-10-12",
+    "postRain": 30.264916759216035,
+    "modifier": "Calibrate the field sensor in one value domain to improve confidence.",
+    "insights": [
+      {
+        "insightType": "setup_missing",
+        "severity": "heads_up",
+        "message": "Add the pump\u0027s flow rate to get watering times in minutes.",
+        "explanation": {
+          "summary": "The advice for Zone 2 would be more accurate with one more detail.",
+          "facts": [
+            {
+              "label": "Flow rate",
+              "value": "not set yet",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Wet/dry soil setup",
+              "value": "not set yet",
+              "source": "this zone\u0027s setup"
+            }
+          ],
+          "rule": "We ask for one thing at a time, in the order that improves the advice most: the crop, the planting date, the pump\u0027s flow rate, the zone\u0027s size, the soil type, then the soil sensor\u0027s wet/dry setup.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "Add the pump\u0027s flow rate to get watering times in minutes.",
+          "technical": "ConfidenceRules.NextStep; missing: the flow rate, the wet/dry soil setup"
+        }
+      },
+      {
+        "insightType": "water_soon",
+        "severity": "heads_up",
+        "message": "Zone 2 will need water in ~2 days (Monday).",
+        "explanation": {
+          "summary": "At the rate tomato is using water, the soil will reach its watering point in about 2 days.",
+          "facts": [
+            {
+              "label": "Expected watering day",
+              "value": "Monday 12 Oct",
+              "source": "weather app"
+            },
+            {
+              "label": "Crop",
+              "value": "Tomato",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Crop stage",
+              "value": "growing, day 35 of about 145",
+              "source": "your planting date"
+            },
+            {
+              "label": "Soil",
+              "value": "Loam / garden soil",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "How dry the soil is now",
+              "value": "about 26.1 mm short of full",
+              "source": "weather app"
+            }
+          ],
+          "rule": "We look 2 days ahead using the weather forecast, so you can plan.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "Rain before Monday would push this back.",
+          "technical": "Dr 26.1 mm, RAW 39.4 mm, TAW 91 mm, p 0.43, Kc 0.67, ETo 6.3 mm, ETc 4.2 mm. FAO-56 Eq. 58 (p. 103), 82-85 (pp. 162-170). Forecast projection of Eq. 85 to Dr \u003E= RAW."
+        }
+      },
+      {
+        "insightType": "growth_status",
+        "severity": "info",
+        "message": "Tomato: Growing, day 35 of 145.",
+        "explanation": {
+          "summary": "Tomato is in its growing stage, day 35 of about 145.",
+          "facts": [
+            {
+              "label": "Crop",
+              "value": "Tomato",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Crop stage",
+              "value": "growing, day 35 of about 145",
+              "source": "your planting date"
+            },
+            {
+              "label": "Soil",
+              "value": "Loam / garden soil",
+              "source": "this zone\u0027s setup"
+            }
+          ],
+          "rule": "Growth stages and their lengths come from the FAO crop water guide for this crop, counted from the planting date.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "If the planting date is wrong, correct it in the zone\u0027s settings.",
+          "technical": "CropRules.StageFor: FAO-56 Table 11, Table 11, Apr/May, Mediterranean."
+        }
+      },
+      {
+        "insightType": "stress_days",
+        "severity": "heads_up",
+        "message": "Zone 2 was too dry on 2 day(s) this week.",
+        "explanation": {
+          "summary": "On 2 day(s) this week the soil was drier than tomato can easily draw water from.",
+          "facts": [
+            {
+              "label": "Crop",
+              "value": "Tomato",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Crop stage",
+              "value": "growing, day 35 of about 145",
+              "source": "your planting date"
+            },
+            {
+              "label": "Soil",
+              "value": "Loam / garden soil",
+              "source": "this zone\u0027s setup"
+            },
+            {
+              "label": "Dry days this week",
+              "value": "2",
+              "source": "weather app and pump run times"
+            }
+          ],
+          "rule": "A day counts when the soil had dried past the watering point, so the crop had to work harder for water.",
+          "confidence": "Medium: based on the weather; the pump\u0027s flow rate is missing.",
+          "whatWouldChangeIt": "Watering when we suggest it keeps this at zero.",
+          "technical": "WaterRules.WasStressed: Ks \u003C 1, FAO-56 Eq. 84 p. 169."
+        }
+      }
+    ],
+    "outlook": [
+      {
+        "date": "2026-10-10",
+        "action": "WaterSoon",
+        "advice": "Irrigation is likely within the next 2 days.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 30.264916759216035,
+        "rawMm": 39.37002653720316,
+        "tentative": false,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-11",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 34.54927169033947,
+        "rawMm": 39.0049480507107,
+        "tentative": false,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-12",
+        "action": "WaterNow",
+        "advice": "Irrigation likely at about 38.9 mm.",
+        "litres": 778.6862812597956,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 38.93431406298978,
+        "rawMm": 38.63844576355287,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-13",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 4.486107116876483,
+        "rawMm": 38.2705700945696,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-14",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 9.07364236519642,
+        "rawMm": 37.90137169611543,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-15",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 13.762955167294411,
+        "rawMm": 37.53090140036332,
+        "tentative": true,
+        "confidence": "medium"
+      },
+      {
+        "date": "2026-10-16",
+        "action": "NoWaterNeeded",
+        "advice": "No irrigation currently expected.",
+        "litres": null,
+        "runtimeSeconds": null,
+        "forecastRainMm": 0,
+        "projectedDepletionMm": 18.554380945602812,
+        "rawMm": 37.15921016695742,
+        "tentative": true,
+        "confidence": "medium"
+      }
+    ]
+  }
+]

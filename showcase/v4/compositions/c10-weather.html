@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c10-root { position: absolute; inset: 0; }
+
+  #c10-ex { position: absolute; left: 96px; top: 300px; width: 1100px; }
+  .c10-e { margin-bottom: 18px; padding: 20px 24px; }
+  .c10-e .h { font-weight: 700; font-size: 16px; letter-spacing: .14em; text-transform: uppercase; color: #4b5a4d; }
+  .c10-e .m { margin-top: 8px; font-weight: 700; font-size: 30px; color: #0f6b73; }
+  .c10-e .r { margin-top: 6px; font-weight: 600; font-size: 20px; color: #184d35; }
+  #c10-note { font-weight: 600; font-size: 17px; color: #637064; letter-spacing: .04em; }
+  #c10-ab { position: absolute; left: 96px; top: 300px; width: 1100px; display: flex; gap: 20px; }
+  .c10-c { flex: 1; padding: 22px 24px; }
+  .c10-c .h { font-weight: 700; font-size: 16px; letter-spacing: .14em; text-transform: uppercase; color: #4b5a4d; }
+  .c10-c .m { margin-top: 10px; font-weight: 700; font-size: 28px; color: #253126; line-height: 1.25; }
+  #c10-tgw .bub { font-size: 12.4px; }
+
+</style>
+<div id="c10-root" data-composition-id="c10" data-width="1920" data-height="1080">
+  <div id="c10-in" class="layer">
+
+    <div class="cap" id="c10-cap"><div class="k">The weather changes</div><div class="t">24 mm of rain, tomorrow.</div></div>
+    <div id="c10-ab">
+      <div class="card c10-c" id="c10-c1"><div class="h">Zone 2 · Monday · before</div><div class="m">Irrigation likely at about 38.9 mm.</div></div>
+      <div class="card c10-c" id="c10-c2"><div class="h">Zone 2 · Monday · after the update</div><div class="m">No irrigation currently expected.</div></div>
+    </div>
+    <div id="c10-ex">
+      <div class="card c10-e" id="c10-e1"><div class="h">If rain only helps · 4 mm today</div><div class="m">“Rain helps, but water about 60.2 min (about 904 L) this morning”</div><div class="r">Water less</div></div>
+      <div class="card c10-e" id="c10-e2"><div class="h">If rain covers the need · 12 mm today</div><div class="m">“No watering today: rain is expected to cover it.”</div><div class="r">Wait</div></div>
+      <div id="c10-note">AgroFlow engine output for Zone 1 under other forecasts · demo inputs</div>
+    </div>
+    <div id="c10-ph" class="phone" style="left:1300px;top:91px"><div class="pscreen"><div class="pcam">
+<img id="c10-m0" src="capture/raw/m-week-A-72.png" alt="" />
+<img id="c10-m1" src="capture/raw/m-week-B-72.png" alt="" /><div class="spot" id="c10-s0" style="left:12px;top:520px;width:380px;height:66px"></div><div class="spot" id="c10-s1" style="left:12px;top:520px;width:380px;height:66px"></div><div class="tg" id="c10-tgw"><div class="top"><i></i><div><b>AgroFlow (demo bot)</b><small>bot</small></div></div><div class="msgs"><div class="bub">Heavy rain expected
+
+Farm: Thabo's Farm (demo)
+When: tomorrow
+Expected rainfall: 24 mm
+
+AgroFlow does not pause automatic watering for rain yet, so zones on
+automatic will still water on their own soil moisture readings.
+
+If you do not want that, switch those zones to manual in the app
+before then. Check your drainage and anything that could wash away.
+
+Why: The weather forecast for Thabo's Farm (demo) shows heavy rain on Sunday 11 Oct.<span class="t">07:02</span></div><div class="tgbtn">Why am I seeing this?</div></div><div class="mock">Mock-up · demo values</div></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  INX("#c10-cap", 0.3); IN("#c10-ph", 0.3, 0.6);
+  gsap.set("#c10-tgw", { opacity: 0 });
+  HL("#c10-s0", 1.2, 2.9); IN("#c10-c1", 1.4);
+  SHOW("#c10-m1", 4.4); HL("#c10-s1", 4.8, 5.2); IN("#c10-c2", 5.6);
+  OUT("#c10-ab", 10.1);
+  IN("#c10-e1", 10.4); IN("#c10-e2", 13.4); IN("#c10-note", 14.2);
+  SHOW("#c10-tgw", 17.7, 0.4);
+
+  OUT("#c10-in", 20.99);
+  window.__timelines["c10"] = tl;
+})();
+</script>
+</template>
+</body></html>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c01-root { position: absolute; inset: 0; }
+
+  #c01-title { position: absolute; left: 0; right: 0; top: 330px; text-align: center; }
+  #c01-title img { width: 120px; height: 120px; border-radius: 28px; }
+  #c01-title h1 { margin-top: 22px; font-weight: 700; font-size: 84px; letter-spacing: -.02em; color: #184d35; }
+  #c01-title p { margin-top: 10px; font-weight: 500; font-size: 30px; color: #4b5a4d; }
+  .c01-c { position: absolute; top: 380px; width: 540px; padding: 34px 36px; }
+  .c01-c .h { font-weight: 700; font-size: 18px; letter-spacing: .16em; text-transform: uppercase; }
+  .c01-c .m { margin-top: 14px; font-weight: 700; font-size: 40px; line-height: 1.15; color: #253126; }
+  #c01-bar { position: absolute; left: 96px; top: 760px; width: 1728px; padding: 30px 36px; display: flex; align-items: center; gap: 28px; }
+  #c01-bar img { width: 72px; height: 72px; border-radius: 18px; }
+  #c01-bar .m { font-weight: 700; font-size: 38px; color: #184d35; }
+  #c01-bar .chips { margin-left: auto; display: flex; gap: 12px; }
+
+</style>
+<div id="c01-root" data-composition-id="c01" data-width="1920" data-height="1080">
+  <div id="c01-in" class="layer">
+
+    <div id="c01-title"><img src="assets/brand/agroflow-icon-512.png" alt="" /><h1>AgroFlow</h1><p>From enquiry to irrigation · INF3003W Team 2</p></div>
+    <div id="c01-b" class="layer">
+      <div class="cap" id="c01-cap"><div class="k">The problem</div><div class="t">On many small farms, watering is guesswork.</div></div>
+      <div class="card c01-c" id="c01-k1" style="left:96px"><div class="h" style="color:#9a6214">Too much</div><div class="m">Wastes water and electricity</div></div>
+      <div class="card c01-c" id="c01-k2" style="left:690px"><div class="h" style="color:#b9473e">Too little</div><div class="m">Stresses the crop</div></div>
+      <div class="card" id="c01-bar"><img src="assets/brand/agroflow-icon-512.png" alt="" /><div class="m">AgroFlow helps decide when to irrigate, and how much.</div>
+        <div class="chips"><span class="chip soft">Rules-based</span><span class="chip forest">FAO-56</span></div></div>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  IN("#c01-title", 0.2, 0.7);
+  OUT("#c01-title", 2.2);
+  tl.set("#c01-b", { opacity: 1 }, 0);
+  INX("#c01-cap", 2.6);
+  IN("#c01-k1", 5.6); IN("#c01-k2", 8.2);
+  IN("#c01-bar", 10.4, 0.6);
+
+  OUT("#c01-in", 15.38);
+  window.__timelines["c01"] = tl;
+})();
+</script>
+</template>
+</body></html>

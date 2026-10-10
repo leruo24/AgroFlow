@@ -1,0 +1,69 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c08-root { position: absolute; inset: 0; }
+
+  #c08-act { position: absolute; left: 96px; top: 290px; width: 1050px; padding: 26px 30px; }
+  #c08-act .h { font-weight: 700; font-size: 16px; letter-spacing: .16em; text-transform: uppercase; color: #184d35; }
+  #c08-act .m { margin-top: 10px; font-weight: 700; font-size: 38px; color: #0f6b73; }
+  #c08-act .sm { margin-top: 10px; font-weight: 500; font-size: 20px; color: #4b5a4d; }
+  #c08-grid { position: absolute; left: 96px; top: 520px; width: 1050px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .c08-v { padding: 16px 18px; }
+  .c08-v .l { font-weight: 700; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: #4b5a4d; }
+  .c08-v .n { margin-top: 6px; font-weight: 700; font-size: 25px; color: #184d35; }
+  .c08-v .src { margin-top: 4px; font-weight: 500; font-size: 15px; color: #637064; }
+  #c08-rule { position: absolute; left: 96px; top: 820px; width: 1050px; padding: 16px 20px; font-weight: 600; font-size: 21px; color: #253126; line-height: 1.4; }
+
+</style>
+<div id="c08-root" data-composition-id="c08" data-width="1920" data-height="1080">
+  <div id="c08-in" class="layer">
+
+    <div class="cap" id="c08-cap"><div class="k">Daily use</div><div class="t">One action per zone.</div></div>
+    <div class="card" id="c08-act"><div class="h">Zone 1 · today</div><div class="m">Water about 66.4 min (about 996 L) this morning</div>
+      <div class="sm">High: your sensor, setup and the weather all agree.</div></div>
+    <div id="c08-grid">
+      <div class="card c08-v"><div class="l">Weather: crop use today</div><div class="n">6.6 mm</div><div class="src">weather app + FAO crop guide</div></div>
+      <div class="card c08-v"><div class="l">Crop stage</div><div class="n">growing, day 63 of about 145</div><div class="src">planting date</div></div>
+      <div class="card c08-v"><div class="l">Water left in the soil</div><div class="n">about 49.8 mm short of full</div><div class="src">soil sensor + weather</div></div>
+      <div class="card c08-v"><div class="l">Watering point</div><div class="n">about 30.6 mm short of full</div><div class="src">FAO crop water guide</div></div>
+      <div class="card c08-v"><div class="l">Rain expected today</div><div class="n">0 mm</div><div class="src">weather app</div></div>
+      <div class="card c08-v"><div class="l">How much</div><div class="n">≈ 66.4 min (about 996 L)</div><div class="src">20 m² zone · 15 L/min</div></div>
+    </div>
+    <div class="card" id="c08-rule">We suggest watering once your crop has used about 34% of the water your soil can hold for it, counting any useful rain first.</div>
+    <div id="c08-ph" class="phone" style="left:1300px;top:91px"><div class="pscreen"><div class="pcam">
+<img id="c08-m0" src="capture/raw/m-home.png" alt="" />
+<img id="c08-m1" src="capture/raw/m-why-top.png" alt="" />
+<img id="c08-m2" src="capture/raw/m-why-facts.png" alt="" />
+<img id="c08-m3" src="capture/raw/m-week-A-71.png" alt="" /><div class="spot" id="c08-s0" style="left:16px;top:538px;width:372px;height:60px"></div><div class="spot" id="c08-s1" style="left:16px;top:610px;width:236px;height:32px"></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  INX("#c08-cap", 0.3); IN("#c08-ph", 0.3, 0.6);
+  IN("#c08-act", 3.9); HL("#c08-s0", 4.1, 4.4);
+  HL("#c08-s1", 8.8, 1.0);
+  SHOW("#c08-m1", 9.9);
+  tl.fromTo("#c08-grid > div", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.4, ease: E, stagger: 0.55 }, 10.6);
+  SHOW("#c08-m2", 13.4);
+  IN("#c08-rule", 15.6);
+  SHOW("#c08-m3", 18.0);
+
+  OUT("#c08-in", 21.85);
+  window.__timelines["c08"] = tl;
+})();
+</script>
+</template>
+</body></html>

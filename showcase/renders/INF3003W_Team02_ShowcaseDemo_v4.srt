@@ -1,0 +1,306 @@
+1
+00:00:02,600 --> 00:00:05,560
+On many small farms, watering is guesswork.
+
+2
+00:00:05,600 --> 00:00:08,132
+Too much wastes water and electricity;
+
+3
+00:00:08,172 --> 00:00:10,275
+too little stresses the crop.
+
+4
+00:00:10,315 --> 00:00:14,990
+AgroFlow helps a farmer decide when
+to irrigate, and how much.
+
+5
+00:00:16,330 --> 00:00:18,861
+Meet Thabo, one of our personas:
+
+6
+00:00:18,901 --> 00:00:24,432
+a tomato farmer near Mafikeng, with one
+field split into two irrigation zones.
+
+7
+00:00:24,472 --> 00:00:28,718
+He asks for a call back on
+the AgroFlow website.
+
+8
+00:00:28,758 --> 00:00:33,860
+If he mistypes his phone number, the
+form tells him straight away.
+
+9
+00:00:35,200 --> 00:00:38,588
+Naledi, our second persona,
+is a field officer.
+
+10
+00:00:38,628 --> 00:00:42,016
+Telegram tells her a new
+enquiry has arrived.
+
+11
+00:00:42,056 --> 00:00:48,444
+In the Enquiries tab she taps "I'll handle
+this", so nobody else calls him too.
+
+12
+00:00:48,483 --> 00:00:51,014
+After the call, she logs it:
+
+13
+00:00:51,054 --> 00:00:52,300
+Thabo wants AgroFlow.
+
+14
+00:00:53,640 --> 00:00:56,600
+She starts onboarding
+straight from the enquiry,
+
+15
+00:00:56,640 --> 00:00:59,600
+so Thabo's details are already filled in.
+
+16
+00:00:59,640 --> 00:01:04,743
+She adds his farm and both zones,
+with crop, soil and size.
+
+17
+00:01:04,783 --> 00:01:11,600
+The enquiry then shows he became a farmer, and
+the activity log records who did it.
+
+18
+00:01:12,940 --> 00:01:16,329
+To hand over, Naledi shows a QR code.
+
+19
+00:01:16,369 --> 00:01:21,044
+Thabo scans it and presses Start in
+the AgroFlow Telegram bot,
+
+20
+00:01:21,084 --> 00:01:26,188
+which sends his sign-in email, a
+temporary password and the app link.
+
+21
+00:01:26,228 --> 00:01:31,760
+When he first signs in, the app makes
+him choose his own password.
+
+22
+00:01:33,100 --> 00:01:34,774
+Next, the field kit:
+
+23
+00:01:34,814 --> 00:01:39,918
+an ESP32 board, a Soil Moisture Sensor, a
+temperature and humidity sensor,
+
+24
+00:01:39,958 --> 00:01:42,490
+and a relay for the pump.
+
+25
+00:01:42,530 --> 00:01:47,633
+Naledi registers the kit to Zone 1
+and gets a one-time code.
+
+26
+00:01:47,673 --> 00:01:51,491
+On site, the installer joins
+the kit's setup Wi-Fi,
+
+27
+00:01:51,531 --> 00:01:57,920
+enters the farm Wi-Fi and the code, and
+the kit links itself to the zone.
+
+28
+00:01:59,260 --> 00:02:02,648
+In the app, Thabo finishes
+each zone's setup.
+
+29
+00:02:02,688 --> 00:02:09,933
+For the flow rate, he times how long his tap
+takes to fill a 500 millilitre bottle.
+
+30
+00:02:09,973 --> 00:02:17,218
+Then he teaches the sensor his soil, with a wet
+and a dry reading on different days.
+
+31
+00:02:17,258 --> 00:02:20,217
+With each step, the advice gets surer:
+
+32
+00:02:20,257 --> 00:02:22,360
+from medium to high confidence.
+
+33
+00:02:23,700 --> 00:02:27,089
+Every day, Home shows one action per zone.
+
+34
+00:02:27,129 --> 00:02:33,517
+Today, Zone 1 needs about 66 minutes of water,
+or 996 litres, with high confidence.
+
+35
+00:02:33,557 --> 00:02:36,946
+"Why am I seeing this?" shows the reasons:
+
+36
+00:02:36,986 --> 00:02:42,089
+the weather, the crop's stage and
+the water left in the soil.
+
+37
+00:02:42,129 --> 00:02:44,660
+The week ahead plans each day.
+
+38
+00:02:46,000 --> 00:02:46,817
+AgroFlow recommends;
+
+39
+00:02:46,857 --> 00:02:47,674
+Thabo decides.
+
+40
+00:02:47,714 --> 00:02:50,674
+He starts a run from the app.
+
+41
+00:02:50,714 --> 00:02:56,245
+The command reaches the kit over MQTT,
+the relay switches the pump on,
+
+42
+00:02:56,285 --> 00:02:59,245
+and the kit reports the run back.
+
+43
+00:02:59,285 --> 00:03:06,102
+For safety, the kit never runs the pump for
+more than five minutes at a time.
+
+44
+00:03:06,142 --> 00:03:09,530
+Our website demo shows this
+as a visualisation.
+
+45
+00:03:10,870 --> 00:03:12,544
+Then the forecast changes:
+
+46
+00:03:12,584 --> 00:03:14,687
+24 millimetres of rain tomorrow.
+
+47
+00:03:14,727 --> 00:03:21,114
+AgroFlow works the plan out again, and Zone
+2 no longer needs water on Monday.
+
+48
+00:03:21,154 --> 00:03:24,971
+If rain covers the crop's
+need, it says wait;
+
+49
+00:03:25,011 --> 00:03:28,399
+if it only helps, it says water less.
+
+50
+00:03:28,439 --> 00:03:30,970
+Thabo also gets a Telegram alert.
+
+51
+00:03:32,310 --> 00:03:35,269
+Reports start with what to do next.
+
+52
+00:03:35,309 --> 00:03:41,696
+Thabo makes his as a PDF in the app, and
+automatic ones arrive on Telegram.
+
+53
+00:03:41,736 --> 00:03:47,266
+Naledi can preview a farm's report, download
+PDF or Excel, and schedule daily,
+
+54
+00:03:47,306 --> 00:03:48,980
+weekly or monthly reports.
+
+55
+00:03:50,320 --> 00:03:54,565
+For Naledi, Home shows what needs
+attention across every farm:
+
+56
+00:03:54,605 --> 00:03:57,994
+new requests, quiet kits and
+farmers without Telegram.
+
+57
+00:03:58,034 --> 00:04:04,421
+Every action is logged, so a small team can
+look after many farms without losing
+
+58
+00:04:04,461 --> 00:04:04,850
+track.
+
+59
+00:04:06,190 --> 00:04:08,293
+We tested as we built.
+
+60
+00:04:08,333 --> 00:04:14,720
+Forms reject bad input, like a wrong phone
+number or a run over 60 minutes.
+
+61
+00:04:14,760 --> 00:04:21,148
+Today, all 64 mobile tests passed, and all
+but three of 1,413 backend and admin
+
+62
+00:04:21,188 --> 00:04:21,576
+tests.
+
+63
+00:04:21,616 --> 00:04:26,290
+Those three failures are on
+screen, and we are fixing them.
+
+64
+00:04:27,730 --> 00:04:28,834
+AgroFlow recommends.
+
+65
+00:04:28,874 --> 00:04:30,550
+The farmer decides.
+
+66
+00:04:31,040 --> 00:04:34,000
+Every number traces back to its source.
+
+67
+00:04:34,490 --> 00:04:38,520
+Built by Team 2 for INF3003W.
+
+68
+00:04:39,010 --> 00:04:40,680
+Thank you for watching.

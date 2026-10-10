@@ -1,0 +1,45 @@
+<!doctype html>
+<html><head><meta charset="UTF-8" /></head>
+<body>
+<template>
+<style>
+  #c04-root { position: absolute; inset: 0; }
+
+</style>
+<div id="c04-root" data-composition-id="c04" data-width="1920" data-height="1080">
+  <div id="c04-in" class="layer">
+
+    <div id="c04-br" class="browser" style="left:200px;top:120px"><div class="bbar"><i></i><i></i><i></i><b>AgroFlow admin console · Set up a farmer</b></div><div class="bscreen"><div class="bcam">
+<img id="c04-i0" src="capture/raw/a-onb-step1.png" alt="" />
+<img id="c04-i1" src="capture/raw/a-onb-step1-filled.png" alt="" />
+<img id="c04-i2" src="capture/raw/a-onb-step2.png" alt="" />
+<img id="c04-i3" src="capture/raw/a-enq-done.png" alt="" />
+<img id="c04-i4" src="capture/raw/a-page-activity.png" alt="" /><div class="hl" id="c04-h1" style="left:1084px;top:760px;width:400px;height:92px"></div><div class="hl" id="c04-h2" style="left:1070px;top:342px;width:200px;height:40px"></div><div class="hl" id="c04-h3" style="left:300px;top:398px;width:1180px;height:80px"></div>
+</div></div></div>
+
+  </div>
+</div>
+<script>
+(() => {
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+  const IN = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: d, ease: E }, t);
+  const INX = (s, t, d = 0.5) => tl.fromTo(s, { opacity: 0, x: -22 }, { opacity: 1, x: 0, duration: d, ease: E }, t);
+  const OUT = (s, t, d = 0.4) => tl.to(s, { opacity: 0, duration: d, ease: "power2.in" }, t);
+  const SHOW = (s, t, d = 0.35) => tl.fromTo(s, { opacity: 0 }, { opacity: 1, duration: d, ease: "power1.out" }, t);
+  const HL = (s, t, d) => { tl.fromTo(s, { opacity: 0, scale: 1.06 }, { opacity: 1, scale: 1, duration: 0.35, ease: E }, t); tl.to(s, { opacity: 0, duration: 0.3 }, t + d); };
+  const TAP = (s, t) => tl.fromTo(s, { opacity: 0.95, scale: 0.4 }, { opacity: 0, scale: 1.6, duration: 0.7, ease: "power2.out", immediateRender: false }, t);
+
+  IN("#c04-br", 0.2, 0.5);
+  HL("#c04-h1", 1.2, 2.2);
+  SHOW("#c04-i1", 3.6);
+  SHOW("#c04-i2", 6.5);
+  SHOW("#c04-i3", 11.6); HL("#c04-h2", 11.9, 2.9);
+  SHOW("#c04-i4", 15.0); HL("#c04-h3", 15.3, 3.2);
+
+  OUT("#c04-in", 18.85);
+  window.__timelines["c04"] = tl;
+})();
+</script>
+</template>
+</body></html>

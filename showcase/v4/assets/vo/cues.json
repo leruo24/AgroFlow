@@ -1,0 +1,162 @@
+[
+ {
+  "id": "s01_leruo",
+  "scene": 1,
+  "speaker": "Leruo",
+  "title": "The problem",
+  "text": "On many small farms, watering is guesswork. Too much wastes water and electricity; too little stresses the crop. AgroFlow helps a farmer decide when to irrigate, and how much.",
+  "dur": 12.29,
+  "at": 2.6
+ },
+ {
+  "id": "s02_olwethu",
+  "scene": 2,
+  "speaker": "Olwethu",
+  "title": "The enquiry",
+  "text": "Meet Thabo, one of our personas: a tomato farmer near Mafikeng, with one field split into two irrigation zones. He asks for a call back on the AgroFlow website. If he mistypes his phone number, the form tells him straight away.",
+  "dur": 15.9,
+  "at": 16.33
+ },
+ {
+  "id": "s03_olwethu",
+  "scene": 3,
+  "speaker": "Olwethu",
+  "title": "The call-back",
+  "text": "Naledi, our second persona, is a field officer. Telegram tells her a new enquiry has arrived. In the Enquiries tab she taps \"I'll handle this\", so nobody else calls him too. After the call, she logs it: Thabo wants AgroFlow.",
+  "dur": 16.24,
+  "at": 35.2
+ },
+ {
+  "id": "s04_philisile",
+  "scene": 4,
+  "speaker": "Philisile",
+  "title": "Onboarding",
+  "text": "She starts onboarding straight from the enquiry, so Thabo's details are already filled in. She adds his farm and both zones, with crop, soil and size. The enquiry then shows he became a farmer, and the activity log records who did it.",
+  "dur": 15.83,
+  "at": 53.64
+ },
+ {
+  "id": "s05_philisile",
+  "scene": 5,
+  "speaker": "Philisile",
+  "title": "Telegram and first sign-in",
+  "text": "To hand over, Naledi shows a QR code. Thabo scans it and presses Start in the AgroFlow Telegram bot, which sends his sign-in email, a temporary password and the app link. When he first signs in, the app makes him choose his own password.",
+  "dur": 16.79,
+  "at": 72.94
+ },
+ {
+  "id": "s06_leruo",
+  "scene": 6,
+  "speaker": "Leruo",
+  "title": "The field kit",
+  "text": "Next, the field kit: an ESP32 board, a Soil Moisture Sensor, a temperature and humidity sensor, and a relay for the pump. Naledi registers the kit to Zone 1 and gets a one-time code. On site, the installer joins the kit's setup Wi-Fi, enters the farm Wi-Fi and the code, and the kit links itself to the zone.",
+  "say": "Next, the field kit: an E S P thirty-two board, a Soil Moisture Sensor, a temperature and humidity sensor, and a relay for the pump. Naledi registers the kit to Zone 1 and gets a one-time code. On site, the installer joins the kit's setup Wi-Fi, enters the farm Wi-Fi and the code, and the kit links itself to the zone.",
+  "dur": 23.13,
+  "at": 93.1
+ },
+ {
+  "id": "s07_luba",
+  "scene": 7,
+  "speaker": "Lubaelihle",
+  "title": "Zone setup in the app",
+  "text": "In the app, Thabo finishes each zone's setup. For the flow rate, he times how long his tap takes to fill a 500 millilitre bottle. Then he teaches the sensor his soil, with a wet and a dry reading on different days. With each step, the advice gets surer: from medium to high confidence.",
+  "say": "In the app, Thabo finishes each zone's setup. For the flow rate, he times how long his tap takes to fill a five hundred millilitre bottle. Then he teaches the sensor his soil, with a wet and a dry reading on different days. With each step, the advice gets surer: from medium to high confidence.",
+  "dur": 19.21,
+  "at": 119.26
+ },
+ {
+  "id": "s08_luba",
+  "scene": 8,
+  "speaker": "Lubaelihle",
+  "title": "Daily use",
+  "text": "Every day, Home shows one action per zone. Today, Zone 1 needs about 66 minutes of water, or 996 litres, with high confidence. \"Why am I seeing this?\" shows the reasons: the weather, the crop's stage and the water left in the soil. The week ahead plans each day.",
+  "say": "Every day, Home shows one action per zone. Today, Zone 1 needs about sixty-six minutes of water, or nine hundred and ninety-six litres, with high confidence. \"Why am I seeing this?\" shows the reasons: the weather, the crop's stage and the water left in the soil. The week ahead plans each day.",
+  "dur": 19.57,
+  "at": 143.7
+ },
+ {
+  "id": "s09_leruo",
+  "scene": 9,
+  "speaker": "Leruo",
+  "title": "Execution",
+  "text": "AgroFlow recommends; Thabo decides. He starts a run from the app. The command reaches the kit over MQTT, the relay switches the pump on, and the kit reports the run back. For safety, the kit never runs the pump for more than five minutes at a time. Our website demo shows this as a visualisation.",
+  "say": "AgroFlow recommends; Thabo decides. He starts a run from the app. The command reaches the kit over M Q T T, the relay switches the pump on, and the kit reports the run back. For safety, the kit never runs the pump for more than five minutes at a time. Our website demo shows this as a visualisation.",
+  "dur": 21.32,
+  "at": 166.0
+ },
+ {
+  "id": "s10_leruo",
+  "scene": 10,
+  "speaker": "Leruo",
+  "title": "The weather changes",
+  "text": "Then the forecast changes: 24 millimetres of rain tomorrow. AgroFlow works the plan out again, and Zone 2 no longer needs water on Monday. If rain covers the crop's need, it says wait; if it only helps, it says water less. Thabo also gets a Telegram alert.",
+  "say": "Then the forecast changes: twenty-four millimetres of rain tomorrow. AgroFlow works the plan out again, and Zone 2 no longer needs water on Monday. If rain covers the crop's need, it says wait; if it only helps, it says water less. Thabo also gets a Telegram alert.",
+  "dur": 18.53,
+  "at": 190.87
+ },
+ {
+  "id": "s11_olwethu",
+  "scene": 11,
+  "speaker": "Olwethu",
+  "title": "Reports",
+  "text": "Reports start with what to do next. Thabo makes his as a PDF in the app, and automatic ones arrive on Telegram. Naledi can preview a farm's report, download PDF or Excel, and schedule daily, weekly or monthly reports.",
+  "dur": 16.52,
+  "at": 212.31
+ },
+ {
+  "id": "s12_olwethu",
+  "scene": 12,
+  "speaker": "Olwethu",
+  "title": "Naledi's admin view",
+  "text": "For Naledi, Home shows what needs attention across every farm: new requests, quiet kits and farmers without Telegram. Every action is logged, so a small team can look after many farms without losing track.",
+  "dur": 14.4,
+  "at": 230.32
+ },
+ {
+  "id": "s13_leruo",
+  "scene": 13,
+  "speaker": "Leruo",
+  "title": "Testing and validation",
+  "text": "We tested as we built. Forms reject bad input, like a wrong phone number or a run over 60 minutes. Today, all 64 mobile tests passed, and all but three of 1,413 backend and admin tests. Those three failures are on screen, and we are fixing them.",
+  "say": "We tested as we built. Forms reject bad input, like a wrong phone number or a run over sixty minutes. Today, all sixty-four mobile tests passed, and all but three of one thousand four hundred and thirteen backend and admin tests. Those three failures are on screen, and we are fixing them.",
+  "dur": 20.06,
+  "at": 246.19
+ },
+ {
+  "id": "s14a_luba",
+  "scene": 14,
+  "speaker": "Lubaelihle",
+  "title": "Close",
+  "text": "AgroFlow recommends. The farmer decides.",
+  "dur": 2.86,
+  "at": 267.73
+ },
+ {
+  "id": "s14b_leruo",
+  "scene": 14,
+  "speaker": "Leruo",
+  "title": "Close",
+  "text": "Every number traces back to its source.",
+  "dur": 2.1,
+  "at": 271.04
+ },
+ {
+  "id": "s14c_philisile",
+  "scene": 14,
+  "speaker": "Philisile",
+  "title": "Close",
+  "text": "Built by Team 2 for INF3003W.",
+  "say": "Built by Team 2 for I N F three thousand and three W.",
+  "dur": 4.07,
+  "at": 274.49
+ },
+ {
+  "id": "s14d_olwethu",
+  "scene": 14,
+  "speaker": "Olwethu",
+  "title": "Close",
+  "text": "Thank you for watching.",
+  "dur": 1.16,
+  "at": 279.01
+ }
+]
