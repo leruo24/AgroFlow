@@ -3,6 +3,8 @@
 Deck: `AgroFlow_Showcase_Intro_2026.pptx` · Audit date: 6 October 2026
 Repository state: branch `dev` at `bb1c0a1` ("merge: final finish before the presentation")
 
+> The `showcase/` paths cited below (video narration, captured screens, demo data) were removed from `dev` on 10 Oct 2026. They are kept in the tag `archive/pre-tidy-2026-10-10` and on the `feature/showcase-v4` branch.
+
 ## Sources examined
 
 | ID | Source | Notes |
@@ -10,7 +12,7 @@ Repository state: branch `dev` at `bb1c0a1` ("merge: final finish before the pre
 | M1 | `Milestone-1_Team-2.docx` | Team roles (Table 14), As-Is activity, early package diagram |
 | M2 | `Milestone2_URS_Team2.docx` (submitted 14 Aug 2026) | Project definition, To-Be activity diagrams, use cases, class, sequence and state diagrams |
 | M3 | `Milestone_3__Team_2.docx` (dated 28 Sep 2026 on its cover) | Latest milestone: business case, technology platform, network/deployment diagram, expanded class diagram, persona, wireframes |
-| REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/reports/final-finish-report.md`, `showcase/presentation/presentation-runbook.md`, `docs/releases/release-notes-v2.md`) |
+| REPO | AgroFlow repository, `dev` @ `bb1c0a1` | Code, migrations, firmware, `docs/*.md` reports (latest: `docs/reports/final-finish-report.md`, `docs/presentation/presentation-runbook.md`, `docs/releases/release-notes-v2.md`) |
 | RUN | Apps run locally on 6 Oct 2026 | See "What was run" below |
 | SHOWCASE | `showcase/` and `showcase/walkthrough-video/` on `dev` (pushed 6 Oct 2026 while this deck was being built) | The team's system-demo video: narration, system audit and captured screens. Used for slide 10. |
 | OLD DECK | Original AgroFlow presentation | **Not supplied.** It could not be audited, and none of its images could be reused. |
@@ -132,7 +134,7 @@ The admin audit log ("Activity") is built (commit `47cf5b0`), but the final repo
 ### Slide 10: The journey we will demonstrate
 | Content | Type | Source | Notes |
 |---|---|---|---|
-| Seven steps (farmer opens app → Zone 2 critical → advice → manual run → command to kit → run recorded → admin follows up) | Text | `showcase/narration.md` and `showcase/storyboard.md` (the team's system-demo video, added to `dev` on 6 Oct 2026) | Matches the demo that follows the introduction. The admin-led `showcase/presentation/presentation-runbook.md` is an older live-demo plan. **If you present the runbook demo live instead, change this slide.** |
+| Seven steps (farmer opens app → Zone 2 critical → advice → manual run → command to kit → run recorded → admin follows up) | Text | `showcase/narration.md` and `showcase/storyboard.md` (the team's system-demo video, added to `dev` on 6 Oct 2026) | Matches the demo that follows the introduction. The admin-led `docs/presentation/presentation-runbook.md` is an older live-demo plan. **If you present the runbook demo live instead, change this slide.** |
 | Validation: 90 min → "Enter a duration between 1 and 60 minutes." → 5 min | Text | `apps/mobile/src/app/zone/[id].tsx` `handleStartManualRun`; demo narration 2:14 | The message is quoted exactly from the code. Five minutes fits the firmware's 5-minute cap. |
 | Three phone screens + admin Kits | **Real app screenshots with illustrative demo data** | `showcase/assets/screens/m-zone2.png`, `m-zone2-sent.png`, `m-history.png`, `a-kits.png` → copied to `ui/demo-*.png` | Captured by the team's showcase work from the unmodified apps, answering with labelled demo data (`showcase/capture/demo-data.mjs`, every farm marked "(demo)"). `showcase/system-audit.md` records that the team approved this approach. **The slide says so on screen:** "real app, illustrative demo data". The values shown (e.g. 19% moisture) are **not** measurements. |
 | "Now, let's see AgroFlow in action." | Text | Brief | |

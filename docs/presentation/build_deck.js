@@ -9,7 +9,7 @@ const sharp = require("sharp");
 const fa = require("react-icons/fa");
 const { applyTheme } = require(process.env.PPTX_SKILL + "/scripts/apply_theme.js");
 
-const OUT_DIR = "/home/user/AgroFlow/showcase/presentation";
+const OUT_DIR = "/home/user/AgroFlow/docs/presentation";
 const A = (p) => path.join(OUT_DIR, "presentation-assets", p);
 const OUT = path.join(OUT_DIR, "AgroFlow_Showcase_Intro_2026.pptx");
 

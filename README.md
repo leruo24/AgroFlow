@@ -18,7 +18,6 @@ inputs always give the same answer. See [docs/engine/rule-book.md](docs/engine/r
 | [`backend/`](backend/) | `AgroFlow.Api` (ASP.NET Core 8: MQTT bridge, device enrollment, reports, Telegram, weather collection), `AgroFlow.Domain` (domain model in the DB / XDB / Controller pattern, the FAO-56 engine and the rule book), `AgroFlow.Domain.Tests` (xUnit). |
 | [`hardware/`](hardware/) | ESP32 firmware, one sketch folder per device type, plus the shared MQTT topic notes. |
 | [`supabase/`](supabase/) | `migrations/` (the schema history, applied in order), `diagnostics/`, and `scripts/apply-migrations.ps1`. |
-| [`showcase/`](showcase/) | UCT showcase material: the HyperFrames walkthrough video and its renders, `presentation/` (slide deck, script, runbook) and `walkthrough-video/` (the earlier v1 video). |
 | [`docs/`](docs/) | Engine documentation, reports, operations helpers, sample reports and test evidence. See [docs/README.md](docs/README.md). |
 | `Dockerfile`, `.dockerignore` | The Railway image for `backend/AgroFlow.Api`. The build context is the repo root because the Api references the sibling Domain project. |
 
@@ -58,7 +57,6 @@ that needs the service role.
 | Backend tests | `dotnet test backend/AgroFlow.Domain.Tests` |
 | Firmware | Arduino IDE; see [hardware/README.md](hardware/README.md) and [the irrigation node's setup guide](hardware/esp32/AgroFlowIrrigationNode/README.md). |
 | Database | Migrations are applied by hand in the Supabase SQL editor. `supabase/scripts/apply-migrations.ps1 -From <n>` puts the ones you need on the clipboard in order; then run `docs/ops/verify-migrations.sql`. The files are not proof of the live schema: check the live database. |
-| Showcase video | `cd showcase`, `npm run check`, `npm run render` (HyperFrames). |
 
 ## Configuration and secrets
 
@@ -78,5 +76,5 @@ that needs the service role.
 - What AgroFlow 2.0 does today: [docs/releases/release-notes-v2.md](docs/releases/release-notes-v2.md)
 - How the irrigation advice is worked out: [docs/fao56-engine-report.md](docs/fao56-engine-report.md), [docs/engine/rule-book.md](docs/engine/rule-book.md), [docs/engine/fao56-engine-audit.md](docs/engine/fao56-engine-audit.md)
 - Coming from an older branch: [docs/ORIENTATION.md](docs/ORIENTATION.md) (the RLS and schema-truth notes still apply; use this README for the current layout)
-- Demo day: [showcase/presentation/presentation-runbook.md](showcase/presentation/presentation-runbook.md), [docs/ops/demo-account.md](docs/ops/demo-account.md)
+- Demo day: [docs/presentation/presentation-runbook.md](docs/presentation/presentation-runbook.md), [docs/ops/demo-account.md](docs/ops/demo-account.md)
 - This layout and what is still open: [docs/repo-cleanup-plan.md](docs/repo-cleanup-plan.md)
