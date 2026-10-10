@@ -30,7 +30,7 @@ TAGS = [
   (10, 17.7, None, MOCK, "Mocked Telegram chat · message text from AgroFlow's code"),
   (11, 0.3, None, APP, "Report PDF from AgroFlow's own renderer · real admin console · demo data"),
   (12, 0.3, None, APP, "Real admin console · demo data"),
-  (13, 0.3, None, APP, "Real test results from today's runs"),
+  (13, 0.3, None, APP, "Test results from our local runs, 9–10 Oct 2026"),
 ]
 css = open("shared.css").read()
 total = round(scenes[-1]["start"] + scenes[-1]["dur"], 2)

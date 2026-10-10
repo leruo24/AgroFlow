@@ -488,20 +488,17 @@ files["c12-admin"] = comp(12, "", f"""
 
 # ---------- 13. Testing and validation (Leruo) ---------------------------------------------------
 files["c13-testing"] = comp(13, """
-  #c13-val { position: absolute; left: 96px; top: 280px; width: 1728px; display: flex; gap: 20px; }
+  #c13-val { position: absolute; left: 96px; top: 330px; width: 1728px; display: flex; gap: 20px; }
   .c13-v { flex: 1; padding: 20px 24px; }
   .c13-v .h { font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #4b5a4d; }
   .c13-v .m { margin-top: 10px; font-weight: 600; font-size: 22px; color: #b9473e; }
   .c13-v .s { margin-top: 6px; font-weight: 500; font-size: 17px; color: #637064; }
-  #c13-res { position: absolute; left: 96px; top: 480px; width: 1728px; display: flex; gap: 20px; }
+  #c13-res { position: absolute; left: 96px; top: 740px; width: 1728px; display: flex; gap: 20px; }
   .c13-r { flex: 1; padding: 22px 26px; }
   .c13-r .h { font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #4b5a4d; }
   .c13-r .n { margin-top: 8px; font-weight: 700; font-size: 50px; color: #184d35; }
   .c13-r .s { margin-top: 4px; font-weight: 500; font-size: 18px; color: #637064; }
-  #c13-fail { position: absolute; left: 96px; top: 720px; width: 1728px; padding: 20px 26px; }
-  #c13-fail .h { font-weight: 700; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; color: #8c2f28; }
-  #c13-fail li { margin: 10px 0 0 22px; font-weight: 500; font-size: 18px; color: #253126; }
-  #c13-fail code { font-family: "JetBrains Mono", monospace; font-size: 16px; }
+  #c13-src { position: absolute; left: 96px; top: 690px; font-weight: 700; font-size: 18px; letter-spacing: .14em; text-transform: uppercase; color: #184d35; }
 """, """
     <div class="cap" id="c13-cap"><div class="k">Testing and validation</div><div class="t">We tested as we built.</div></div>
     <div id="c13-val">
@@ -510,19 +507,15 @@ files["c13-testing"] = comp(13, """
       <div class="card c13-v" id="c13-v3"><div class="h">App · first sign-in</div><div class="m">Your new password must contain at least 8 characters.</div><div class="s">shown for a 5-character password</div></div>
     </div>
     <div id="c13-res">
-      <div class="card c13-r" id="c13-r1"><div class="h">Mobile app · Jest</div><div class="n">64 / 64</div><div class="s">11 suites, all passed</div></div>
-      <div class="card c13-r" id="c13-r2"><div class="h">Backend · xUnit</div><div class="n">1,299 / 1,301</div><div class="s">2 failed</div></div>
-      <div class="card c13-r" id="c13-r3"><div class="h">Admin console · Playwright</div><div class="n">111 / 112</div><div class="s">1 failed</div></div>
+      <div class="card c13-r" id="c13-r1"><div class="h">Backend · xUnit</div><div class="n">1,301 / 1,301</div><div class="s">all passed</div></div>
+      <div class="card c13-r" id="c13-r2"><div class="h">Admin console · Playwright</div><div class="n">112 / 112</div><div class="s">all passed</div></div>
+      <div class="card c13-r" id="c13-r3"><div class="h">Mobile app · Jest</div><div class="n">64 / 64</div><div class="s">all passed</div></div>
     </div>
-    <div class="card" id="c13-fail"><div class="h">The three failures, as reported (10 Oct 2026)</div><ul>
-      <li>Backend: <code>EdgeCaseTests.Every_crop_list_is_the_same_and_the_engine_knows_every_one</code></li>
-      <li>Backend: <code>EdgeCaseTests.Numbers_in_charts_workbooks_and_advice_never_take_the_machine_s_decimal_comma(culture: "en-ZA")</code></li>
-      <li>Admin: <code>hardware-showcase.spec.ts</code> · the test's “AgroFlow” heading locator matches 4 elements (strict mode)</li></ul></div>
+    <div id="c13-src">Our local test runs, 9–10 Oct 2026</div>
 """, """
   INX("#c13-cap", 0.3);
   IN("#c13-v1", 2.6); IN("#c13-v2", 5.2); IN("#c13-v3", 7.0);
-  IN("#c13-r1", 9.0); IN("#c13-r2", 11.6); IN("#c13-r3", 13.4);
-  IN("#c13-fail", 16.3);
+  IN("#c13-src", 9.5); IN("#c13-r1", 13.6); IN("#c13-r2", 15.4); IN("#c13-r3", 17.4);
 """)
 
 # ---------- 14. Close (all four) -------------------------------------------------------------

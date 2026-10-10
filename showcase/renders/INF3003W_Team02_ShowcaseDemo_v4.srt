@@ -263,44 +263,40 @@ look after many farms without losing
 track.
 
 59
-00:04:06,190 --> 00:04:08,293
+00:04:06,190 --> 00:04:08,427
 We tested as we built.
 
 60
-00:04:08,333 --> 00:04:14,720
+00:04:08,467 --> 00:04:15,259
 Forms reject bad input, like a wrong phone
 number or a run over 60 minutes.
 
 61
-00:04:14,760 --> 00:04:21,148
-Today, all 64 mobile tests passed, and all
-but three of 1,413 backend and admin
+00:04:15,299 --> 00:04:21,635
+In our local test runs on 9 and 10
+October, all 1,301 backend tests,
 
 62
-00:04:21,188 --> 00:04:21,576
-tests.
+00:04:21,675 --> 00:04:26,190
+all 112 admin tests and all 64
+mobile tests passed.
 
 63
-00:04:21,616 --> 00:04:26,290
-Those three failures are on
-screen, and we are fixing them.
-
-64
 00:04:27,730 --> 00:04:28,834
 AgroFlow recommends.
 
-65
+64
 00:04:28,874 --> 00:04:30,550
 The farmer decides.
 
-66
+65
 00:04:31,040 --> 00:04:34,000
 Every number traces back to its source.
 
-67
+66
 00:04:34,490 --> 00:04:38,520
 Built by Team 2 for INF3003W.
 
-68
+67
 00:04:39,010 --> 00:04:40,680
 Thank you for watching.

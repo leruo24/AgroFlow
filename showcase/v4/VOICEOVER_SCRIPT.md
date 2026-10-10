@@ -128,9 +128,9 @@ Times are `minutes:seconds` from the start of the video. **In** is when your fir
 - File: `vo-team/s13_leruo.wav`
 - Scene: 4:05.69 – 4:27.13
 - In: **4:06.19** · Out by: **4:27.13** (slot 20.9 s)
-- Words: 47 · target at 140 wpm: 20.1 s · guide voice: 20.06 s
+- Words: 44 · target at 140 wpm: 18.9 s · guide voice: 20.04 s
 
-> We tested as we built. Forms reject bad input, like a wrong phone number or a run over 60 minutes. Today, all 64 mobile tests passed, and all but three of 1,413 backend and admin tests. Those three failures are on screen, and we are fixing them.
+> We tested as we built. Forms reject bad input, like a wrong phone number or a run over 60 minutes. In our local test runs on 9 and 10 October, all 1,301 backend tests, all 112 admin tests and all 64 mobile tests passed.
 
 ## 14. Close · Lubaelihle (a)
 

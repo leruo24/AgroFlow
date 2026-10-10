@@ -117,9 +117,9 @@
   "scene": 13,
   "speaker": "Leruo",
   "title": "Testing and validation",
-  "text": "We tested as we built. Forms reject bad input, like a wrong phone number or a run over 60 minutes. Today, all 64 mobile tests passed, and all but three of 1,413 backend and admin tests. Those three failures are on screen, and we are fixing them.",
-  "say": "We tested as we built. Forms reject bad input, like a wrong phone number or a run over sixty minutes. Today, all sixty-four mobile tests passed, and all but three of one thousand four hundred and thirteen backend and admin tests. Those three failures are on screen, and we are fixing them.",
-  "dur": 20.06,
+  "text": "We tested as we built. Forms reject bad input, like a wrong phone number or a run over 60 minutes. In our local test runs on 9 and 10 October, all 1,301 backend tests, all 112 admin tests and all 64 mobile tests passed.",
+  "say": "We tested as we built. Forms reject bad input, like a wrong phone number or a run over sixty minutes. In our local test runs on the ninth and tenth of October, all one thousand three hundred and one backend tests, all one hundred and twelve admin tests and all sixty-four mobile tests passed.",
+  "dur": 20.04,
   "at": 246.19
  },
  {
