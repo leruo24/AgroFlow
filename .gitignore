@@ -29,12 +29,13 @@ test-results/
 playwright-report/
 *.log
 
-# Video and archives. The two loading animations are app assets and stay tracked.
+# Video and archives. The loading animations are app assets and stay tracked.
 *.mp4
 *.mov
 *.zip
 !apps/mobile/assets/media/agroflow-loading.mp4
 !apps/web/admin/public/media/agroflow-loading.mp4
+!apps/mobile/public/media/agroflow-loading.mp4
 
 # Firmware credentials anywhere, not only under hardware/
 secrets.h
