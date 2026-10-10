@@ -296,7 +296,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
   const label = `${MASCOT_NAME} says: ${decision.message}`;
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
+    <View style={[styles.container, { pointerEvents: 'box-none' }]}>
       <Animated.View
         style={{
           opacity,

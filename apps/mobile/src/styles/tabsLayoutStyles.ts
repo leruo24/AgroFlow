@@ -27,11 +27,17 @@ export function createTabsLayoutStyles(colors: AppColors) {
       backgroundColor: colors.tabBarSurface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.divider,
-      shadowColor: colors.black,
-      shadowOpacity: 0.12,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 8,
+      // react-native-web only supports boxShadow; the phones keep shadow* and elevation.
+      ...Platform.select({
+        web: { boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.12)' },
+        default: {
+          shadowColor: colors.black,
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 8,
+        },
+      }),
     },
     badge: {
       fontSize: Type.label,

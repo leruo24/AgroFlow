@@ -81,17 +81,23 @@ export default function AlertsScreen() {
         const severe = /critical|error|danger/i.test(alert.type);
         const Icon = severe ? AlertCircle : Bell;
         const key = alertKey(alert.id);
-        return <TouchableOpacity key={alert.id} accessibilityRole="button" accessibilityLabel={alert.title + (alert.read ? ', read' : ', unread') + (alert.zoneId ? ', open zone' : ', mark read')} style={styles.row} onPress={() => {
+        const open = () => {
           if (!alert.read) markAlertAsRead(alert.id);
           if (alert.zoneId) router.push({ pathname: '/zone/[id]', params: { id: alert.zoneId } });
-        }}>
-          <View style={styles.rowTop}><Icon size={21} color={severe ? colors.error : colors.textSecondary} strokeWidth={1.7} /><Text style={styles.title}>{alert.title}</Text>{!alert.read && <Text style={styles.buttonText}>Unread</Text>}{alert.zoneId && <ChevronRight size={19} color={colors.textSecondary} />}
+        };
+        // The Dismiss and Why buttons sit beside the tap areas, not inside them: a button inside
+        // a button is invalid on web and cannot be reached by a screen reader on a phone.
+        return <View key={alert.id} style={styles.row}>
+          <View style={styles.rowTop}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={alert.title + (alert.read ? ', read' : ', unread') + (alert.zoneId ? ', open zone' : ', mark read')} style={[styles.rowTop, { flex: 1 }]} onPress={open}>
+              <Icon size={21} color={severe ? colors.error : colors.textSecondary} strokeWidth={1.7} /><Text style={styles.title}>{alert.title}</Text>{!alert.read && <Text style={styles.buttonText}>Unread</Text>}{alert.zoneId && <ChevronRight size={19} color={colors.textSecondary} />}
+            </TouchableOpacity>
             {key && <DismissButton label={alert.title} onPress={() => severe ? setAsking({ key, title: alert.title }) : dismiss(key, null)} />}
           </View>
-          <Text style={styles.body}>{alert.message}</Text>
+          <TouchableOpacity accessible={false} onPress={open}><Text style={styles.body}>{alert.message}</Text></TouchableOpacity>
           <WhyLink explanation={why[alert.id]} compact />
-          <Text style={styles.caption}>{[alert.zone, formatSast(alert.timestamp) ?? 'Time unavailable'].filter(Boolean).join(' · ')}</Text>
-        </TouchableOpacity>;
+          <TouchableOpacity accessible={false} onPress={open}><Text style={styles.caption}>{[alert.zone, formatSast(alert.timestamp) ?? 'Time unavailable'].filter(Boolean).join(' · ')}</Text></TouchableOpacity>
+        </View>;
       }))}
     {view !== 'active' && <>
       <Text accessibilityRole="header" style={styles.sectionTitle}>Dismissed</Text>

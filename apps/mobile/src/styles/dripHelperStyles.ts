@@ -33,11 +33,16 @@ export function createDripHelperStyles(colors: AppColors) {
       borderWidth: 1,
       borderColor: colors.border,
       // A soft shadow so the bubble looks like it floats above the page.
-      shadowColor: colors.black,
-      shadowOpacity: 0.12,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 3 },
-      elevation: 4,
+      ...Platform.select({
+        web: { boxShadow: '0px 3px 8px rgba(0, 0, 0, 0.12)' },
+        default: {
+          shadowColor: colors.black,
+          shadowOpacity: 0.12,
+          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: 4,
+        },
+      }),
     },
     bubbleText: {
       fontSize: Type.caption,

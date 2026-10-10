@@ -1,9 +1,9 @@
+import { AppAlert as Alert } from '@/components/AppAlert';
 import { router } from '@/lib/router';
 import { HelpButton } from '@/components/HelpButton';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,

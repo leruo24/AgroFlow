@@ -180,8 +180,8 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
         // Web only: `fixed` keeps the overlay over the viewport so it cannot scroll away. It is not
         // in React Native's ViewStyle type, which is why it is cast here.
         Platform.OS === 'web' ? ({ position: 'fixed' } as object) : null,
+        { pointerEvents: 'auto' },
       ]}
-      pointerEvents="auto"
       accessibilityRole="progressbar"
       accessibilityLabel="AgroFlow is starting"
     >

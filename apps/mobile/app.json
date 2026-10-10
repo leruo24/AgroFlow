@@ -21,8 +21,19 @@
       "package": "com.agroflow.irrigation"
     },
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "AgroFlow",
+      "shortName": "AgroFlow",
+      "description": "Smart irrigation for South African farmers: live soil moisture, 7-day forecast advice, automatic watering and alerts.",
+      "lang": "en",
+      "themeColor": "#FFFFFF",
+      "backgroundColor": "#FFFFFF",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "scope": "/",
+      "barStyle": "default"
     },
     "plugins": [
       "expo-router",
