@@ -1,7 +1,0 @@
-node_modules
-capture/node_modules/
-snapshots/
-renders/work-*/
-renders/.*
-.hyperframes/
-renders/preview-draft-full.mp4
