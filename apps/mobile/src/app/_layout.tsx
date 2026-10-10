@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Platform,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -161,12 +162,25 @@ function RootNavigator() {//decides which screens the user is permitted to acces
 // above the provider that supplies them.
 function RootShell() {
   const { isLoading } = useAuth();
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
 
   return (
     <>
-      <View style={Platform.OS === 'web' ? styles.webFrame : styles.nativeFrame}>
-        <RootNavigator />
-      </View>
+      {/* On a computer the app stays phone width in the middle of the window, on a neutral
+          background, instead of stretching edge to edge. Phones are narrower than the column,
+          so they see no difference; Android uses the plain frame. */}
+      {Platform.OS === 'web' ? (
+        <View style={[styles.webOuter, { backgroundColor: colors.surfaceSecondary }]}>
+          <View style={[styles.webFrame, { backgroundColor: colors.background }, width > 480 && { borderColor: colors.border, borderLeftWidth: StyleSheet.hairlineWidth, borderRightWidth: StyleSheet.hairlineWidth }]}>
+            <RootNavigator />
+          </View>
+        </View>
+      ) : (
+        <View style={styles.nativeFrame}>
+          <RootNavigator />
+        </View>
+      )}
 
       {/* Above everything, including the login screen, and deliberately
           independent of the "Raindrop helper" and "Show page help" settings -
@@ -208,6 +222,7 @@ const styles =
         'center',
     },
     nativeFrame: { flex: 1 },
+    webOuter: { flex: 1 },
     webFrame: {
       flex: 1,
       width: '100%',

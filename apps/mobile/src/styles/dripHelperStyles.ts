@@ -2,8 +2,8 @@ import { Platform, StyleSheet } from 'react-native';
 import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 
 // Styles for the raindrop helper. It floats over Home, so it is positioned absolutely and
-// sits clear of the floating tab bar (72 px on Android, 82 on iOS; see tabsLayoutStyles).
-const TAB_BAR_CLEARANCE = Platform.OS === 'ios' ? 96 : 86;
+// sits clear of the floating tab bar (72 px on Android, 82 on iOS, 80 on web; see tabsLayoutStyles).
+const TAB_BAR_CLEARANCE = Platform.OS === 'ios' ? 96 : Platform.OS === 'web' ? 94 : 86;
 
 export function createDripHelperStyles(colors: AppColors) {
   return StyleSheet.create({

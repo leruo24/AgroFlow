@@ -42,6 +42,20 @@
       }
     </style>
 
+    <!-- Touch screens: every control is at least 44 px (Apple HIG / WCAG 2.5.5). On Android the
+         same controls use hitSlop, which a browser ignores. "html" in front outranks
+         react-native-web's own reset (min-height: 0). -->
+    <style>
+      @media (pointer: coarse) {
+        html [role="button"], html [role="link"], html [role="tab"], html [role="switch"],
+        html [role="checkbox"], html [role="radio"], html a[href], html button,
+        html input[type="checkbox"] {
+          min-width: 44px;
+          min-height: 44px;
+        }
+      }
+    </style>
+
     <!-- The page colour before React paints and in the overscroll area: the app's own light
          and dark backgrounds (constants/colors.ts), so there is no seam. -->
     <style>

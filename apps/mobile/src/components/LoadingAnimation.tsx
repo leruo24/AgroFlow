@@ -196,7 +196,9 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
       >
         {reduceMotion === false && player ? (
           <VideoView
-            style={StyleSheet.absoluteFill}
+            // On web the <video> element keeps its own 1080x1920 size unless told to fill the
+            // overlay; contain then fits the whole picture, centred, at any screen size.
+            style={[StyleSheet.absoluteFill, Platform.OS === 'web' ? styles.webVideo : null]}
             player={player}
             // contain: the video is 1080x1920 portrait with the logo in the middle; cover would crop
             // the logo on a short screen.
@@ -233,6 +235,7 @@ const styles = StyleSheet.create({
     // Above every screen, including login, and above anything the router renders on web.
     zIndex: 9999,
   },
+  webVideo: { width: '100%', height: '100%' },
   posterWrap: {
     position: 'absolute',
     top: 0,

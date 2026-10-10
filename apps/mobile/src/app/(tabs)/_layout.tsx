@@ -11,8 +11,10 @@ import {//importing icons for the bottom navigation bar
 import { useMemo, type ComponentType } from 'react';
 import {
   ColorValue,
+  Platform,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
 import { useTheme } from '@/context/ThemeContext';//contains the colors
@@ -35,6 +37,12 @@ export default function TabsLayout() {//creates layout component
   const { colors } = useTheme();
   const { alerts } = useAgroFlow();
   const themedStyles = useMemo(() => createTabsLayoutStyles(colors), [colors]);
+  // From an iPhone Home Screen the web app runs edge to edge (viewport-fit=cover), so the
+  // floating bar sits above the home indicator. The native apps already allow for it.
+  const { bottom } = useSafeAreaInsets();
+  const tabBarStyle = Platform.OS === 'web' && bottom > 0
+    ? [themedStyles.tabBar, { marginBottom: 12 + bottom }]
+    : themedStyles.tabBar;
 
   const unreadAlerts = alerts.filter(//gets unread alerts count
     (alert) => !alert.read
@@ -53,7 +61,7 @@ export default function TabsLayout() {//creates layout component
         // Inactive icons and labels stay readable on forest green.
         tabBarInactiveTintColor: colors.textMuted,
 
-        tabBarStyle: themedStyles.tabBar,
+        tabBarStyle,
 
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,

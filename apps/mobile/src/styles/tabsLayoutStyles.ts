@@ -17,11 +17,13 @@ export function createTabsLayoutStyles(colors: AppColors) {
     // by the corners and looks unfinished. No `overflow: 'hidden'`, which would clip the
     // shadow on iOS.
     tabBar: {
-      height: Platform.OS === 'ios' ? 82 : 72,
+      // Browsers draw the label taller than Android does, so web needs a little more room or the
+      // descenders ("g", "y") are cut off.
+      height: Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 80 : 72,
       marginHorizontal: 16,
       marginBottom: Platform.OS === 'ios' ? 8 : 12,
       paddingTop: 8,
-      paddingBottom: Platform.OS === 'ios' ? 15 : 8,
+      paddingBottom: Platform.OS === 'ios' ? 15 : Platform.OS === 'web' ? 10 : 8,
       borderRadius: Radius.md,
       position: 'absolute',
       backgroundColor: colors.tabBarSurface,
