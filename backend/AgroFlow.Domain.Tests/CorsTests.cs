@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -130,6 +131,27 @@ public class CorsTests : IClassFixture<ApiHost>
         var res = await _app.CreateClient().SendAsync(req);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, res.StatusCode);
         Assert.Equal(Listed, AllowOrigin(res));
+    }
+
+    [Fact]
+    public void Allowed_origins_can_be_a_list_or_one_comma_separated_value()
+    {
+        var single = new ConfigurationBuilder()
+            .AddInMemoryCollection(new System.Collections.Generic.Dictionary<string, string?>
+            {
+                ["Cors:AllowedOrigins"] = " https://agroflow.vercel.app/ , https://app.agroflow.example,,",
+            })
+            .Build();
+        Assert.Equal(new[] { "https://agroflow.vercel.app", "https://app.agroflow.example" }, CorsSetup.ReadAllowedOrigins(single));
+
+        var listed = new ConfigurationBuilder()
+            .AddInMemoryCollection(new System.Collections.Generic.Dictionary<string, string?>
+            {
+                ["Cors:AllowedOrigins:0"] = "https://agroflow.vercel.app",
+                ["Cors:AllowedOrigins:1"] = "https://app.agroflow.example/",
+            })
+            .Build();
+        Assert.Equal(new[] { "https://agroflow.vercel.app", "https://app.agroflow.example" }, CorsSetup.ReadAllowedOrigins(listed));
     }
 
     [Fact]
