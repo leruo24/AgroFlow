@@ -204,8 +204,11 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
         }}
         accessibilityLabel="Skip the opening animation"
       >
-        {reduceMotion === false && Platform.OS === 'web' ? (
-          <WebLoadingVideo onDone={markVideoDone} />
+        {Platform.OS === 'web' ? (
+          <WebLoadingVideo
+            mode={reduceMotion === null ? 'pending' : reduceMotion ? 'still' : 'video'}
+            onDone={markVideoDone}
+          />
         ) : reduceMotion === false && player ? (
           <VideoView
             style={StyleSheet.absoluteFill}

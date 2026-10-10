@@ -56,11 +56,12 @@
       }
     </style>
 
-    <!-- The page colour before React paints and in the overscroll area: the app's own light
-         and dark backgrounds (constants/colors.ts), so there is no seam. -->
+    <!-- The page colour before React paints and in the overscroll area. Light: the loading
+         video's own background (#F9FBF8), so the first paint, the poster and the video match;
+         dark: the app's dark background (constants/colors.ts). -->
     <style>
       body {
-        background-color: #ffffff;
+        background-color: #f9fbf8;
       }
       @media (prefers-color-scheme: dark) {
         body {

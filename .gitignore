@@ -35,7 +35,7 @@ playwright-report/
 *.zip
 !apps/mobile/assets/media/agroflow-loading.mp4
 !apps/web/admin/public/media/agroflow-loading.mp4
-!apps/mobile/public/media/agroflow-loading.mp4
+!apps/mobile/public/media/agroflow-loading-v2.mp4
 
 # Firmware credentials anywhere, not only under hardware/
 secrets.h
