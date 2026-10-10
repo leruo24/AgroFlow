@@ -21,8 +21,8 @@ dotnet run
 
 For Expo web, run this API alongside Metro. Development requests from
 `localhost`/`127.0.0.1` are allowed across ports. For a deployed web app or
-a browser opened on a LAN hostname, configure `Cors:AllowedOrigins:0` with
-the exact web origin (for example via `Cors__AllowedOrigins__0`). Restart the
+a browser opened on a LAN hostname, add the exact web origin to
+`Cors:AllowedOrigins` (for example via `Cors__AllowedOrigins`). Restart the
 API after changing its code or CORS configuration; rebuilding alone does not
 update an already-running process.
 
@@ -42,17 +42,15 @@ still checks its own JWT or device key, so CORS decides only which websites a
 browser lets read the answers. Error answers (401, 500, 503) carry the header
 too, so the admin shows the API's sentence rather than "Failed to fetch".
 
-On **Railway**, set one variable per website, numbered from 0, with no
+On **Railway**, set one variable with every website, comma-separated, with no
 trailing path:
 
 | Variable | Example value |
 |---|---|
-| `Cors__AllowedOrigins__0` | `https://<github-user>.github.io` (the admin console on GitHub Pages) |
-| `Cors__AllowedOrigins__1` | the mobile web app's origin, if it is hosted |
-| `Cors__AllowedOrigins__N` | any further website, one per number |
+| `Cors__AllowedOrigins` | `https://<project>.vercel.app,https://<mobile-web-app-origin>` |
 
-An origin is only `scheme://host[:port]` - for a site served from
-`https://<user>.github.io/agroflow/`, the origin is `https://<user>.github.io`.
+The numbered form (`Cors__AllowedOrigins__0`, `__1`, ...) still works and can be
+combined with it. An origin is only `scheme://host[:port]`.
 Railway restarts the service when a variable changes.
 
 `Telegram:BotToken` is optional locally: with no token the API starts
@@ -120,7 +118,7 @@ Config is split by sensitivity:
 | `Supabase:JwksUrl` | `appsettings.json` | `{Supabase:Url}/auth/v1/.well-known/jwks.json` | Used to validate admin bearer tokens |
 | `Firmware:LatestVersion` / `Firmware:DownloadUrl` | `appsettings.json` | You set these per release | `DownloadUrl` must point at an actual hosted `.bin` — this project doesn't host firmware binaries itself |
 | `Mqtt:Host` / `Mqtt:Port` / `Mqtt:Username` | `appsettings.json` | HiveMQ Cloud console → your cluster → Access Management | Endpoint identity, not a credential |
-| `Cors:AllowedOrigins` | deployment configuration (Railway: `Cors__AllowedOrigins__0..N`) | The admin console's and web app's origins | Exact browser origins allowed to call the API, on top of the fixed local dev origins; any other loopback origin only in Development. See CORS above |
+| `Cors:AllowedOrigins` | deployment configuration (Railway: `Cors__AllowedOrigins`, comma-separated, or `__0..N`) | The admin console's and web app's origins | Exact browser origins allowed to call the API, on top of the fixed local dev origins; any other loopback origin only in Development. See CORS above |
 | `Telegram:BotToken` | **user-secrets / Railway** | @BotFather → `/newbot` or `/token` | Never commit. Absent ⇒ notifications become no-ops instead of failing |
 | `Telegram:BotUsername` | `appsettings.json` | The bot's @name, without the `@` | Only used to build the `t.me/<bot>?start=<code>` deep link the admin screen renders as a QR |
 | `Telegram:EnablePolling` | deployment configuration | — | **Exactly one running instance may set this true.** Defaults to `false`; Railway sets `Telegram__EnablePolling=true`. Two pollers on one token steal each other's `/start` messages (HTTP 409) |

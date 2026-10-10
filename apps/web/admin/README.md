@@ -81,23 +81,25 @@ src/
   styles/main.css
 ```
 
-## Connecting a backend
+## Configuration
 
-Everything goes through `src/data/api.ts`. Nothing else changes.
+Copy `.env.example` to `.env`. Every variable is built into the public
+JavaScript, so none of them may hold a secret.
 
-1. Create `.env`:
+| Variable | What it is for |
+|---|---|
+| `VITE_SUPABASE_URL` | The Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | The Supabase anon (publishable) key. Public by design: Row Level Security protects the data |
+| `VITE_AGROFLOW_API_BASE` | The AgroFlow.Api base URL, no trailing slash |
+| `VITE_DOWNLOADS_ANDROID_APK_URL` | Optional: the landing page's Android download link (hidden when empty) |
+| `VITE_DOWNLOADS_WEB_APP_URL` | Optional: the landing page's link to the mobile web app (hidden when empty) |
 
-   ```
-   VITE_API_BASE=https://your-server.com/api
-   ```
+## Deploying on Vercel
 
-   The api layer auto-switches off mock data once this is set.
-
-2. Each method already has its real `request<T>()` call written beside the
-   mock branch — adjust endpoint paths to match your routes.
-
-3. Make your JSON match `src/types/models.ts`. Run `npm run typecheck` to
-   surface mismatches at compile time.
+Root directory `apps/web/admin`, framework preset Vite, build `npm run build`,
+output `dist`, and the variables above set in the project settings. The site
+routes on the URL hash, so no rewrites are needed. Add the Vercel origin to the
+API's `Cors__AllowedOrigins` (see `backend/AgroFlow.Api/README.md`).
 
 4. Delete `src/data/mock.ts` once nothing imports it.
 

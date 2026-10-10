@@ -76,7 +76,7 @@ builder.Services
 builder.Services.AddAuthorization();
 builder.Services.AddHttpClient();
 
-// One CORS policy: Cors:AllowedOrigins (Railway: Cors__AllowedOrigins__0..N) plus
+// One CORS policy: Cors:AllowedOrigins (Railway: Cors__AllowedOrigins, comma-separated) plus
 // the local dev origins, and any loopback origin in Development. See
 // Services/CorsSetup.cs. Authentication and the device key are still required.
 builder.Services.AddAgroFlowCors(builder.Configuration, builder.Environment);

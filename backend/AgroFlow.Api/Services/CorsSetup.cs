@@ -1,8 +1,9 @@
 namespace AgroFlow.Api.Services;
 
 /* The API's one CORS policy, applied once:
- * - every origin in Cors:AllowedOrigins (on Railway: Cors__AllowedOrigins__0,
- *   Cors__AllowedOrigins__1, ...), matched exactly, ignoring case and a trailing slash;
+ * - every origin in Cors:AllowedOrigins (on Railway: Cors__AllowedOrigins as one
+ *   comma-separated value, or Cors__AllowedOrigins__0, __1, ...), matched exactly,
+ *   ignoring case and a trailing slash;
  * - the local dev origins (the admin's Vite ports and Expo web), in every environment;
  * - in Development, any http(s) loopback origin, so a dev server on another port works.
  * Any header and method are allowed: every route still checks its own JWT or device
@@ -22,11 +23,7 @@ public static class CorsSetup
     public static IServiceCollection AddAgroFlowCors(
         this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
-        var configured = (configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
-            .Select(Normalise)
-            .Where(o => o.Length > 0)
-            .ToArray();
-        var allowed = new HashSet<string>(configured.Concat(LocalDevOrigins), StringComparer.OrdinalIgnoreCase);
+        var allowed = new HashSet<string>(ReadAllowedOrigins(configuration).Concat(LocalDevOrigins), StringComparer.OrdinalIgnoreCase);
         var development = environment.IsDevelopment();
 
         services.AddCors(options => options.AddPolicy(PolicyName, policy => policy
@@ -34,6 +31,20 @@ public static class CorsSetup
             .AllowAnyHeader()
             .AllowAnyMethod()));
         return services;
+    }
+
+    // Cors:AllowedOrigins as a list (Cors__AllowedOrigins__0, __1, ...) or as one
+    // comma-separated value (Cors__AllowedOrigins=https://a,https://b). Both forms may be set.
+    public static string[] ReadAllowedOrigins(IConfiguration configuration)
+    {
+        var section = configuration.GetSection("Cors:AllowedOrigins");
+        var listed = section.GetChildren().Select(c => c.Value);
+        var single = (section.Value ?? "").Split(',');
+        return listed.Concat(single)
+            .Select(Normalise)
+            .Where(o => o.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     internal static bool IsAllowed(string origin, ISet<string> allowed, bool development)
