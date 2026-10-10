@@ -15,10 +15,9 @@ export function telegramState(u: User): string {
   return u.telegramAlerts ? "Connected" : "Connected, alerts off";
 }
 
-/* Deliberately not a subtle icon. A farmer with no Telegram receives nothing
-   at all - no weather warning, no equipment failure, no password reset - and
-   that is a "somebody has to go and fix this" state, not a decoration. It gets
-   the same red treatment the rest of the dashboard uses for faults. */
+/* Not a subtle icon on purpose. A farmer with no Telegram gets nothing (no weather warning,
+ * equipment failure or password reset), and someone has to fix that, so it gets the same red
+ * as other faults. */
 function telegramCell(u: User): string {
   if (!u.telegramLinked) {
     return `<span class="badge bad" title="This farmer receives no alerts at all until they connect Telegram.">Not connected</span>`;

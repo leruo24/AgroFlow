@@ -4,14 +4,13 @@ using AgroFlow.Business;
 
 namespace AgroFlow.Presentation
 {
-    // Demonstrates DYNAMIC POLYMORPHISM (Notes 2.4) the same way the workshop's
-    // waitering system does with Role.Payment(): one base-class collection holding
-    // different concrete subclasses, one method call, different runtime behaviour.
+    // Shows dynamic polymorphism (Notes 2.4), like Role.Payment() in the workshop:
+    // one base-class collection, one method call, different behaviour per subclass.
     public class Program
     {
         public static void Main()
         {
-            // A Collection of the BASE type, holding three different DERIVED types.
+            // A collection of the base type holding three different derived types.
             Collection<Hardware> devices = new Collection<Hardware>();
 
             Sensor soilSensor = new Sensor();
@@ -22,11 +21,8 @@ namespace AgroFlow.Presentation
 
             Pump waterPump = new Pump();
             waterPump.DeviceName = "Zone1-Pump";
-            // Display-only, for the polymorphism demo below: Pump.ReadValue()
-            // reports a pump's rated flow while running. This is NOT used to
-            // value any irrigation event - that is zone.flow_rate_lpm's job.
-            // Set to the measured test pump (500 ml in 20 s = 1.5 L/min) so the
-            // demo does not print a number that contradicts the database.
+            // Display only, for the demo below. Irrigation events use zone.flow_rate_lpm,
+            // not this. 1.5 L/min is the measured test pump (500 ml in 20 s).
             waterPump.FlowRate = 1.5f;
             waterPump.IsRunning = true;
             waterPump.Status = "Running";
@@ -40,9 +36,8 @@ namespace AgroFlow.Presentation
             devices.Add(waterPump);
             devices.Add(board);
 
-            // The SAME ReadValue() call resolves to a different override on each object,
-            // decided at runtime - this is the polymorphism the class diagram's
-            // Hardware hierarchy exists to provide.
+            // The same ReadValue() call runs a different override on each object,
+            // chosen at runtime.
             foreach (Hardware device in devices)
             {
                 Console.WriteLine(

@@ -1,5 +1,5 @@
-// Drip: AgroFlow's raindrop helper. All four moods designed in ChatGPT.
-// Requires react-native-svg (`npx expo install react-native-svg` if not installed).
+// Drip: AgroFlow's raindrop helper, with four moods.
+// Needs react-native-svg (`npx expo install react-native-svg` if not installed).
 import Svg, { G, Path, Ellipse } from 'react-native-svg';
 
 export type DripMood = 'happy' | 'alert' | 'thirsty' | 'wave';

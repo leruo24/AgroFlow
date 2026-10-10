@@ -1,8 +1,8 @@
 /// <reference types="jest" />
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
-/* Item 6b: "Recommended for you" shows the server's sentence; Use these
- * settings saves through Reset to recommended; Keep my own hides it. */
+/* "Recommended for you" shows the server's sentence; Use these settings saves through
+ * Reset to recommended; Keep my own hides it. */
 
 jest.mock('@/context/ThemeContext', () => {
   const { lightColors } = jest.requireActual('@/constants/colors');

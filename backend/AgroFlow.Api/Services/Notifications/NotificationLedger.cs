@@ -2,15 +2,9 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// "Has this farm already been told about this?" - the thing that stops a
-// repeatedly-observed event becoming a repeatedly-sent message.
-//
-// The forecast is refreshed every 6 hours and carries 8 days, so a storm four
-// days out is seen about 20 times before it arrives. Without a ledger that is
-// 20 identical messages, after which the farmer mutes the bot and misses the
-// frost warning that mattered.
-//
-// See migration 0026 for the table and for what subject_date means.
+// "Has this farm already been told about this?" Stops one event being messaged again
+// and again. The forecast refreshes every 6 hours with 8 days, so a storm four days
+// out is seen about 20 times. See migration 0026 for the table and subject_date.
 public sealed class NotificationLedger
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -22,17 +16,11 @@ public sealed class NotificationLedger
         _logger = logger;
     }
 
-    // Returns true exactly once per (farm, alertType, subjectDate), and false
-    // every time after.
-    //
-    // Claiming and checking are a single statement on purpose: `on conflict do
-    // nothing returning` means two API instances racing on the same event
-    // cannot both be told to send. Whoever's insert lands gets the row back;
-    // the other gets nothing.
-    //
-    // Fails OPEN - a database problem here returns true and the farmer gets
-    // the message. A duplicate warning is a far smaller harm than a frost
-    // warning swallowed by a failing dedupe check.
+    // Returns true once per (farm, alertType, subjectDate), and false after that.
+    // Claim and check are one statement (`on conflict do nothing returning`), so two API
+    // instances cannot both send.
+    // Fails open: on a database problem we return true and send, because a duplicate is
+    // better than a missed frost warning.
     public async Task<bool> TryClaimAsync(
         long farmId,
         string alertType,

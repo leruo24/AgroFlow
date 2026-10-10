@@ -4,13 +4,9 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Issues and redeems the single-use codes that link a farmer's Telegram
-// account to their AgroFlow profile.
-//
-// The whole design exists because a Telegram bot cannot message anyone first.
-// The admin generates a code, shows it as a QR for
-// https://t.me/<bot>?start=<code>, and the farmer scanning it is what creates
-// a chat the bot may use from then on.
+// Issues and redeems the single-use codes that link a farmer's Telegram to their
+// AgroFlow profile. A bot cannot message anyone first, so the admin shows a QR for
+// https://t.me/<bot>?start=<code>, and the farmer scanning it creates the chat.
 public sealed class TelegramOnboardingService
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -27,26 +23,14 @@ public sealed class TelegramOnboardingService
         _logger = logger;
     }
 
-    // Mints a fresh code and invalidates any earlier unused ones for the same
-    // farmer, so "Regenerate code" cannot leave two live QR codes pointing at
-    // one profile - the older printout stops working the moment a new one is
-    // produced.
-    //
-    // purpose decides what redeeming it does to the farmer's account - see
-    // TelegramCodePurpose. It is chosen by the endpoint that issues the code,
-    // never by the farmer, so somebody cannot turn a link request into a
-    // password reset on someone else's account.
-    // lifetime is optional and defaults to the configured TTL, so every
-    // existing caller is unchanged.
-    //
-    // It exists for the app's own "Connect Telegram" button, which wants
-    // FIFTEEN MINUTES rather than the onboarding default of seven days. The
-    // two are different situations: an onboarding QR is printed or shown
-    // on-site and may sit in a box for days, while a link code is generated
-    // by a farmer who is holding the phone and about to tap straight through
-    // to Telegram. A week-long window for that is a week in which a code
-    // sitting in a log or a screenshot can attach someone else's chat to
-    // their account.
+    // Creates a new code and cancels any older unused ones for the same farmer, so
+    // "Regenerate code" never leaves two working QR codes.
+    // Security: purpose (see TelegramCodePurpose) decides what redeeming does to the
+    // account. The endpoint picks it, never the farmer, so a link request cannot become
+    // a password reset on someone else's account.
+    // lifetime defaults to the configured TTL. The app's "Connect Telegram" button uses
+    // 15 minutes instead of the onboarding default of 7 days, because the farmer is
+    // holding the phone, and a long window means a leaked code stays usable longer.
     public async Task<TelegramOnboardingCode> IssueCodeAsync(
         Guid profileId,
         TelegramCodePurpose purpose,
@@ -90,10 +74,8 @@ public sealed class TelegramOnboardingService
         return new TelegramOnboardingCode(code, expiresAt, BuildDeepLink(code));
     }
 
-    // Single-use redemption in one statement. The `used_at is null and
-    // expires_at > now()` predicate plus `returning` means two farmers
-    // scanning the same QR at the same moment cannot both win: Postgres
-    // serialises the update and the loser gets zero rows back.
+    // Single-use redemption in one statement: `used_at is null and expires_at > now()`
+    // with `returning` means two people scanning the same QR at once cannot both win.
     public async Task<TelegramRedemption?> RedeemCodeAsync(
         string code,
         long chatId,
@@ -128,10 +110,9 @@ public sealed class TelegramOnboardingService
             await reader.CloseAsync();
         }
 
-        // profile.telegram_chat_id is uniquely indexed, so a farmer who
-        // re-links from the same Telegram account - or one phone handed to a
-        // different person - would otherwise collide. Detach the chat from
-        // whoever held it before, then attach it here.
+        // profile.telegram_chat_id is unique, so re-linking the same Telegram account (or a
+        // phone passed to someone else) would collide. We detach the chat from its old
+        // owner first, then attach it here.
         await using (var detach = new NpgsqlCommand(
             "update profile set telegram_chat_id = null where telegram_chat_id = $1 and id <> $2",
             connection, transaction))
@@ -159,9 +140,8 @@ public sealed class TelegramOnboardingService
         return new TelegramRedemption(profileId, purpose);
     }
 
-    // Everything the welcome message needs, read after redemption. Returns
-    // null if the profile has no farm yet - possible for a farmer created
-    // through the older /api/farmers/create path.
+    // Everything the welcome message needs, read after redemption. Null if the profile
+    // has no farm yet (possible via the older /api/farmers/create path).
     public async Task<FarmerContext?> GetFarmerContextAsync(
         Guid profileId,
         CancellationToken cancellationToken)
@@ -197,9 +177,8 @@ public sealed class TelegramOnboardingService
             reader.GetString(3));
     }
 
-    // Sets the flag the mobile app reads to force a password change at first
-    // sign-in. Called right after the bot sends a temporary password, since
-    // that password then lives in the farmer's chat history indefinitely.
+    // Security: sets the flag that makes the app force a password change at first
+    // sign-in, because the temporary password now sits in the chat history.
     public async Task SetMustChangePasswordAsync(
         Guid profileId,
         bool mustChange,
@@ -256,10 +235,8 @@ public sealed class TelegramOnboardingService
             ? null
             : $"https://t.me/{_options.BotUsername.TrimStart('@')}?start={code}";
 
-    // Telegram restricts the ?start= payload to 1-64 characters from
-    // [A-Za-z0-9_-], which rules out ordinary base64. URL-safe base64 of 24
-    // random bytes gives 32 characters in that alphabet with no padding, and
-    // 192 bits of entropy - not guessable in the week a code stays live.
+    // Telegram only allows 1-64 characters from [A-Za-z0-9_-] in ?start=, so we use
+    // URL-safe base64 of 24 random bytes: 32 characters, no padding, 192 bits of entropy.
     private static string GenerateCode()
     {
         var bytes = RandomNumberGenerator.GetBytes(24);
@@ -271,20 +248,17 @@ public sealed class TelegramOnboardingService
     }
 }
 
-// Why a code was issued, which is what decides whether redeeming it touches
-// the farmer's password. Chosen by the issuing endpoint, never by the farmer.
+// Why a code was issued, which decides whether redeeming it touches the farmer's
+// password. Chosen by the issuing endpoint, never by the farmer.
 public enum TelegramCodePurpose
 {
-    // Issued by an admin: on-site farmer onboarding, or "Regenerate code" for
-    // a QR that expired or was lost. The farmer has no usable password yet (or
-    // the one they were given is loose in the world), so redemption mints a
-    // fresh one, sends it, and forces a change at next sign-in.
+    // Issued by an admin (on-site onboarding or "Regenerate code"). The farmer has no
+    // usable password yet, so redemption creates one, sends it and forces a change at
+    // next sign-in.
     Onboarding,
 
-    // Issued by the farmer themselves from the mobile app's Connect Telegram
-    // option. They are already signed in with a password they know, and they
-    // only want their alerts here - so redemption links the chat and leaves
-    // the account completely alone.
+    // Issued by the farmer from the app's Connect Telegram option. They already have a
+    // password, so redemption only links the chat.
     Link,
 }
 
@@ -296,10 +270,9 @@ public static class TelegramCodePurposeExtensions
         _ => "onboarding",
     };
 
-    // Anything unrecognised falls back to onboarding, matching the column
-    // default in migration 0025: the louder behaviour is the safer default,
-    // because a farmer who unexpectedly has to set a password is a nuisance,
-    // while one who silently never receives their credentials is stuck.
+    // Anything unknown counts as onboarding, like the column default (0025): an
+    // unexpected password change is a nuisance, but never getting credentials leaves
+    // the farmer stuck.
     public static TelegramCodePurpose FromDatabaseValue(string value) =>
         string.Equals(value, "link", StringComparison.OrdinalIgnoreCase)
             ? TelegramCodePurpose.Link

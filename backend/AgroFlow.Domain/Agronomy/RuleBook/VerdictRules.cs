@@ -11,22 +11,16 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         TooMuch,
     }
 
-    // Verdict rules - was the water a zone got about right?
-    //
-    // Every rule here is a DATA RULE. FAO-56 says how much water a crop uses
-    // (ETc, Eq. 58 p. 103); it does not say how far from that a farmer may be
-    // before it matters. The bands below are our judgement, written down so
-    // they can be argued with.
+    // Verdict rules: was the water a zone got about right?
+    // Every rule here is a DATA RULE. FAO-56 says how much water a crop uses (ETc,
+    // Eq. 58 p. 103), not how far from that is acceptable; these bands are our judgement.
     public static class VerdictRules
     {
-        // DATA RULE: more than 20% over the crop's use is too much. Pump
-        // litres are estimates (run time × flow rate, no flow meter), so a
-        // margin smaller than the estimate's own error would flag noise. Same
-        // figure the overwatering insight has always used.
+        // DATA RULE: more than 20% over the crop's use is too much. Pump litres are estimates
+        // (run time x flow rate, no flow meter), so a smaller margin would flag noise.
         public const double OverwaterRatio = 1.2;
 
-        // DATA RULE: less than 80% of the crop's use is too little - the same
-        // 20% margin on the other side, for the same reason.
+        // DATA RULE: less than 80% of the crop's use is too little; the same 20% margin.
         public const double UnderwaterRatio = 0.8;
 
         /// <summary>Too little / About right / Too much, for water applied against water needed.</summary>

@@ -4,28 +4,13 @@ using System.Text;
 namespace AgroFlow.Api.Reports;
 
 /// The report's charts, built as SVG.
-///
-/// WHY SVG AND NOT DRAWING COMMANDS
-/// QuestPDF has no chart element, and its canvas (SkiaSharp) is not exposed
-/// by the packaged build - a probe confirmed `using SkiaSharp` does not
-/// resolve through it. What it does render is SVG, so the charts are
-/// generated as SVG markup and handed to `.Svg(...)`.
-///
-/// That is a better fit than it sounds. A bar chart assembled out of QuestPDF
-/// layout elements can only ever be rectangles in a row; the template needs a
-/// shaded band behind a line, markers sitting on that line, and value labels
-/// floating above bars. All of those are one SVG element each, and the
-/// alternative was a new charting dependency, which the brief does not allow.
-///
-/// EVERY NUMBER IS FORMATTED WITH InvariantCulture. An SVG coordinate written
-/// on a machine with a comma decimal separator - which is most of Europe, and
-/// is what a Railway container may well report - produces "12,5" inside a
-/// path, which silently truncates the shape or voids the whole attribute.
-/// This has bitten the project once already, in ReportPeriods.Describe.
+/// QuestPDF has no chart element and does not expose SkiaSharp, but it renders SVG,
+/// which also handles the shaded band, markers and value labels we need.
+/// Every number uses InvariantCulture: on a machine with a comma decimal separator
+/// "12,5" would break the SVG path.
 internal static class ChartSvg
 {
-    /// Inside the viewBox. The axis labels need the room at the bottom, and
-    /// bar value labels need it at the top.
+    /// Padding inside the viewBox for the axis labels (bottom) and value labels (top).
     private const double PadLeft = 44;
     private const double PadRight = 12;
     private const double PadTop = 18;
@@ -36,10 +21,8 @@ internal static class ChartSvg
         return value.ToString("0.##", CultureInfo.InvariantCulture);
     }
 
-    /// SVG has five characters that cannot appear raw in text or an attribute.
-    /// Zone and crop names reach these charts, and a farm called "Smith & Son"
-    /// would otherwise produce markup that does not parse - and QuestPDF
-    /// renders a blank box rather than throwing, so it would have shipped.
+    /// Escape the five SVG special characters. A farm called "Smith & Son" would
+    /// otherwise break the markup, and QuestPDF just draws a blank box.
     private static string E(string? text)
     {
         return ReportText.Clean(text)
@@ -56,23 +39,14 @@ internal static class ChartSvg
         sb.Append(CultureInfo.InvariantCulture,
             $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {N(width)} {N(height)}\" ");
         sb.Append(CultureInfo.InvariantCulture, $"width=\"{N(width)}\" height=\"{N(height)}\" ");
-        // "Lato", and nothing else.
-        //
-        // QuestPDF's SVG renderer resolves a font-family only against the
-        // fonts it has registered, and it ships exactly one: Lato. Naming
-        // Helvetica, Arial or sans-serif does not fall back - it drops the
-        // <text> element entirely. The charts rendered with every bar in
-        // place and not one axis label, value or legend, and nothing threw.
-        // Omitting the attribute works too, but naming it keeps the charts
-        // in the same typeface as the rest of the document.
+        // Only "Lato": QuestPDF's SVG renderer only knows its one bundled font, and any
+        // other font-family drops the <text> element without an error.
         sb.Append("font-family=\"Lato\">");
         return sb;
     }
 
-    /// A "nice" top for the value axis: the smallest of 1, 2 or 5 times a
-    /// power of ten that clears the data. Without this the axis tops out at
-    /// whatever the largest bar happens to be, and the gridlines land on
-    /// numbers like 2.37, which nobody can read a value off.
+    /// A "nice" top for the value axis (1, 2 or 5 times a power of ten), so the
+    /// gridlines land on readable numbers.
     private static double NiceMax(double rawMax)
     {
         if (rawMax <= 0) return 1;
@@ -111,8 +85,7 @@ internal static class ChartSvg
 
         if (!string.IsNullOrEmpty(axisLabel))
         {
-            // Rotated about its own midpoint, so the label stays centred on
-            // the plot however tall the chart is.
+            // Rotated about its own midpoint so the label stays centred.
             var midY = plotTop + plotHeight / 2;
             sb.Append(CultureInfo.InvariantCulture,
                 $"<text x=\"10\" y=\"{N(midY)}\" text-anchor=\"middle\" font-size=\"8\" " +
@@ -141,11 +114,8 @@ internal static class ChartSvg
      * Page 1 — water used per day
      * ------------------------------------------------------------------ */
 
-    /// One bar per day, with the value printed above it.
-    ///
-    /// The values are printed because this chart is read for individual days
-    /// ("what did Tuesday get?"), not for its shape. A reader should not have
-    /// to measure a bar against a gridline to answer that.
+    /// One bar per day, with the value printed above it, because this chart is read
+    /// day by day ("what did Tuesday get?").
     public static string DailyBars(
         IReadOnlyList<string> labels,
         IReadOnlyList<double?> values,
@@ -165,10 +135,8 @@ internal static class ChartSvg
 
         for (var i = 0; i < labels.Count; i++)
         {
-            // A day with no estimate is drawn as nothing at all, not as a
-            // zero-height bar: a flat bar on the axis reads as "the pump ran
-            // and delivered none", which is a fault report. See migration
-            // 0018 - a zone with no flow rate yields no estimate.
+            // A day with no estimate draws nothing, not a zero bar, which would look like the
+            // pump ran and delivered nothing. A zone with no flow rate has no estimate (0018).
             if (i >= values.Count || values[i] is null) continue;
 
             var value = values[i]!.Value;
@@ -194,11 +162,8 @@ internal static class ChartSvg
      * Page 2 — what the crop needed vs what it got
      * ------------------------------------------------------------------ */
 
-    /// Two bars per day, side by side, with a legend above the plot.
-    ///
-    /// Side by side rather than stacked on purpose: the question this answers
-    /// is "was it enough?", which is a comparison of two heights. Stacking
-    /// them would show a total nobody wants.
+    /// Two bars per day, side by side, with a legend above. Side by side because the
+    /// question is "was it enough?", a comparison of two heights.
     public static string PairedBars(
         IReadOnlyList<string> labels,
         IReadOnlyList<double?> needed,
@@ -214,7 +179,7 @@ internal static class ChartSvg
         var all = needed.Concat(given).Where(v => v.HasValue).Select(v => v!.Value);
         var max = NiceMax(all.DefaultIfEmpty(0).Max());
 
-        // The legend sits inside the top padding, above the first gridline.
+        // The legend sits in the top padding, above the first gridline.
         sb.Append(CultureInfo.InvariantCulture,
             $"<rect x=\"{N(PadLeft + 4)}\" y=\"2\" width=\"10\" height=\"8\" fill=\"{ReportTheme.TealLight}\"/>");
         sb.Append(CultureInfo.InvariantCulture,
@@ -261,15 +226,9 @@ internal static class ChartSvg
 
     public sealed record MoisturePoint(double Position, double Percent);
 
-    /// A line, a shaded healthy band behind it, and a marker wherever the
-    /// pump ran.
-    ///
-    /// The band is what makes this chart readable without the surrounding
-    /// text: "in the blue" is the whole message, and a dip below it is the
-    /// only thing a farmer has to act on. Position is 0..1 across the period
-    /// rather than an index, because readings do not arrive on a tidy grid -
-    /// a sensor that missed four hours must leave a gap of the right width,
-    /// not a point of equal spacing that hides the outage.
+    /// A line, a shaded healthy band behind it, and a marker wherever the pump ran.
+    /// "In the band" is the whole message. Position runs 0..1 across the period, so a
+    /// sensor that missed four hours leaves a gap of the right width.
     public static string MoistureLine(
         IReadOnlyList<MoisturePoint> points,
         IReadOnlyList<double> pumpPositions,
@@ -282,16 +241,13 @@ internal static class ChartSvg
     {
         var sb = Open(width, height);
 
-        // Fixed 40-100 scale, not fitted to the data. A chart that rescales
-        // to its own range makes a calm week and an alarming one look
-        // identical, and the healthy band would move between reports.
+        // Fixed 40-100 scale, so a calm week and a worrying one look different and the
+        // healthy band stays in the same place.
         const double axisMin = 40;
         const double axisMax = 100;
 
-        // The legend sits ABOVE the plot, as it does on the other charts.
-        // Below it, it collided with the day labels and the two strings
-        // interleaved character by character - "HMeaolnth2y8range" - which
-        // renders without complaint and is unreadable.
+        // The legend sits above the plot like the other charts; below it, it overlapped
+        // the day labels.
         var plotTop = PadTop + 10;
         var plotBottom = height - PadBottom;
         var plotHeight = plotBottom - plotTop;
@@ -343,9 +299,8 @@ internal static class ChartSvg
                 $"stroke-width=\"1.4\" stroke-linejoin=\"round\"/>");
         }
 
-        // Pump markers: a small triangle at the top of the plot, pointing
-        // down at the moment the pump ran. Above the line rather than on it,
-        // so a burst of runs does not obscure the recovery it caused.
+        // Pump markers: small triangles at the top of the plot, pointing down at each run,
+        // so a burst of runs does not hide the line.
         foreach (var position in pumpPositions)
         {
             var x = X(position);
@@ -374,8 +329,7 @@ internal static class ChartSvg
             $"<text x=\"{N(plotLeft + 264)}\" y=\"{N(legendY)}\" font-size=\"7.5\" fill=\"{ReportTheme.Muted}\">" +
             $"Pump ran</text>");
 
-        // Day labels sit on the axis itself, one per day, centred in the slot
-        // that day occupies across the period.
+        // Day labels on the axis, one per day, centred in that day's slot.
         if (dayLabels.Count > 0)
         {
             var slot = plotWidth / dayLabels.Count;
@@ -395,10 +349,8 @@ internal static class ChartSvg
      * Page 3 — area forecast vs local field conditions
      * ------------------------------------------------------------------ */
 
-    /// Two lines with round markers, for comparing a forecast against a
-    /// sensor. Gaps are real: a day with no reading breaks the line rather
-    /// than joining across it, because a straight segment over a missing day
-    /// is an invented measurement.
+    /// Two lines with round markers, comparing a forecast with a sensor. A day with no
+    /// reading breaks the line, because joining across it would invent a measurement.
     public static string TwoLines(
         IReadOnlyList<string> labels,
         IReadOnlyList<double?> seriesA,
@@ -415,8 +367,7 @@ internal static class ChartSvg
         var dataMin = all.Count > 0 ? all.Min() : 0;
         var dataMax = all.Count > 0 ? all.Max() : 1;
 
-        // Padded to whole units so the lines never touch the frame, which
-        // makes a peak look clipped.
+        // Padded to whole units so the lines never touch the frame.
         var axisMin = Math.Floor(dataMin - 2);
         var axisMax = Math.Ceiling(dataMax + 2);
         if (axisMax - axisMin < 4) axisMax = axisMin + 4;

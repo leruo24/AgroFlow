@@ -1,10 +1,7 @@
-/* Part 2: times shown to a farmer are South African time, whatever the
-   phone's own time zone or language setting. Alerts and History used the
-   phone's toLocaleString(), which is SAST only if the phone happens to be set
-   to it, and whose format changes with the phone's language.
-
-   SAST is UTC+2 all year (no daylight saving), so this is fixed arithmetic -
-   no dependency on the JavaScript engine's time-zone data. */
+/* Times shown to a farmer are always South African time, whatever the phone's own time zone
+ * or language. The phone's toLocaleString() is only SAST if the phone is set to it, and its
+ * format changes with the language.
+ * SAST is UTC+2 all year (no daylight saving), so this is fixed arithmetic with no time-zone data. */
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const SAST_MS = 2 * 60 * 60 * 1000;

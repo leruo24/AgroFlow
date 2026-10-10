@@ -1,12 +1,9 @@
 import QRCode from "qrcode";
 import { esc, fmtDate } from "@/lib/format";
 
-/* Shows a Telegram link as a QR code plus the plain link, for chasing up a
-   farmer who never connected.
-
-   Both forms matter and neither is hidden behind the other: the QR is for a
-   farmer standing in front of you, the plain link is for reading out over the
-   phone or pasting into a WhatsApp message to someone who is not. */
+/* Shows a Telegram link as a QR code plus the plain link, for following up a farmer who
+ * never connected. The QR is for a farmer standing in front of the admin; the plain link is
+ * for reading out over the phone or pasting into a WhatsApp message. */
 
 let qrModalHost: HTMLElement | null = null;
 
@@ -106,8 +103,7 @@ export function showQrModal(
     if (deepLink) {
       canvas.style.display = "";
 
-      /* A QR that will not draw is not a failure - the link text above it
-         still works, and can be read out. */
+      /* A QR that will not draw is not a failure: the link text above it still works. */
       void QRCode.toCanvas(canvas, deepLink, { width: 240, margin: 1 })
         .catch(() => {
           canvas.style.display = "none";

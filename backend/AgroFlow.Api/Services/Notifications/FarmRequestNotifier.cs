@@ -3,24 +3,12 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Sends the three farm/zone request messages, exactly once each.
-//
-// WHY A SERVICE AND NOT A COUPLE OF CALLS AT THE CALL SITES
-// ---------------------------------------------------------
-// There are two call sites - the farmer submitting a request, and an admin
-// moving it along - and both have the same three obligations:
-//
-//   1. Claim first, send second. The claim is what makes it send once.
-//   2. Never block, never fail the operation. A Telegram outage must not
-//      roll back a submitted request. This is the mistake the removed Resend
-//      email service made: a failed send threw inside onboarding's try block,
-//      so an email outage rolled back a completed on-site onboarding.
-//   3. Send AFTER the database write has committed, never inside the
-//      transaction - a message about a request that then rolls back is a lie
-//      that cannot be retracted.
-//
-// Keeping all three in one place is what stops the second call site getting
-// two of them right.
+// Sends the three farm/zone request messages, once each. Both callers (a farmer
+// submitting, an admin moving a request along) follow the same three rules, kept here:
+//   1. Claim first, then send. The claim is what makes it send once.
+//   2. Never block or fail the operation: a Telegram outage must not undo a request.
+//   3. Send after the database write has committed, never inside the transaction,
+//      so we never message about a change that rolled back.
 public sealed class FarmRequestNotifier
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -37,18 +25,14 @@ public sealed class FarmRequestNotifier
         _logger = logger;
     }
 
-    // Everything a message needs, read back in one query so neither call site
-    // has to assemble it. Location falls back to the farm's own location for
-    // a new_zone request, which carries none of its own.
+    // Everything a message needs, read back in one query. A new_zone request has no
+    // location of its own, so we use the farm's.
     private sealed record RequestContext(
         long RequestId, Guid FarmerId, string FarmerName, string RequestType, string? Location, string Status);
 
-    // Fire-and-forget by design. Returns as soon as the sends are dispatched;
-    // nothing a caller does depends on the outcome.
-    //
-    // The whole body is wrapped: INotificationService's contract is that it
-    // never throws, but the ledger claim talks to Postgres and that CAN
-    // throw, and no notification bookkeeping may ever fail a request.
+    // Fire-and-forget: returns once the sends are started. The whole body is wrapped
+    // because the ledger claim talks to Postgres and can throw, and notification
+    // bookkeeping must never fail a request.
     public async Task NotifyAsync(long requestId, CancellationToken cancellationToken = default)
     {
         try
@@ -66,8 +50,8 @@ public sealed class FarmRequestNotifier
 
             if (stage is null)
             {
-                // A status with nothing to say. The farmer does not need to
-                // hear that their request went back to pending.
+                // A status with nothing to say: the farmer does not need to hear their request
+                // went back to pending.
                 _logger.LogDebug(
                     "Request {RequestId} is at status {Status}, which sends no message.",
                     requestId, context.Status);
@@ -77,9 +61,8 @@ public sealed class FarmRequestNotifier
 
             await NotifyFarmerAsync(context, stage.Value, cancellationToken);
 
-            // The admin notice is for the SUBMISSION only - it is a work
-            // queue, and an admin who just set a request to Scheduled does
-            // not need to be told that they did.
+            // The admin notice is only for new submissions: an admin who just scheduled a
+            // request does not need telling.
             if (stage == FarmRequestStage.Submitted)
             {
                 await NotifyAdminsAsync(context, cancellationToken);
@@ -112,9 +95,8 @@ public sealed class FarmRequestNotifier
                 stage,
                 context.RequestType,
                 context.Location,
-                // service_request (0021) has no date column, so there is
-                // never a date to name. Carried through so that adding one
-                // later is a change in FarmRequestMessages and nowhere else.
+                // service_request (0021) has no date column, so there is no date to name yet.
+                // Adding one later only changes FarmRequestMessages.
                 ScheduledFor: null),
             cancellationToken);
     }
@@ -129,15 +111,10 @@ public sealed class FarmRequestNotifier
             cancellationToken);
     }
 
-    // The claim and the check are one statement, so two API instances racing
-    // on the same status change cannot both send. Whoever's insert lands gets
-    // the row back; the other gets nothing. Modelled directly on
-    // NotificationLedger.TryClaimAsync - see migration 0032 for why it is a
-    // different table.
-    //
-    // FAILS OPEN, exactly as NotificationLedger does: a database problem here
-    // returns true and the message goes out. A farmer told twice that their
-    // kit is booked is a smaller harm than a farmer never told at all.
+    // Claim and check in one statement, so two API instances cannot both send (like
+    // NotificationLedger.TryClaimAsync; see 0032 for why it is a separate table).
+    // Fails open: on a database problem we return true and send. Telling a farmer
+    // twice is better than never telling them.
     private async Task<bool> TryClaimAsync(
         long requestId, string stage, string audience, CancellationToken cancellationToken)
     {
@@ -174,10 +151,8 @@ public sealed class FarmRequestNotifier
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
-        // coalesce on the location: a new_zone request stores none of its
-        // own, so the farm's location is what the message should name. Both
-        // nullified-if-blank first, because an empty string is not a
-        // location and would leave a hole in the sentence.
+        // A new_zone request has no location, so we use the farm's. Blank strings become
+        // null first so the sentence never has a gap.
         await using var command = new NpgsqlCommand(
             """
             select r.id,

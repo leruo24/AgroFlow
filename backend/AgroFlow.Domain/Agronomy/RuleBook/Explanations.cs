@@ -6,17 +6,13 @@ using System.Linq;
 
 namespace AgroFlow.Business.Agronomy.RuleBook
 {
-    // "Why am I seeing this?" for every insight type (item 2c).
-    //
-    // Each explanation is built from the SAME values the rule used: the
-    // engine result, the fault signals, and the numbers the builder recorded
-    // in the insight's Data. Rule sentences quote the rule's own constants,
-    // so changing a threshold changes its explanation too.
-    //
-    // Wording rules: plain language, no FAO-56 symbols, no column names, no
-    // ISO dates in summary/facts/rule/whatWouldChangeIt. Settings are "from
-    // this zone's setup" - we do not record who set them, so we never claim
-    // "set by you". Never blame the farmer. FAO-56 detail goes in Technical.
+    // "Why am I seeing this?" for every insight type.
+    // Each explanation uses the same values the rule used (the engine result, the fault
+    // signals and the numbers in the insight's Data), and rule sentences quote the rule's
+    // own constants, so changing a threshold changes its explanation.
+    // Wording: plain language, no FAO-56 symbols, column names or ISO dates in
+    // summary/facts/rule/whatWouldChangeIt. Settings are "from this zone's setup" (we do
+    // not record who set them). Never blame the farmer. FAO-56 detail goes in Technical.
     public static class Explanations
     {
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -69,7 +65,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             }
         }
 
-        // ---- setup ------------------------------------------------------
+        // Setup
 
         private static Explanation SetupMissing(string zone, ZoneEngineResult r)
         {
@@ -90,7 +86,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             return e;
         }
 
-        // ---- kit ------------------------------------------------------------
+        // Kit
 
         private static Explanation ZoneOffline(ZoneEngineResult r, ZoneFaultSignals s)
         {
@@ -165,10 +161,10 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             return e;
         }
 
-        // ---- water ------------------------------------------------------------
+        // Water
 
-        // The engine has already decided (PrimaryAction WaterNow or
-        // WaterNowReduced); this explains that decision and never re-derives it.
+        // The engine has already decided (WaterNow or WaterNowReduced); this explains that
+        // decision and never works it out again.
         private static Explanation WaterNow(ZoneEngineInput i, ZoneEngineResult r)
         {
             var crop = CropName(r);
@@ -336,7 +332,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             return e;
         }
 
-        // ---- crop ---------------------------------------------------------------
+        // Crop
 
         private static Explanation GrowthStatus(ZoneEngineInput i, ZoneEngineResult r)
         {
@@ -424,7 +420,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             }, i, r);
         }
 
-        // ---- confidence badge ---------------------------------------------------
+        // Confidence badge
 
         /// <summary>Why the advice is High / Medium / Low - from the same setup state ConfidenceRules used.</summary>
         public static Explanation Confidence(ZoneEngineResult r)
@@ -452,7 +448,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             return e;
         }
 
-        // ---- alert rows -----------------------------------------------------------
+        // Alert rows
 
         /// <summary>Why a zone's "entered Critical" alert was raised.</summary>
         public static Explanation CriticalAlert(float? reading, float? temperatureC, float readingCriticalBelow, float temperatureCriticalFrom)
@@ -486,7 +482,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
                 Technical = "KitRules.IsDhtOffline (DATA RULE).",
             }.Fact("Last good reading", lastGoodUtc.HasValue ? Sast(lastGoodUtc.Value) : "none recorded", FromKit);
 
-        // ---- verdicts (reports) ---------------------------------------------------
+        // Verdicts (reports)
 
         /// <summary>Why a period's water was Too little / About right / Too much.</summary>
         public static Explanation Verdict(double appliedL, double neededL, string? cropLabel, string periodWords)
@@ -519,7 +515,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             .Fact("Verdict", VerdictRules.Label(verdict), "the rule below");
         }
 
-        // ---- shared facts -------------------------------------------------------
+        // Shared facts
 
         private static Explanation AddCropFacts(Explanation e, ZoneEngineInput i, ZoneEngineResult r)
         {
@@ -541,7 +537,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
         private static void AddReadingFact(Explanation e, ZoneEngineInput i, ZoneEngineResult r)
         {
-            // Item 6: the farmer's own soil check, when the balance used one.
+            // The farmer's own soil check, when the balance used one.
             if (r.LatestSoilFeel is { } feel)
             {
                 e.Fact("Your soil check", $"felt {feel.Feel} at {Sast(feel.CheckedAtUtc)}", "you, by hand");
@@ -556,8 +552,8 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             else if (r.RelativeMoisturePercent.HasValue)
             {
                 e.Fact("Soil moisture", N(Math.Round(r.RelativeMoisturePercent.Value)) + "%", FromSensor);
-                // The level is in the zone's own sensor units (the engine compares it
-                // in those units), so it never carries a %.
+                // The level is in the zone's own sensor units (the engine compares in those units),
+                // so it never has a %.
                 if (i.MoistureThreshold.HasValue) e.Fact("Watering level", N(i.MoistureThreshold.Value), FromSetup);
             }
             else
@@ -591,7 +587,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             return string.Join(", ", parts) + ". FAO-56 Eq. 58 (p. 103), 82-85 (pp. 162-170).";
         }
 
-        // ---- helpers ------------------------------------------------------------
+        // Helpers
 
         private static string CropName(ZoneEngineResult r) =>
             r.Crop != null ? r.Crop.Label.ToLowerInvariant() : "this crop";

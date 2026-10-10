@@ -7,49 +7,25 @@ namespace AgroFlow.Api.Endpoints;
 
 public record TelegramLinkCodeResponse(string Code, string? DeepLink, DateTimeOffset ExpiresAt);
 
-// Step 7: the webhook half of Telegram linking, and the app-facing endpoint
-// that starts it.
-//
-// WHAT WAS ALREADY HERE
-// ---------------------
-// Linking a farmer's Telegram already worked, end to end: TelegramEndpoints
-// issues a single-use code, TelegramOnboardingService redeems it, and
-// TelegramPollingService receives the "/start <code>" by long-polling
-// getUpdates. So this adds a second DELIVERY ROUTE for inbound updates, not
-// a second linking mechanism - the webhook hands the update to the same
-// TelegramPollingService.HandleUpdateAsync the poller calls, and every reply
-// the farmer sees is unchanged.
-//
-// WHY ADD IT AT ALL
-// -----------------
-// Polling has a hazard that is written up at length in TelegramPollingService
-// and in Program.cs: Telegram gives each update to exactly ONE getUpdates
-// consumer, so a developer running the API locally with
-// Telegram__EnablePolling=true silently steals the /start of a farmer
-// standing in a field. That is why the flag defaults to false and must be
-// true on exactly one instance. A webhook has no such mode - Telegram pushes
-// to one URL, and a second instance cannot take delivery by accident.
-//
-// Both routes can safely be live at once. Nothing in the handler touches the
-// poller's offset bookkeeping, and code redemption is a single atomic
-// statement, so an update delivered twice links once.
+// The webhook route for Telegram updates, and the app endpoint that starts linking.
+// It is a second way to receive updates, not a second linking system: the webhook
+// passes each update to the same TelegramPollingService.HandleUpdateAsync.
+// We add it because with polling only one getUpdates consumer gets each update, so
+// a developer polling locally could steal a farmer's /start. A webhook pushes to
+// one URL. Both can run at once: code redemption is one atomic statement, so an
+// update delivered twice links once.
 public static class TelegramWebhookEndpoints
 {
     public static void MapTelegramWebhookEndpoints(this WebApplication app)
     {
-        // NOT RequireAuthorization: Telegram's servers hold no AgroFlow
-        // credential, so this cannot carry a JWT. The secret header is the
-        // whole gate - see TelegramWebhookAuth, which fails closed when the
-        // secret is unset.
-        //
-        // Already exempt from the device X-Api-Key middleware, because
-        // /api/telegram is in Program.cs's isUserRoute list.
+        // Security: no RequireAuthorization because Telegram's servers have no AgroFlow
+        // credential. The secret header is the only gate (TelegramWebhookAuth fails closed
+        // when it is unset). Already exempt from the device key (/api/telegram is in
+        // isUserRoute).
         app.MapPost("/api/telegram/webhook", WebhookAsync);
 
-        // The app's own Connect Telegram button. Under /api/farmer/telegram
-        // rather than beside the existing /api/telegram/me/code so the mobile
-        // app's whole surface stays on one prefix; it does the same thing
-        // with a 15-minute code.
+        // The app's Connect Telegram button, under /api/farmer like the rest of the
+        // app's routes. Same as /api/telegram/me/code, with a 15-minute code.
         app.MapPost("/api/farmer/telegram/link-code", IssueLinkCodeAsync)
             .RequireAuthorization();
     }
@@ -68,13 +44,9 @@ public static class TelegramWebhookEndpoints
 
         if (!TelegramWebhookAuth.IsAuthorised(presented, options.Value.WebhookSecret))
         {
-            // 401 and nothing else. A forged "/start <code>" would attach the
-            // caller's own chat to a farmer's account, so this is the one
-            // check that matters on this route.
-            //
-            // The secret itself is never logged, and neither is the presented
-            // value - a near-miss in a log is a near-miss handed to whoever
-            // reads logs.
+            // Security: 401 and nothing else. A forged "/start <code>" would attach someone
+            // else's chat to a farmer's account. Neither the secret nor the value sent is
+            // ever logged.
             logger.LogWarning(
                 "Refused a Telegram webhook call with a missing or wrong {Header}.",
                 TelegramWebhookAuth.HeaderName);
@@ -88,23 +60,17 @@ public static class TelegramWebhookEndpoints
         }
         catch (Exception ex)
         {
-            // Telegram RETRIES a non-2xx webhook call, and it does so for a
-            // while. An update this code cannot process - a message type the
-            // handler does not understand, a transient database error - would
-            // then be redelivered indefinitely. Logging and acknowledging
-            // drops that one update instead of turning it into a retry loop.
+            // Telegram retries failed webhook calls for a long time, so we log the error and
+            // still acknowledge, dropping that one update instead of looping.
             logger.LogError(ex, "A Telegram webhook update failed to process; acknowledging it anyway.");
         }
 
-        // Always 200. Telegram treats the response body as an optional reply
-        // to send; an empty 200 just means "received".
+        // Always 200; an empty 200 means "received".
         return Results.Ok();
     }
 
-    // The app gets a one-time code, opens https://t.me/<bot>?start=<code>,
-    // and the farmer pressing Start is what creates the chat the bot is then
-    // allowed to use. A bot cannot message anyone first, so there is no way
-    // to do this without the farmer initiating it.
+    // The app gets a one-time code and opens https://t.me/<bot>?start=<code>. A bot
+    // cannot message anyone first, so the farmer pressing Start creates the chat.
     private static async Task<IResult> IssueLinkCodeAsync(
         ClaimsPrincipal user,
         TelegramOnboardingService onboarding,
@@ -116,11 +82,8 @@ public static class TelegramWebhookEndpoints
             return Results.Unauthorized();
         }
 
-        // Purpose.Link, never Onboarding. This farmer is signed in with a
-        // password they already use and only wants their alerts delivered to
-        // Telegram; an onboarding code would reset that working password and
-        // force a change they never asked for - which is precisely what
-        // migration 0025 exists to prevent.
+        // Purpose.Link, never Onboarding: the farmer already has a password, and an
+        // onboarding code would reset it (what migration 0025 prevents).
         var issued = await onboarding.IssueCodeAsync(
             userId,
             TelegramCodePurpose.Link,

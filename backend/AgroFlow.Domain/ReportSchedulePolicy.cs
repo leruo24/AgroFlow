@@ -8,27 +8,18 @@ namespace AgroFlow.Business
     {
         Weekly,
         Monthly,
-        // Item 4: a one-page brief of today's actions, every morning.
+        // A one-page brief of today's actions, every morning.
         Daily,
     }
 
     // Decides when an automatic report schedule is due, and for which period.
-    //
-    // WHY THIS IS A NAMED POLICY AND NOT AN `if` IN THE SERVICE
-    // --------------------------------------------------------
-    // The service wakes every hour. Getting "is it due?" wrong in one
-    // direction sends a farmer the same report every hour until someone
-    // notices; in the other it silently sends nothing for a month and nobody
-    // notices at all. Both are invisible from the code that calls it, so the
-    // rule is separated out and tested directly.
-    //
-    // ALL TIMES ARE Africa/Johannesburg. South Africa has no daylight saving,
-    // so a fixed +2 offset is exact and needs no timezone database - the same
-    // choice the FAO-56 engine and the report endpoints already make.
+    // The service wakes every hour. Getting "is it due?" wrong either sends the same
+    // report every hour or silently sends nothing for a month, so the rule is kept
+    // separate and tested directly.
+    // All times are SAST (fixed UTC+2, no daylight saving), like the engine and reports.
     public static class ReportSchedulePolicy
     {
-        // 07:00 SAST. Early enough to be read with the morning's first coffee,
-        // late enough not to be a 3am phone buzz.
+        // 07:00 SAST: early enough for the morning, late enough not to buzz at 3am.
         public const int SendHourSast = 7;
 
         public static readonly TimeSpan SastOffset = TimeSpan.FromHours(2);
@@ -55,9 +46,8 @@ namespace AgroFlow.Business
             };
         }
 
-        // Item 4: the weekday a weekly schedule is sent, ISO 1 (Monday) .. 7
-        // (Sunday). Null or out of range means Monday - what every schedule
-        // meant before the day could be chosen (0040).
+        // The weekday a weekly schedule is sent, ISO 1 (Monday) .. 7 (Sunday). Null or out of
+        // range means Monday, the original default (0040).
         public const int DefaultIsoDay = 1;
 
         public static int IsoDay(int? dayOfWeek) =>
@@ -73,22 +63,16 @@ namespace AgroFlow.Business
                 _ => IsoDayOf(date) == IsoDay(dayOfWeek),
             };
 
-        // The period a run at this moment should report ON.
-        //
-        // Always a CLOSED period in the past: weekly covers the Monday-to-
-        // Sunday that just ended, monthly the calendar month that just ended.
-        // Never a part-finished period - a "week" report sent on Monday
-        // morning covering the two hours since midnight would be worse than
-        // useless, and it is also the value the duplicate check keys on, so
-        // it has to be stable for the whole run.
+        // The period a run now should report on: always a finished period in the past.
+        // Weekly is the Monday-Sunday that just ended, monthly the month that just ended.
+        // The duplicate check is keyed on this value, so it must be stable for the whole run.
         public static (DateOnly Start, DateOnly End) PeriodFor(
             ReportFrequency frequency, DateTimeOffset sastNow)
         {
             var today = DateOnly.FromDateTime(sastNow.DateTime);
 
-            // Daily: today. The brief is "today's actions", so its period is
-            // the day it is sent - still stable for the whole day, which is
-            // what the duplicate check keys on.
+            // Daily: today. The brief is "today's actions", and the date stays stable all day,
+            // which the duplicate check needs.
             if (frequency == ReportFrequency.Daily)
             {
                 return (today, today);
@@ -105,10 +89,8 @@ namespace AgroFlow.Business
             }
 
             // Weekly: the seven days ending last Sunday.
-            //
-            // DayOfWeek.Sunday is 0 and Monday is 1, so this maps Monday->0
-            // ... Sunday->6 and steps back to the most recent Monday, then
-            // back one more week to the Monday of the week that has finished.
+            // DayOfWeek.Sunday is 0 and Monday is 1, so this maps Monday->0 ... Sunday->6, steps back
+            // to the latest Monday, then one more week back to the Monday of the finished week.
             var daysSinceMonday = ((int)today.DayOfWeek + 6) % 7;
             var thisMonday = today.AddDays(-daysSinceMonday);
             var lastMonday = thisMonday.AddDays(-7);
@@ -116,17 +98,12 @@ namespace AgroFlow.Business
             return (lastMonday, lastMonday.AddDays(6));
         }
 
-        // Is this schedule due to run right now?
-        //
-        // Three conditions, all of which must hold:
-        //   1. it is on or after the send hour TODAY;
+        // Is this schedule due right now? All three must hold:
+        //   1. it is on or after the send hour today;
         //   2. today is the right day (Monday, or the 1st);
         //   3. this period has not already been run.
-        //
-        // lastRunAt is the period the schedule last produced reports FOR, not
-        // when the service last looked - see the column comment in 0035. That
-        // is what makes (3) survive a container restarting every ten minutes
-        // during a deploy.
+        // lastRunAt is the period the schedule last reported on, not when the service last
+        // looked (see 0035), so (3) still holds when the container restarts during a deploy.
         public static bool IsDue(
             bool enabled,
             ReportFrequency frequency,
@@ -151,17 +128,15 @@ namespace AgroFlow.Business
 
             if (lastRunAt is null) return true;
 
-            // Already run today. Compared as a SAST calendar date rather than
-            // "within 24 hours", so a run at 07:05 and one at 23:50 on the
-            // same Monday are correctly one run, and 07:00 next Monday is
-            // correctly a new one.
+            // Already run today. Compared as a SAST calendar date, not "within 24 hours", so runs
+            // at 07:05 and 23:50 on the same Monday count as one, and next Monday is a new one.
             var lastRunDate = DateOnly.FromDateTime(ToSast(lastRunAt.Value).DateTime);
 
             return lastRunDate < today;
         }
 
-        // Weekly period for a chosen weekday: the seven days ending yesterday.
-        // For Monday that is exactly the Monday-to-Sunday PeriodFor gives.
+        // Weekly period for a chosen weekday: the seven days ending yesterday. For Monday
+        // that is the same Monday-Sunday PeriodFor gives.
         public static (DateOnly Start, DateOnly End) PeriodFor(
             ReportFrequency frequency, int? dayOfWeek, DateTimeOffset sastNow)
         {
@@ -174,8 +149,7 @@ namespace AgroFlow.Business
             return (today.AddDays(-7), today.AddDays(-1));
         }
 
-        // Item 4: when this schedule will next send, for the "Next send" line.
-        // Null when it is off.
+        // When this schedule will next send, for the "Next send" line. Null when it is off.
         public static DateTimeOffset? NextSend(
             bool enabled, ReportFrequency frequency, int? dayOfWeek,
             DateTimeOffset? lastRunAt, DateTimeOffset sastNow)
@@ -202,11 +176,9 @@ namespace AgroFlow.Business
             return null;
         }
 
-        // Item 4: "the combined weekly farm summary". Every report is now the
-        // same action report (item 3), so the summary is the farm's all-zones
-        // report for the period - queued as a farm-level water_usage request,
-        // which report_request already accepts. Schedule-only: never a type a
-        // farmer can request by hand.
+        // "The combined weekly farm summary": the farm's all-zones action report for the
+        // period, queued as a farm-level water_usage request. Schedule only; a farmer cannot
+        // request it by hand.
         public const string FarmSummary = "farm_summary";
 
         public static bool IsScheduleType(string? type) =>
@@ -215,12 +187,11 @@ namespace AgroFlow.Business
         public static string DisplayName(string? type) =>
             type == FarmSummary ? "Farm summary" : ReportKinds.DisplayName(type);
 
-        // Item 4: the report requests one due schedule queues, as
-        // (report_request type, zone or null for the whole farm). Moisture is
-        // always per zone; water usage and the schedule are one all-zones PDF
-        // unless perZonePdf, then one tailored PDF per zone; the farm summary
-        // is always the whole farm. Duplicates collapse, so choosing both
-        // "water usage" (all zones) and "farm summary" sends one PDF.
+        // The report requests one due schedule creates, as (report type, zone or null for the
+        // whole farm). Moisture is always per zone; water usage and the schedule are one
+        // all-zones PDF unless perZonePdf (then one per zone); the farm summary is always the
+        // whole farm. Duplicates collapse, so "water usage" (all zones) plus "farm summary"
+        // sends one PDF.
         public static List<(string ReportType, long? ZoneId)> RequestsFor(
             IEnumerable<string> types, bool perZonePdf, IReadOnlyList<long> zoneIds)
         {
@@ -250,11 +221,8 @@ namespace AgroFlow.Business
             return requests;
         }
 
-        // What the farmer sees on their Reports screen.
-        //
-        // Named here rather than built in the app so the farmer's wording and
-        // the admin's checkboxes cannot drift - they are describing the same
-        // row.
+        // What the farmer sees on their Reports screen, built here so the farmer's wording
+        // and the admin's checkboxes describe the same row the same way.
         public static string Describe(
             bool enabled, ReportFrequency frequency, string[] reportTypes)
         {

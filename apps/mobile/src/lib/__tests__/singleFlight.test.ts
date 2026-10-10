@@ -1,9 +1,8 @@
 /// <reference types="jest" />
-// TypeScript 6 no longer auto-includes @types packages, and adding jest
-// to tsconfig "types" would put describe/it/expect in scope for the whole
-// app. This scopes them to the test file that uses them.
+// TypeScript 6 does not auto-include @types packages, and adding jest to tsconfig "types"
+// would put describe/it/expect in scope for the whole app, so the reference is per test file.
 
-/* Item 0b: one request per intention, however fast the taps. */
+/* One request per intention, however fast the taps. */
 
 import { singleFlight, writeKey, pendingWrites } from '../singleFlight';
 
@@ -44,8 +43,7 @@ describe('singleFlight', () => {
   });
 
   it('the same write repeated AFTER the first finished goes through again', async () => {
-    // This is about two taps, not about refusing to do the same thing twice
-    // on purpose.
+    // This is about two taps, not about refusing to do the same thing twice on purpose.
     const run = jest.fn(() => Promise.resolve('ok'));
 
     await singleFlight('POST /y', run);

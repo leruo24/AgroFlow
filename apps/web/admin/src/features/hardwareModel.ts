@@ -500,7 +500,7 @@ export function buildHardwareModel(THREE: ThreeModule): HardwareModel {
     esp32.add(led);
   }
 
-  // One real-world-sized 5 V relay board, not the previous pair of generic blocks.
+  // One real-world-sized 5 V relay board.
   const relay = new THREE.Group();
   relay.position.set(0.82, -0.65, 0.61);
   root.add(relay);
@@ -631,7 +631,7 @@ export function buildHardwareModel(THREE: ThreeModule): HardwareModel {
     new THREE.Vector3(3.18, -1.35, 0.04), new THREE.Vector3(3.48, 0.02, 0.02),
   ], cableRubber, 0.050);
 
-  // Pump/valve wiring is visibly electrical and merely runs beside the water pipe.
+  // Pump/valve wiring is clearly electrical and only runs beside the water pipe.
   const pumpOutput = new THREE.Group();
   pumpOutput.position.set(3.30, -3.12, -0.02);
   root.add(pumpOutput);

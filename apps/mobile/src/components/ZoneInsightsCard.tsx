@@ -19,7 +19,7 @@ import { todayInSast } from '@/services/insightsService';
 import { formatSast } from '@/lib/sastTime';
 import { useAgroFlow } from '@/context/AgroFlowContext';
 
-// Item 2: how sure the advice is, and the ONE thing that would improve it.
+// How sure the advice is, and the one thing that would improve it.
 type Confidence = {
   level: 'high' | 'medium' | 'low';
   reason: string;
@@ -31,17 +31,13 @@ const LEVEL_LABEL = { high: 'High', medium: 'Medium', low: 'Low' } as const;
 
 type Props = {
   zoneId: number;
-  // Supply insights directly to skip the fetch - useful when a parent screen
-  // has already loaded them.
+  // Pass insights in to skip the fetch, when a parent screen already has them.
   insights?: ZoneInsight[];
 };
 
-// Today's advice for one zone, act_now first, tap to dismiss.
-//
-// A dismissed insight disappears for the rest of the day. It is removed from the
-// list straight away rather than after the round trip, because the farmer has
-// already read it and a row that lingers looks broken; if the call fails it is
-// put back and nothing is lost.
+// Today's advice for one zone, act-now first, tap to dismiss.
+// A dismissed insight disappears for the rest of the day. It is removed from the list
+// straight away; if the call fails it comes back.
 export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneInsightsStyles(colors), [colors]);
@@ -78,8 +74,8 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
         setFailed(false);
       })
       .catch(() => {
-        // The insights table may not exist yet. An empty card is the honest
-        // answer - never a placeholder message pretending to be advice.
+        // The insights table may not exist yet. An empty card is the honest answer, never a
+        // placeholder pretending to be advice.
         if (!active) return;
         setInsights([]);
         setFailed(true);
@@ -100,9 +96,8 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
     );
   }, [insights]);
 
-  // Admin polish, item 1: × to dismiss (recorded, never deleted), Undo for
-  // 5 s, an optional note for "act now" advice, and this zone's dismissed
-  // advice under Dismissed with Restore.
+  // x to dismiss (recorded, never deleted), Undo for 5 s, an optional note for act-now
+  // advice, and this zone's dismissed advice under Dismissed with Restore.
   const { farm } = useAgroFlow();
   const [view, setView] = useState<DismissView>('active');
   const [dismissals, setDismissals] = useState<Dismissal[]>([]);

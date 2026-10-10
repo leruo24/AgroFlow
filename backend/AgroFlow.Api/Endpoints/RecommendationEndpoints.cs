@@ -9,7 +9,7 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
-// What was changed - never who changed it. The person is the login's subject.
+// What was changed, never who: the person comes from the login.
 public record CropChangeBody(string? CropType, DateOnly? PlantingDate);
 
 // The register-farm wizard's card, before the zone exists.
@@ -17,13 +17,13 @@ public record RecommendationPreviewBody(
     string? CropType, string? SoilType, double? AreaM2, double? FlowRateLpm,
     double? RootDepthLimitM, DateOnly? PlantingDate, string? Location);
 
-// Item 6b: "Recommended for you", and the farmer changing the crop.
+// "Recommended for you", and the farmer changing the crop.
 //
 // GET  /api/farmer/zones/{id}/recommended-settings - the card for a zone.
 // POST /api/admin/recommended-settings/preview     - the wizard's card.
 // PUT  /api/farmer/zones/{id}/crop                  - crop and planting date.
-// "Use these settings" is the existing POST .../reset-recommended, which
-// saves the same threshold this card shows.
+// "Use these settings" is POST .../reset-recommended, which saves the same
+// threshold this card shows.
 public static class RecommendationEndpoints
 {
     public static void MapRecommendationEndpoints(this WebApplication app)
@@ -37,8 +37,8 @@ public static class RecommendationEndpoints
             .AddEndpointFilter<AdminOnlyFilter>();
     }
 
-    /// The crop must be one the engine has figures for; the date not in the
-    /// future and not more than two years back (same limits as registration).
+    /// The crop must be one the engine knows; the date not in the future and at most
+    /// two years back (same limits as registration).
     public static string? CheckCropChange(CropChangeBody body, DateOnly today)
     {
         if (Fao56EngineReference.TryResolveCrop(body.CropType) is null)
@@ -47,8 +47,8 @@ public static class RecommendationEndpoints
             ?.Replace("Zone 'This zone': ", "");
     }
 
-    /// Somebody else's zone is refused outright (403), never a silent no-op;
-    /// a zone that does not exist is 404. Null = go ahead.
+    /// Security: someone else's zone gets 403, never a silent no-op; a missing zone
+    /// gets 404. Null = go ahead.
     public static IResult? Refusal(bool zoneExists, bool canAccess)
     {
         if (!zoneExists) return Results.NotFound(new { error = "Zone not found." });
@@ -74,8 +74,8 @@ public static class RecommendationEndpoints
         etoBasis = r.EtoBasis,
         text = r.Text,
         confidence = new { level = r.Confidence.Key, reason = r.Confidence.Reason },
-        // "Use these settings" saves thresholds in the sensor's own units,
-        // which needs the wet/dry setup. Without it the button explains that.
+        // "Use these settings" saves thresholds in the sensor's own units, which needs
+        // the wet/dry setup. Without it the button explains that.
         canApply = calibrated,
         applyNote = calibrated ? null : "Do the wet and dry soil setup first; then Use these settings saves this level.",
     };
@@ -105,8 +105,8 @@ public static class RecommendationEndpoints
         return Results.Ok(ToDto(r, zone.CalibrationWet.HasValue && zone.CalibrationDry.HasValue));
     }
 
-    // No weather for a farm that does not exist yet: RAW on Table 22's own
-    // ETc basis, and the card says how often will follow (RecommendationRules).
+    // A farm that does not exist yet has no weather: RAW uses Table 22's own ETc
+    // basis, and the card says how often watering will follow (RecommendationRules).
     private static IResult Preview(RecommendationPreviewBody body)
     {
         var today = Fao56EngineController.TodayInSast();

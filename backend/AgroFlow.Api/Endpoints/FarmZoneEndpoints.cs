@@ -8,10 +8,8 @@ namespace AgroFlow.Api.Endpoints;
 
 public record AddZonesRequest(List<FarmEndpoints.RegisterFarmZone> Zones);
 
-// Item 6c: add zones to a farm that already exists - what a farmer's
-// "new zone" request asks for. Until now the console could only create zones
-// with a new farm, so such a request could not be carried out from it.
-// Same zone fields and checks as registering a farm (item 6).
+// Adds zones to an existing farm, which is what a farmer's "new zone" request
+// asks for. Same fields and checks as registering a farm.
 public static class FarmZoneEndpoints
 {
     public static void MapFarmZoneEndpoints(this WebApplication app)
@@ -21,8 +19,8 @@ public static class FarmZoneEndpoints
             .AddEndpointFilter<AdminOnlyFilter>();
     }
 
-    /// Null = fine. The zones must have names, sizes and crops; fit in the
-    /// farm with the zones it already has; and not repeat a name.
+    /// Null = fine. Zones need names, sizes and crops, must fit in the farm with its
+    /// existing zones, and must not repeat a name.
     public static string? CheckNewZones(
         IReadOnlyList<FarmEndpoints.RegisterFarmZone>? zones, double farmHectares, double existingHectares,
         IReadOnlyCollection<string> existingNames, DateOnly today)

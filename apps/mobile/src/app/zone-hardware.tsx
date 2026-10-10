@@ -1,17 +1,9 @@
 // The Kit screen. Reached as /zone-hardware?zoneId=123&zoneName=Tunnel%201
-//
-// "Kit" and not "hardware", "device" or "node" anywhere the farmer can see it.
-// The thing in the field is a small box they were handed on installation day,
-// and that is the only name they have for it.
-//
-// WHAT THIS SCREEN IS FOR
-// Two questions, in this order:
-//   1. Is my kit working? - answered in one line of plain words at the top.
-//   2. My WiFi changed, how do I fix it? - the Change WiFi button, and the
-//      instructions that follow it.
-//
-// Everything else (kit ID, firmware version) is below those, because it is
-// only ever needed when somebody on a phone call asks for it.
+// The farmer only ever sees the word "Kit": it is the box they were given at installation.
+// It answers two questions, in this order:
+//   1. Is my kit working? (one plain line at the top)
+//   2. My WiFi changed, how do I fix it? (the Change WiFi button and its instructions)
+// Kit ID and firmware version are below, for when someone on a support call asks.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -38,9 +30,8 @@ import {
   type ZoneHardware,
 } from '@/services/agroFlowApi';
 
-// "last seen 4 minutes ago" in the fewest words that are still true. Returns
-// null when there is nothing to say, so the caller renders no clause at all
-// rather than "last seen never".
+// "last seen 4 minutes ago" in as few words as possible. Null when there is nothing to say,
+// so the caller shows no clause instead of "last seen never".
 function describeLastSeen(iso: string | null): string | null {
   if (!iso) return null;
 
@@ -49,7 +40,7 @@ function describeLastSeen(iso: string | null): string | null {
 
   const minutes = Math.floor((Date.now() - then) / 60000);
 
-  // A kit that reported seconds ago, or a clock a little ahead of ours.
+  // A kit that reported seconds ago, or a clock slightly ahead of ours.
   if (minutes < 1) return 'just now';
   if (minutes === 1) return '1 minute ago';
   if (minutes < 60) return `${minutes} minutes ago`;
@@ -106,9 +97,8 @@ export default function ZoneHardwareScreen() {
     void load();
   }, [load]);
 
-  // Two steps on purpose. The dialog is the confirmation; the sheet that
-  // follows is the instructions, which the farmer needs to be able to read
-  // while they leave the app to switch WiFi networks.
+  // Two steps: the dialog confirms, and the sheet that follows has the instructions, which
+  // the farmer needs while they leave the app to switch WiFi.
   const confirmChangeWifi = useCallback(() => {
     Alert.alert(
       'Change WiFi?',
@@ -132,8 +122,7 @@ export default function ZoneHardwareScreen() {
                   password: result.setupNetworkPassword,
                 });
               } catch (changeError) {
-                // The kit is not listening. Completely different advice, so
-                // it gets its own block rather than the error line.
+                // The kit is not listening: completely different advice, so it gets its own block.
                 if (changeError instanceof KitOfflineError) {
                   setOffline(changeError);
                 } else {
@@ -145,8 +134,7 @@ export default function ZoneHardwareScreen() {
                 }
               } finally {
                 setChanging(false);
-                // The kit has just been told to drop its WiFi, so the status
-                // on screen is already out of date.
+                // The kit was just told to drop its WiFi, so the status on screen is already out of date.
                 void load();
               }
             })();
@@ -178,8 +166,7 @@ export default function ZoneHardwareScreen() {
         ) : error && !kit ? (
           <Text style={styles.error}>{error}</Text>
         ) : !kit || kit.hardwareId === null ? (
-          // A zone with no kit installed. Said plainly - there is nothing
-          // wrong, the farmer simply has no box in this zone yet.
+          // A zone with no kit installed. Nothing is wrong; the farmer has no box here yet.
           <View style={styles.statusCard}>
             <Text style={styles.statusHeadline}>No kit here yet</Text>
             <Text style={styles.statusDetail}>
@@ -188,7 +175,7 @@ export default function ZoneHardwareScreen() {
           </View>
         ) : (
           <>
-            {/* ---- 1. Status ------------------------------------------- */}
+            {/* 1. Status */}
             <View
               style={[
                 styles.statusCard,
@@ -210,7 +197,7 @@ export default function ZoneHardwareScreen() {
               </Text>
             </View>
 
-            {/* ---- 2. Sensors ------------------------------------------ */}
+            {/* 2. Sensors */}
             {/* Per sensor, because they fail separately. A dead temperature
                 sensor does not stop watering - the soil probe is what
                 decides that - so saying so is the difference between a
@@ -258,7 +245,7 @@ export default function ZoneHardwareScreen() {
               )}
             </View>
 
-            {/* ---- 3. Kit details ------------------------------------- */}
+            {/* 3. Kit details */}
             {/* Last, and quietly. Only ever needed when somebody on a phone
                 call asks which kit this is. */}
             <View style={styles.section}>
@@ -277,7 +264,7 @@ export default function ZoneHardwareScreen() {
               </View>
             </View>
 
-            {/* ---- 4. Change WiFi ------------------------------------- */}
+            {/* 4. Change WiFi */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>WiFi</Text>
 
@@ -343,7 +330,7 @@ export default function ZoneHardwareScreen() {
         )}
       </ScrollView>
 
-      {/* ---- The instructions sheet, after a successful change ------- */}
+      {/* The instructions sheet, after a successful change */}
       {/* Three numbered steps, because the farmer has to leave this app to
           do step 1 and come back. Nothing here is a countdown or a spinner:
           the kit reconnects by itself and the app cannot see it happen. */}

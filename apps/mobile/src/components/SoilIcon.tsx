@@ -1,18 +1,10 @@
 import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
 
-// The three soil-type icons, rendered with react-native-svg.
-//
-// WHY THIS IS A .tsx AND NOT AN IMPORT OF THE .svg FILES
-// The artwork lives at apps/mobile/assets/soil/soil_{sandy,loam,clay}.svg and
-// those files are the design source, used for docs and slides. Importing an
-// .svg directly as a component needs react-native-svg-transformer plus a metro
-// config, which is a new build dependency this change does not require - so the
-// drawing commands are transcribed here instead, exactly as the committed SVGs
-// have them, nothing redrawn or restyled.
-//
-// This is the same arrangement the mascot already uses: components/mascot/Drip.tsx
-// renders what assets/mascot/drip_*.svg documents. If a transformer is added
-// later, these three can be replaced by direct imports with no other change.
+// The three soil-type icons, drawn with react-native-svg.
+// The artwork is in apps/mobile/assets/soil/soil_{sandy,loam,clay}.svg. Importing an .svg
+// as a component would need react-native-svg-transformer and a metro config, so the
+// drawing commands are copied here unchanged, like components/mascot/Drip.tsx does for
+// assets/mascot/drip_*.svg.
 
 export type SoilIconKind = 'sandy' | 'loam' | 'clay';
 

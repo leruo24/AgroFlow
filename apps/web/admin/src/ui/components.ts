@@ -1,8 +1,6 @@
-/* ============================================================================
-   Reusable render helpers. Each returns an HTML string.
-   Animation hooks are baked in via data-* attributes and .reveal classes,
-   which lib/animate.ts picks up after content is inserted.
-   ========================================================================== */
+/* Reusable render helpers. Each returns an HTML string.
+ * Animation hooks are data-* attributes and .reveal classes, which lib/animate.ts picks up
+ * after the content is inserted. */
 
 import { whyLink, countExplanation } from "@/lib/why";
 import { esc, fmtInt, badgeTone, trendClass } from "@/lib/format";
@@ -13,13 +11,13 @@ import type {
   FilterState, DateRangePreset,
 } from "@/types/models";
 
-/* -------------------------------- badges --------------------------------- */
+/* badges */
 
 export function badge(text: string, tone?: BadgeTone): string {
   return `<span class="badge ${tone ?? badgeTone(text)}">${esc(text)}</span>`;
 }
 
-/* --------------------------------- KPIs ---------------------------------- */
+/* KPIs */
 
 export type CountFormat = "int" | "pct" | "pct2" | "litres" | "ratio";
 
@@ -30,14 +28,11 @@ export interface KpiOptions {
   total?: string;
   trend?: Trend;
   icon?: string;
-  /* A data-act value. When present the tile becomes a button that opens the
-     list it counts - a number you cannot click makes the admin go and find
-     the thing it refers to. */
+  /* A data-act value. When set, the tile becomes a button that opens the list it counts. */
   act?: string;
   actId?: string;
-  /* Item 2c: "Why am I seeing this?" - what the number counts and why it is
-     highlighted. Written next to the tile, from the same filter that makes
-     the number, so the two cannot drift. */
+  /* "Why am I seeing this?": what the number counts and why it is highlighted. Written next
+   * to the tile, from the same filter that makes the number, so they always match. */
   why?: KpiWhy;
 }
 
@@ -67,8 +62,8 @@ export function kpiCard(opts: KpiOptions): string {
     <div class="value" data-countup="${opts.value}" data-countup-format="${fmt}"${totalAttr}>0</div>
     ${trend}`;
 
-  // A real <button> when it is clickable, so it is keyboard-reachable and
-  // announced as actionable - not a div with a click handler bolted on.
+  // A real <button> when clickable, so it can be reached by keyboard and is announced as
+  // an action.
   const tile = opts.act
     ? `<button type="button" class="card reveal card-clickable" data-act="${esc(opts.act)}"${
         opts.actId ? ` data-id="${esc(opts.actId)}"` : ""
@@ -77,8 +72,7 @@ export function kpiCard(opts: KpiOptions): string {
 
   if (!opts.why) return tile;
 
-  // The link sits beside the tile, never inside it: a button inside a
-  // button is invalid and the tile is already a link to its list.
+  // The link sits beside the tile, never inside it: a button inside a button is invalid.
   const why = whyLink(countExplanation({
     label: opts.label,
     what: opts.why.counts,
@@ -92,7 +86,7 @@ export function kpiCard(opts: KpiOptions): string {
   return `<div class="kpi-item">${tile}${why}</div>`;
 }
 
-/* -------------------------------- panels --------------------------------- */
+/* panels */
 
 export function panel(title: string, subtitle = "", rightHtml = "", bodyHtml = ""): string {
   return `<section class="panel reveal">
@@ -118,7 +112,7 @@ export function routeLink(pageId: PageId, label: string): string {
   return `<a href="#${esc(pageId)}" class="link" data-go="${esc(pageId)}">${esc(label)}</a>`;
 }
 
-/* -------------------------------- charts --------------------------------- */
+/* charts */
 
 export function barChart(data: SeriesPoint[], unit = ""): string {
   const max = Math.max(...data.map((d) => d.value), 1);
@@ -215,7 +209,7 @@ export function donut(
   </div>`;
 }
 
-/* -------------------------------- tables --------------------------------- */
+/* tables */
 
 export function table<T>(
   cols: string[],
@@ -238,7 +232,7 @@ export function resultCount(shown: number, total: number, noun = "records"): str
   return `<div class="result-count">Showing <b>${fmtInt(shown)}</b> of ${fmtInt(total)} ${esc(noun)}</div>`;
 }
 
-/* ---------------------------- filter toolbar ----------------------------- */
+/* filter toolbar */
 
 export interface SelectFilter {
   /** Must match a key on FilterState. */
@@ -318,7 +312,7 @@ export function filterBar(opts: FilterBarOptions): string {
   </section>`;
 }
 
-/* ------------------------------- skeleton -------------------------------- */
+/* skeleton */
 
 export function skeletonPage(): string {
   return `<div class="skeleton-wrap">
@@ -331,7 +325,7 @@ export function skeletonPage(): string {
   </div>`;
 }
 
-/* ------------------------------ small bits ------------------------------- */
+/* small bits */
 
 export function meter(pct: number, tone = "good"): string {
   return `<div class="meter meter-${esc(tone)}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`;

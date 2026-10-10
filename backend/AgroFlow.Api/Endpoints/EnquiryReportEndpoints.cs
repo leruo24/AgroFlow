@@ -6,10 +6,10 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Item 6c: the "Enquiries & sales follow-up" report, PDF and Excel.
+// The "Enquiries & sales follow-up" report, PDF and Excel.
 // GET /api/admin/reports/enquiries.pdf|.xlsx?from=YYYY-MM-DD&to=YYYY-MM-DD&province=..&handler=<profile id>
-// Admin only. Reads no names, phone numbers or emails - the report is about
-// how the follow-up went, not about who asked.
+// Admin only. It reads no names, phone numbers or emails: it is about how the
+// follow-up went, not who asked.
 public static class EnquiryReportEndpoints
 {
     private static readonly TimeSpan Sast = TimeSpan.FromHours(2);

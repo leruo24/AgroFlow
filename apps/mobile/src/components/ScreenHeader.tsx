@@ -7,10 +7,8 @@ import { HelpButton } from './HelpButton';
 import type { HelpScreen } from '@/constants/helpContent';
 import { sharedLayout } from '@/styles/shared';
 
-// `help` is optional so that adding page help to a screen is a one-word change
-// here rather than a restructured header there. The button sits to the left of
-// the account avatar, and disappears entirely when the farmer turns page help
-// off in Settings.
+// `help` is optional, so adding page help to a screen is a one-word change. The button sits
+// left of the account avatar and disappears when page help is turned off in Settings.
 export function ScreenHeader({
   title,
   subtitle,

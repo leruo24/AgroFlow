@@ -3,34 +3,30 @@ using System;
 
 namespace AgroFlow.Business.Agronomy.RuleBook
 {
-    // Water rules - turning "how dry the soil is" into "run the pump N minutes".
+    // Water rules: turning "how dry the soil is" into "run the pump N minutes".
     public static class WaterRules
     {
-        // DATA RULE: a pump run at least this long counts as a real watering.
-        // The same two-minute figure the watering-failed check already uses
-        // (ZoneInsightBuilder: "pump runtime of at least 2 minutes") - a few
-        // seconds of a pump being tested is not a watering, and the two checks
-        // must agree about what a watering is.
+        // DATA RULE: a pump run at least this long counts as a real watering. The same two
+        // minutes the watering-failed check uses, so both agree on what a watering is; a few
+        // seconds of testing the pump is not one.
         public const double FullWateringMinimumSeconds = 120.0;
 
         // DATA RULE: "water soon" looks this many days ahead - far enough to
         // plan around, near enough that the forecast is still worth trusting.
         public const int WaterSoonDays = 2;
 
-        // DATA RULE: forecast reference water use this many times the last
-        // week's average is "hot, dry days ahead". 30% more demand is roughly
-        // a heatwave's worth on the Western Cape's summer figures.
+        // DATA RULE: forecast reference water use this many times last week's average means
+        // "hot, dry days ahead". 30% more demand is about a heatwave on Western Cape summer figures.
         public const double HotDaysEtoMultiple = 1.3;
 
-        // Configurable/testable equipment sanity bounds. These warn; they never
-        // cap or alter an agronomic requirement.
+        // Equipment sanity limits. They only warn; they never cap or change the water the
+        // crop needs.
         public const double ImpracticallyShortRuntimeSeconds = 10.0;
         public const double ImpracticallyLongRuntimeSeconds = 12.0 * 60.0 * 60.0;
 
-        // DATA RULE (item 6): where "moist" sits between full and the watering
-        // point. A farmer's hand cannot tell a quarter-dry soil from a
-        // three-quarter-dry one, so a "moist" check only pulls the estimate
-        // into the middle band; it never moves it past either end.
+        // DATA RULE: where "moist" sits between full and the watering point. A hand cannot
+        // tell quarter-dry from three-quarter-dry, so "moist" only pulls the estimate into
+        // the middle band, never past either end.
         public const double MoistLowFractionOfRaw = 0.25;
         public const double MoistHighFractionOfRaw = 0.75;
 

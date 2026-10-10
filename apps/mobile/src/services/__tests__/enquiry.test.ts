@@ -1,8 +1,8 @@
 /// <reference types="jest" />
 // See doubleSubmit.test.ts for why this reference is per file.
 
-/* Item 6c: "Ask for a call" from the login screen - no login, one request
- * per tap, the honeypot always empty, and the server's reason shown. */
+/* "Ask for a call" from the login screen: no login, one request per tap, the honeypot always
+ * empty, and the server's reason shown. */
 
 jest.mock('@/lib/supabase', () => ({ supabase: { auth: { getSession: async () => ({ data: { session: null } }) } } }));
 

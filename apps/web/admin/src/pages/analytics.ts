@@ -16,17 +16,13 @@ import { getActivityLog, type AuditRow } from "@/services/agroFlowApi";
 import { getReportFarms, getEnquiries, type ReportFarm } from "@/services/agroFlowApi";
 import { getAttentionThisWeek, type AttentionGroup } from "@/data/api";
 
-/* ============================ IRRIGATION DATA ============================ */
-/* Historical analytics for administrators — NOT live irrigation control.   */
+/* IRRIGATION DATA */
+/* Historical analytics for administrators, not live irrigation control. */
 
-/* Only events whose zone HAS a flow rate can be added up.
- *
- * IrrigationEvent.litres is null when the zone has no rate on file, and
- * migration 0018 is explicit that this must read as "no estimate available"
- * rather than as zero. Treating null as 0 in a sum is the same mistake in a
- * subtler place: it silently drags a month's total down and the chart shows a
- * dip that never happened. These are left out of the figures instead, and the
- * page says how many were left out. */
+/* Only events whose zone has a flow rate can be added up. litres is null when the zone has
+ * no rate, and migration 0018 says that means "no estimate", not zero. Counting null as 0
+ * would pull a month's total down and show a dip that never happened, so we leave them out
+ * and the page says how many. */
 function estimable(events: IrrigationEvent[]): (IrrigationEvent & { litres: number })[] {
   return events.filter((e): e is IrrigationEvent & { litres: number } => e.litres !== null);
 }
@@ -55,15 +51,13 @@ function groupByRegion(events: IrrigationEvent[]): Record<string, number> {
   const map: Record<string, number> = {};
 
   for (const e of estimable(events)) {
-    // "No region on file", not "": an empty key rendered as a nameless slice
-    // of the donut that nobody could identify.
+    // "No region on file", not "": an empty key would be a nameless slice of the donut.
     const key = e.region || "No region on file";
     map[key] = (map[key] ?? 0) + e.litres;
   }
 
-  // Rounded to kL once, at the end. Rounding each event first and then
-  // summing lost most of the volume: a 400 L event rounds to 0 kL, so a
-  // region watering in short bursts reported almost nothing.
+  // Rounded to kL once, at the end. Rounding each event first loses most of the volume: a
+  // 400 L event rounds to 0 kL.
   for (const key of Object.keys(map)) {
     map[key] = Math.round((map[key] ?? 0) / 1000);
   }
@@ -120,11 +114,8 @@ export async function irrigationPage(): Promise<string> {
     ${kpiCard({ label: "Irrigation events", value: filteredEvents.length, icon: Icon.repeat, why: { counts: "pump runs are in this range", rule: "Every irrigation event in the chosen range and filters.", query: "count(irrigation_event) filtered" } })}
     ${kpiCard({ label: "Total pump time", value: Math.round(totalMinutes / 60), trend: { dir: "up", text: "hours" }, icon: Icon.timer, why: { counts: "hours of pump time are in this range", rule: "Pump run time of every irrigation event in the chosen range, in hours.", query: "sum(runtime_seconds) / 3600 over filtered irrigation_event" } })}
     ${
-      /* This tile used to read "Schedule Compliance" and show a percentage
-         computed from a field that was hardcoded true - so it always said
-         100%. Nothing in the schema records whether an irrigation ran to
-         schedule, so the honest tile is the one that says how much of this
-         range can be estimated at all. */
+      /* Nothing records whether an irrigation ran to schedule, so this tile shows how much of the
+       * range can be estimated at all. */
       kpiCard({
         label: "Events we can estimate",
         value: filteredEvents.length ? (withEstimate.length / filteredEvents.length) * 100 : 0,
@@ -160,16 +151,8 @@ export async function irrigationPage(): Promise<string> {
     byFarm.length ? barChart(byFarm) : `<div class="empty-state">No data in this range.</div>`)}
 
   ${
-    /* This was a table of schedules with a Cadence, a Compliance meter and
-       View/Edit/Delete links. It could never have a row in it: the
-       irrigation_schedule table it read was DROPPED in migration 0010, and
-       schedules have lived as columns on the zone itself ever since - one per
-       zone, not a list. So the panel rendered an empty table under a heading
-       promising something, and an admin reading it would conclude no farm had
-       a schedule, which is the opposite of true.
-
-       An empty table is not mock data, but it is a false impression, and the
-       fix is the same: say what is actually the case and where to go. */
+    /* Schedules are columns on each zone (irrigation_schedule was dropped in 0010), so there is
+     * no list to show here. The panel says where schedules are instead of showing an empty table. */
     panel("Watering schedules", "", "", `
       <p>
         Each zone has its own watering schedule, set on the zone rather than kept in a
@@ -189,8 +172,8 @@ export async function irrigationPage(): Promise<string> {
       esc(e.farm),
       esc(e.zone),
       esc(e.crop || "No crop set"),
-      // Never "0 L" for a zone with no flow rate: a zero reads as a pump
-      // that ran and delivered nothing.
+      // Never "0 L" for a zone with no flow rate: a zero reads as a pump that ran and delivered
+      // nothing.
       e.litres === null
         ? `<span class="muted" title="This zone has no flow rate on file, so no volume can be estimated.">No estimate</span>`
         : fmtLitres(e.litres),
@@ -199,17 +182,12 @@ export async function irrigationPage(): Promise<string> {
   `;
 }
 
-/* =========================== REPORTS & ANALYTICS ========================== */
+/* REPORTS & ANALYTICS */
 
-/* Item 4: the Reports page is about farms, not about the platform.
- *
- * It used to open on ten generic report cards (Device Performance, Support
- * Performance, Hardware Downtime...). "Generate" only showed a message, and
- * every card's Excel exported the same irrigation table whatever its name.
- * Those are gone. What is left all produces real numbers: farm reports
- * (preview = the PDF itself), the farms that need attention this week, a
- * farm's automatic reports, a water-use comparison, and growth charts
- * counted from the records. */
+/* The Reports page is about farms, not the platform. Everything here produces real
+ * numbers: farm reports (the preview is the PDF itself), farms needing attention this week,
+ * a farm's automatic reports, a water-use comparison, and growth charts counted from the
+ * records. */
 
 const FARM_KEY = "agroflow.reports.farm";
 
@@ -221,8 +199,7 @@ function preferredFarm(farms: ReportFarm[]): number | null {
   let remembered: number | null = null;
   try { remembered = Number(localStorage.getItem(FARM_KEY)) || null; } catch { remembered = null; }
   if (remembered && farms.some((f) => f.farm_id === remembered)) return remembered;
-  // No farm picked before: the newest farm, which is the one most likely
-  // being set up and checked.
+  // No farm picked yet: use the newest farm, the one most likely being set up.
   return farms.length ? Math.max(...farms.map((f) => f.farm_id)) : null;
 }
 
@@ -318,8 +295,8 @@ function comparisonPanel(): string {
     <div id="cmpResult" class="cmp-result"></div>`);
 }
 
-/* Item 6c: "Enquiries & sales follow-up" - for the team that phones people
-   back. Period, province and handler; PDF or Excel, the same content. */
+/* "Enquiries & sales follow-up", for the team that phones people back. Period, province
+ * and handler; PDF or Excel with the same content. */
 const ENQUIRY_PROVINCES = [
   "Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo",
   "Mpumalanga", "North West", "Northern Cape", "Western Cape",
@@ -396,20 +373,17 @@ export async function reportsPage(): Promise<string> {
   `;
 }
 
-/* =========================== PLATFORM ACTIVITY =========================== */
+/* PLATFORM ACTIVITY */
 
-/* The audit log (migration 0037): who did what, newest first.
- *
- * Every row is one sentence, built on the SERVER so this page, the CSV and
- * the XLSX cannot describe the same action three different ways. */
+/* The audit log (migration 0037): who did what, newest first. Each row is one sentence
+ * built on the server, so this page, the CSV and the XLSX describe an action the same way. */
 export async function activityPage(): Promise<string> {
   return withErrorState("Activity", async () => {
     const f = getFilter("activity");
 
     const log = await getActivityLog({
-      // eventType and administrator already exist on FilterState and mean
-      // exactly this, so the activity page reuses them rather than widening
-      // the shared shape with two near-duplicates.
+      // eventType and administrator already exist on FilterState with this meaning, so we reuse
+      // them instead of adding two near-duplicates.
       ...(f.eventType ? { action: f.eventType } : {}),
       ...(f.administrator ? { actor: f.administrator } : {}),
     });
@@ -445,8 +419,8 @@ export async function activityPage(): Promise<string> {
       table(["When", "Who", "What", "Farm"], log.rows, (r) => [
         esc(fmtDateTimeSast(r.createdAt)),
         esc(r.actorName),
-        // The summary already names the actor; the What column carries the
-        // action so the two columns are not the same sentence twice.
+        // The summary already names the actor; the What column shows the action so the two columns
+        // do not repeat each other.
         esc(r.summary.replace(new RegExp("^" + r.actorName + "\\s*"), "")),
         r.farmName ? esc(r.farmName) : `<span class="muted">—</span>`,
       ], "No actions match the current filters."))}
@@ -454,10 +428,9 @@ export async function activityPage(): Promise<string> {
   });
 }
 
-/* A timeline for one item, oldest first - the shape a person reads a history
-   in, which is the opposite of the activity list above. */
-/* Item 5: what the person said - a take-over's reason and who had it
-   before, or a note - under the line, so the chain explains itself. */
+/* A timeline for one item, oldest first, the order people read a history in. */
+/* What the person said (a take-over's reason and who had it before, or a note) under the
+ * line, so the chain explains itself. */
 function timelineDetail(r: AuditRow): string {
   let d: { note?: unknown; reason?: unknown; from?: unknown } = {};
   try { d = JSON.parse(r.details ?? "{}") ?? {}; } catch { d = {}; }
@@ -486,12 +459,11 @@ export function timelineHtml(rows: AuditRow[], emptyText: string): string {
     .join("")}</ol>`;
 }
 
-/* ================================ SETTINGS =============================== */
+/* SETTINGS */
 
-/* Only "My account" (admin polish, item 6). "Platform thresholds" showed
- * values that can only be changed in the API's configuration, and "Backup &
- * Recovery" described the Supabase dashboard; neither was something to do
- * here. The thresholds endpoint itself stays for anything else that reads it. */
+/* Only "My account". Platform thresholds can only be changed in the API's configuration and
+ * backups live in the Supabase dashboard, so neither is here. The thresholds endpoint stays
+ * for anything else that reads it. */
 export const SETTINGS_TABS: SettingsTab[] = ["My account"];
 
 export async function settingsPage(): Promise<string> {
@@ -510,9 +482,8 @@ export async function settingsPage(): Promise<string> {
 
 export function settingsTabBody(tab: SettingsTab): string {
   switch (tab) {
-    /* Everything here writes somewhere real: profile goes to
-       PUT /api/farmer/profile, the password goes to Supabase Auth, and
-       Telegram goes to /api/telegram/me. */
+    /* Everything here saves for real: profile to PUT /api/farmer/profile, the password to
+     * Supabase Auth, and Telegram to /api/telegram/me. */
     case "My account": {
       const profile = getAdminProfile();
 

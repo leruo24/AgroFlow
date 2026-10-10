@@ -3,32 +3,20 @@ using AgroFlow.Business.Agronomy;
 
 namespace AgroFlow.Api.Services;
 
-// Runs the FAO-56 engine on a schedule, hosted the same way as the MQTT and
-// LISTEN services (BackgroundService registered with AddHostedService in
-// Program.cs).
-//
-// Two cadences, per spec section 10:
-//
-//   Daily, shortly after midnight SAST: compute yesterday's and today's ETo,
-//   update every zone's water balance, and write the growth, forecast and
-//   efficiency insights.
-//
-//   Periodically (every 15 minutes): the checks that cannot wait a day -
-//   zone_offline, sensor_stuck, watering_failed, water_now - plus the DHT11
-//   fault sweep.
-//
-// WHY A TIMER AND NOT A CRON LIBRARY
-// The daily pass only needs to know "has the SAST day rolled over since the last
-// run", which one comparison answers. Adding a scheduling dependency to express
-// that would be more moving parts than the problem has.
-//
-// The engine is a pure function of its inputs and every write is an upsert keyed
-// on (zone, day), so a missed run, a double run or a restart mid-pass all
-// converge on the same rows. That is what makes this safe to run unattended.
+// Runs the FAO-56 engine on a schedule, as a BackgroundService like the MQTT and
+// LISTEN services.
+// Two cadences:
+//   Daily, just after midnight SAST: work out yesterday's and today's ETo, update
+//   every zone's water balance, and write the growth, forecast and efficiency insights.
+//   Every 15 minutes: the checks that cannot wait a day (zone_offline, sensor_stuck,
+//   watering_failed, water_now) plus the DHT11 fault sweep.
+// A timer is enough because the daily pass only needs "has the SAST day changed?".
+// Every write is an upsert keyed on (zone, day), so a missed run, a double run or a
+// restart all end with the same rows.
 public sealed class Fao56EngineService : BackgroundService
 {
-    // Matches the cadence the act_now insights are useful at: a farmer who waters
-    // by hand wants to know within the quarter hour, not the day.
+    // Every 15 minutes, because a farmer who waters by hand wants to know within the
+    // quarter hour, not the day.
     private static readonly TimeSpan PeriodicInterval = TimeSpan.FromMinutes(15);
 
     private readonly IConfiguration _configuration;
@@ -62,8 +50,7 @@ public sealed class Fao56EngineService : BackgroundService
             "FAO-56 engine starting; daily pass just after midnight {TimeZone}, periodic checks every {Minutes} minutes",
             "Africa/Johannesburg", PeriodicInterval.TotalMinutes);
 
-        // Give the API a moment to finish starting before the first sweep, so a
-        // cold start does not contend with request handling.
+        // Let the API finish starting before the first sweep.
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
@@ -91,8 +78,7 @@ public sealed class Fao56EngineService : BackgroundService
             }
             catch (Exception ex)
             {
-                // One bad cycle must not take the service down - the next tick
-                // recomputes everything from scratch anyway.
+                // One bad cycle must not stop the service; the next tick recalculates everything.
                 _logger.LogError(ex, "FAO-56 engine cycle failed; will retry on the next tick");
             }
 

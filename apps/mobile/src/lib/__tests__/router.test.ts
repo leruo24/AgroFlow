@@ -1,9 +1,8 @@
 /// <reference types="jest" />
-// TypeScript 6 no longer auto-includes @types packages, and adding jest
-// to tsconfig "types" would put describe/it/expect in scope for the whole
-// app. This scopes them to the test file that uses them.
+// TypeScript 6 does not auto-include @types packages, and adding jest to tsconfig "types"
+// would put describe/it/expect in scope for the whole app, so the reference is per test file.
 
-/* Item 0b: a double tap must not push a screen twice, or pop two. */
+/* A double tap must not push a screen twice, or go back two screens. */
 
 const mockPush = jest.fn();
 const mockNavigate = jest.fn();
@@ -43,7 +42,7 @@ describe('guarded router', () => {
   });
 
   it('first tap wins when two different buttons are tapped together', () => {
-    // The second tap almost always lands on the screen already sliding away.
+    // The second tap nearly always lands on the screen that is already sliding away.
     router.push('/reports');
     router.push('/request');
 

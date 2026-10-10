@@ -89,22 +89,15 @@ export default function SettingsScreen() {
   const [preferencesLoaded, setPreferencesLoaded] =
     useState(false);
 
-  // Whether this farmer's Telegram is linked.
-  //
-  // Read, never changed, from here. The linking itself - the deep link, the
-  // alerts switch, disconnecting - already lives in TelegramSection on the
-  // Profile screen, and duplicating it would give two places that could
-  // disagree about the same account. This row reports the state and sends
-  // the farmer there.
-  //
-  // null means "not known yet", which shows no status rather than guessing
-  // "Not connected" and telling a connected farmer they are not.
+  // Whether this farmer's Telegram is linked. Only read here: linking, the alerts switch
+  // and disconnecting are in TelegramSection on the Profile screen, and this row sends the
+  // farmer there. null means "not known yet", so we show no status instead of guessing
+  // "Not connected".
   const [telegramLinked, setTelegramLinked] =
     useState<boolean | null>(null);
 
-  // In-app help preferences, stored on this device by useAppPreferences.
-  // Deliberately separate from the notification preferences above: these are
-  // display choices, those are about messages being sent.
+  // In-app help preferences, stored on this device by useAppPreferences. Separate from the
+  // notification preferences above: these are display choices.
   const {
     preferences: appPreferences,
     setPreference: setAppPreference,
@@ -155,9 +148,8 @@ export default function SettingsScreen() {
           setTelegramLinked(status.linked);
         }
       } catch {
-        // Offline, signed out, or Telegram not configured on the server.
-        // The row then shows no status at all and still navigates - a
-        // settings page must not fail because one row could not load.
+        // Offline, signed out, or Telegram not set up on the server. The row shows no status and
+        // still navigates; one row failing must not break the settings page.
         if (active) setTelegramLinked(null);
       }
     })();

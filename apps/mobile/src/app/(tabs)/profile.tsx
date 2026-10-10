@@ -1,6 +1,6 @@
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { HelpButton } from '@/components/HelpButton';
-//profile screen
+// Profile screen
 import { router } from '@/lib/router';
 
 import {
@@ -186,7 +186,8 @@ export default function ProfileScreen() {
   ] =
     useState('');
 
-//load the signed-in user's public profile from Supabase. The auth user ID and profile ID are the same, so only the current user's row is requested. If the database request fails, the auth metadata is used as a safe fallback so that the screen remains usable.
+// Load the signed-in user's profile from Supabase (the auth user ID is the profile ID).
+// If the request fails we fall back to the auth metadata so the screen still works.
   useEffect(
     () => {
       if (
@@ -445,7 +446,8 @@ export default function ProfileScreen() {
       setSaving(
         true
       );
-//save the editable fields to the public profile row. Email and role are deliberately excluded, so this screen cannot change either protected field. Auth metadata is then refreshed so the rest of the app immediately shows the new name, phone, and initials.
+// Save the editable fields. Security: email and role are left out, so this screen cannot
+// change them. Then refresh the auth metadata so the new name, phone and initials show everywhere.
       await updateProfileThroughApi(
         fullName,
         cleanPhone
@@ -507,7 +509,7 @@ export default function ProfileScreen() {
       );
     }
   }
-//updates authentication state and clears stored session data when the user chooses to log out. The handleLogout function displays a confirmation alert asking the user if they want to log out. If the user confirms, the signOut function from the AuthContext is called, which clears the authentication state and any stored session data, effectively logging the user out of the application.
+// Ask the user to confirm, then sign out, which clears the auth state and the stored session.
   function handleLogout() {
     Alert.alert(
       'Log Out?',

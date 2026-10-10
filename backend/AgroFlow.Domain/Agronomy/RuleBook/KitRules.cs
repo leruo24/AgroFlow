@@ -23,13 +23,10 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         SensorDrift,
     }
 
-    // Kit rules - is the hardware telling the truth?
-    //
-    // Every rule here is a DATA RULE: FAO-56 knows nothing about sensors and
-    // pumps. The thresholds come from how the kit behaves - it reports every
-    // 30 seconds - and are written down here so they can be argued with.
-    //
-    // The data layer (Fao56EngineXDB) reads the rows; these methods decide.
+    // Kit rules: is the hardware telling the truth?
+    // Every rule here is a DATA RULE (FAO-56 says nothing about sensors and pumps). The
+    // thresholds come from how the kit behaves (it reports every 30 seconds).
+    // Fao56EngineXDB reads the rows; these methods decide.
     public static class KitRules
     {
         // DATA RULE: a kit reports every 30 seconds, so three hours of silence
@@ -41,8 +38,8 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         // loose or failed probe.
         public const int SensorStuckHours = 6;
 
-        // DATA RULE: a run must be at least this long to be judged - the same
-        // two minutes WaterRules uses for "a real watering".
+        // DATA RULE: a run must be at least this long to be judged; the same two minutes
+        // WaterRules uses for "a real watering".
         public const double PumpCheckMinimumSeconds = WaterRules.FullWateringMinimumSeconds;
 
         // DATA RULE: water should reach a correctly placed zone probe within
@@ -62,8 +59,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
         // day-to-day scatter, before readings become useless.
         public const double SensorDriftFraction = 0.15;
 
-        // DATA RULE (spec 3b plausibility): a DHT11 reading outside these is
-        // a timeout or checksum failure, not weather.
+        // DATA RULE: a DHT11 reading outside these is a timeout or checksum error, not weather.
         public const double DhtMinTemperatureC = -10.0;
         public const double DhtMaxTemperatureC = 60.0;
         public const double DhtMinHumidityPct = 0.0;

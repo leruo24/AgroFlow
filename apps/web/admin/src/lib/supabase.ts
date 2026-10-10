@@ -10,20 +10,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-// Same session-handling options as apps/mobile/src/lib/supabase.ts
-// (autoRefreshToken/persistSession) - this is a browser tab, not a native
-// app, so there's no AsyncStorage/AppState equivalent to wire up: the
-// client's default storage (window.localStorage) and default
-// detectSessionInUrl (true, for any future magic-link/invite flow) are
-// already correct for the web.
+// Same session options as apps/mobile/src/lib/supabase.ts (autoRefreshToken/
+// persistSession). In a browser tab the default storage (window.localStorage) and
+// detectSessionInUrl (true) are already right, so nothing else is needed.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
   },
-  // Every table read a page makes while it is rendering is tied to that
-  // navigation, and cancelled if the admin clicks somewhere else first -
-  // one wrapper here instead of an abort signal at every query. Writes and
-  // auth traffic are never cancelled. See lib/navigation.ts.
+  // Every table read a page makes while rendering is tied to that navigation and cancelled
+  // if the admin clicks elsewhere first: one wrapper here instead of an abort signal on every
+  // query. Writes and auth traffic are never cancelled. See lib/navigation.ts.
   global: { fetch: navigationAwareFetch },
 });

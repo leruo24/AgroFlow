@@ -11,7 +11,7 @@ import {
 } from "@/ui/components";
 import { Icon } from "@/lib/icons";
 
-/* ============================== FARM HARDWARE ============================= */
+/* FARM HARDWARE */
 
 export async function hardwarePage(): Promise<string> {
   const hardware = await api.getHardware();
@@ -32,11 +32,8 @@ export async function hardwarePage(): Promise<string> {
   const offline = hardware.filter((h) => h.status === "Offline" || h.status === "Fault").length;
   const needsService = hardware.filter((h) => h.maintenanceState === "Due" || h.maintenanceState === "Overdue").length;
 
-  // The number that decides when Devices:LegacyApiKeyEnabled can be turned
-  // off: boards claimed before v1.3.0 have no per-device token and are still
-  // authenticating with the shared fleet key. Once this is zero, the flag can
-  // go. Surfaced as a KPI because it is a one-time migration to finish, not a
-  // permanent property of the fleet.
+  // Boards claimed before v1.3.0 have no per-device token and still use the shared fleet
+  // key. When this count reaches zero, Devices:LegacyApiKeyEnabled can be turned off.
   const legacyKey = hardware.filter((h) => h.tokenStatus === "legacy key").length;
   const revoked = hardware.filter((h) => h.tokenStatus === "revoked").length;
 
@@ -85,13 +82,12 @@ export async function hardwarePage(): Promise<string> {
         `<span class="mono">${esc(h.deviceId ?? h.id)}</span>`,
         esc(h.type),
         esc(h.zoneName ? `${h.farm} · ${h.zoneName}` : h.farm),
-        // firmware_version, reported by the board on claim and on every
-        // 4-hourly firmware-check. Blank until a board on 1.3.0 has called in.
+        // firmware_version, reported by the board on claim and on every 4-hourly firmware check.
+        // Blank until a board on 1.3.0 has called in.
         `<span class="mono sm">${esc(h.firmware || "—")}</span>`,
-        // Deliberately separate from `status` below. This is the 5-minute
-        // "is it listening right now" answer that decides whether a command
-        // will arrive; `status` is DeviceStatusMonitorService's 30-minute
-        // alerting judgement. They legitimately disagree.
+        // Separate from `status` below on purpose. This is the 5-minute "is it listening now"
+        // answer that decides whether a command will arrive; `status` is
+        // DeviceStatusMonitorService's 30-minute alerting judgement. They can disagree.
         h.online === undefined
           ? `<span class="muted">Unknown</span>`
           : badge(h.online ? "Online" : "Offline", h.online ? "good" : "warn"),
@@ -103,10 +99,8 @@ export async function hardwarePage(): Promise<string> {
           ? `<span class="mono sm">${esc(h.mqttUsername)}</span>`
           : `<span class="muted">Shared</span>`,
         badge(h.status),
-        // The three new actions are addressed by ZONE, not hardware id: the
-        // commands go into irrigation_commands, which is keyed on zone. A
-        // board with no zone cannot be commanded at all, so those links are
-        // omitted rather than rendered and then failing on click.
+        // These actions go by zone, not hardware id: the commands go into irrigation_commands,
+        // which is keyed on zone. A board with no zone cannot be commanded, so the links are left out.
         `<span class="row-act">
           <a href="#" data-act="view-device" data-id="${esc(h.id)}">View</a>
           ${h.zoneId ? `
@@ -120,12 +114,12 @@ export async function hardwarePage(): Promise<string> {
   `;
 }
 
-/* =========================== OPERATIONS CENTRE =========================== */
+/* OPERATIONS CENTRE */
 
 export async function alertsPage(): Promise<string> {
   const [alerts, dismissals] = await Promise.all([
     api.getAlerts(),
-    // Admin polish: dismissed alerts leave the queue but stay in its history.
+    // Dismissed alerts leave the queue but stay in its history.
     getAdminDismissals().catch(() => [] as Dismissal[]),
   ]);
   const view = viewOf("alerts");
@@ -178,8 +172,7 @@ export async function alertsPage(): Promise<string> {
     (view === "dismissed" ? "" : table(["ID", "Raised (SAST)", "Category", "Alert", "Farm", "Farmer", "Handled by", "Priority", "Status", "Actions"],
       filtered, (a) => [
         `<span class="mono">${esc(a.id)}</span>`,
-        // fmtDateTimeSast, not the raw column: this cell used to render
-        // "2026-10-03T14:05:12.345Z".
+        // fmtDateTimeSast, not the raw ISO column.
         `<span class="sm">${esc(fmtDateTimeSast(a.raised))}</span>`,
         badge(a.category, "info"),
         esc(a.title),
@@ -203,7 +196,7 @@ export async function alertsPage(): Promise<string> {
   `;
 }
 
-/* ============================== MAINTENANCE ============================== */
+/* MAINTENANCE */
 
 export async function maintenancePage(): Promise<string> {
   const jobs = await api.getMaintenance();

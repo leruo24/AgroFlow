@@ -7,24 +7,15 @@ using System.Linq;
 namespace AgroFlow.Business.Agronomy
 {
     // The FAO-56 growth-stage advice engine.
-    //
-    // WHAT THIS IS, AND WHAT IT DELIBERATELY IS NOT
-    // ---------------------------------------------
-    // This is NOT a language model and there is no API key, no subscription and
-    // no vendor behind it. It is a deterministic function of a zone's sensor
-    // readings, its weather rows and a committed extract of FAO-56. The same
-    // inputs always produce the same words. MafiHub owns it outright.
-    //
-    // It should read as if something knowledgeable looked at the field, and it
-    // earns that by being specific and sourced rather than by sounding clever.
-    // The governing rule, applied without exception: every number in the output
-    // traces to a sensor reading, a weather row, or a cited FAO-56 value. When
-    // an input is missing, the engine says what it cannot tell you and gives
-    // the advice it still can - it never fills a gap with a plausible default.
+    // It is not a language model: no API key, no subscription, no vendor. It is a
+    // deterministic function of a zone's sensor readings, its weather rows and a
+    // committed extract of FAO-56, so the same inputs always give the same words.
+    // Every number in the output comes from a sensor reading, a weather row or a cited
+    // FAO-56 value. When an input is missing, it says what it cannot tell and gives the
+    // advice it still can; it never fills a gap with a guess.
 
-    // The first four are the original values and keep their meaning. The rest
-    // exist so every Fao56Engine PrimaryAction has its own answer: a crop that
-    // is not planted, or a zone the engine could not decide for, is never
+    // The first four values are the original ones. The rest give every Fao56Engine
+    // PrimaryAction its own answer, so an unplanted crop or an undecided zone is never
     // reported as "no action needed".
     public enum AdviceAction
     {
@@ -41,8 +32,8 @@ namespace AgroFlow.Business.Agronomy
         SeasonComplete,
     }
 
-    // One reported quantity plus where it came from. The UI can render these as
-    // footnotes; the report prints them so the agronomy can be checked by hand.
+    // One reported quantity plus where it came from. The UI can show these as footnotes;
+    // the report prints them so the agronomy can be checked by hand.
     public sealed class AdviceFact
     {
         public string Label { get; }
@@ -92,24 +83,19 @@ namespace AgroFlow.Business.Agronomy
 
         public double? FarmLatitudeDegrees { get; set; }
 
-        // Most recent actual weather for this farm - the day ET0 is computed
-        // for. Null when no weather row exists yet.
+        // The most recent actual weather for the farm, the day ET0 is worked out for. Null
+        // when no weather row exists yet.
         public DailyWeather? LatestWeather { get; set; }
 
         // Forward-looking rows, used only for the rainfall outlook sentence.
         public IReadOnlyList<DailyWeather> Forecast { get; set; } = Array.Empty<DailyWeather>();
 
-        // ------------------------------------------------------------------
-        // Water-balance inputs (added with the FAO-56 water-balance engine).
-        //
-        // Every one is OPTIONAL and defaults to "not known", so existing callers
-        // that only set the fields above keep compiling and keep getting exactly
-        // the advice they got before. The engine runs only when WaterBalance is
-        // supplied; without it this class behaves as it always did.
-        // ------------------------------------------------------------------
+        // Water-balance inputs. All optional and "not known" by default, so callers that only
+        // set the fields above get the same advice as before. The engine only runs when
+        // WaterBalance is given.
         public ZoneEngineInput? WaterBalance { get; set; }
 
-        // Timing and pump-derived fault signals. Optional for the same reason.
+        // Timing and pump fault signals. Optional for the same reason.
         public ZoneFaultSignals? FaultSignals { get; set; }
     }
 
@@ -140,23 +126,14 @@ namespace AgroFlow.Business.Agronomy
         // everything it needed.
         public IReadOnlyList<string> Limitations { get; internal set; } = Array.Empty<string>();
 
-        // ------------------------------------------------------------------
-        // Water-balance results (added with the FAO-56 water-balance engine).
-        //
-        // Additive: Summary, Reasoning, Facts, Insights and Limitations above all
-        // keep their existing meaning and content, so the schedule report and the
-        // admin dashboard need no changes for them.
-        //
-        // Insights above stays the FAO-56 narrative, every line carrying a
-        // citation. FarmerInsights below is the separate, farmer-facing set from
-        // spec section 7 - short, plain, no jargon - which is what the app shows
-        // and what the reports render as { text, source }.
-        // ------------------------------------------------------------------
+        // Water-balance results. Summary, Reasoning, Facts, Insights and Limitations above keep
+        // their meaning, so the schedule report and dashboard need no changes.
+        // Insights is the cited FAO-56 narrative; FarmerInsights is the short, plain set the
+        // app shows and the reports render as { text, source }.
         public IReadOnlyList<ZoneInsight> FarmerInsights { get; internal set; } = Array.Empty<ZoneInsight>();
 
-        // The one plain sentence spec section 9a asks for, e.g. "Water about
-        // 2 min today." Null when the water balance could not run. Summary is left
-        // untouched for callers already rendering it.
+        // The one plain sentence, e.g. "Water about 2 min today." Null when the water
+        // balance could not run.
         public string? PlainSummary { get; internal set; }
 
         // Today's water-balance state, for reports. Null where unavailable.
@@ -175,17 +152,17 @@ namespace AgroFlow.Business.Agronomy
         // True when the balance ran end to end for today.
         public bool WaterBalanceAvailable { get; internal set; }
 
-        // Item 2. How sure the advice is, and the one step that would improve
-        // it. Null when the water balance was not asked for.
+        // How sure the advice is and the one step that would improve it. Null when the
+        // water balance was not asked for.
         public RuleBook.Confidence? Confidence { get; internal set; }
         public RuleBook.SetupStep? NextStep { get; internal set; }
         public bool StageAssumed { get; internal set; }
         public double? RecommendedDepthMm { get; internal set; }
         public double? RecommendedMinutesPerSquareMetre { get; internal set; }
 
-        // The water balance's own decision and its rolling seven-day plan.
-        // Null / empty when the balance was not asked for. When set, Action,
-        // Reasoning and Summary are all derived from this - never re-decided.
+        // The water balance's own decision and its 7-day plan. Null or empty when the
+        // balance was not asked for; when set, Action, Reasoning and Summary come from
+        // this and are never re-decided.
         public IrrigationPrimaryAction? PrimaryAction { get; internal set; }
         public IReadOnlyList<RollingIrrigationDay> Outlook { get; internal set; } = Array.Empty<RollingIrrigationDay>();
     }
@@ -212,7 +189,7 @@ namespace AgroFlow.Business.Agronomy
             var crop = Fao56Knowledge.TryResolve(input.CropType);
             advice.CropDisplayName = crop != null ? crop.DisplayName : input.CropType;
 
-            // ---- Soil moisture: the trigger, and the one thing measured -----
+            // Soil moisture: the trigger, and the one thing measured
             var moisture = input.SoilMoisturePercent;
             var threshold = input.MoistureThresholdPercent;
 
@@ -238,7 +215,7 @@ namespace AgroFlow.Business.Agronomy
                 limitations.Add("This zone has no moisture threshold configured, so auto-irrigation has nothing to trigger against.");
             }
 
-            // ---- Growth stage ------------------------------------------------
+            // Growth stage
             StageAssessment? stage = null;
 
             if (crop == null)
@@ -251,8 +228,7 @@ namespace AgroFlow.Business.Agronomy
             }
             else if (!input.PlantingDate.HasValue)
             {
-                // 3c: the explicit, stated degradation. Do not guess a planting
-                // date, and do not fail.
+                // Say clearly that stage advice needs a planting date; do not guess one and do not fail.
                 limitations.Add("Stage-aware guidance needs a planting date, and this zone does not have one. " +
                                 "Advice below is moisture-threshold only. Set the zone's planting date to get growth stage, Kc and ETc.");
             }
@@ -269,7 +245,7 @@ namespace AgroFlow.Business.Agronomy
                 facts.Add(new AdviceFact("Kc today", Fao56Knowledge.Format(stage.Kc, 2), stage.KcBasis));
             }
 
-            // ---- ET0 / ETc ---------------------------------------------------
+            // ET0 / ETc
             double? et0 = null;
             double? etc = null;
 
@@ -318,9 +294,9 @@ namespace AgroFlow.Business.Agronomy
                 }
             }
 
-            // ---- Stage-specific insights (3e) --------------------------------
-            // With the water balance supplied, the balance decides - not the
-            // farmer's threshold - so nothing below may claim otherwise.
+            // Stage-specific insights.
+            // With the water balance given, the balance decides (not the farmer's threshold),
+            // so nothing below may say otherwise.
             var engineDecides = input.WaterBalance != null;
 
             if (crop != null && stage != null)
@@ -328,7 +304,7 @@ namespace AgroFlow.Business.Agronomy
                 insights.AddRange(BuildInsights(crop, stage, etc, limitations, engineDecides));
             }
 
-            // ---- Rainfall outlook --------------------------------------------
+            // Rainfall outlook
             var upcomingRain = input.Forecast
                 .Where(f => f.Date > input.AsOf && f.Date <= input.AsOf.AddDays(ForecastHorizonDays))
                 .OrderBy(f => f.Date)
@@ -344,19 +320,17 @@ namespace AgroFlow.Business.Agronomy
                     "weather_daily forecast row for " + nextMeaningfulRain.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
             }
 
-            // ---- Decision -----------------------------------------------------
+            // Decision
             if (engineDecides)
             {
-                // The FAO-56 root-zone water balance (Eq. 82-88) decides, and
-                // Action, Reasoning and Summary are worded from its
-                // PrimaryAction. The farmer's threshold is not consulted, so
+                // The FAO-56 root-zone water balance (Eq. 82-88) decides, and Action, Reasoning and
+                // Summary are worded from its PrimaryAction. The farmer's threshold is not used, so
                 // the two can never disagree.
                 ApplyWaterBalance(input, advice, reasoning, facts, limitations);
             }
             else
             {
-                // A caller that has not supplied the balance keeps the original
-                // threshold-only decision, unchanged.
+                // Without the balance, the threshold-only decision is used, as before.
                 advice.Action = Decide(moisture, threshold, out var decisionSentence);
                 reasoning.Add(decisionSentence);
 
@@ -379,8 +353,8 @@ namespace AgroFlow.Business.Agronomy
             return advice;
         }
 
-        // The adapter over the water-balance engine. Everything it produces is
-        // ADDED to the advice: nothing existing is overwritten.
+        // The adapter over the water-balance engine. It only adds to the advice; nothing
+        // existing is overwritten.
         private static void ApplyWaterBalance(
             ZoneAdviceInput input, ZoneAdvice advice,
             List<string> reasoning, List<AdviceFact> facts, List<string> limitations)
@@ -419,7 +393,7 @@ namespace AgroFlow.Business.Agronomy
                 if (!limitations.Contains(limitation)) limitations.Add(limitation);
             }
 
-            // The farmer-facing insight set (spec section 7).
+            // The farmer-facing insights.
             var insights = ZoneInsightBuilder.Build(
                 engineInput, result, input.FaultSignals ?? new ZoneFaultSignals());
             advice.FarmerInsights = insights;
@@ -427,9 +401,8 @@ namespace AgroFlow.Business.Agronomy
             advice.PrimaryAction = result.PrimaryAction;
             advice.Outlook = result.Outlook;
 
-            // Item 2: the action is the balance's verdict - the same one the
-            // farmer reads in FarmerInsights - for every PrimaryAction,
-            // including the terminal states the balance returns early from.
+            // The action is the balance's verdict (the same one the farmer reads in
+            // FarmerInsights) for every PrimaryAction, including the early-return states.
             advice.Action = ToAdviceAction(result.PrimaryAction);
             reasoning.Add(DecisionSentence(result));
 
@@ -537,8 +510,7 @@ namespace AgroFlow.Business.Agronomy
                 return AdviceAction.InsufficientData;
             }
 
-            // The same rule the insight builder uses (item 2b), so the two
-            // never disagree at exactly the threshold.
+            // The same rule the insight builder uses, so the two never disagree at the threshold.
             if (RuleBook.WaterRules.AtOrBelowFarmerThreshold(moisture, threshold, readingFresh: true))
             {
                 sentence = "Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "% is at or below the " +
@@ -551,11 +523,10 @@ namespace AgroFlow.Business.Agronomy
             return AdviceAction.NoActionNeeded;
         }
 
-        // 3e. Every line here is tied to something FAO-56 actually says, with
-        // the citation attached. Claims the textbook does not support are left
-        // out - notably per-crop ranking of which stages are most sensitive to
-        // water stress, which is FAO-33 material (yield response factor Ky) and
-        // is simply not in FAO-56. See notInFao56 in the knowledge JSON.
+        // Every line here is tied to something FAO-56 says, with the citation. Claims the
+        // book does not support are left out, e.g. ranking which stages are most sensitive to
+        // water stress, which is FAO-33 (yield response factor Ky). See notInFao56 in the
+        // knowledge JSON.
         private static IEnumerable<string> BuildInsights(
             Fao56Crop crop, StageAssessment stage, double? etc, List<string> limitations, bool engineDecides)
         {
@@ -629,8 +600,8 @@ namespace AgroFlow.Business.Agronomy
             }
             insights.Add(pLine);
 
-            // Say plainly why p is context and not a trigger. Only true on the
-            // threshold-only path: with the balance, p (via RAW) is the trigger.
+            // Explain why p is context, not a trigger. Only true on the threshold-only path;
+            // with the balance, p (through RAW) is the trigger.
             if (!engineDecides) limitations.Add("FAO-56's depletion limit p is a fraction of plant-available water, which needs the soil's field capacity and wilting point " +
                             "(FAO-56 Table 19) to convert into a moisture percentage. AgroFlow does not record soil texture per zone, so p is reported as " +
                             "context only - the irrigation trigger remains the farmer's configured moisture threshold.");
@@ -652,9 +623,8 @@ namespace AgroFlow.Business.Agronomy
 
         private static string LateSeasonInsight(Fao56Crop crop)
         {
-            // FAO-56 p. 97 is explicit that Kc_end encodes a management choice,
-            // which is what makes "should I dry this down?" answerable from the
-            // table rather than from folklore.
+            // FAO-56 p. 97 says Kc_end reflects a management choice, so "should I dry this down?"
+            // can be answered from the table.
             var line = "Late season. FAO-56 (p. 97) explains that Kc_end \"reflects crop and water management practices\": it is high if the crop is " +
                        "irrigated until harvested fresh, and small if the crop is allowed to senesce and dry out in the field before harvest. " +
                        "This crop's Kc_end is " + Fao56Knowledge.Format(crop.Kc.End, 2) + " (" + crop.KcCite + ")";
@@ -708,8 +678,8 @@ namespace AgroFlow.Business.Agronomy
                 parts.Add("stage-aware guidance unavailable");
             }
 
-            // With the balance deciding, the threshold comparison is not the
-            // reason for the action, so it is not stated as one.
+            // With the balance deciding, the threshold comparison is not the reason for the
+            // action, so we do not present it as one.
             if (engineDecides && moisture.HasValue)
             {
                 parts.Add("Soil moisture " + Fao56Knowledge.Format(moisture.Value, 0) + "%");
@@ -731,8 +701,8 @@ namespace AgroFlow.Business.Agronomy
                     var action = advice.PrimaryAction == IrrigationPrimaryAction.WaterNowReduced
                         ? "Irrigate today at a reduced amount; the rain expected helps but is not enough"
                         : "Irrigate today";
-                    // The threshold path's forward-looking hint. The balance has
-                    // its own outlook, which already accounts for that rain.
+                    // The threshold path's rain hint. The balance has its own outlook that already
+                    // counts that rain.
                     if (!engineDecides && nextRain != null && etc.HasValue)
                     {
                         action += "; " + Fao56Knowledge.Format(nextRain.PrecipitationMm, 0) + " mm forecast " +

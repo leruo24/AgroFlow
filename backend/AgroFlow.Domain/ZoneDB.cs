@@ -7,12 +7,10 @@ using AgroFlow.Business;
 
 namespace AgroFlow.Data
 {
-    // Workshop-style data class (like EmployeeDB.cs): fills a DataSet, then maps
-    // each DataRow into a Zone business object kept in a Collection<Zone>.
-    //
-    // Not called by the API. It follows an early design, and its table and column
-    // names don't match the current zone table. The live code reads zones through
-    // Fao56EngineXDB.
+    // Workshop-style data class (like EmployeeDB.cs): fills a DataSet, then maps each
+    // DataRow to a Zone object in a Collection<Zone>.
+    // Not used by the API: it follows an early design whose table and column names no
+    // longer match the zone table. The live code reads zones through Fao56EngineXDB.
     public class ZoneDB : DB
     {
         #region Data Members

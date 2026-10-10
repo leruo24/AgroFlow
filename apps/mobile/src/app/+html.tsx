@@ -1,15 +1,8 @@
-// The HTML shell for the WEB build only. Expo Router renders this on the
-// server during `expo export --platform web`; it never runs on iOS or
-// Android, and nothing here reaches the native apps.
-//
-// WHY IT EXISTS: to make the exported web build installable on an iPhone.
-//
-// An APK cannot install on iOS, and a real iOS build needs a paid Apple
-// Developer account that this project does not have. The web app is the
-// answer - but a plain web page is a browser tab, not an app. The manifest
-// and the apple-* meta tags below are what turn "a website" into something a
-// farmer taps Share -> "Add to Home Screen" on and then opens from their home
-// screen, full screen, with the AgroFlow icon.
+// The HTML shell for the web build only. Expo Router renders it during
+// `expo export --platform web`; it never runs on iOS or Android.
+// It makes the web build installable on an iPhone: an APK cannot install on iOS and a
+// real iOS build needs a paid Apple Developer account. The manifest and apple-* meta tags
+// let a farmer tap Share -> "Add to Home Screen" and open it full screen with the AgroFlow icon.
 import { ScrollViewStyleReset } from 'expo-router/html';
 import type { PropsWithChildren } from 'react';
 
@@ -36,7 +29,7 @@ export default function Root({ children }: PropsWithChildren) {
           content="Smart irrigation for South African farmers: live soil moisture, 7-day forecast advice, automatic watering and alerts."
         />
 
-        {/* ---- Installable on a home screen ---------------------------- */}
+        {/* Installable on a home screen */}
         {/* Relative so it works under any path - the site is served from a
             sub-path on GitHub Pages (/AgroFlow/app/), not the domain root. */}
         <link rel="manifest" href="manifest.json" />
@@ -68,10 +61,9 @@ export default function Root({ children }: PropsWithChildren) {
   );
 }
 
-// #184D35 is the app's navigation colour and the native splash background,
-// so the web app opens on the same colour the Android one does. The dark-mode
-// value matches the app's own dark background rather than pure black, which
-// would show a seam against the first screen.
+// #184D35 is the app's navigation colour and the native splash background, so the web app
+// opens on the same colour as Android. The dark-mode value matches the app's dark
+// background instead of pure black, which would show a seam.
 const backgroundStyle = `
 body {
   background-color: #184D35;

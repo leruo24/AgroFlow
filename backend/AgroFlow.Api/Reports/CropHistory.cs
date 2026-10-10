@@ -3,14 +3,13 @@ using Npgsql;
 
 namespace AgroFlow.Api.Reports;
 
-/// One "zone.crop_changed" audit row (item 6b).
+/// One "zone.crop_changed" audit row.
 internal sealed record CropChange(DateTimeOffset At, string? From, DateOnly? FromPlanting);
 
-// Item 6b: a report for a past period keeps the crop that was growing then.
-//
-// The zone row only holds today's crop. Every change is in admin_audit_log
-// with what it changed FROM, so the crop on a past day is the "from" of the
-// first change made after that day - or today's crop if nothing changed since.
+// A report for a past period keeps the crop that was growing then.
+// The zone row only holds today's crop, but each change in admin_audit_log says
+// what it changed from, so the crop on a past day is the "from" of the first
+// change after that day, or today's crop if nothing changed since.
 internal static class CropHistory
 {
     /// The crop and planting date in effect at the end of <paramref name="day"/> (SAST).
@@ -44,7 +43,7 @@ internal static class CropHistory
         }
         catch (PostgresException)
         {
-            // 0037 not applied: no history, so today's crop is used as before.
+            // 0037 not applied: no history, so we use today's crop.
         }
         return list;
     }

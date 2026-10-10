@@ -9,11 +9,9 @@ public record SensorReadingRequest(long ZoneId, string SensorType, float Value);
 
 public record SensorReadingResponse(string HealthStatus, string? CommandIssued);
 
-// HTTP transport for sensor readings. The actual insert + health/
-// auto-irrigation decision logic lives in SensorReadingProcessor, shared
-// with the MQTT handler (MqttConnectionService) - this endpoint's only job
-// is to validate the request and resolve which zone it's for (directly from
-// the request body; MQTT resolves it from the topic's deviceId instead).
+// HTTP route for sensor readings. The insert, health and auto-irrigation logic is
+// in SensorReadingProcessor, shared with the MQTT handler; this endpoint only
+// validates the request and takes the zone from the body.
 public static class SensorReadingEndpoints
 {
     public static void MapSensorReadingEndpoints(this WebApplication app)
@@ -27,9 +25,7 @@ public static class SensorReadingEndpoints
         INotificationService notifications,
         CancellationToken cancellationToken)
     {
-        // The same list the MQTT subscriber checks against, so the two
-        // transports cannot drift apart - it used to be a private copy here
-        // and nothing at all on the MQTT side.
+        // The same list the MQTT subscriber checks, so both routes accept the same types.
         if (request.ZoneId <= 0 || !SensorReadingTypes.IsValid(request.SensorType))
         {
             return Results.BadRequest(

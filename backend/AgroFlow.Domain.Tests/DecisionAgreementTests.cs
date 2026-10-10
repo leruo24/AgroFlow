@@ -6,17 +6,16 @@ using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Domain.Tests;
 
-// Finding 7: Fao56Engine.PrimaryAction (and its rolling Outlook) is the single
-// decision. Explanations, IrrigationAdvisor, TodayRules, the report forecast
-// cards and the schedule report only word it - none may re-decide and land on
-// a different answer.
+// Checks that the app, the explanation and the report all agree with the engine.
+// Fao56Engine.PrimaryAction and its Outlook make the decision; Explanations,
+// IrrigationAdvisor, TodayRules and the report cards only word it.
 public class DecisionAgreementTests
 {
     private static readonly DateOnly Today = new(2026, 10, 7);
 
     private static readonly Regex Jargon = new(@"\b(Kc|Ks|RAW|TAW|Dr|ETc|ETo|ET0|FAO-56)\b");
 
-    // The same field as IrrigationDecisionEngineTests: maize, loam, 200 m², 20 L/min.
+    // Same field as IrrigationDecisionEngineTests: maize, loam, 200 m², 20 L/min.
     private static ZoneEngineInput Input(double initialDr = 100, double todayRain = 0)
     {
         var input = new ZoneEngineInput
@@ -56,7 +55,7 @@ public class DecisionAgreementTests
         return input;
     }
 
-    // One engine input per PrimaryAction the engine can reach today.
+    // One engine input for each PrimaryAction the engine can produce.
     private static ZoneEngineInput InputFor(IrrigationPrimaryAction action)
     {
         switch (action)
@@ -82,8 +81,8 @@ public class DecisionAgreementTests
             }
             case IrrigationPrimaryAction.InsufficientData:
             {
-                // The balance carries a persisted state (so BalanceRan is true)
-                // but there is no weather for today: no decision can be made.
+                // There is a saved state (so BalanceRan is true) but no weather for today,
+                // so no decision can be made.
                 var i = Input();
                 i.Weather.Clear();
                 return i;
@@ -100,13 +99,12 @@ public class DecisionAgreementTests
         IrrigationPrimaryAction.SeasonComplete, IrrigationPrimaryAction.InsufficientData,
     }.Select(a => new object[] { a });
 
-    // Every value the enum has. A new PrimaryAction must be added to the
-    // tables below before this passes.
+    // Every enum value. A new PrimaryAction must be added to the tables below.
     public static IEnumerable<object[]> AllActions() =>
         Enum.GetValues<IrrigationPrimaryAction>().Select(a => new object[] { a });
 
-    // What each consumer must say, written out by hand rather than derived
-    // from the code under test.
+    // What each consumer must say, written out by hand instead of taken from
+    // the code under test.
     private static AdviceAction ExpectedAdvice(IrrigationPrimaryAction a) => a switch
     {
         IrrigationPrimaryAction.WaterNow => AdviceAction.IrrigateNow,
@@ -167,7 +165,7 @@ public class DecisionAgreementTests
         Engine = result,
     };
 
-    // ---- the agreement matrix ----------------------------------------------
+    // The agreement matrix
 
     [Theory]
     [MemberData(nameof(ReachableActions))]
@@ -180,8 +178,8 @@ public class DecisionAgreementTests
         var insights = ZoneInsightBuilder.Build(input, result, new ZoneFaultSignals());
         var today = TodayRules.For(result, insights);
 
-        // A threshold that, on the old path, would always have said "water":
-        // it must not leak into any answer once the balance decides.
+        // A threshold that would always say "water" if it were used: it must not
+        // affect any answer once the balance decides.
         var advice = Advise(input, moisture: 10, threshold: 30);
         var card = ActionReport.ForecastAction(new[] { Report(input, result) }, Today);
 
@@ -233,9 +231,8 @@ public class DecisionAgreementTests
         }
     }
 
-    // The actions the engine never sets today still have a defined answer in
-    // every consumer, so adding them to the engine later cannot fall through
-    // to "no action needed".
+    // Actions the engine does not produce yet still get their own answer in every
+    // consumer, so they can never fall through to "no action needed".
     [Theory]
     [MemberData(nameof(AllActions))]
     public void EveryPrimaryAction_HasItsOwnAnswer_InTodayRulesAndTheAdvisorMapping(IrrigationPrimaryAction action)
@@ -260,10 +257,10 @@ public class DecisionAgreementTests
         Assert.DoesNotMatch(Jargon, today.Text);
     }
 
-    // ---- regression tests for the six contradiction paths ---------------------
+    // Regression tests for the six contradiction paths
 
-    // 1. 3 mm of rain against more crop use, with the soil already well past
-    //    the watering point: water (reduced), never "rain covers it".
+    // 1. 3 mm of rain against more crop use, with the soil well past the watering
+    //    point: water (reduced), never "rain covers it".
     [Fact]
     public void LightRain_OnADryField_StillWaters_NeverRainCoversIt()
     {
@@ -285,8 +282,8 @@ public class DecisionAgreementTests
         Assert.DoesNotContain("Hold", advice.Summary);
     }
 
-    // 1b. The skip explanation gives the engine's reason, not the old
-    //     rain-versus-use rule: postponing on rain smaller than today's use.
+    // 1b. The skip explanation gives the engine's reason (dryness after rain),
+    //     even when the rain is less than today's use.
     [Fact]
     public void Postpone_ExplainsTheProjectedDryness_NotRainVersusUse()
     {
@@ -305,9 +302,8 @@ public class DecisionAgreementTests
         Assert.Contains("PostponeForRain", skip.Explanation.Technical);
     }
 
-    // 2. Start-of-day dryness below the watering point, but today's use takes
-    //    it past: the engine says water, and the explanation must not fall
-    //    back to a sensor claim for a zone it never read.
+    // 2. Dryness starts below the watering point but today's use takes it past:
+    //    the engine says water, and the explanation never claims a sensor reading.
     [Fact]
     public void WaterNow_FromTodaysUse_NeverClaimsASensorReading()
     {
@@ -325,8 +321,8 @@ public class DecisionAgreementTests
         Assert.Contains(water.Explanation.Facts, f => f.Label == "How dry it will be by tonight");
     }
 
-    // 3. The farmer's threshold says water, the balance says not: the
-    //    reasoning and summary follow the balance.
+    // 3. The farmer's threshold says water but the balance says no: the reasoning
+    //    and summary follow the balance.
     [Fact]
     public void ThresholdSaysWater_BalanceSaysNo_ReasoningFollowsTheBalance()
     {
@@ -347,8 +343,8 @@ public class DecisionAgreementTests
         Assert.Contains("Hold irrigation today", advice.Summary);
     }
 
-    // 5. States the balance returns early from, or cannot decide, never turn
-    //    into "irrigate" (from the threshold) or "no action needed".
+    // 5. States the balance stops early on, or cannot decide, never become
+    //    "irrigate" or "no action needed".
     [Fact]
     public void UnplantedCrop_WithADryThreshold_IsNotIrrigateNow()
     {
@@ -375,13 +371,12 @@ public class DecisionAgreementTests
         Assert.DoesNotContain("No irrigation needed", advice.Summary);
     }
 
-    // 6. Forecast cards and schedule days 1-6 read the rolling outlook per
-    //    day, including waterings after the first one.
+    // 6. Forecast cards and schedule days 1-6 read the outlook for each day,
+    //    including waterings after the first one.
     [Fact]
     public void ForecastCardsAndScheduleDays_FollowTheOutlookForEveryDay()
     {
-        // Shallow sand holds little, so a second watering falls inside the week
-        // - the case the old first-watering-only cards missed.
+        // Shallow sand holds little water, so a second watering falls inside the week.
         var input = Input(initialDr: 100);
         input.SoilType = "sandy";
         input.RootDepthLimitM = 0.2;

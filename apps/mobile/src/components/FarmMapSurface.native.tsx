@@ -1,25 +1,12 @@
-// Native map surface: Leaflet + OpenStreetMap tiles inside a WebView.
-//
-// WHY NOT react-native-maps
-// On Android it renders through Google Maps, which needs an API key and a
-// billing account. app.json has never carried one, so the map silently never
-// loaded and FarmLocationMap's 12-second failure timer fired - every Android
-// farmer saw "Map unavailable. Farm location is shown above." AgroFlow is not
-// using Google Maps, so the dependency bought nothing and cost every Android
-// user the feature.
-//
-// OpenStreetMap needs no key and no billing. The web surface
-// (FarmMapSurface.tsx) already used OSM raster tiles; this brings native onto
-// the same tiles, so both platforms now show the same map from the same
-// source.
-//
-// OSM TILE USAGE POLICY
-// Tiles come from tile.openstreetmap.org, a donated-resource service. Three
-// things that policy requires, all deliberate below:
+// Native map: Leaflet + OpenStreetMap tiles inside a WebView.
+// We do not use react-native-maps because on Android it needs Google Maps with an API key
+// and billing. OpenStreetMap needs neither, and the web surface (FarmMapSurface.tsx) uses
+// the same OSM tiles, so both platforms show the same map.
+// OSM's tile usage policy asks for three things, all done below:
 //   - an identifying User-Agent (applicationNameForUserAgent)
 //   - visible attribution linking to the copyright page
-//   - no bulk or offline downloading; only the tiles on screen are fetched,
-//     and the card does not pan or scroll, so that is a handful per view.
+//   - no bulk or offline downloading; only tiles on screen are fetched, and the card does
+//     not pan or scroll.
 import { useCallback, useState } from 'react';
 import { WebView } from 'react-native-webview';
 import { farmMapSurfaceStyles as styles } from '@/styles/farmMapSurfaceStyles';
@@ -115,20 +102,15 @@ export default function FarmMapSurface({
 }: FarmMapSurfaceProps) {
   const [failed, setFailed] = useState(false);
 
-  // Fires onFailure once per mount. Without the guard, a WebView that errors
-  // repeatedly (or errors and then also posts an error message) would call
-  // back several times; FarmLocationMap only needs telling once.
+  // Calls onFailure once per mount, even if the WebView errors several times.
   const reportFailure = useCallback(() => {
     if (failed) return;
     setFailed(true);
     onFailure();
   }, [failed, onFailure]);
 
-  // The zoom prop is already a Leaflet zoom level, but the conversion is
-  // written out rather than assumed: the previous react-native-maps surface
-  // expressed scale as a lat/long delta, and keeping the delta round trip
-  // visible means that if anything upstream ever starts passing a delta
-  // again, this is the one line to change rather than a silent mis-scale.
+  // The zoom prop is already a Leaflet zoom level; the conversion is written out so a
+  // lat/long delta could be passed in again by changing one line.
   // round(log2(360 / delta)) is the inverse of delta = 360 / 2^zoom.
   const delta = 360 / 2 ** zoom;
   const leafletZoom = Math.min(18, Math.max(3, Math.round(Math.log2(360 / delta))));
@@ -139,24 +121,19 @@ export default function FarmMapSurface({
       originWhitelist={['*']}
       source={{ html: buildMapHtml(latitude, longitude, leafletZoom) }}
 
-      // OSM's tile usage policy requires a User-Agent that identifies the
-      // application. A generic WebView UA risks the tiles being blocked.
+      // OSM's policy requires a User-Agent that names the app; a generic WebView one risks the
+      // tiles being blocked.
       applicationNameForUserAgent="AgroFlow/1.0"
 
-      // Glanceable card: the surrounding View owns scrolling, and the +/-
-      // buttons own zoom.
+      // The surrounding View handles scrolling and the +/- buttons handle zoom.
       scrollEnabled={false}
       bounces={false}
       showsHorizontalScrollIndicator={false}
       showsVerticalScrollIndicator={false}
 
-      // No offline tile store: incognito keeps everything in the session, so
-      // nothing is written to persistent storage and there is no prefetching
-      // or bulk download. In-session caching is deliberately LEFT ON - OSM's
-      // policy asks for caching to reduce load on a donated service, and
-      // disabling it would re-request the same handful of tiles on every
-      // re-render. Only the tiles on screen are ever fetched; the card does
-      // not pan.
+      // No offline tile store: incognito keeps everything in the session, with no prefetching.
+      // In-session caching stays on, because OSM asks for caching to reduce load. Only the
+      // tiles on screen are fetched.
       incognito
 
       onError={reportFailure}

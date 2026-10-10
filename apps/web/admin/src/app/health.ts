@@ -1,14 +1,8 @@
-/* Platform health: the sidebar light, the header chip and Home's card.
- *
- * All three read the same GET /api/admin/health, so they cannot disagree -
- * which is what the three separate "Monitoring not yet implemented" strings
- * they replace were at least honest about.
- *
- * Nothing here ever shows green on no information. A check that could not be
- * read says so; an endpoint that cannot be reached shows a Retry. The whole
- * point of this panel is to be trusted during an incident, and a status light
- * that lies once is never trusted again.
- */
+/* Platform health: the sidebar light, the header chip and Home's card. All three read the
+ * same GET /api/admin/health, so they always agree.
+ * Nothing ever shows green without information: a check that could not be read says so,
+ * and an unreachable endpoint shows a Retry. This panel must be trustworthy during an
+ * incident. */
 
 import { clearedConditions, dismissButton, hiddenBy, historyList, viewOf, viewToggle, type Dismissal } from "@/lib/dismiss";
 import { getAdminDismissals, clearDismissalCondition } from "@/services/agroFlowApi";
@@ -24,13 +18,10 @@ const TONE: Record<string, { cls: string; word: string }> = {
   down: { cls: "bad", word: "Problem" },
 };
 
-/* ------------------------------------------------------------------ *
- * The card on Home
- * ------------------------------------------------------------------ */
+/* The card on Home */
 
 export async function healthPanelHtml(): Promise<string> {
-  // Admin polish: warnings can be dismissed; dismissed ones leave the grid
-  // and are listed under Dismissed.
+  // Warnings can be dismissed; dismissed ones leave the grid and are listed under Dismissed.
   const dismissals = await getAdminDismissals().catch(() => [] as Dismissal[]);
   const view = viewOf("health");
   try {
@@ -45,8 +36,8 @@ export async function healthPanelHtml(): Promise<string> {
       </div>`);
   }
 
-  // A check that is OK again (or changed) closes its critical dismissal, so a
-  // repeat shows again.
+  // A check that is OK again (or has changed) closes its critical dismissal, so a repeat
+  // shows again.
   const warnings = new Map(cached.checks.filter((c) => c.status !== "ok").map((c) => [c.key, c.status]));
   for (const d of clearedConditions(dismissals, "health", warnings)) {
     void clearDismissalCondition(d.id).catch(() => undefined);
@@ -92,16 +83,13 @@ function healthCard(c: HealthCheck): string {
     </div>`;
 }
 
-/* ------------------------------------------------------------------ *
- * The sidebar light and the header chip
- * ------------------------------------------------------------------ */
+/* The sidebar light and the header chip */
 
 export function startHealthPolling(): void {
   void refreshHealthIndicators();
 
-  // Once a minute. Frequent enough that an admin watching the sidebar during
-  // an incident sees it change; rare enough that six database queries per
-  // open tab stay negligible.
+  // Once a minute: often enough to see a change during an incident, rarely enough that six
+  // database queries per open tab do not matter.
   if (timer !== undefined) window.clearInterval(timer);
   timer = window.setInterval(() => void refreshHealthIndicators(), 60_000);
 }
@@ -122,8 +110,8 @@ export async function refreshHealthIndicators(): Promise<void> {
   try {
     cached = await getPlatformHealth();
   } catch {
-    // Unknown, said as unknown. Showing the last known good state here
-    // would be the one moment it matters that it is wrong.
+    // Unknown is shown as unknown; showing the last good state would be wrong exactly when it
+    // matters.
     if (sidebar) {
       sidebar.innerHTML = `<i class="dot dot-unknown"></i>Status unavailable`;
     }
@@ -142,15 +130,15 @@ export async function refreshHealthIndicators(): Promise<void> {
 
   if (chip) {
     chip.className = `status-chip status-chip-${tone.cls}`;
-    // The chip is narrow, so it carries the count of what is wrong rather
-    // than the sentence - the sentence is one click away in the card.
+    // The chip is narrow, so it shows how many checks are failing; the full sentence is one
+    // click away in the card.
     const bad = cached.checks.filter((c) => c.status !== "ok").length;
     chip.textContent = bad === 0 ? "All systems normal" : `${bad} need${bad === 1 ? "s" : ""} attention`;
   }
 }
 
-/* Re-renders just the health card in place, for the Refresh button, without
-   reloading the whole page and losing the admin's scroll position. */
+/* Re-renders only the health card, for the Refresh button, so the admin keeps their scroll
+ * position. */
 export async function refreshHealthPanel(): Promise<void> {
   const host = document.getElementById("healthPanel");
   if (!host) return;

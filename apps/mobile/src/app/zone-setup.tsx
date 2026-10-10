@@ -1,9 +1,7 @@
 // Finish setup. Reached as /zone-setup?zoneId=123 from a Home card.
-//
-// Item 6: the checklist of what today's advice is missing for one zone -
-// planting date, soil, size, flow rate and (with a kit) the wet/dry setup.
-// Each item saves on its own and the confidence at the top is re-read from
-// the server afterwards, so the farmer sees the advice get surer.
+// The checklist of what today's advice is missing for one zone: planting date, soil, size,
+// flow rate and (with a kit) the wet/dry setup. Each item saves on its own and the
+// confidence at the top is re-read afterwards, so the farmer sees the advice get surer.
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -170,7 +168,7 @@ export default function ZoneSetupScreen() {
         {message ? <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text> : null}
         {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
 
-        {/* Item 6b: re-read after every save, so it follows the setup. */}
+        {/* Re-read after every save, so it follows the setup. */}
         {zone && <RecommendedCard key={JSON.stringify(zone.setup ?? null)} zoneId={zoneId} />}
       </ScrollView>
 

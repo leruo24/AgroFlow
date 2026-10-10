@@ -1,20 +1,12 @@
-/* ============================================================================
-   AgroFlow Admin — enterprise console styling
-   Refined from the original glass look into a denser, more professional
-   administration UI. Motion layer at the bottom; disabled under
-   prefers-reduced-motion.
-   ========================================================================== */
+/* AgroFlow Admin: console styling.
+ * A dense, professional admin UI. The motion layer is at the bottom and is turned off under
+ * prefers-reduced-motion. */
 
 :root{
-  /* Colour tokens - derived from apps/mobile/src/constants/colors.ts's
-     lightColors (AppColors), the app's one live theme source, not
-     invented separately for the web. Where mobile has no equivalent
-     (border-strong, info, the sidebar's 2nd accent shade - mobile only
-     ever defines ONE shade per role), the value is a reasoned extrapolation
-     from what mobile does define, called out below rather than left
-     unexplained. Mobile's dark-mode palette (darkColors) is not wired up
-     here yet - this pass only carries over the light theme this dashboard
-     already is. */
+  /* Colour tokens, taken from apps/mobile/src/constants/colors.ts's lightColors (AppColors) so
+   * both apps share one theme. Where mobile has no match (border-strong, info, the sidebar's
+   * second accent shade) we extend what mobile defines, as noted below. Only the light theme
+   * is carried over; mobile's darkColors are not used here. */
   --brand:#168f99;        /* mobile primaryDark */
   --brand-2:#2f6b4b;       /* mobile secondaryDark - mobile pairs a teal primary with a green secondary; this does the same */
   --accent:#42c3c7;        /* mobile primary */
@@ -43,32 +35,20 @@
   --side-text:#c4d8cc;     /* mobile navigationMuted */
   --side-text-strong:#ffffff; /* mobile navigationText - active/hovered nav item text */
 
-  /* Spacing scale - apps/mobile/src/constants/theme.ts's Spacing, folded
-     in here verbatim (theme.ts itself is deleted - see colors.ts, which
-     is now the one place both apps' spacing scale is defined). Not
-     retrofitted over every existing pixel value in this file (plenty of
-     hand-tuned in-between numbers stay literal, same as mobile's own
-     styles/homeStyles.ts does over its own Spacing import) - available
-     for new/touched CSS going forward. */
+  /* Spacing scale, the same as the Spacing in apps/mobile/src/constants/colors.ts. Older
+   * hand-tuned pixel values stay as they are; new CSS can use these. */
   --space-half:2px; --space-1:4px; --space-2:8px; --space-3:16px;
   --space-4:24px; --space-5:32px; --space-6:64px;
 
-  /* Type scale - the actual distinct font sizes in use across
-     apps/mobile/src (9-40px, grep-counted), collapsed into named steps
-     rather than left as 12 near-duplicate raw numbers. Font WEIGHTS are
-     every value mobile actually sets explicitly - only 600/700, nothing
-     else (mobile leaves everything else at the RN/web default 400). */
+  /* Type scale: the font sizes used across apps/mobile/src (9-40px), grouped into named
+   * steps. Weights are the ones mobile sets (600/700); everything else is the default 400. */
   --text-xs:10px; --text-sm:12px; --text-base:13px; --text-md:14px;
   --text-lg:16px; --text-xl:18px; --text-2xl:20px; --text-3xl:22px;
   --text-display:40px;
   --weight-regular:400; --weight-semibold:600; --weight-bold:700;
 
-  /* Radii - mobile defines NONE (grepped styles/homeStyles.ts: zero
-     borderRadius properties anywhere: every mobile surface is
-     square-cornered). Kept as this dashboard's own pre-existing values
-     rather than either flattening the web to match mobile exactly (a
-     much bigger visual change than "derive tokens" implies) or pretending
-     a mobile source exists - flagging this gap rather than guessing. */
+  /* Radii: mobile defines none (its surfaces are square), so these are this dashboard's own
+   * values. */
   --radius:12px;
   --radius-sm:8px;
   --shadow-sm:0 1px 2px rgba(15,23,42,.06);
@@ -93,23 +73,17 @@ a{color:inherit}
 
 .app{display:flex;min-height:100%}
 
-/* ------------------------------ boot loading ------------------------------ */
-/* Shown by index.html before src/main.ts has resolved whether a real admin
-   session exists - the only thing ever visible during that gap. */
+/* boot loading */
+/* Shown by index.html before src/main.ts knows whether an admin session exists. */
 .boot-loading{
   min-height:100%;display:flex;align-items:center;justify-content:center;
   color:var(--muted);font-size:13px;
 }
 
-/* ------------------------------ auth screen ------------------------------- */
-/* THE BUG THIS FIXES: min-height was 100%, which resolves against the
-   parent's height - and #root has none. So the gradient only ever covered
-   the card's own height and the page showed a green band across the top with
-   a white half underneath. Viewport units resolve against the viewport, so
-   the background fills the screen whatever the card does.
-
-   dvh after vh so that a phone's retracting address bar does not leave a
-   white strip; browsers without dvh keep the vh value. */
+/* auth screen */
+/* Viewport units, because #root has no height and min-height:100% would only cover the
+ * card, leaving a white half under the gradient. dvh after vh so a phone's retracting
+ * address bar does not leave a white strip; browsers without dvh keep the vh value. */
 .auth-screen{
   min-height:100vh;
   min-height:100dvh;
@@ -122,8 +96,7 @@ a{color:inherit}
 
 .auth-card{
   width:100%;
-  /* 440px: wide enough that a long email does not wrap in the field, narrow
-     enough to stay a card rather than a page. */
+  /* 440px: wide enough that a long email does not wrap, narrow enough to stay a card. */
   max-width:440px;
   background:var(--surface);
   border-radius:var(--radius);
@@ -146,9 +119,8 @@ a{color:inherit}
 .auth-brand h1{ font-size:1.6rem; letter-spacing:-.02em; margin:4px 0 0; }
 .auth-brand p{ font-size:.9rem; margin:0; }
 
-/* 16px labels and 46px inputs: at 14px with a 38px box this read as a
-   settings sub-form rather than the front door to the console. 16px also
-   stops iOS zooming the page when a field is focused. */
+/* 16px labels and 46px inputs, so the login reads as the front door to the console. 16px
+ * also stops iOS zooming in when a field is focused. */
 .auth-card .drawer-field{ gap:6px; }
 .auth-card .drawer-field span{ font-size:16px; font-weight:600; color:var(--text); }
 .auth-card .drawer-field input{
@@ -207,7 +179,7 @@ a{color:inherit}
   .auth-brand h1{ font-size:1.4rem; }
 }
 
-/* ------------------------------- sidebar --------------------------------- */
+/* sidebar */
 .sidebar{
   width:248px;flex:0 0 248px;position:sticky;top:0;height:100vh;overflow-y:auto;
   background:var(--side);color:var(--side-text);
@@ -248,7 +220,7 @@ a{color:inherit}
 }
 .side-foot b{color:#e2e8f0;display:block;font-size:12px;margin-bottom:2px}
 
-/* -------------------------------- header --------------------------------- */
+/* header */
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .header{
   position:sticky;top:0;z-index:30;
@@ -275,8 +247,7 @@ a{color:inherit}
   display:flex;gap:7px;align-items:center;font-size:12px;font-weight:600;color:#166534;
   background:#dcfce7;padding:5px 10px;border-radius:99px;white-space:nowrap;
 }
-/* Neutral, not a green "all good" claim - see app/shell.ts's note on why
-   the old hardcoded "All systems operational" chip was replaced. */
+/* Neutral, not a green "all good": we only show green when health is known. */
 .status-chip-unknown{color:var(--muted);background:var(--surface-2)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--good)}
 .dot.pulse-dot{animation:pulse 2s infinite}
@@ -309,7 +280,7 @@ a{color:inherit}
 }
 .menu a:hover,.menu button:hover{background:var(--surface-2);padding-left:17px}
 
-/* ------------------------------- content --------------------------------- */
+/* content */
 .content{padding:22px;display:flex;flex-direction:column;gap:16px;max-width:1680px;width:100%}
 
 .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
@@ -318,7 +289,7 @@ a{color:inherit}
 .page-actions{display:flex;gap:8px;flex-wrap:wrap}
 .page-note{color:var(--muted);font-size:12.5px;padding:2px 2px 6px}
 
-/* -------------------------------- buttons -------------------------------- */
+/* buttons */
 .btn{
   border:1px solid transparent;border-radius:var(--radius-sm);padding:8px 14px;cursor:pointer;
   font:inherit;font-size:13px;font-weight:600;background:var(--brand);color:#fff;
@@ -333,7 +304,7 @@ a{color:inherit}
 .btn.dark:hover{background:#0f172a}
 .btn.sm{padding:5px 10px;font-size:12px}
 
-/* -------------------------------- cards ---------------------------------- */
+/* cards */
 .grid{display:grid;gap:14px}
 .kpis{grid-template-columns:repeat(6,minmax(0,1fr))}
 .kpis.four{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -360,7 +331,7 @@ a{color:inherit}
 .trend-arrow{display:inline-block;animation:arrowBob 2.6s ease-in-out infinite}
 @keyframes arrowBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 
-/* -------------------------------- panels --------------------------------- */
+/* panels */
 .panel{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
   padding:16px;box-shadow:var(--shadow-sm);
@@ -375,7 +346,7 @@ a{color:inherit}
 .link{color:var(--info);text-decoration:none;font-weight:600;font-size:12.5px;transition:transform .16s var(--ease)}
 .link:hover{text-decoration:underline;display:inline-block;transform:translateX(2px)}
 
-/* ---------------------------- filter toolbar ----------------------------- */
+/* filter toolbar */
 .filter-bar{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
   padding:14px 16px;box-shadow:var(--shadow-sm);
@@ -412,7 +383,7 @@ a{color:inherit}
 .result-count{font-size:12.5px;color:var(--muted)}
 .result-count b{color:var(--text)}
 
-/* -------------------------------- charts --------------------------------- */
+/* charts */
 .bars{display:flex;align-items:flex-end;height:172px;gap:9px;padding:16px 6px 26px}
 .bar{
   flex:1;position:relative;border-radius:5px 5px 2px 2px;
@@ -450,7 +421,7 @@ a{color:inherit}
 .dot-throb{animation:throb 1.6s ease-in-out infinite}
 @keyframes throb{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
 
-/* -------------------------------- badges --------------------------------- */
+/* badges */
 .badge{
   display:inline-block;padding:3px 9px;border-radius:5px;font-size:11.5px;font-weight:650;
   white-space:nowrap;line-height:1.5;
@@ -461,16 +432,11 @@ a{color:inherit}
 .info{background:#e0f2fe;color:#075985}
 .neutral{background:#f1f5f9;color:#475569}
 
-/* -------------------------------- tables --------------------------------- */
+/* tables */
 .table-wrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
 table{width:100%;border-collapse:collapse;font-size:var(--text-base)}
-/* Was 10px 12px - a printed export showed only 4 rows of the hardware
-   table fitting on one A4 page. Tightened for scannability; not pulled
-   from --space-* since neither step lands here without either being too
-   cramped (--space-half, 2px) or barely different from the original
-   (--space-1, 4px still leaves ~34px rows) - a direct, deliberately
-   in-between value, the same way mobile's own homeStyles.ts has plenty
-   of numbers that don't land on its Spacing scale either. */
+/* Tight cell padding so more rows fit on screen and on a printed A4 page. An in-between
+ * value on purpose; neither --space step fits here. */
 th,td{padding:6px 10px;text-align:left;white-space:nowrap;vertical-align:middle}
 th{
   font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700;
@@ -506,7 +472,7 @@ tbody tr:last-child td{border-bottom:none}
 .compliance .meter{width:56px;margin:0}
 .compliance b{font-size:12.5px;font-variant-numeric:tabular-nums}
 
-/* -------------------------------- meters --------------------------------- */
+/* meters */
 .meter{height:6px;border-radius:99px;background:var(--border);overflow:hidden;margin-top:8px}
 .meter i{display:block;height:100%;border-radius:99px;background:var(--good);animation:meterGrow .9s var(--ease) both}
 .meter-warn i{background:var(--warn)}
@@ -516,7 +482,7 @@ tbody tr:last-child td{border-bottom:none}
 .uptime-row .meter{flex:1;margin:0}
 .uptime-row b{font-variant-numeric:tabular-nums}
 
-/* ---------------------------- system health ------------------------------ */
+/* system health */
 .health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:11px}
 .health-card{
   background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;
@@ -527,7 +493,7 @@ tbody tr:last-child td{border-bottom:none}
 .health-status{font-size:12px;color:var(--text-2);margin-top:5px}
 .health-latency{font-size:11.5px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
 
-/* ------------------------------ farm cards ------------------------------- */
+/* farm cards */
 .farm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
 .farm-card{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
@@ -554,7 +520,7 @@ tbody tr:last-child td{border-bottom:none}
 .farm-conn b{font-variant-numeric:tabular-nums;font-size:12.5px}
 .farm-card-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;font-size:11.5px}
 
-/* ------------------------------- reports --------------------------------- */
+/* reports */
 .report-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(288px,1fr));gap:12px}
 .report-card{
   background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;
@@ -572,7 +538,7 @@ tbody tr:last-child td{border-bottom:none}
 .cmp-result{margin-top:14px}
 .cmp-head{font-size:12.5px;font-weight:600;color:var(--text-2);margin-bottom:9px}
 
-/* ------------------------------- settings -------------------------------- */
+/* settings */
 .tabs{display:flex;gap:6px;flex-wrap:wrap;position:relative;border-bottom:1px solid var(--border);padding-bottom:9px;margin-bottom:16px}
 .tab{
   border:0;background:transparent;padding:7px 13px;cursor:pointer;border-radius:var(--radius-sm);
@@ -622,7 +588,7 @@ tbody tr:last-child td{border-bottom:none}
 .tone-warn{color:var(--warn)}.tone-info{color:var(--info)}
 .stat-pill{display:flex;justify-content:space-between;gap:10px;padding:7px 11px;background:var(--surface-2);border-radius:var(--radius-sm);font-size:12.5px}
 
-/* ============================== MOTION =================================== */
+/* MOTION */
 .reveal{opacity:0;transform:translateY(10px)}
 .reveal.in{opacity:1;transform:none;transition:opacity .4s var(--ease),transform .4s var(--ease)}
 .reveal-row{animation:rowIn .34s var(--ease) both}
@@ -778,7 +744,7 @@ tbody tr:last-child td{border-bottom:none}
 .error-modal-close:hover {
   filter: brightness(0.95);
 }
-/* ------------------------------ responsive ------------------------------- */
+/* responsive */
 @media (max-width:1400px){
   .kpis{grid-template-columns:repeat(3,1fr)}
   .sk-grid{grid-template-columns:repeat(3,1fr)}
@@ -807,7 +773,7 @@ tbody tr:last-child td{border-bottom:none}
   .status-chip{display:none}
 }
 
-/* --------------------------- reduced motion ------------------------------ */
+/* reduced motion */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{
     animation-duration:.001ms !important;
@@ -819,11 +785,10 @@ tbody tr:last-child td{border-bottom:none}
   .lc-area,.lc-dot{opacity:1}
 }
 
-/* ------------------------ farmer handover (step 3) ------------------------ */
-/* Shown after a farmer is created: the Telegram QR code on the left, the
-   credentials to read out on the right. Both halves matter - the QR is the
-   normal path, the credentials are the fallback for a farmer with no
-   Telegram - so neither is tucked away behind a toggle. */
+/* farmer handover */
+/* Shown after a farmer is created: the Telegram QR code on the left, the credentials to read
+ * out on the right. The QR is the normal path and the credentials are the fallback for a
+ * farmer with no Telegram, so neither is hidden behind a toggle. */
 .onboarding-handover{
   display:grid;
   grid-template-columns:240px 1fr;
@@ -846,8 +811,8 @@ tbody tr:last-child td{border-bottom:none}
 .onboarding-cred-list{display:grid;grid-template-columns:auto 1fr;gap:var(--space-1) var(--space-3);margin:0 0 var(--space-3)}
 .onboarding-cred-list dt{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 .onboarding-cred-list dd{margin:0;color:var(--text)}
-/* The password gets read off this screen and typed into a phone, so it is
-   monospaced and large enough to not confuse similar glyphs. */
+/* The password is read off this screen and typed into a phone, so it is monospaced and large
+ * enough to tell similar characters apart. */
 .onboarding-cred-list code{
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   font-size:16px;
@@ -869,7 +834,7 @@ tbody tr:last-child td{border-bottom:none}
   .onboarding-handover{grid-template-columns:1fr}
 }
 
-/* ------------------------- telegram link QR modal ------------------------- */
+/* telegram link QR modal */
 /* Reuses .error-modal's backdrop/panel so there is one modal shell, not two. */
 .qr-modal .error-modal-panel{text-align:center;max-width:380px}
 .qr-modal canvas{
@@ -882,10 +847,8 @@ tbody tr:last-child td{border-bottom:none}
 .qr-modal-link{font-size:12px;color:var(--text-2);margin:var(--space-2) 0 0;word-break:break-all}
 .qr-modal-expiry{font-size:12px;color:var(--muted);margin:var(--space-1) 0 var(--space-3)}
 
-/* ============================================================================
-   Report insights and the weather comparison (FAO-56 engine, spec 9b/9c).
-   Additive: uses the existing colour tokens above, adds no new ones.
-   ========================================================================== */
+/* Report insights and the weather comparison (FAO-56 engine).
+ * Uses the existing colour tokens; adds none. */
 .liveInsights{
   margin:12px 0;
   padding:10px 12px;
@@ -909,8 +872,8 @@ tbody tr:last-child td{border-bottom:none}
 .liveInsight + .liveInsight{ border-top:1px solid var(--divider); }
 .liveInsight__text{ display:block; color:var(--text); }
 
-/* The source line is deliberately quiet: reports must always show it, but it
-   is reference material, not the message. */
+/* The source line is quiet on purpose: reports must always show it, but it is reference
+ * material, not the message. */
 .liveInsight__source{
   display:block;
   margin-top:2px;
@@ -918,7 +881,7 @@ tbody tr:last-child td{border-bottom:none}
   font-size:.72rem;
 }
 
-/* Severity reuses the existing status colours rather than introducing new ones. */
+/* Severity reuses the existing status colours. */
 .liveInsight--act_now{ border-left-color:var(--bad); }
 .liveInsight--heads_up{ border-left-color:var(--warn); }
 .liveInsight--info{ border-left-color:var(--info); }
@@ -933,11 +896,9 @@ tbody tr:last-child td{border-bottom:none}
 }
 .liveWeatherCompare table{ font-size:.78rem; }
 
-/* ============================================================================
-   Welcome screen (Phase E). Shown to anyone who is not signed in, before the
-   login form. Uses the existing tokens only - no new colours, no new fonts, no
-   external images and no CDN, so it works on GitHub Pages under any base path.
-   ========================================================================== */
+/* Welcome screen. Shown to anyone not signed in, before the login form. Existing tokens
+ * only: no new colours or fonts, no external images and no CDN, so it works on GitHub Pages
+ * under any base path. */
 .welcome-screen{
   position:relative;
   min-height:100vh;
@@ -1047,8 +1008,8 @@ tbody tr:last-child td{border-bottom:none}
   border:1px solid transparent;
 }
 .welcome-login:hover{ background:var(--accent); color:var(--bg-grad-1); }
-/* A visible focus ring that survives on the dark background - the button is the
-   only control on the screen, so a keyboard user must be able to see it. */
+/* A visible focus ring on the dark background: the button is the only control on the
+ * screen, so keyboard users must be able to see it. */
 .welcome-login:focus-visible{
   outline:3px solid var(--accent);
   outline-offset:3px;
@@ -1059,27 +1020,18 @@ tbody tr:last-child td{border-bottom:none}
   .welcome-login{ width:100%; }
 }
 
-/* ==========================================================================
-   PUBLIC LANDING PAGE (step 5c).
-
-   Replaces the admin-only welcome card as the first thing anyone sees at the
-   root URL. The console link gets shared with people who are not
-   administrators - a lecturer, an examiner, a partner, a curious farmer - and
-   a password box tells them nothing and gives them nothing to do.
-
-   Same tokens as everything else: no new colours, no new fonts, no external
-   images and no CDN, so it works on GitHub Pages under any base path.
-   Scrollable rather than a fixed single screen, because there is now real
-   content on it.
-   ========================================================================== */
+/* PUBLIC LANDING PAGE
+ * The first thing anyone sees at the root URL. The console link is shared with people who
+ * are not admins (a lecturer, an examiner, a partner, a curious farmer), and a password box
+ * tells them nothing.
+ * Same tokens as everything else: no new colours or fonts, no external images and no CDN,
+ * so it works on GitHub Pages under any base path. Scrollable, because it has real content. */
 .landing{
   position:relative;
   min-height:100vh;
   min-height:100dvh;
-  /* `hidden` would make this the nearest scroll container and prevent the
-     product viewer's descendant `position:sticky` from following document
-     scroll. `clip` keeps the same overflow protection without that side
-     effect. */
+  /* `hidden` would make this the nearest scroll container and stop the product viewer's
+   * `position:sticky` from following the page scroll. `clip` protects overflow without that. */
   overflow-x:clip;
   padding:0 0 48px;
   background:#f8faf7;
@@ -1155,11 +1107,10 @@ tbody tr:last-child td{border-bottom:none}
 .landing-proof b{ color:#184d35; font-size:.78rem; letter-spacing:.05em; text-transform:uppercase; }
 .landing-proof span{ color:#526a77; font-size:.82rem; }
 
-/* --- Interactive field controller --------------------------------------
-   The copy remains ordinary HTML; WebGL is a supplementary, lazily loaded
-   view. The pale product stage deliberately borrows the existing surface,
-   border, green and teal tokens rather than introducing a second visual
-   language inside the landing page. */
+/* Interactive field controller
+ * The text is ordinary HTML; WebGL is an extra, lazily loaded view. The pale product stage
+ * uses the existing surface, border, green and teal tokens on purpose, so the landing page
+ * keeps one visual style. */
 .landing-experience{
   position:relative;
   display:grid;
@@ -1510,7 +1461,7 @@ tbody tr:last-child td{border-bottom:none}
   font-weight:700;
 }
 
-/* --- How it works ------------------------------------------------------ */
+/* How it works */
 .landing-steps{
   list-style:none;
   margin:0;
@@ -1542,7 +1493,7 @@ tbody tr:last-child td{border-bottom:none}
 .landing-step-title{ margin:0 0 6px; font-size:1rem; font-weight:700; }
 .landing-step-body{ margin:0; color:#526a77; font-size:.92rem; line-height:1.65; }
 
-/* --- Features ---------------------------------------------------------- */
+/* Features */
 .landing-features{
   list-style:none;
   margin:0;
@@ -1573,14 +1524,14 @@ tbody tr:last-child td{border-bottom:none}
 .public-about{ display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:clamp(28px,7vw,96px); align-items:start; padding-bottom:72px; }
 .public-about > p{ margin:32px 0 0; color:#526a77; font-size:1.05rem; line-height:1.85; }
 
-/* --- Get the app ------------------------------------------------------- */
+/* Get the app */
 .landing-downloads{ display:flex; flex-wrap:wrap; gap:12px; }
 .landing-download{ text-decoration:none; }
 .landing-note{ margin:12px 0 0; font-size:.88rem; line-height:1.55; opacity:.8; }
 
-/* --- Credits ----------------------------------------------------------- */
+/* Credits */
 
-/* --- The login buttons -------------------------------------------------- */
+/* The login buttons */
 .landing-cta{ padding:40px 0 0; }
 
 .landing-login,
@@ -1598,9 +1549,8 @@ tbody tr:last-child td{border-bottom:none}
 .landing-footer{ display:flex; justify-content:space-between; gap:20px; max-width:1180px; margin:70px auto 0; padding:28px 20px 0; border-top:1px solid #dce7e2; color:#526a77; font-size:.82rem; }
 .landing-footer span:first-child{ color:#184d35; font-weight:800; }
 
-/* Keyboard users must be able to see where they are - the brief asks for
-   this page to be keyboard-accessible, and a transparent button on a dark
-   gradient has almost no default focus ring. */
+/* Keyboard users must be able to see where they are: a transparent button on a dark
+ * gradient has almost no default focus ring. */
 .landing-login:focus-visible,
 .landing-login-top:focus-visible,
 .landing-download:focus-visible{
@@ -1610,8 +1560,8 @@ tbody tr:last-child td{border-bottom:none}
 
 @media (max-width:560px){
   .landing-hero{ padding-top:36px; }
-  /* The header button is redundant once the one at the end is a full-width
-     target, and dropping it keeps the brand on one line on a small phone. */
+  /* The header button is not needed once the one at the end is full width, and hiding it
+   * keeps the brand on one line on a small phone. */
   .landing-login-top{ display:none; }
   .landing-login{ width:100%; }
   .landing-download{ width:100%; text-align:center; }
@@ -1661,14 +1611,9 @@ tbody tr:last-child td{border-bottom:none}
   .hardware-stage{ opacity:1; transform:none; }
 }
 
-/* ==========================================================================
-   ITEM A — the click-driven console.
-   Styles for ui/patterns.ts: the attention queue, pickers, wizards, detail
-   panels, empty and error states.
-
-   Tokens only - every colour below is one of the variables defined at the
-   top of this file. No new palette, no new font.
-   ========================================================================== */
+/* The click-driven console.
+ * Styles for ui/patterns.ts: the attention queue, pickers, wizards, detail panels, empty
+ * and error states. Tokens only: every colour is a variable from the top of this file. */
 
 .section-heading{
   margin:28px 0 12px;
@@ -1678,7 +1623,7 @@ tbody tr:last-child td{border-bottom:none}
 }
 .section-heading:first-child{ margin-top:0; }
 
-/* ---- Attention queue ---------------------------------------------------- */
+/* Attention queue */
 .attn-section{ margin-bottom:8px; }
 
 .attn-grid{
@@ -1704,8 +1649,8 @@ tbody tr:last-child td{border-bottom:none}
 .attn-card:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(20,26,20,.08); }
 .attn-card:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
 
-/* The left edge carries the urgency. The count and the words carry it too,
-   so colour is never the only signal. */
+/* The left edge shows the urgency. The count and words show it too, so colour is never
+ * the only signal. */
 .attn-bad{ border-left-color:var(--bad); }
 .attn-warn{ border-left-color:var(--warn); }
 .attn-info{ border-left-color:var(--info); }
@@ -1740,7 +1685,7 @@ tbody tr:last-child td{border-bottom:none}
 .attn-clear b{ display:block; color:var(--text); }
 .attn-clear p{ margin:2px 0 0; font-size:.85rem; }
 
-/* ---- Clickable KPI tiles ------------------------------------------------ */
+/* Clickable KPI tiles */
 .card-clickable{
   cursor:pointer;
   text-align:left;
@@ -1751,7 +1696,7 @@ tbody tr:last-child td{border-bottom:none}
 .card-clickable:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(20,26,20,.08); }
 .card-clickable:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
 
-/* ---- Empty and error states --------------------------------------------- */
+/* Empty and error states */
 .empty-state-card,
 .error-state-card{
   display:flex;
@@ -1776,7 +1721,7 @@ tbody tr:last-child td{border-bottom:none}
 .error-state-ico svg{ width:26px; height:26px; }
 .error-state-body{ flex:1; }
 
-/* ---- Pickers ------------------------------------------------------------ */
+/* Pickers */
 .picker{ display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
 .picker-label{ font-size:.85rem; font-weight:600; color:var(--text); }
 .picker-label .req{ color:var(--bad); }
@@ -1819,7 +1764,7 @@ tbody tr:last-child td{border-bottom:none}
 .picker-option:hover:not(.is-disabled){ background:var(--surface-2); }
 .picker-option:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
 
-/* Selection is a left bar plus a tint plus bold text - never colour alone. */
+/* Selection is a left bar plus a tint plus bold text, never colour alone. */
 .picker-option.is-selected{
   background:var(--surface-2);
   box-shadow:inset 3px 0 0 var(--brand);
@@ -1842,7 +1787,7 @@ tbody tr:last-child td{border-bottom:none}
   color:var(--text-2);
 }
 
-/* ---- Wizards ------------------------------------------------------------ */
+/* Wizards */
 .wizard{ display:flex; flex-direction:column; gap:18px; }
 .wizard-head h3{ margin:0 0 4px; font-size:1.15rem; }
 
@@ -1900,7 +1845,7 @@ tbody tr:last-child td{border-bottom:none}
 .wizard-count{ margin-left:auto; font-size:.82rem; color:var(--text-2); }
 .wizard-foot .btn[hidden]{ display:none; }
 
-/* ---- Detail panels ------------------------------------------------------ */
+/* Detail panels */
 .detail{ display:flex; flex-direction:column; gap:18px; }
 .detail-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
 .detail-head h3{ margin:0; font-size:1.1rem; }
@@ -1931,7 +1876,7 @@ tbody tr:last-child td{border-bottom:none}
 .related-list a b{ font-size:.89rem; }
 .related-list a span{ font-size:.78rem; color:var(--text-2); }
 
-/* ---- Confirm dialogs ---------------------------------------------------- */
+/* Confirm dialogs */
 .confirm-body{ display:flex; flex-direction:column; gap:10px; }
 .confirm-consequence{ margin:0; font-size:.95rem; line-height:1.55; color:var(--text); font-weight:600; }
 .confirm-body p{ margin:0; font-size:.86rem; line-height:1.55; }
@@ -1944,7 +1889,7 @@ tbody tr:last-child td{border-bottom:none}
   color:var(--text-2);
 }
 
-/* ---- Sidebar brand + status --------------------------------------------- */
+/* Sidebar brand + status */
 .brand-logo{
   width:36px; height:36px;
   border-radius:9px;
@@ -1952,8 +1897,8 @@ tbody tr:last-child td{border-bottom:none}
   background:#fff;
 }
 
-/* The status block is a button now (it opens the health card), so it needs
-   resetting out of the browser default button styling. */
+/* The status block is a button (it opens the health card), so the browser's default button
+ * style is reset. */
 .side-foot{
   display:block;
   width:100%;
@@ -1974,7 +1919,7 @@ tbody tr:last-child td{border-bottom:none}
 .dot-bad{ background:var(--bad); }
 .dot-unknown{ background:var(--neutral); }
 
-/* ---- Health card -------------------------------------------------------- */
+/* Health card */
 .health-good{ border-left:3px solid var(--good); }
 .health-warn{ border-left:3px solid var(--warn); }
 .health-bad{ border-left:3px solid var(--bad); }
@@ -1994,11 +1939,10 @@ tbody tr:last-child td{border-bottom:none}
   .attn-card:hover, .card-clickable:hover{ transform:none; }
 }
 
-/* ---- Timelines (item 5) -------------------------------------------------
-   A request or an alert read top to bottom in the order things happened.
-   Submitted -> Assigned -> Scheduled -> Completed, each with a name and a
-   time, so "who attended to this?" has an answer on the page rather than in
-   somebody's memory. */
+/* Timelines
+ * A request or an alert read top to bottom in the order things happened: Submitted ->
+ * Assigned -> Scheduled -> Completed, each with a name and a time, so "who attended to
+ * this?" is answered on the page. */
 .timeline{
   list-style:none;
   margin:0;
@@ -2013,8 +1957,8 @@ tbody tr:last-child td{border-bottom:none}
   padding:0 0 16px;
   position:relative;
 }
-/* The connecting line, drawn behind the dots. Not on the last item, so the
-   timeline ends rather than trailing off. */
+/* The connecting line, drawn behind the dots. Not on the last item, so the timeline ends
+ * cleanly. */
 .timeline-item:not(:last-child)::before{
   content:"";
   position:absolute;
@@ -2037,14 +1981,12 @@ tbody tr:last-child td{border-bottom:none}
 .timeline-item b{ display:block; font-size:.9rem; font-weight:600; color:var(--text); }
 .timeline-when{ display:block; font-size:.78rem; color:var(--text-2); margin-top:2px; }
 
-/* A step that has not happened yet - shown greyed so the shape of the whole
-   process is visible, not just the parts already done. */
+/* A step that has not happened yet, shown greyed so the whole process is visible. */
 .timeline-item.is-pending .timeline-dot{ background:var(--border-strong); }
 .timeline-item.is-pending b{ color:var(--muted); font-weight:500; }
 
-/* A table cell that is a way in, not just text (item A's list -> detail
-   pattern). Underlined on hover rather than always, so a column of names
-   does not read as a wall of links. */
+/* A table cell that opens a detail view. Underlined on hover only, so a column of names
+ * does not look like a wall of links. */
 .cell-link{
   color:inherit;
   text-decoration:none;
@@ -2061,13 +2003,9 @@ tbody tr:last-child td{border-bottom:none}
   border-radius:3px;
 }
 
-/* ===================================================================
-   MAP LOCATION PICKER (item 6)
-
-   The canvas needs an explicit height: Leaflet measures its container, and
-   a container sized by its contents is zero tall, which renders as nothing
-   at all rather than as a broken map.
-   =================================================================== */
+/* MAP LOCATION PICKER
+ * The canvas needs an explicit height: Leaflet measures its container, and a container
+ * sized by its contents is zero tall, so nothing would show. */
 .map-pick{
   margin-top:16px;
 }
@@ -2105,7 +2043,7 @@ tbody tr:last-child td{border-bottom:none}
   border:1px solid var(--border, #dfe6e2);
   border-radius:10px;
   background:var(--surface-2, #f4f7f5);
-  /* Leaflet's own panes sit above a lot; keep it under the drawer chrome. */
+  /* Leaflet's own panes sit high; keep the map under the drawer. */
   z-index:0;
 }
 .map-pick-status{
@@ -2136,9 +2074,7 @@ tbody tr:last-child td{border-bottom:none}
   .map-search-row{ grid-template-columns:1fr; }
 }
 
-/* ===================================================================
-   WIZARD REVIEW STEP (item 6)
-   =================================================================== */
+/* WIZARD REVIEW STEP */
 .review-pane .detail-list{
   margin-bottom:16px;
 }
@@ -2157,9 +2093,8 @@ tbody tr:last-child td{border-bottom:none}
   border-bottom:1px solid var(--border, #dfe6e2);
 }
 
-/* An inline explanation attached to the figures above it - not an error and
-   not a toast. Used where a page has to say why a number is smaller than the
-   row count it sits next to (item 8). */
+/* An inline explanation attached to the figures above it, not an error or a toast. Used
+ * where a page explains why a number is smaller than the row count next to it. */
 .notice{
   margin:0 0 16px;
   padding:12px 14px;
@@ -2172,8 +2107,7 @@ tbody tr:last-child td{border-bottom:none}
   line-height:1.5;
 }
 
-/* Settings, after item 2 removed the twenty fake fields. Each block is one
-   real thing an admin can change or one group of real values they can read. */
+/* Settings. Each block is one thing an admin can change, or one group of values they can read. */
 .settings-block{
   padding:18px 0;
   border-bottom:1px solid var(--border, #dfe6e2);
@@ -2187,33 +2121,23 @@ tbody tr:last-child td{border-bottom:none}
 .settings-block .form-foot{ margin-top:14px; }
 .muted.sm{ font-size:12.5px; line-height:1.5; margin:2px 0; }
 
-/* ===================================================================
-   NO LAYOUT JUMP BETWEEN PAGES (item 0b)
-
-   The document is the scroll container. A short skeleton has no scrollbar;
-   the long page that replaces it does. On Windows a classic scrollbar takes
-   ~15 px, so every swap slid the whole console sideways and back - visible as
-   the page "vibrating" when somebody clicked through a few items quickly.
-   Reserving the gutter permanently means the scrollbar can come and go
-   without moving anything.
-   =================================================================== */
+/* NO LAYOUT JUMP BETWEEN PAGES
+ * The document is the scroll container. A short skeleton has no scrollbar and the long page
+ * after it does; on Windows a classic scrollbar takes ~15 px, so each swap would shift the
+ * console sideways. Reserving the gutter keeps everything still. */
 html{ scrollbar-gutter: stable; }
 .sidebar{ scrollbar-gutter: stable; }
 
-/* The skeleton holds the page's height while it loads, so the footer and
-   everything under the content area do not collapse up and then drop back
-   down when the real page arrives. */
+/* The skeleton keeps the page's height while it loads, so the content below does not jump
+ * up and back down. */
 .skeleton-wrap{ min-height: calc(100vh - 140px); }
 
-/* While a page is loading, a second click is the only input that matters;
-   the outgoing page's own buttons must not take one. */
+/* While a page is loading, the outgoing page's buttons must not take a click. */
 #content[aria-busy="true"]{ pointer-events: none; }
 
-/* ------------------------------------------------------------------ *
- * Item 2c: "Why am I seeing this?"
- * The link sits beside a card or tile, never inside it (a button inside a
- * button is invalid), so the wrappers keep the grid cell a single column.
- * ------------------------------------------------------------------ */
+/* "Why am I seeing this?"
+ * The link sits beside a card or tile, never inside it (a button inside a button is
+ * invalid), so the wrappers keep the grid cell a single column. */
 .kpi-item, .attn-item{ display:flex; flex-direction:column; gap:4px; min-width:0; }
 .kpi-item > .card, .attn-item > .attn-card{ flex:1; }
 .why-link{
@@ -2225,13 +2149,13 @@ html{ scrollbar-gutter: stable; }
 .why-body .detail-row small{ display:block; }
 .why-technical p{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; opacity:.85; }
 
-/* Item 4: the Reports page. */
+/* The Reports page. */
 .report-preview{ width:100%; height:720px; border:1px solid var(--line, #e2e8e4); border-radius:8px; background:#fff; }
 .attn-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
 .link-btn{ background:none; border:0; padding:4px 0; cursor:pointer; text-align:left; color:inherit; font:inherit; }
 .link-btn:hover b, .link-btn:focus-visible b{ text-decoration:underline; }
 
-/* Item 6: soil cards in the zone rows. Selected = bar + tint + bold, never colour alone. */
+/* Soil cards in the zone rows. Selected = bar + tint + bold, never colour alone. */
 .zone-setup{ border-top:1px solid var(--divider); padding-top:12px; margin-top:12px; }
 /* .drawer-field sets display, which would otherwise beat the hidden attribute. */
 .zone-setup [hidden]{ display:none; }
@@ -2248,16 +2172,16 @@ html{ scrollbar-gutter: stable; }
 .field-note{ display:block; margin-top:4px; opacity:.8; }
 @media (max-width: 600px){ .soil-cards{ grid-template-columns:1fr; } }
 
-/* Item 6b: "Recommended for you" in the register wizard. */
+/* "Recommended for you" in the register wizard. */
 .recommend-card{ margin-top:8px; padding:10px 12px; border-radius:8px; background:var(--surface-2); box-shadow:inset 3px 0 0 var(--brand); }
 .recommend-card p{ margin:6px 0 0; }
 
-/* Item 6c: the Requests list fits 1366 px - long text wraps, nothing scrolls sideways. */
+/* The Requests list fits 1366 px: long text wraps and nothing scrolls sideways. */
 .requests-table{ table-layout:auto; width:100%; }
 .requests-table td{ white-space:normal; overflow-wrap:anywhere; vertical-align:top; }
 .row-actions{ display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }
 
-/* Item 6c: "Get a call back" on the landing page. */
+/* "Get a call back" on the landing page. */
 .enquiry-form{ display:grid; gap:12px; max-width:560px; margin-top:16px; }
 .enquiry-form fieldset{ border:1px solid var(--divider); border-radius:8px; padding:10px 12px; display:flex; flex-wrap:wrap; gap:8px 16px; }
 .enquiry-form legend{ padding:0 4px; font-weight:600; }
@@ -2269,7 +2193,7 @@ html{ scrollbar-gutter: stable; }
 .enquiry-thanks{ font-weight:600; margin-top:16px; }
 .enquiry [hidden]{ display:none !important; }
 
-/* Item 6c: Requests tabs, and the nav count badge. */
+/* Requests tabs, and the nav count badge. */
 .req-tabs{ display:flex; gap:4px; border-bottom:1px solid var(--divider); margin:0 0 12px; flex-wrap:wrap; }
 .req-tab{ background:none; border:0; padding:8px 12px; font:inherit; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; }
 .req-tab.active{ color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
@@ -2280,7 +2204,7 @@ html{ scrollbar-gutter: stable; }
 .log-call .check{ display:flex; gap:6px; align-items:center; }
 .log-call [hidden]{ display:none !important; }
 
-/* Admin polish: dismiss (×), Active / Dismissed / All, history. */
+/* Dismiss (×), Active / Dismissed / All, history. */
 .dismiss-x{ border:0; background:none; color:var(--muted); font-size:18px; line-height:1; cursor:pointer; padding:2px 6px; border-radius:6px; }
 .dismiss-x:hover{ background:var(--surface-2); color:var(--ink, inherit); }
 .dismiss-x:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
@@ -2295,12 +2219,12 @@ html{ scrollbar-gutter: stable; }
 .section-heading-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .sub-heading{ margin:16px 0 8px; font-size:14px; }
 
-/* Admin polish, item 3: the sidebar logo and name are a link to Home. */
+/* The sidebar logo and name link to Home. */
 a.brand{ color:inherit; text-decoration:none; border-radius:var(--radius-sm); }
 a.brand:hover h1{ text-decoration:underline; text-underline-offset:3px; }
 a.brand:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 
-/* Item 4: Log out, always visible at the foot of the sidebar. */
+/* Log out, always visible at the foot of the sidebar. */
 .side-logout{
   margin-top:8px; width:100%; padding:9px 11px; border-radius:var(--radius-sm);
   border:1px solid rgba(255,255,255,.18); background:none; color:#e2e8f0;
@@ -2309,7 +2233,7 @@ a.brand:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .side-logout:hover{ background:rgba(255,255,255,.08); }
 .side-logout:focus-visible{ outline:2px solid var(--accent); outline-offset:-2px; }
 
-/* Item 2: the Open and Completed headings inside the requests table. */
+/* The Open and Completed headings inside the requests table. */
 .requests-table tr.req-group th{
   text-align:left; padding:14px 10px 6px; font-size:12px; letter-spacing:.04em;
   text-transform:uppercase; color:var(--muted); background:none;

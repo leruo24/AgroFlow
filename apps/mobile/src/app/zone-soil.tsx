@@ -1,13 +1,8 @@
 // Soil type screen. Reached as /zone-soil?zoneId=123&soilType=loam
-//
-// Soil texture decides how much water the soil can hold and therefore how often
-// a zone needs watering, so it is worth asking the farmer rather than assuming.
-// Three large cards, plain words, loam pre-selected because it is the most common
-// garden soil and the documented fallback when the farmer is not sure.
-//
-// ICONS: each card carries its soil icon, rendered with react-native-svg by
-// components/SoilIcon.tsx from the artwork in assets/soil/soil_*.svg. The
-// drawing commands are the provided ones, unchanged.
+// Soil texture decides how much water the soil holds and so how often a zone needs
+// watering, so we ask instead of assuming. Three large cards in plain words, with loam
+// pre-selected as the most common garden soil and the default when the farmer is not sure.
+// Each card's icon is drawn by components/SoilIcon.tsx from assets/soil/soil_*.svg.
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -28,9 +23,8 @@ import { SoilIcon } from '@/components/SoilIcon';
 import { createZoneSoilStyles } from '@/styles/zoneSoilStyles';
 import { saveZoneSoilType, type ZoneSoilType } from '@/services/agroFlowApi';
 
-// Copy is fixed by the spec. The "how it feels" lines are the common field
-// texture check (squeeze a handful and see what it does), not FAO-56 - FAO-56
-// supplies the water-holding numbers, not the feel descriptions.
+// The "how it feels" lines are the usual field texture check (squeeze a handful), not
+// FAO-56; FAO-56 only supplies the water-holding numbers.
 const SOILS: {
   key: ZoneSoilType;
   title: string;

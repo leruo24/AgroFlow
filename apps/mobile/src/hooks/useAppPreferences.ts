@@ -2,19 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useState } from 'react';
 
 // The two in-app help preferences, readable from any screen.
-//
-// STORAGE: @react-native-async-storage/async-storage, which the app already
-// depends on and already uses for the notification preferences and the selected
-// farm. Nothing new was installed.
-//
-// NOT in `profile`: that table has column-level UPDATE revokes, so a farmer
-// cannot write arbitrary columns to it - and these are per-device display
-// choices anyway, not account data. Someone who turns the helper off on their
-// phone has not turned it off on a shared tablet.
-//
-// A tiny subscriber list keeps every mounted copy of the hook in step, so
-// flipping a toggle in Settings hides the "?" icons on other screens
-// immediately instead of on their next remount.
+// Stored with AsyncStorage (already used for notification preferences and the selected farm).
+// Not in `profile`: that table limits which columns a farmer can update, and these are
+// per-device display choices anyway.
+// A small subscriber list keeps every copy of the hook in step, so flipping a toggle in
+// Settings hides the "?" icons on other screens straight away.
 
 export type AppPreferences = {
   showPageHelp: boolean;
@@ -23,9 +15,8 @@ export type AppPreferences = {
 
 export const APP_PREFERENCES_KEY = 'agroflow_app_preferences';
 
-// Both default ON: the help is for farmers who have not used the app before,
-// and they are exactly the people who will not go looking for a setting to
-// enable it.
+// Both default to on: the help is for farmers new to the app, who will not go looking for
+// a setting.
 export const defaultAppPreferences: AppPreferences = {
   showPageHelp: true,
   showRaindropHelper: true,
@@ -53,8 +44,7 @@ async function loadOnce() {
       };
     }
   } catch {
-    // Unreadable or absent storage falls back to the defaults. A farmer must
-    // never lose the help because a read failed.
+    // Missing or unreadable storage falls back to the defaults, so help is never lost.
     current = { ...defaultAppPreferences };
   } finally {
     loaded = true;
@@ -85,8 +75,7 @@ export function useAppPreferences() {
       current = { ...current, [key]: value };
       publish();
 
-      // Written straight away so the choice survives a restart even if the app
-      // is killed seconds later.
+      // Written straight away so the choice survives a restart even if the app is killed soon after.
       AsyncStorage.setItem(APP_PREFERENCES_KEY, JSON.stringify(current)).catch(
         () => {
           // The in-memory value still applies for this session.

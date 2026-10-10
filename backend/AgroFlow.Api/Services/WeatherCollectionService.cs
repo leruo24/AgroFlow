@@ -3,27 +3,13 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-// Populates weather_daily (migration 0016) from Open-Meteo, once every
-// Weather:FetchIntervalHours (default 6), for every farm that has
-// coordinates.
-//
-// This is the foundation the whole FAO-56 advice engine stands on: nothing in
-// AgroFlow stored weather before this, so ET0 could not be computed for any
-// farm at all. It runs as a hosted service alongside MqttConnectionService and
-// IrrigationCommandNotifyService.
-//
-// OPEN-METEO IS FREE AND KEYLESS AND MUST STAY THAT WAY. No account, no API
-// key, no secret to rotate, no per-call cost, and nothing extra to configure
-// on Railway. That is a deliberate property of this design, not an accident of
-// which provider was nearest to hand - it is the same reasoning that keeps the
-// advice engine off a paid LLM. If you are about to swap in a provider that
-// needs a key, have that conversation first.
-//
-// FAILURE POSTURE: one farm's problem is that farm's problem. A bad
-// coordinate, a timeout, an unparseable response - each is logged and the loop
-// moves to the next farm. Nothing in here is allowed to take the host process
-// down, because the host process is also the MQTT bridge and the irrigation
-// command path.
+// Fills weather_daily (0016) from Open-Meteo every Weather:FetchIntervalHours
+// (default 6) for every farm with coordinates. The FAO-56 engine needs this to
+// work out ET0.
+// Open-Meteo is free and needs no key: no account, no secret, no cost. Talk to the
+// team before switching to a provider that needs a key.
+// One farm's problem stays that farm's problem: each failure is logged and we move
+// on, because this process also runs the MQTT bridge and the irrigation commands.
 public class WeatherCollectionService : BackgroundService
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -31,9 +17,8 @@ public class WeatherCollectionService : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly ILogger<WeatherCollectionService> _logger;
 
-    // Farms already reported as having no coordinates. Without this the
-    // service would log the same warning for the same farms every six hours
-    // forever, which trains everyone to ignore the logs.
+    // Farms already reported as having no coordinates, so we warn once instead of every
+    // six hours.
     private readonly HashSet<long> _farmsReportedWithoutCoordinates = new();
 
     public WeatherCollectionService(
@@ -71,10 +56,8 @@ public class WeatherCollectionService : BackgroundService
             }
             catch (Exception ex)
             {
-                // Belt and braces - CollectOnceAsync already handles per-farm
-                // failures. This catches anything structural (the farm list
-                // query itself failing, say) so a transient database problem
-                // cannot end the loop for the life of the container.
+                // A second safety net: CollectOnceAsync already handles per-farm failures, and this
+                // catches structural ones (e.g. the farm list query failing) so the loop keeps running.
                 _logger.LogError(ex, "Weather collection cycle failed; will retry next interval");
             }
 
@@ -89,8 +72,7 @@ public class WeatherCollectionService : BackgroundService
         }
     }
 
-    // Exposed so a future admin endpoint or a manual trigger can run one cycle
-    // without waiting for the timer.
+    // Public so an admin endpoint or a manual trigger can run one cycle without waiting.
     public async Task CollectOnceAsync(CancellationToken ct)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(ct);
@@ -106,9 +88,8 @@ public class WeatherCollectionService : BackgroundService
         var succeeded = 0;
         var rowsWritten = 0;
 
-        // The farm's own local date, not UTC - what counts as "today" for a
-        // farm in SAST is not what counts as today in UTC for eight hours of
-        // the day, and is_forecast is decided by that comparison.
+        // Today in SAST, not UTC: for part of the day they differ, and is_forecast depends
+        // on this date.
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
 
         foreach (var farm in farms)
@@ -117,7 +98,7 @@ public class WeatherCollectionService : BackgroundService
 
             if (!farm.Latitude.HasValue || !farm.Longitude.HasValue)
             {
-                // Quietly, and ONCE - not every cycle.
+                // Quietly, and only once, not every cycle.
                 if (_farmsReportedWithoutCoordinates.Add(farm.FarmId))
                 {
                     _logger.LogInformation(
@@ -142,8 +123,7 @@ public class WeatherCollectionService : BackgroundService
             }
             catch (Exception ex)
             {
-                // Log and continue. One farm's bad coordinate or one timeout
-                // must not stop the other farms from getting their weather.
+                // Log and continue: one farm's bad coordinate or timeout must not stop the others.
                 _logger.LogError(ex,
                     "Weather fetch failed for farm {FarmId}; continuing with the remaining farms", farm.FarmId);
             }
@@ -171,8 +151,8 @@ public class WeatherCollectionService : BackgroundService
         var written = 0;
         foreach (var row in rows)
         {
-            // A row with no usable temperature pair cannot produce ET0. Storing
-            // it would just put a hole in the series that looks like data.
+            // A row without a usable temperature pair cannot give ET0; storing it would leave
+            // a hole that looks like data.
             if (!row.HasUsableTemperatures) continue;
 
             await UpsertWeatherDailyAsync(connection, farm.FarmId, row, OpenMeteoDailyParser.ForecastSource, ct);
@@ -183,21 +163,15 @@ public class WeatherCollectionService : BackgroundService
         return written;
     }
 
-    // The upsert that makes forecasts converge on actuals.
-    //
-    // The WHERE clause on the DO UPDATE is the important part: an incoming
-    // ACTUAL always wins, but an incoming FORECAST may only overwrite another
-    // forecast. Without it, a cycle that ran just after midnight could replace
-    // yesterday's real observations with a model value and quietly degrade the
-    // history the advice engine reads.
+    // The upsert that turns forecasts into actuals. The WHERE on DO UPDATE matters: an
+    // incoming actual always wins, but a forecast may only replace another forecast, so a
+    // run just after midnight cannot overwrite yesterday's observations with a model value.
     private static async Task UpsertWeatherDailyAsync(
         NpgsqlConnection connection, long farmId, WeatherDailyRow row, string source, CancellationToken ct)
     {
         await using var cmd = new NpgsqlCommand(
-            // rh_min_pct / rh_max_pct / wind_ms / wind_height_m were added for
-            // FAO-56 Penman-Monteith (migration 0027). Additive: the same call
-            // already returned them, and every existing column behaves exactly
-            // as before.
+            // rh_min_pct / rh_max_pct / wind_ms / wind_height_m are for Penman-Monteith (0027);
+            // the same call already returns them.
             "insert into weather_daily " +
             "  (farm_id, date, tmin_c, tmax_c, precipitation_mm, humidity_mean, is_forecast, fetched_at, source, " +
             "   rh_min_pct, rh_max_pct, wind_ms, wind_height_m) " +
@@ -237,8 +211,7 @@ public class WeatherCollectionService : BackgroundService
     {
         var farms = new List<FarmLocation>();
 
-        // farm's primary key is farm_id, not id (0001_foundation.sql).
-        // latitude/longitude were added by 0010_zone_schema_realignment.sql
+        // farm's primary key is farm_id, not id (0001). latitude/longitude come from 0010
         // and are nullable.
         await using var cmd = new NpgsqlCommand(
             "select farm_id, latitude, longitude from farm order by farm_id", connection);

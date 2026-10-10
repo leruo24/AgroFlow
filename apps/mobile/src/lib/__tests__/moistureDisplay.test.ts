@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 // See doubleSubmit.test.ts for why this reference is per file.
 
-/* Item 2: an uncalibrated soil reading is never shown with a %. */
+/* An uncalibrated soil reading is never shown with a %. */
 
 import {
   averageSoilText,
@@ -27,7 +27,7 @@ describe('soil readings on screen', () => {
   it('matches the backend formula, including a probe that reads lower when wet', () => {
     // Wet 1200, dry 3000: 2100 is halfway.
     expect(relativeMoisturePercent(2100, 1200, 3000)).toBeCloseTo(50);
-    // Clamped, as SoilWaterBalance.RelativeMoisturePercent clamps.
+    // Clamped, the same as SoilWaterBalance.RelativeMoisturePercent.
     expect(relativeMoisturePercent(900, 1200, 3000)).toBe(100);
     expect(relativeMoisturePercent(3500, 1200, 3000)).toBe(0);
     expect(relativeMoisturePercent(2100, null, 3000)).toBeNull();

@@ -1,8 +1,6 @@
 /* How one irrigation_event reads in the History tab.
- *
- * Item 6: a watering the farmer logged by hand (migration 0042's
- * logged_by_profile_id) is labelled as such, and given in litres when that
- * is what they entered - never shown as a pump run. */
+ * A watering the farmer logged by hand (logged_by_profile_id, migration 0042) is labelled
+ * as such, and shown in litres when that is what they entered, never as a pump run. */
 export type EventTextInput = {
   runtime_seconds: number | string | null;
   estimated_litres?: number | string | null;

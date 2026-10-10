@@ -1,4 +1,4 @@
-//authentication controller that manages user login, logout, and profile updates. It uses React's context API to provide authentication state and functions to the rest of the application. The AuthProvider component wraps the app and maintains the current user's authentication state, including their access token and profile information. It also provides functions for signing in, signing out, and updating the user's profile. The authentication state is persisted using AsyncStorage or SecureStore, depending on the platform, allowing the app to retain user session data across sessions.
+// Forgot password screen: asks the server to send a new temporary password over Telegram.
 import { router } from '@/lib/router';
 
 import {
@@ -65,18 +65,17 @@ export default function ForgotPasswordScreen() {
     setLoading,
   ] =
     useState(false);
-//react state variable that indicates whether the password reset request has been submitted. When the user submits their email address for password recovery, this state is set to true, triggering a change in the UI to show a confirmation message and options to return to login or try another email address.
+// True once the request has been sent, which switches the screen to the confirmation
+// message with options to go back to login or try another email.
   const [
     submitted,
     setSubmitted,
   ] =
     useState(false);
 
-  //The server's own wording is shown rather than anything composed here. It
-  //is deliberately identical whether the account exists, has no Telegram
-  //connected, or was rate limited - this screen must not be more specific
-  //than that, or it becomes a way to test which email addresses are real
-  //AgroFlow farmers.
+  // Security: we show the server's own wording, which is the same whether the account
+  // exists, has no Telegram, or was rate limited, so this screen cannot be used to test
+  // which emails belong to farmers.
   const [
     notice,
     setNotice,
@@ -136,13 +135,9 @@ export default function ForgotPasswordScreen() {
         true
       );
 
-      //Recovery goes over Telegram, not email. Supabase's own
-      //resetPasswordForEmail - which this screen used to call - needs SMTP
-      //that AgroFlow has never configured, so it silently did nothing and a
-      //farmer who forgot their password had no self-service path at all.
-      //
-      //The bot sends a new temporary password to the chat already linked to
-      //that account, and the app forces a change at the next sign-in.
+      // Recovery goes over Telegram, not email: Supabase's email reset needs SMTP, which we do
+      // not have. The bot sends a new temporary password to the chat linked to the account,
+      // and the app forces a change at the next sign-in.
       const message =
         await requestPasswordReset(
           cleanedEmail

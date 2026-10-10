@@ -10,10 +10,9 @@ namespace AgroFlow.Business.Agronomy
         MidSeason,
         LateSeason,
 
-        // Days-after-planting has run past the end of the tabulated season.
-        // Not an error: the farmer may simply not have updated the planting
-        // date after harvest. The advisor says so instead of extrapolating a
-        // Kc curve off the end of the table.
+        // Days after planting is past the end of the tabulated season. Not an error: the
+        // farmer may not have updated the planting date after harvest. The advisor says so
+        // instead of extending the Kc curve past the table.
         PastSeasonEnd,
 
         // Planting date is in the future relative to the day being assessed.
@@ -31,8 +30,8 @@ namespace AgroFlow.Business.Agronomy
         public int SeasonLengthDays { get; }
         public double Kc { get; }
 
-        // Plain-language account of where this Kc came from, so every number
-        // the farmer sees can be traced back to a table or an interpolation.
+        // Where this Kc came from, in plain words, so every number the farmer sees can be
+        // traced to a table or an interpolation.
         public string KcBasis { get; }
 
         public StageAssessment(
@@ -73,9 +72,8 @@ namespace AgroFlow.Business.Agronomy
         }
     }
 
-    // Maps (planting date, today) onto the FAO-56 four-stage crop coefficient
-    // curve for a given crop, and evaluates Kc for the day.
-    //
+    // Places (planting date, today) on the FAO-56 four-stage crop coefficient curve
+    // for a crop, and works out Kc for the day.
     // The curve, per FAO-56 Chapter 6 (Figure 24, p. 97):
     //
     //   Kc |          ,--------------.
@@ -85,14 +83,10 @@ namespace AgroFlow.Business.Agronomy
     //      +-------------------------------------------> days
     //        initial | development |  mid  |  late
     //
-    // Kc is FLAT through initial and mid-season, and interpolates LINEARLY
-    // through development (Kc_ini -> Kc_mid) and late season (Kc_mid -> Kc_end).
-    // The interpolation is the part that makes the daily number move like a
-    // real crop instead of stepping between three constants.
-    //
-    // Day convention: the planting day itself is day-after-planting 0. A stage
-    // boundary belongs to the stage it OPENS - at dap == L_ini the crop is on
-    // its first day of development, not its last day of initial.
+    // Kc is flat through initial and mid-season, and changes linearly through
+    // development (Kc_ini -> Kc_mid) and late season (Kc_mid -> Kc_end).
+    // Day convention: the planting day is day-after-planting 0. A stage boundary belongs
+    // to the stage it opens: at dap == L_ini the crop is on its first day of development.
     public static class GrowthStageCalculator
     {
         public static StageAssessment Assess(Fao56Crop crop, DateOnly plantingDate, DateOnly asOf)
@@ -118,7 +112,7 @@ namespace AgroFlow.Business.Agronomy
                     ". Kc is held at Kc_end rather than extrapolated off the end of the table.");
             }
 
-            // Initial - Kc flat at Kc_ini.
+            // Initial: Kc flat at Kc_ini.
             if (dap < lengths.DevelopmentStartsAtDap)
             {
                 return new StageAssessment(
@@ -128,7 +122,7 @@ namespace AgroFlow.Business.Agronomy
                     " through the initial stage (" + crop.KcCite + ").");
             }
 
-            // Development - Kc interpolates linearly Kc_ini -> Kc_mid.
+            // Development: Kc rises linearly Kc_ini -> Kc_mid.
             if (dap < lengths.MidSeasonStartsAtDap)
             {
                 var dayWithin = dap - lengths.DevelopmentStartsAtDap;
@@ -144,7 +138,7 @@ namespace AgroFlow.Business.Agronomy
                     lengths.DevelopmentDays + "-day development stage (" + crop.KcCite + ").");
             }
 
-            // Mid-season - Kc flat at its maximum.
+            // Mid-season: Kc flat at its maximum.
             if (dap < lengths.LateSeasonStartsAtDap)
             {
                 var dayWithin = dap - lengths.MidSeasonStartsAtDap;
@@ -155,7 +149,7 @@ namespace AgroFlow.Business.Agronomy
                     " through mid-season (" + crop.KcCite + ").");
             }
 
-            // Late season - Kc interpolates linearly Kc_mid -> Kc_end.
+            // Late season: Kc falls linearly Kc_mid -> Kc_end.
             {
                 var dayWithin = dap - lengths.LateSeasonStartsAtDap;
                 var fraction = (double)dayWithin / lengths.LateSeasonDays;
@@ -192,9 +186,8 @@ namespace AgroFlow.Business.Agronomy
             {
                 case GrowthStage.Initial:
                     next = GrowthStage.Development;
-                    // Development opens AT Kc_ini and climbs from there, so the
-                    // meaningful comparison for "demand will rise" is the value
-                    // at the START of mid-season, not at the start of dev.
+                    // Development starts at Kc_ini and climbs, so for "demand will rise" we compare with
+                    // the value at the start of mid-season.
                     kcAtNextStageStart = crop.Kc.Initial;
                     break;
                 case GrowthStage.Development:

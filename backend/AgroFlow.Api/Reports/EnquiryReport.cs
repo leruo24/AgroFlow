@@ -14,8 +14,8 @@ internal sealed record EnquiryCallFact(long EnquiryId, DateTimeOffset CalledAt, 
 
 internal sealed record Count(string Label, int Value);
 
-/// Everything the PDF and the workbook show - worked out once, here, so the
-/// two can never disagree and the numbers can be tested.
+/// Everything the PDF and workbook show, worked out once here so they match and
+/// the numbers can be tested.
 internal sealed class EnquiryReportContent
 {
     public required string Title { get; init; }
@@ -42,15 +42,15 @@ internal sealed class EnquiryReportContent
     public required List<string> DoThisNext { get; init; }
 }
 
-// Item 6c: "Enquiries & sales follow-up" - for the team that phones people
-// back. Action-led: what to do next first, then how it went.
+// "Enquiries & sales follow-up", for the team that phones people back:
+// what to do next first, then how it went.
 internal static class EnquiryReport
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static readonly TimeSpan Sast = TimeSpan.FromHours(2);
 
-    /// DATA RULE: an enquiry with no call this many working days after it
-    /// arrived has missed the "within 2 working days" the form promises.
+    /// DATA RULE: an enquiry with no call after this many working days has missed the
+    /// "within 2 working days" the form promises.
     public const int PromisedWorkingDays = 2;
 
     public static readonly IReadOnlyDictionary<string, string> OutcomeLabels = new Dictionary<string, string>
@@ -107,9 +107,8 @@ internal static class EnquiryReport
         bool InFilters(EnquiryFact e) =>
             (province is null || e.Province == province) && (handler is null || e.HandlerId == handler);
 
-        // Across ALL enquiries, not only the period: a call-back promised last
-        // month is still owed, and an enquiry from last week still waits.
-        // Overdue: the call-back time someone logged has passed.
+        // Across all enquiries, not just the period: a call-back promised last month is
+        // still owed. Overdue means the logged call-back time has passed.
         var overdue = allEnquiries.Count(e =>
             e.Status == "open" && e.CallbackAt is { } cb && cb <= now && InFilters(e));
 
@@ -143,9 +142,8 @@ internal static class EnquiryReport
             .Select(g => new Count(g.Key, g.Count()))
             .OrderByDescending(c => c.Value).ThenBy(c => c.Label, StringComparer.Ordinal).ToList();
 
-        // "Do this next": counts from the data and nothing else - no advice
-        // about products or options (follow-up: an invented suggestion was
-        // removed). Three kinds of line, each only when its count is not zero.
+        // "Do this next": counts from the data only, with no product advice. Each of the
+        // three lines only appears when its count is not zero.
         var next = new List<string>();
         if (overdue > 0)
             next.Add($"{overdue} call-back{(overdue == 1 ? " is" : "s are")} overdue.");

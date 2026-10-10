@@ -1,15 +1,9 @@
-/* Item 2c: "Why am I seeing this?" in the admin console.
- *
- * Every insight, alert, Needs-attention card, KPI tile and verdict carries an
- * explanation: what it is based on, the rule, how sure, what would change it -
- * and, for admins only, the technical line (FAO-56 page and numbers, or the
- * query behind a count).
- *
- * Explanations are registered while a page renders and opened by id from the
- * one delegated [data-act] handler, so a link is plain HTML in a template
- * string like everything else here. No explanation, no link: the console
- * never shows a generic "this is based on your data".
- */
+/* "Why am I seeing this?" in the admin console.
+ * Every insight, alert, Needs-attention card, KPI tile and verdict has an explanation: what
+ * it is based on, the rule, how sure, what would change it, and for admins the technical
+ * line (FAO-56 page and numbers, or the query behind a count).
+ * Explanations are registered while a page renders and opened by id from the delegated
+ * [data-act] handler. No explanation, no link: we never show a generic "based on your data". */
 
 export type ExplanationFact = { label: string; value: string; source: string };
 

@@ -31,17 +31,9 @@ public record ForecastResponse(
     string Source,
     string? Message);
 
-// The farmer's 7-day forecast, and - when a zone is named - what the engine
-// says to do about each day.
-//
-// WHY A SERVER ENDPOINT AND NOT A DIRECT SUPABASE READ
-// ----------------------------------------------------
-// The weather rows themselves could be read straight from `weather_daily`
-// under RLS, the way the app already reads insights. The ADVICE cannot: it
-// needs the FAO-56 crop coefficients, the zone's planting date and soil, and
-// the farm's latitude, all of which live in the engine. Splitting the screen
-// across two sources would mean a day could show rain from one place and
-// advice from another, so both come from here.
+// The farmer's 7-day forecast and, when a zone is named, what the engine says to
+// do each day. This is a server endpoint because the advice needs the engine;
+// keeping both here means rain and advice always come from the same place.
 public static class ForecastEndpoints
 {
     public static void MapForecastEndpoints(this WebApplication app)
@@ -61,12 +53,8 @@ public static class ForecastEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        // ------------------------------------------------------------------
-        // 1. Ownership. Resolved from the ZONE when one is named, so a farmer
-        //    cannot pair their own farmId with someone else's zoneId and read
-        //    that zone's advice. Archived farms are excluded (0036) - an
-        //    archived farm is not something to plan irrigation for.
-        // ------------------------------------------------------------------
+        // 1. Ownership. Taken from the zone when one is named, so a farmer cannot pair
+        //    their own farmId with someone else's zone. Archived farms (0036) are left out.
         long resolvedFarmId;
         string? zoneName = null;
         double? latitude;
@@ -94,8 +82,8 @@ public static class ForecastEndpoints
                  or exists (select 1 from profile p where p.id = $1 and p.role = 'admin'))
             """;
 
-        // With neither, fall back to the farmer's own first farm, so Home can
-        // link here without already knowing a farm id.
+        // With neither, use the farmer's own first farm, so Home can link here without
+        // knowing a farm id.
         const string ownFarmSql = """
             select f.farm_id, null::text, f.latitude
               from farm f
@@ -118,8 +106,7 @@ public static class ForecastEndpoints
 
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
-            // Not found and not allowed look identical, the same choice the
-            // report endpoints make.
+            // Not found and not allowed look the same, like the report endpoints.
             if (!await reader.ReadAsync(cancellationToken))
             {
                 return Results.NotFound(new { error = "Farm not found." });
@@ -130,15 +117,9 @@ public static class ForecastEndpoints
             latitude = reader.IsDBNull(2) ? null : Convert.ToDouble(reader.GetValue(2));
         }
 
-        // ------------------------------------------------------------------
-        // 2. The forecast rows. Today onward, forecast only, at most 7.
-        //
-        //    `is_forecast = true` and `date >= today` are both applied: the
-        //    collector overwrites a past day's row with is_forecast = false
-        //    once observations exist, but a row can legitimately still be
-        //    flagged forecast for a day that has just passed, and a "forecast"
-        //    for yesterday is not a forecast.
-        // ------------------------------------------------------------------
+        // 2. The forecast rows: today onward, forecast only, at most 7.
+        //    We check both is_forecast and date >= today, because a day that has just
+        //    passed can still be flagged as forecast.
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2)); // SAST, no DST
         var weatherByDate = new Dictionary<DateOnly, DailyWeather>();
 
@@ -171,9 +152,7 @@ public static class ForecastEndpoints
 
                 days.Add((date, min, max, rain, hum));
 
-                // The advisor wants the whole set as DailyWeather regardless
-                // of whether a zone was asked for - building it here avoids a
-                // second pass.
+                // The advisor needs the whole set as DailyWeather either way, so we build it here.
                 if (min.HasValue && max.HasValue)
                 {
                     weatherByDate[date] = new DailyWeather(date, min.Value, max.Value, rain ?? 0, true);
@@ -183,8 +162,7 @@ public static class ForecastEndpoints
 
         if (days.Count == 0)
         {
-            // An explicit message rather than an empty list. A farmer who
-            // opens Forecast and sees nothing assumes the app is broken.
+            // A clear message instead of an empty list, so the app does not look broken.
             return Results.Ok(new ForecastResponse(
                 resolvedFarmId, zoneId, zoneName,
                 Array.Empty<ForecastDayResponse>(),
@@ -192,14 +170,8 @@ public static class ForecastEndpoints
                 ForecastOutlook.NoForecastMessage));
         }
 
-        // ------------------------------------------------------------------
-        // 3. Per-day advice, when a zone was named.
-        //
-        //    Uses IrrigationAdvisor - the same engine the schedule report
-        //    drives - rather than a second set of rules. Day 0 gets the
-        //    zone's real soil reading and the full water balance; later days
-        //    have no reading and never get a guessed one.
-        // ------------------------------------------------------------------
+        // 3. Per-day advice, when a zone was named, from the same engine the schedule
+        //    report uses. Only today uses the real soil reading.
         var planPerDay = new Dictionary<DateOnly, RollingIrrigationDay>();
 
         if (zoneId is not null)
@@ -214,9 +186,8 @@ public static class ForecastEndpoints
             planPerDay.TryGetValue(d.Date, out var plan);
             return new ForecastDayResponse(
                 d.Date.ToString("yyyy-MM-dd"),
-                // Named on the server so every client shows the same word, and
-                // so an English weekday name does not depend on the phone's
-                // locale producing one.
+                // Named on the server so every client shows the same weekday name, whatever
+                // the phone's locale.
                 d.Date.ToDateTime(TimeOnly.MinValue).ToString("ddd", CultureInfo.InvariantCulture),
                 d.Min is { } mn ? Math.Round(mn, 0) : null,
                 d.Max is { } mx ? Math.Round(mx, 0) : null,

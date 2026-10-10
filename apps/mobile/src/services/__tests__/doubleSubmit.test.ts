@@ -1,15 +1,11 @@
 /// <reference types="jest" />
-// TypeScript 6 no longer auto-includes @types packages, and adding jest
-// to tsconfig "types" would put describe/it/expect in scope for the whole
-// app. This scopes them to the test file that uses them.
+// TypeScript 6 does not auto-include @types packages, and adding jest to tsconfig "types"
+// would put describe/it/expect in scope for the whole app, so the reference is per test file.
 
-/* Item 0b: the real service code, with only the network faked.
- *
- * "Water now" is the case that mattered. startManualIrrigation checks whether
- * the pump is already running, but that flag is only set after the command's
- * request returns - so two quick taps both passed the check. These run the
- * actual API functions against a fake fetch and count what reaches the wire.
- */
+/* The real service code with only the network faked.
+ * "Water now" is the important case: startManualIrrigation's "pump already running" flag is
+ * only set after the request returns, so two quick taps both passed the check. These run the
+ * real API functions against a fake fetch and count what reaches the network. */
 
 jest.mock('@/lib/supabase', () => ({
   supabase: {

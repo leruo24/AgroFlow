@@ -5,29 +5,24 @@ using QuestPDF.Infrastructure;
 
 namespace AgroFlow.Api.Reports;
 
-// Item 2c: "Why:" in the PDFs.
-//
-// Under each action and verdict, a short grey line - "Why: <summary> (note 2)" -
-// and on the last page a numbered "Why we said this" entry with the facts used,
-// the rule, how sure we are and what would change it. The technical line
-// (FAO-56 page and numbers) is printed small in the appendix, the one place a
-// report reader who wants to check the agronomy can find it.
-//
-// Every report uses this one helper, so the wording cannot drift between them.
+// "Why:" in the PDFs.
+// Under each action and verdict there is a short grey line, "Why: <summary> (note 2)",
+// and on the last page a numbered "Why we said this" entry with the facts, the rule,
+// how sure we are and what would change it. The technical line (FAO-56 page and
+// numbers) is printed small in the appendix. Every report uses this one helper.
 internal sealed class ReportWhy
 {
     private readonly List<Explanation> _notes = new();
 
-    // Every registered explanation -> its note number. Two zones with the
-    // same reason share one note (item 3: no sentence repeated across zones),
-    // so the second one's line says "as in note N" instead of repeating it.
+    // Each registered explanation -> its note number. Zones with the same reason share
+    // one note, so the second line says "as in note N".
     private readonly Dictionary<Explanation, int> _numbers = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, int> _bySummary = new(StringComparer.Ordinal);
 
     public IReadOnlyList<Explanation> Notes => _notes;
 
-    /// Registers an explanation BEFORE rendering, so numbering never
-    /// depends on how often QuestPDF composes a page. Null or empty is ignored.
+    /// Registers an explanation before rendering, so the numbering never depends on how
+    /// often QuestPDF lays out a page. Null or empty is ignored.
     public void Add(Explanation? explanation)
     {
         if (explanation is null || string.IsNullOrWhiteSpace(explanation.Summary)) return;
@@ -44,8 +39,7 @@ internal sealed class ReportWhy
         _bySummary[explanation.Summary] = _notes.Count;
     }
 
-    /// Writes the grey "Why:" line for a registered explanation - in full the
-    /// first time a reason appears, "as in note N" after that.
+    /// Writes the grey "Why:" line: in full the first time, "as in note N" after that.
     public void Line(ColumnDescriptor col, Explanation? explanation)
     {
         if (explanation is null || !_numbers.TryGetValue(explanation, out var number)) return;
@@ -83,8 +77,8 @@ internal sealed class ReportWhy
         catch (System.Text.Json.JsonException) { return null; }
     }
 
-    /// Registers every explanation in an "insights" array, in order, and
-    /// returns them one-for-one with the array (null where there is none).
+    /// Registers every explanation in an "insights" array, in order, and returns them
+    /// in the same order (null where there is none).
     public List<Explanation?> AddInsights(System.Text.Json.JsonElement container)
     {
         var perInsight = new List<Explanation?>();

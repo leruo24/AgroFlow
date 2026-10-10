@@ -2,15 +2,13 @@ import { StyleSheet } from 'react-native';
 import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
-// Styles for the FAO-56 engine's farmer-facing components: the insights card,
-// the growth bar, the reset button and the calibration sheet.
-//
-// One factory taking colours, matching every other style module here. Hierarchy
-// comes from the named type steps and hairline dividers rather than from boxes,
-// which is the direction the rest of these screens went in.
+// Styles for the FAO-56 engine's farmer-facing components: the insights card, the growth
+// bar, the reset button and the calibration sheet.
+// One factory taking colours, like every other style module here. Hierarchy comes from the
+// named text sizes and hairline dividers, not boxes.
 export function createZoneInsightsStyles(colors: AppColors) {
   return StyleSheet.create({
-    // ---- Insights card ----
+    // Insights card
     card: { paddingVertical: Spacing.three, gap: Spacing.two },
     heading: { ...sharedLayout.inlineRow, justifyContent: 'space-between' },
     headingLeft: { ...sharedLayout.inlineRow },
@@ -29,8 +27,8 @@ export function createZoneInsightsStyles(colors: AppColors) {
       borderTopColor: colors.divider,
     },
 
-    // A 3px bar on the leading edge carries severity. The icon changes with it,
-    // so urgency never rests on colour alone.
+    // A 3px bar on the leading edge shows severity. The icon changes with it, so urgency never
+    // relies on colour alone.
     severityBar: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
     severityActNow: { backgroundColor: colors.error },
     severityHeadsUp: { backgroundColor: colors.warning },
@@ -42,7 +40,7 @@ export function createZoneInsightsStyles(colors: AppColors) {
 
     empty: { fontSize: Type.body, lineHeight: 23, color: colors.textSecondary },
 
-    // ---- Confidence badge and the one next step (item 2) ----
+    // Confidence badge and the one next step
     confidence: { gap: Spacing.one, paddingBottom: Spacing.two },
     confidenceBadge: {
       alignSelf: 'flex-start',
@@ -67,7 +65,7 @@ export function createZoneInsightsStyles(colors: AppColors) {
     improveTitle: { fontSize: Type.label, fontWeight: '700', color: colors.text },
     improveText: { fontSize: Type.body, lineHeight: 23, color: colors.text },
 
-    // ---- Growth bar ----
+    // Growth bar
     growthCard: { paddingVertical: Spacing.three, gap: Spacing.two },
     growthHeading: { ...sharedLayout.inlineRow, justifyContent: 'space-between' },
     growthStage: { fontSize: Type.title, fontWeight: '600', color: colors.text },
@@ -81,7 +79,7 @@ export function createZoneInsightsStyles(colors: AppColors) {
     fill: { height: 8, borderRadius: Radius.sm, backgroundColor: colors.primaryDark },
     growthCrop: { fontSize: Type.caption, color: colors.textMuted },
 
-    // ---- Reset button ----
+    // Reset button
     resetButton: {
       ...sharedLayout.inlineRow,
       justifyContent: 'center',
@@ -96,7 +94,7 @@ export function createZoneInsightsStyles(colors: AppColors) {
     resetResult: { fontSize: Type.caption, color: colors.textSecondary, marginTop: Spacing.two },
     resetError: { fontSize: Type.caption, color: colors.error, marginTop: Spacing.two },
 
-    // ---- Calibration sheet ----
+    // Calibration sheet
     sheet: { gap: Spacing.three },
     sheetTitle: { fontSize: Type.title, fontWeight: '600', color: colors.text },
     sheetIntro: { fontSize: Type.body, lineHeight: 23, color: colors.textSecondary },

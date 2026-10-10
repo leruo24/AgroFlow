@@ -22,25 +22,11 @@ public static class UserEndpoints
     {
         await using var connection = await dataSource.OpenConnectionAsync();
 
-        // ONE ROW PER PERSON.
-        //
-        // This used to be a plain left join onto farm_member, so a farmer who
-        // belongs to three farms came back three times and the Farmers page
-        // listed them three times - with the same email, the same Telegram
-        // state and three different farm names. The count at the top of the
-        // page was wrong by the same margin.
-        //
-        // Grouping fixes it, and the farms are joined into one readable cell
-        // rather than one of them being picked arbitrarily. farm_id keeps the
-        // lowest membership so the existing "their farm" links still resolve
-        // to a real farm; it is not meaningful for somebody on several.
-        //
-        // ADMINS ARE INCLUDED NOW. The role filter meant this endpoint could
-        // only ever return farmers, so anything needing a list of
-        // administrators - the Assign pickers on requests and alerts - had
-        // nothing to offer. role travels on each row and the Farmers page
-        // filters on it, which is the right place for a question about what
-        // one page wants to show.
+        // One row per person: we group farm_member so a farmer on three farms appears
+        // once, with their farms joined into one cell. farm_id is the lowest membership so
+        // "their farm" links still work.
+        // Admins are included (role is on each row) so the Assign pickers can list them;
+        // the Farmers page filters by role.
         const string sql = """
             select
                 p.id,
@@ -104,11 +90,9 @@ public static class UserEndpoints
 
                 telegram_linked = !reader.IsDBNull(8) && reader.GetBoolean(8),
 
-                // The column is NOT NULL DEFAULT TRUE, so null is only
-                // reachable through an outer join that did not match. Reading
-                // it as "alerts on" keeps an unlinked farmer from also looking
-                // like one who deliberately muted their alerts - those are
-                // different problems with different follow-ups.
+                // The column is NOT NULL DEFAULT TRUE, so null only comes from an unmatched outer
+                // join. We read it as "alerts on", so an unlinked farmer does not look like one
+                // who muted alerts.
                 telegram_alerts_enabled = reader.IsDBNull(9) || reader.GetBoolean(9)
             });
         }

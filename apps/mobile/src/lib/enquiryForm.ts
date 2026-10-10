@@ -1,5 +1,5 @@
-/* Item 6c: the "Ask for a call" form's lists and its checks - the server's
-   own wording, so a person is told at once; the server checks again. */
+/* The "Ask for a call" form's lists and checks, in the server's own words, so a person is
+ * told straight away; the server checks again. */
 import type { EnquiryInput } from '@/services/agroFlowApi';
 
 export const PROVINCES = [

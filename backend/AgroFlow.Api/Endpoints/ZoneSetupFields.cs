@@ -5,12 +5,11 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Item 6: the mobile "Finish setup" checklist saves these one at a time.
+// The mobile "Finish setup" checklist saves these one at a time.
 public record ZoneSetupBody(DateOnly? PlantingDate, double? AreaM2, double? FlowRateLpm);
 
-// Item 6: the setup a zone's advice needs, asked for when the farm is
-// registered instead of left for later. All optional on the wire so older
-// admin builds keep working; the wizard always sends soil and area.
+// The setup a zone's advice needs, asked for when the farm is registered. All
+// optional so older admin builds still work; the wizard always sends soil and area.
 public static class ZoneSetupFields
 {
     public static readonly string[] SoilTypes = { "sandy", "loam", "clay" };
@@ -56,8 +55,8 @@ public static class ZoneSetupFields
         app.MapPut("/api/farmer/zones/{zoneId:long}/setup", SaveSetupAsync).RequireAuthorization();
     }
 
-    // Only what was sent changes; the zone's size in hectares is not the
-    // farmer's to edit here, so the area is checked on its own.
+    // Only what was sent changes. The zone's size in hectares is not editable here,
+    // so the area is checked on its own.
     private static async Task<IResult> SaveSetupAsync(
         long zoneId, ZoneSetupBody body, ClaimsPrincipal user,
         NpgsqlDataSource dataSource, Fao56EngineController engine, CancellationToken ct)

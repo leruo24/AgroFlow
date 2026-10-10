@@ -1,27 +1,9 @@
-/* Which navigation is current, and cancelling the reads of the ones that aren't.
- *
- * WHY THIS EXISTS (item 0b)
- * Clicking quickly made the console cycle through pages on its own. A test
- * with a backend answering in random order showed eight clicks producing
- * seventy-five hash changes. Three things compounded:
- *
- *   1. Every sidebar click navigated TWICE: the click called go(), and go()
- *      wrote location.hash, which fired hashchange, which called go() again.
- *   2. Nothing marked a navigation as superseded. A page clicked first could
- *      answer last and paint over the page clicked after it.
- *   3. When that stale page finished, it wrote ITS hash back - firing another
- *      hashchange for a page nobody wanted any more, which started the whole
- *      thing again. That loop is the "vibration".
- *
- * The fix has three parts, and this module is the shared half of two of them:
- * a token that says which navigation is current, and an AbortController per
- * navigation so the reads a superseded page started are cancelled rather than
- * left to finish and be thrown away.
- *
- * It imports only lib/plainError (which imports nothing), on purpose. The router writes to it and the data layer
- * reads from it, and the router already imports every page - if this lived in
- * the router, the data layer importing it would close a loop.
- */
+/* Which navigation is current, and cancelling the reads of the ones that are not.
+ * When the admin clicks quickly, a page clicked first can answer last and paint over the
+ * newer one. This module holds a token saying which navigation is current, and an
+ * AbortController per navigation, so a replaced page's reads are cancelled.
+ * It imports only lib/plainError (which imports nothing) on purpose: the router writes to it
+ * and the data layer reads from it, and putting it in the router would make an import loop. */
 
 import { isRawNetworkError, networkFailureFor } from "@/lib/plainError";
 
@@ -43,17 +25,17 @@ export function isCurrentNavigation(t: number): boolean {
   return t === token;
 }
 
-/** The newest navigation has committed its page. Reads started after this
-    point - a drawer opening, a button's lookup - belong to the page the admin
-    is looking at, not to a navigation, and must not be cancelled by the next
-    click. */
+/**
+ * The newest navigation has committed its page. Reads started after this (a drawer
+ * opening, a button's lookup) belong to the page on screen, so the next click must not
+ * cancel them.
+ */
 export function endNavigation(t: number): void {
   if (t === token) rendering = false;
 }
 
-/* Requests that keep running whatever the admin clicks. The platform status
-   light polls every minute; cancelling its request because somebody changed
-   page would just make the light go stale. */
+/* Requests that keep running whatever the admin clicks. The status light polls every
+ * minute; cancelling it on a page change would just make it stale. */
 const BACKGROUND = ["/api/admin/health"];
 
 function isRead(init: RequestInit | undefined, input: RequestInfo | URL): boolean {
@@ -68,22 +50,11 @@ function urlOf(input: RequestInfo | URL): string {
   return input.url;
 }
 
-/* `fetch`, except that a READ issued while a navigation is rendering is tied to
- * that navigation, and cancelled if the admin clicks somewhere else first.
- *
- * WHY WRITES ARE NEVER CANCELLED
- * A save in flight when somebody clicks the sidebar has still been asked for.
- * Cancelling it would lose the admin's work to a click that had nothing to do
- * with it.
- *
- * WHY A CANCELLED READ NEVER SETTLES
- * Rejecting it would send an AbortError into the page that asked - and most
- * pages turn a failed read into an error state, a console.error or an error
- * dialog. For a page that has already been superseded, all three are wrong:
- * nobody is looking at it. A promise that never settles simply abandons that
- * render where it stands. Nothing holds on to it, so it is collected with the
- * rest of the superseded page.
- */
+/* `fetch`, but a read made while a navigation is rendering is tied to that navigation and
+ * cancelled if the admin clicks somewhere else first.
+ * Writes are never cancelled: a save that was asked for must not be lost to an unrelated click.
+ * A cancelled read never settles: rejecting it would show an error state or dialog for a
+ * page nobody is looking at. The unsettled promise is garbage-collected with that page. */
 export async function navigationAwareFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -111,12 +82,10 @@ export async function navigationAwareFetch(
   try {
     const response = await fetch(input, { ...init, signal });
 
-    // The body is read HERE, under the same guard. The signal can fire after
-    // the headers arrive but while the body is still streaming, and then the
-    // caller's own `response.json()` would throw an AbortError outside this
-    // try - exactly the noise this exists to prevent. These are page reads,
-    // small enough to buffer; downloads are started from a click on a page
-    // that has already rendered, so they never reach this path.
+    // The body is read here, under the same guard. The signal can fire while the body is still
+    // streaming, and the caller's own `response.json()` would then throw an AbortError outside
+    // this try. Page reads are small enough to buffer; downloads start from a click on a
+    // rendered page, so they never come through here.
     const body = await response.arrayBuffer();
 
     // The Response constructor throws for a body on these statuses, which
@@ -134,8 +103,8 @@ export async function navigationAwareFetch(
   }
 }
 
-/* Admin polish, item 7: a request that never completed becomes a
-   NetworkFailure in plain words; anything else (an abort) passes through. */
+/* A request that never completed becomes a NetworkFailure in plain words; anything else
+ * (an abort) passes through. */
 async function plainFailure(url: string, error: unknown): Promise<unknown> {
   return isRawNetworkError(error) ? networkFailureFor(url, error) : error;
 }

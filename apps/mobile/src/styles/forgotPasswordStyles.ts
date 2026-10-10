@@ -122,7 +122,7 @@ export function createForgotPasswordStyles(
         colors.error,
     },
 
-    // No card around the form - inputs carry their own boundaries.
+    // No card around the form; the inputs have their own borders.
     form: {
       paddingTop: Spacing.one,
     },
@@ -152,7 +152,7 @@ export function createForgotPasswordStyles(
         colors.text,
     },
 
-    // Matches the app's single filled accent CTA treatment.
+    // Same filled accent button as the rest of the app.
     primaryButton: {
       height: 56,
       alignItems: 'center',
@@ -196,7 +196,7 @@ export function createForgotPasswordStyles(
         colors.textSecondary,
     },
 
-    // Success reads through the label colour and copy, not a bordered panel.
+    // Success is shown by the label colour and text, not a bordered panel.
     successBox: {
       marginBottom: Spacing.three,
       paddingVertical: Spacing.three,

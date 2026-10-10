@@ -11,25 +11,17 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Data
 {
-    // Data layer for the FAO-56 engine, in the project's DB / XDB shape: a
-    // concrete class with no interface, no DTOs, and synchronous calls
-    // throughout, reading and writing the Agronomy business objects directly.
-    //
-    // Unlike ZoneDB this does not go through DataSet/DataAdapter. The engine
-    // reads several differently-shaped result sets per zone (weather days,
-    // readings, irrigation totals) and writes idempotent upserts; a DataSet per
-    // shape would add a mapping layer without buying anything, and the upserts
-    // need ON CONFLICT, which DataAdapter cannot express. The layering is the
-    // same - SQL lives here and nowhere else.
-    //
-    // Days are Africa/Johannesburg throughout, matching the report endpoints.
-    // South Africa has no daylight saving, so UTC+2 is fixed.
+    // Data layer for the FAO-56 engine (DB / XDB pattern): a concrete class with
+    // no interface, no DTOs and synchronous calls, working with the Agronomy objects.
+    // It uses NpgsqlCommand instead of a DataSet because the engine reads several
+    // result shapes and writes upserts with ON CONFLICT, which DataAdapter cannot do.
+    // All SQL stays in this class. Days are in SAST (fixed UTC+2).
     public class Fao56EngineXDB : DB
     {
         public const string DayTimeZone = "Africa/Johannesburg";
 
-        // DB keeps its own copy privately, so the string is held here too rather
-        // than widening the shared base class that other XDB classes depend on.
+        // DB keeps its connection string private, so we keep a copy here instead of
+        // changing the shared base class.
         private readonly string connectionString;
 
         public Fao56EngineXDB(string connectionString) : base(connectionString)
@@ -44,9 +36,7 @@ namespace AgroFlow.Data
             return connection;
         }
 
-        // ------------------------------------------------------------------
         // Zones the engine should run for.
-        // ------------------------------------------------------------------
         public Collection<EngineZoneRow> GetZonesForFarm(long farmId)
         {
             return ReadZones("where z.farm_id = $1", cmd => cmd.Parameters.AddWithValue(farmId));
@@ -111,14 +101,12 @@ namespace AgroFlow.Data
             return rows;
         }
 
-        // ------------------------------------------------------------------
-        // Weather for a farm, observed and forecast, plus the dht_daily values
+        // Weather for a farm (observed and forecast) plus the dht_daily values
         // for the same days.
-        // ------------------------------------------------------------------
         public Collection<ZoneWeatherDay> GetWeather(long farmId, long zoneId, DateOnly from, DateOnly to)
         {
-            // dht_daily is per zone; weather_daily is per farm. Joined on the day
-            // so the engine gets one row per day with both sides on it.
+            // dht_daily is per zone and weather_daily is per farm; we join on the day so
+            // the engine gets one row per day.
             const string sql =
                 "select w.date, w.tmin_c, w.tmax_c, w.precipitation_mm, " +
                 "       w.rh_min_pct, w.rh_max_pct, w.humidity_mean, " +
@@ -166,10 +154,8 @@ namespace AgroFlow.Data
             return days;
         }
 
-        // ------------------------------------------------------------------
-        // Soil moisture readings. Raw values, oldest first. Nothing is filtered
-        // out here - the engine marks implausible readings and keeps the row.
-        // ------------------------------------------------------------------
+        // Raw soil moisture readings, oldest first. Nothing is filtered here; the
+        // engine marks implausible readings and keeps the row.
         public Collection<ZoneMoistureReading> GetMoistureReadings(long zoneId, DateTime sinceUtc)
         {
             const string sql =
@@ -202,28 +188,23 @@ namespace AgroFlow.Data
             return readings;
         }
 
-        // ------------------------------------------------------------------
-        // Irrigation applied per day, as a depth in mm.
-        //
-        // Litres are ALWAYS runtime_seconds / 60 * zone.flow_rate_lpm -
-        // irrigation_event.estimated_litres is never read, because the seeded
-        // rows in it are wrong (120 L per event where the formula gives 22.5 L).
-        // Depth is then litres / area_m2.
-        // ------------------------------------------------------------------
+        // Irrigation applied per day, in mm.
+        // Litres = runtime_seconds / 60 * zone.flow_rate_lpm, then mm = litres / area_m2.
+        // We never read irrigation_event.estimated_litres because the seeded values
+        // are wrong (120 L per event where the formula gives 22.5 L).
         public Dictionary<DateOnly, double> GetIrrigationMmByDay(
             long zoneId, double? flowRateLpm, double? areaM2, DateOnly from, DateOnly to)
         {
             var result = new Dictionary<DateOnly, double>();
 
-            // Without a flow rate or an area there is no depth to compute, and a
-            // zero would read as "nothing was watered", which is a different and
-            // false claim.
+            // Without a flow rate or area there is no depth. Returning 0 would wrongly
+            // say nothing was watered.
             if (!flowRateLpm.HasValue || flowRateLpm.Value <= 0.0) return result;
             if (!areaM2.HasValue || areaM2.Value <= 0.0) return result;
 
-            // Item 6: a watering logged by hand with litres and no pump time
-            // counts its litres; everything else is pump time x flow rate.
-            // Read through jsonb so a database without 0042 counts as before.
+            // A watering logged by hand with litres and no pump time counts its litres;
+            // everything else is pump time x flow rate. Read through jsonb so a database
+            // without migration 0042 still works.
             const string sql =
                 "select (e.started_at at time zone 'Africa/Johannesburg')::date as day, " +
                 "       sum(e.runtime_seconds) as runtime_seconds, " +
@@ -259,18 +240,16 @@ namespace AgroFlow.Data
             return result;
         }
 
-        // Item 2: the longest single pump run per day, for zones whose waterings
-        // cannot be measured in mm (no flow rate or no size). The engine treats
-        // a long enough run as a full watering (WaterRules.WateringResetsBalance).
+        // The longest pump run per day, for zones whose waterings cannot be measured
+        // in mm (no flow rate or no size). A long enough run counts as a full
+        // watering (WaterRules.WateringResetsBalance).
         public Dictionary<DateOnly, double> GetLongestRunSecondsByDay(long zoneId, DateOnly from, DateOnly to)
         {
             var result = new Dictionary<DateOnly, double>();
 
             var sql =
-                // Item 6: a watering the farmer logged by hand is a real
-                // watering however briefly they timed it (or if they gave
-                // litres instead of minutes) - it counts as at least the
-                // two-minute minimum.
+                // A watering the farmer logged by hand always counts as at least the
+                // two-minute minimum, even if they entered litres instead of minutes.
                 "select (e.started_at at time zone 'Africa/Johannesburg')::date as day, " +
                 "       max(case when (to_jsonb(e) ->> 'logged_by_profile_id') is not null " +
                 "                then greatest(coalesce(e.runtime_seconds, 0), " + WaterRules.FullWateringMinimumSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + ") " +
@@ -301,8 +280,8 @@ namespace AgroFlow.Data
             return result;
         }
 
-        // Item 6: the farmer's own "How does the soil feel?" checks. Empty if
-        // migration 0042 is not applied - the advice then simply has none.
+        // The farmer's own "How does the soil feel?" checks. Empty if migration 0042
+        // is not applied.
         public List<ZoneSoilFeelCheck> GetSoilFeelChecks(long zoneId, DateOnly from)
         {
             var checks = new List<ZoneSoilFeelCheck>();
@@ -340,9 +319,8 @@ namespace AgroFlow.Data
             return byDay.Values.Sum();
         }
 
-        // Seed a bounded replay from the immediately preceding persisted state.
-        // zone_water_balance is derived/recomputable, but this row is what makes
-        // Dr continuous across query windows and calendar-week boundaries.
+        // Start the replay from the last saved state, so Dr carries on across query
+        // windows and week boundaries.
         public (DateOnly Day, double DepletionMm)? GetLastCompleteBalanceBefore(long zoneId, DateOnly before)
         {
             const string sql =
@@ -363,11 +341,8 @@ namespace AgroFlow.Data
             }
         }
 
-        // ------------------------------------------------------------------
-        // Writing the balance. Idempotent: re-running a day overwrites it,
-        // because the engine is a pure function of its inputs and a rerun with
-        // better weather should correct the row, not add a second one.
-        // ------------------------------------------------------------------
+        // Save one balance day. Re-running a day overwrites it, so a rerun with better
+        // weather corrects the row instead of adding a second one.
         public void SaveWaterBalanceDay(long zoneId, WaterBalanceDay day, string? stageLabel)
         {
             const string sql =
@@ -412,9 +387,8 @@ namespace AgroFlow.Data
             }
         }
 
-        // Today's ETo written back onto the farm's weather row, with its
-        // provenance. weather_daily is per farm, so this is written once per farm
-        // per day rather than per zone.
+        // Save today's ETo and where it came from on the farm's weather row
+        // (weather_daily is per farm, so once per farm per day).
         public void SaveFarmEto(long farmId, DateOnly day, double? etoMm, string etoSource, string rsSource)
         {
             const string sql =
@@ -434,13 +408,10 @@ namespace AgroFlow.Data
             }
         }
 
-        // ------------------------------------------------------------------
-        // Insights. One row per zone per type per day: a second run on the same
-        // day refreshes the message rather than stacking duplicates.
-        //
-        // dismissed_at is deliberately NOT reset on update - re-running the
-        // engine must not un-dismiss something the farmer has already dealt with.
-        // ------------------------------------------------------------------
+        // Insights: one row per zone, type and day, so a second run updates the message
+        // instead of adding a duplicate.
+        // dismissed_at is not reset on update, so a rerun never un-dismisses something
+        // the farmer already dealt with.
         public void SaveInsight(ZoneInsight insight, string dataJson)
         {
             const string sql =
@@ -469,9 +440,8 @@ namespace AgroFlow.Data
             }
         }
 
-        // Reuses the existing alert table for material plan changes. Identical
-        // open alerts are deduplicated so a 15-minute recalculation cannot spam
-        // the farmer/admin dashboard.
+        // Uses the existing alert table for big plan changes. Identical open alerts are
+        // skipped so the 15-minute recalculation cannot spam the dashboard.
         public void CreateDecisionAlert(long zoneId, string message)
         {
             const string sql =
@@ -487,8 +457,8 @@ namespace AgroFlow.Data
             }
         }
 
-        // Clear an insight type for a zone, used when a fault condition resolves
-        // (spec 8b: three good DHT11 readings stop the dht_offline insight).
+        // Clear an insight type for a zone when the fault is fixed
+        // (e.g. three good DHT11 readings stop the dht_offline insight).
         public void ClearInsight(long zoneId, string insightType, DateOnly validFor)
         {
             const string sql =
@@ -545,14 +515,12 @@ namespace AgroFlow.Data
             return insights;
         }
 
-        // ------------------------------------------------------------------
-        // Fault signals that come from timing rather than from the balance.
-        // ------------------------------------------------------------------
+        // Fault signals that come from timing, not from the water balance.
         public ZoneFaultSignals GetFaultSignals(EngineZoneRow zone, DateTime nowUtc)
         {
             var signals = new ZoneFaultSignals();
 
-            // Latest soil reading, and how long it has been unchanged.
+            // Latest soil reading, and how long it has stayed the same.
             const string latestSql =
                 "select recorded_at, value from sensor_reading " +
                 "where zone_id = $1 and sensor_type = 'SoilMoisture' " +
@@ -584,26 +552,25 @@ namespace AgroFlow.Data
                 signals.SevenDayMinimumReading = KitRules.Wettest(week, zone.CalibrationWet, zone.CalibrationDry);
             }
 
-            // DHT11: is the board reporting soil readings but no valid
-            // temperature or humidity? (spec 8b)
+            // DHT11: is the board sending soil readings but no valid temperature or humidity?
             signals.DhtOffline = IsDhtOffline(zone.ZoneId, nowUtc, out var dhtSince);
             signals.DhtOfflineSinceUtc = dhtSince;
 
-            // watering_failed: a run of at least 2 minutes whose soil reading did
-            // not move toward wet within 30 minutes.
+            // watering_failed: a run of at least 2 minutes where the soil reading did not
+            // get wetter within 30 minutes.
             signals.WateringAppearedToFail = DidWateringFail(zone, nowUtc, out var failedAt);
             signals.FailedRunAtUtc = failedAt;
 
             return signals;
         }
 
-        // The thresholds live in RuleBook/KitRules.cs with their reasons.
+        // The thresholds and their reasons are in RuleBook/KitRules.cs.
         public const int DhtOfflineWindowHours = KitRules.DhtOfflineWindowHours;
         public const int DhtBackOnlineReadingCount = KitRules.DhtBackOnlineReadingCount;
 
-        // A zone is DHT offline when soil readings are still arriving but none of
-        // the last two hours' readings carries a valid DHT11 temperature or
-        // humidity. It is back online after 3 consecutive valid DHT11 readings.
+        // A zone's DHT11 is offline when soil readings still arrive but none in the
+        // last two hours has a valid temperature or humidity. It is back online after
+        // 3 valid readings in a row.
         public bool IsDhtOffline(long zoneId, DateTime nowUtc, out DateTime? offlineSinceUtc)
         {
             offlineSinceUtc = null;
@@ -628,8 +595,8 @@ namespace AgroFlow.Data
                 soilCount = Convert.ToInt64(cmd.ExecuteScalar());
             }
 
-            // No soil readings either means the whole board is quiet - that is
-            // zone_offline, not a DHT11 fault. Do not log a sensor callout for it.
+            // No soil readings either means the whole board is quiet (zone_offline),
+            // not a DHT11 fault, so no sensor callout.
             if (soilCount == 0) return false;
 
             var dht = new List<(DateTime At, string Type, double Value)>();
@@ -649,7 +616,7 @@ namespace AgroFlow.Data
             return KitRules.IsDhtOffline(soilStillReporting: true, dht, nowUtc, out offlineSinceUtc);
         }
 
-        // Spec 3b plausibility - the rule is KitRules.IsValidDhtValue.
+        // Plausibility check; the rule is KitRules.IsValidDhtValue.
         public static bool IsValidDhtValue(string sensorType, double value)
         {
             return KitRules.IsValidDhtValue(sensorType, value);
@@ -662,7 +629,7 @@ namespace AgroFlow.Data
         {
             failedAtUtc = null;
 
-            // The most recent run of at least 2 minutes in the last day.
+            // The latest run of at least 2 minutes in the last day.
             const string runSql =
                 "select started_at, runtime_seconds from irrigation_event " +
                 "where zone_id = $1 and runtime_seconds >= $2 and started_at >= $3 " +
@@ -688,12 +655,11 @@ namespace AgroFlow.Data
 
             var runEnded = startedAt.AddSeconds(runtimeSeconds);
 
-            // The window must have fully elapsed before this can be judged -
-            // otherwise a run that finished a minute ago looks like a failure.
+            // Wait until the window has passed, or a run that just finished looks like a failure.
             if (nowUtc < runEnded.AddMinutes(WateringFailedWindowMinutes)) return false;
 
-            // Compare the reading just before the run with the wettest reading in
-            // the 30 minutes after it.
+            // Compare the reading just before the run with the wettest reading in the
+            // 30 minutes after it.
             const string beforeSql =
                 "select value from sensor_reading " +
                 "where zone_id = $1 and sensor_type = 'SoilMoisture' and recorded_at <= $2 " +
@@ -729,24 +695,21 @@ namespace AgroFlow.Data
                 }
             }
 
-            // No readings on one side of the run: that is a data gap, not a proven
-            // pump failure. Do not accuse the hardware on missing evidence.
+            // No readings on one side of the run is a data gap, not proof the pump failed.
             var wetIsLower = zone.CalibrationWet.HasValue && zone.CalibrationDry.HasValue
                              && zone.CalibrationWet.Value < zone.CalibrationDry.Value;
 
-            // An uncalibrated zone still gets this check - spec section 8 says the
-            // sensor is used to confirm the soil got wetter even without
-            // calibration. The rule itself is KitRules.PumpRanNoChange.
+            // Uncalibrated zones get this check too: the sensor can still show the soil got
+            // wetter. The rule is KitRules.PumpRanNoChange.
             if (!KitRules.PumpRanNoChange(startedAt, runtimeSeconds, nowUtc, before, after, wetIsLower)) return false;
 
             failedAtUtc = startedAt;
             return true;
         }
 
-        // Item 6b: the climate behind "Recommended for you". The last 30 days
-        // of measured ETo when there are at least RecommendationRules
-        // .MinHistoryDays of them; otherwise the forecast; otherwise whatever
-        // history there is; otherwise nothing.
+        // The climate behind "Recommended for you": the last 30 days of measured ETo
+        // when there are at least RecommendationRules.MinHistoryDays of them, otherwise
+        // the forecast, otherwise whatever history there is.
         public (double? MeanEto, string? Basis) GetRecommendationEto(long farmId, DateOnly today)
         {
             const string sql =
@@ -773,7 +736,7 @@ namespace AgroFlow.Data
             }
         }
 
-        // Trailing mean ETo over the days before today, for the hot_days check.
+        // Mean ETo over the days before today, for the hot_days check.
         public double? GetTrailingMeanEto(long farmId, DateOnly from, DateOnly to)
         {
             const string sql =
@@ -793,12 +756,10 @@ namespace AgroFlow.Data
             }
         }
 
-        // ------------------------------------------------------------------
-        // Calibration and soil writes, for the farmer-facing endpoints.
-        // ------------------------------------------------------------------
+        // Calibration and soil writes for the farmer-facing endpoints.
         public void SaveCalibrationPoint(long zoneId, string point, double reading)
         {
-            // The column name is chosen here, not interpolated from caller input.
+            // Security: the column name is picked here, never taken from caller input.
             var column = point == "wet" ? "calibration_wet" : "calibration_dry";
             var sql = "update zone set calibration_" + (point == "wet" ? "wet" : "dry") + " = $2 where id = $1";
 
@@ -858,8 +819,7 @@ namespace AgroFlow.Data
                     while (reader.Read())
                     {
                         var value = Convert.ToDouble(reader.GetValue(0));
-                        // Calibration points define the range, so they cannot be
-                        // checked against it - only the ADC range applies here.
+                        // Calibration points set the range, so only the ADC range check applies here.
                         if (Fao56Engine.IsPlausibleReading(value, null, null)) return value;
                     }
                 }
@@ -868,10 +828,8 @@ namespace AgroFlow.Data
             return null;
         }
 
-        // ------------------------------------------------------------------
-        // Access check, matching the rule the report endpoints use: owner, farm
-        // member, or an admin profile.
-        // ------------------------------------------------------------------
+        // Access check, the same rule the report endpoints use: the owner, a farm
+        // member, or an admin.
         public bool CanAccessZone(Guid userId, long zoneId, out long farmId)
         {
             const string sql =
@@ -896,15 +854,9 @@ namespace AgroFlow.Data
             }
         }
 
-        // ------------------------------------------------------------------
-        // Maintenance callout for a DHT11 fault (spec 8b).
-        //
-        // Luba's service_request is NOT used: its crop_type and farmer_id columns
-        // are both NOT NULL, so a system-generated row would have to invent a
-        // crop and attribute the request to a farmer who never made it. Spec 8b's
-        // own fallback applies - an admin-facing `alert` row instead. Her table,
-        // her constraints and her admin page are untouched.
-        // ------------------------------------------------------------------
+        // Maintenance callout for a DHT11 fault.
+        // We use an admin-facing alert row, not service_request: that table needs a
+        // crop_type and farmer_id, and a system callout has neither.
         public bool HasOpenDhtAlert(long zoneId)
         {
             const string sql =
@@ -946,8 +898,8 @@ namespace AgroFlow.Data
                     alertId = Convert.ToInt64(cmd.ExecuteScalar());
                 }
 
-                // Item 2c: the callout's "Why?". A missing explanation table
-                // (migration 0039) never stops the callout itself.
+                // The callout's "Why?". If the explanation table (migration 0039) is missing,
+                // the callout is still created.
                 try
                 {
                     using var why = new NpgsqlCommand(
@@ -964,9 +916,7 @@ namespace AgroFlow.Data
             }
         }
 
-        // ------------------------------------------------------------------
         // Helpers
-        // ------------------------------------------------------------------
         private static double? Nullable(NpgsqlDataReader reader, int ordinal)
         {
             return reader.IsDBNull(ordinal) ? (double?)null : Convert.ToDouble(reader.GetValue(ordinal));
@@ -995,8 +945,8 @@ namespace AgroFlow.Data
         }
     }
 
-    // Plain row objects. No DTO layer: these are what the data layer reads and
-    // what the engine is handed, in the project's established style.
+    // Plain row objects with no DTO layer: what the data layer reads and the
+    // engine is given.
     public sealed class EngineZoneRow
     {
         public long ZoneId { get; set; }

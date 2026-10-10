@@ -20,11 +20,10 @@ import { fetchFarmToday, type TodayZone } from '@/services/agroFlowApi';
 export default function HomeScreen() {
   const { colors } = useTheme();
   const { farm, isFarmLoading, farmError, zones, isZonesLoading, zonesError, refreshZones, refreshFarms, alerts } = useAgroFlow();
-  // Shared vocabulary (screenStyles) plus this screen's own two styles
-  // (homeStyles) - kept as separate factories so Home can change without
-  // touching what Alerts/History/Irrigation share.
+  // Shared screen styles plus Home's own, kept separate so Home can change
+  // without affecting Alerts, History and Irrigation.
   const styles = useMemo(() => ({ ...createScreenStyles(colors), ...createHomeStyles(colors) }), [colors]);
-  // Set-up zones only: an uncalibrated sensor number is not a percentage.
+  // Only set-up zones: an uncalibrated sensor number is not a percentage.
   const moisture = averageSoilText(zones.map(z => z.sensors.soilMoisture));
   const unread = alerts.filter(a => !a.read).length;
   // Today's cards come from GET /api/farmer/farms/{id}/today on the API.
@@ -38,17 +37,15 @@ export default function HomeScreen() {
   }, [farm]);
   useEffect(() => { setToday(null); loadToday(); }, [loadToday]);
   const pendingCommands = zones.filter(z => z.irrigation.override.active).length;
-  // null usedTodayLitres means no zone_daily_water_usage row exists for that
-  // zone today - only sum zones that actually have one, and say so plainly
-  // rather than reporting a 0 no zone actually recorded.
+  // null usedTodayLitres means the zone has no zone_daily_water_usage row today,
+  // so we only add up zones that have one instead of showing a false 0.
   const zonesWithUsage = zones.filter(z => z.water.usedTodayLitres != null);
   const waterToday = zonesWithUsage.length === 0
     ? 'No data'
     : Math.round(zonesWithUsage.reduce((sum, z) => sum + z.water.usedTodayLitres!, 0)) + ' L';
   const metrics = [
     { label: 'Avg soil moisture', value: moisture },
-    // No live valve/relay feedback exists, so this stays honest rather than
-    // deriving a number that would imply confirmed hardware state.
+    // There is no valve or relay feedback, so we show Unknown instead of guessing.
     { label: 'Irrigating', value: 'Unknown' },
     { label: 'Recorded water today', value: waterToday },
     { label: 'Unread alerts', value: String(unread) },
@@ -82,8 +79,8 @@ export default function HomeScreen() {
         <Droplets size={22} color={colors.white} strokeWidth={1.7} /><Text style={styles.primaryActionText}>Manage Irrigation</Text><ChevronRight size={20} color={colors.white} />
       </TouchableOpacity>
       {[
-        // Forecast first: it is the only one of these that answers a question
-        // the farmer has BEFORE they open the app ("do I water tomorrow?").
+        // Forecast first: it answers the question farmers have before opening the
+        // app ("do I water tomorrow?").
         { label: 'The week ahead', route: '/forecast' as const, Icon: CloudSun },
         { label: 'View Alerts', route: '/alerts' as const, Icon: Bell },
         { label: 'View History', route: '/history' as const, Icon: Clock3 },

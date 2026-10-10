@@ -8,8 +8,8 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Item 5: the body carries what was done, NEVER who did it. There is no
-// actor field to send; the actor is always the login's subject.
+// Security: the body says what was done, never who did it. The actor is always
+// the logged-in user.
 public record TakeOverBody(string? Reason);
 public record HandlingActionBody(string? Action, string? Note, string? Date);
 public record CreateMaintenanceBody(long? HardwareId, long? FarmId, string? Description, string? Date);
@@ -24,16 +24,10 @@ public record HandlingState(
     string? ResolvedAt,
     string? EscalatedAt);
 
-// "I'll handle this", "Take over", "Release", and the real actions on alerts
-// and maintenance - one set of routes shared by requests, alerts and
-// maintenance (item 5).
-//
-// WHAT THIS REPLACES
-// The console could put any admin's name on an item ("Assign to ..."), and
-// its alert and maintenance actions only changed what was on that admin's
-// screen - nothing was saved. Now every step is a write, the name is always
-// the caller's own, and each one lands in admin_audit_log under the item's
-// entity type and id, which is the item's timeline.
+// "I'll handle this", "Take over", "Release", and the real actions on alerts and
+// maintenance: one set of routes for requests, alerts and maintenance.
+// Every step is saved under the caller's own name and written to
+// admin_audit_log, which gives each item its timeline.
 public static class HandlingEndpoints
 {
     private sealed record Kind(string Table, string IdColumn, string EntityType, string? ResolvedColumn, string? ResolvedAtColumn, string FarmSql);
@@ -65,8 +59,8 @@ public static class HandlingEndpoints
         admin.MapPost("/{kind}/{id:long}/action", ActionAsync);
     }
 
-    // Who is handling what, for a list page to merge into its rows. Read
-    // through jsonb so a database without 0041 answers "nobody" for all.
+    // Who is handling what, for list pages. Read through jsonb so a database without
+    // 0041 answers "nobody".
     private static async Task<IResult> ListAsync(string kind, NpgsqlDataSource dataSource, CancellationToken ct)
     {
         if (!Kinds.TryGetValue(kind, out var k)) return Results.NotFound(new { error = "No such kind." });
@@ -127,8 +121,7 @@ public static class HandlingEndpoints
 
         if (outcome == HandlingOutcome.Claimed)
         {
-            // Atomic: only claims an item nobody holds, so two admins pressing
-            // at once cannot both win.
+            // Atomic: only claims an item nobody holds, so two admins cannot both win.
             var claimed = await ExecAsync(connection,
                 $"update {k.Table} set handled_by_profile_id = $2, claimed_at = now() where {k.IdColumn} = $1 and handled_by_profile_id is null",
                 ct, id, caller);
@@ -241,8 +234,7 @@ public static class HandlingEndpoints
                 break;
 
             case ("alerts", "reopen"):
-                // resolved_by is kept: it WAS resolved by that person, and the
-                // timeline now says it was reopened.
+                // resolved_by is kept (it was resolved by that person); the timeline shows it was reopened.
                 changed = await ExecAsync(connection,
                     "update alert set status = 'Open', updated_at = now() where id = $1", ct, id);
                 done = "Reopened.";
@@ -290,8 +282,7 @@ public static class HandlingEndpoints
         return Results.Ok(new { message = done });
     }
 
-    // A new maintenance job, booked by the caller - who is then handling it.
-    // Before item 5 the console's "Schedule maintenance" created nothing.
+    // A new maintenance job, booked by the caller, who is then handling it.
     private static async Task<IResult> CreateMaintenanceAsync(
         CreateMaintenanceBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AuditLog audit, CancellationToken ct)
     {

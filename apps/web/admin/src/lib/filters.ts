@@ -1,8 +1,6 @@
-/* ============================================================================
-   Filtering engine — date ranges, presets and per-page filter state.
-   Every filterable page registers a FilterState here; the toolbar writes to it
-   and the page re-renders from it.
-   ========================================================================== */
+/* Filtering: date ranges, presets and per-page filter state.
+ * Every filterable page registers a FilterState here; the toolbar writes to it and the
+ * page re-renders from it. */
 
 import type { DateRangePreset, FilterState, PageId } from "@/types/models";
 
@@ -33,7 +31,7 @@ export function resetFilter(page: PageId): FilterState {
   return fresh;
 }
 
-/* ------------------------------ date helpers ----------------------------- */
+/* date helpers */
 
 const pad = (n: number): string => String(n).padStart(2, "0");
 export const toISO = (d: Date): string =>
@@ -98,7 +96,7 @@ export function rangeLabel(f: FilterState): string {
   return "Custom range";
 }
 
-/* ----------------------------- generic filtering ------------------------- */
+/* generic filtering */
 
 export interface FieldMap<T> {
   /** Fields concatenated for the free-text search. */

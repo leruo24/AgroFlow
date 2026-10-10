@@ -1,12 +1,7 @@
-// The Reports screen. Ask for a PDF, see the ones you have asked for, open a
-// finished one.
-//
-// WHY A REQUEST AND NOT A DOWNLOAD BUTTON
-// A report runs the whole FAO-56 engine over a date range. On rural data that
-// is long enough to time out a phone mid-download, and the farmer would have
-// nothing to show for the wait. So the request is queued, the list shows what
-// is happening, and - if Telegram is connected - the finished PDF arrives
-// there too, which is where this farmer already gets everything else.
+// The Reports screen: ask for a PDF, see your requests, open a finished one.
+// A report runs the whole FAO-56 engine over a date range, which can time out on rural
+// data, so requests are queued, the list shows progress, and if Telegram is connected the
+// PDF arrives there too.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,8 +34,7 @@ import {
 
 const REPORT_TYPES: { key: ReportKind; label: string; needsZone: boolean }[] = [
   { key: 'water_usage', label: 'Water usage', needsZone: false },
-  // Olwethu's moisture endpoint takes a zoneId and nothing else, so this one
-  // genuinely cannot be run for a whole farm.
+  // The moisture report takes a zoneId only, so it cannot run for a whole farm.
   { key: 'moisture', label: 'Soil moisture', needsZone: true },
   { key: 'schedule', label: 'Watering schedule & advice', needsZone: false },
 ];
@@ -70,16 +64,14 @@ export default function ReportsScreen() {
   const [message, setMessage] = useState<string | null>(null);
 
   const needsZone = REPORT_TYPES.find((t) => t.key === reportType)?.needsZone ?? false;
-  // The schedule report projects forward from today, so a period choice would
-  // be a control that changes nothing.
+  // The schedule report projects forward from today, so a period choice would change nothing.
   const usesDates = reportType !== 'schedule';
 
   const load = useCallback(async () => {
     try {
       const [list, summary] = await Promise.all([
         fetchReportRequests(),
-        // Allowed to fail: a farm with no schedule set up has nothing to
-        // report, and that must not stop the list loading.
+        // Allowed to fail: a farm with no schedule has nothing to show, and the list must still load.
         fetchAutoReportSummary().catch(() => null),
       ]);
       setRows(list);
@@ -98,9 +90,8 @@ export default function ReportsScreen() {
     void load();
   }, [load]);
 
-  // A report that is still being made will not change by itself on screen, so
-  // the list re-checks while anything is in progress - and stops as soon as
-  // nothing is, rather than polling an idle screen forever.
+  // A report in progress does not change on screen by itself, so we re-check while anything
+  // is in progress and stop as soon as nothing is.
   useEffect(() => {
     if (!rows.some((r) => r.status === 'preparing')) return;
 
@@ -127,15 +118,9 @@ export default function ReportsScreen() {
       setMessage(result.message);
       await load();
     } catch (submitError) {
-      // The farmer sees one plain sentence whatever went wrong.
-      //
-      // The raw message used to go straight through, which is how a missing
-      // migration reached them as "AgroFlow API request failed (500)" - a
-      // sentence that tells them nothing and that they cannot act on. The
-      // real reason is in the server log, where somebody can.
-      //
-      // A 400 IS passed through, because those are the farmer's own input:
-      // "A soil moisture report is for one zone" is worth reading.
+      // The farmer sees one plain sentence whatever went wrong; the real reason is in the server
+      // log. A 400 is passed through, because those are about the farmer's own input ("A soil
+      // moisture report is for one zone").
       const message =
         submitError instanceof Error ? submitError.message : '';
 
@@ -214,7 +199,7 @@ export default function ReportsScreen() {
 
         <ScreenHeader title="Your reports" subtitle={farm?.name ?? undefined} help="reports" />
 
-        {/* ---- Automatic reports, if the team set them up ------------- */}
+        {/* Automatic reports, if the team set them up */}
         {auto?.enabled && (
           <View style={styles.autoCard}>
             <Text style={styles.autoTitle}>{auto.description}</Text>
@@ -232,7 +217,7 @@ export default function ReportsScreen() {
           </View>
         )}
 
-        {/* ---- Request form ------------------------------------------- */}
+        {/* Request form */}
         <View style={styles.group}>
           <Text style={styles.groupLabel}>What kind of report</Text>
           <View style={styles.chipRow}>
@@ -332,7 +317,7 @@ export default function ReportsScreen() {
         {message && <Text style={styles.message}>{message}</Text>}
         {error && <Text style={styles.error}>{error}</Text>}
 
-        {/* ---- Past reports ------------------------------------------- */}
+        {/* Past reports */}
         <Text accessibilityRole="header" style={styles.sectionTitle}>
           Your reports
         </Text>

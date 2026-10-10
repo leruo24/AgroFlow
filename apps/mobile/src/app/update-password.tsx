@@ -1,4 +1,5 @@
-//allows a user who opened a valid Supabase password-recovery link to choose a new password. The recovery link creates a temporary authenticated session before Supabase permits the password change.
+// Lets a user who opened a valid Supabase recovery link choose a new password. The link
+// creates a temporary session before Supabase allows the change.
 import {
   useLocalSearchParams,
 } from 'expo-router';
@@ -77,9 +78,9 @@ export default function UpdatePasswordScreen() {
   const openedFromProfile =
     source === 'profile';
 
-  //The forced first-login change. The farmer arrives here straight after
-  //signing in with the temporary password they were given at onboarding, and
-  //cannot reach the rest of the app until this is done - see _layout.tsx.
+  // The forced first-login change: the farmer comes here straight after signing in with
+  // their onboarding password and cannot use the rest of the app until it is done (see
+  // _layout.tsx).
   const openedAsFirstLogin =
     source === 'first-login';
 
@@ -147,7 +148,8 @@ export default function UpdatePasswordScreen() {
   ] =
     useState('');
 
-//reads either the implicit-flow access tokens or a PKCE authorization code from the recovery link, then gives those credentials to Supabase to create the password-recovery session.
+// Reads the implicit-flow tokens or a PKCE code from the recovery link and gives them to
+// Supabase to create the recovery session.
   useEffect(
     () => {
       let isMounted =
@@ -405,9 +407,8 @@ export default function UpdatePasswordScreen() {
     if (
       openedAsFirstLogin
     ) {
-      //Clearing the flag is what unlocks the rest of the app. If the call
-      //fails the farmer keeps their new password but stays on this screen,
-      //which is the safe way round - they can try again, and nothing is lost.
+      // Clearing the flag unlocks the rest of the app. If it fails the farmer keeps the new
+      // password but stays here and can try again, which is the safe way round.
       try {
         await clearMustChangePassword();
       } catch (

@@ -3,16 +3,11 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Warns farmers about weather that could damage the crop, reading the forecast
-// rows WeatherCollectionService already stores in weather_daily. Nothing is
-// fetched here - this only interprets what is already in the database.
-//
-// WHY THE LEDGER MATTERS SO MUCH HERE
-// The forecast refreshes every 6 hours and carries 8 days. A storm four days
-// out is therefore seen roughly 20 times before it arrives. Every send goes
-// through NotificationLedger keyed on the FORECAST DATE, so a storm on Friday
-// is one message no matter how many times Friday's forecast is refreshed
-// before Friday.
+// Warns farmers about weather that could damage the crop, using the forecast rows
+// already in weather_daily (nothing is fetched here).
+// The forecast refreshes every 6 hours with 8 days, so a storm four days out is seen
+// about 20 times. Every send goes through NotificationLedger keyed on the forecast
+// date, so a storm on Friday is one message however often Friday's forecast updates.
 public sealed class WeatherAlertService : BackgroundService
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -52,10 +47,8 @@ public sealed class WeatherAlertService : BackgroundService
 
         using var timer = new PeriodicTimer(interval);
 
-        // Sweep once at startup rather than waiting a full interval: a frost
-        // tomorrow night is no use to anyone reported three hours from now.
-        // The ledger makes a restart loop harmless - a redeployed container
-        // re-sends nothing.
+        // Sweep once at start-up instead of waiting a full interval: frost tomorrow night is
+        // no use reported three hours late. The ledger means a restart re-sends nothing.
         do
         {
             try
@@ -64,10 +57,8 @@ public sealed class WeatherAlertService : BackgroundService
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Never let a bad sweep kill the service: an unhandled
-                // exception out of a BackgroundService stops the whole host
-                // under the default BackgroundServiceExceptionBehavior, which
-                // would take irrigation down with it.
+                // A failed sweep must not kill the service: an unhandled exception in a
+                // BackgroundService stops the whole host, including irrigation.
                 _logger.LogError(ex, "Weather alert sweep failed; will retry on the next interval.");
             }
         }
@@ -91,9 +82,8 @@ public sealed class WeatherAlertService : BackgroundService
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
         var horizon = today.AddDays(Math.Max(1, _options.ForecastDays));
 
-        // Only farms with somebody listening are considered, so a farm nobody
-        // has linked costs nothing. is_forecast filters out the historical
-        // backfill rows, which would otherwise raise alerts about last winter.
+        // Only farms where someone is listening are checked. is_forecast leaves out the
+        // historical backfill rows, which would otherwise raise alerts about last winter.
         const string sql =
             """
             select w.farm_id, f.name, w.date, w.precipitation_mm, w.tmin_c, w.tmax_c
@@ -183,8 +173,7 @@ public sealed class WeatherAlertService : BackgroundService
             return 0;
         }
 
-        // INotificationService never throws, so one unreachable farmer cannot
-        // stop the rest of the sweep.
+        // INotificationService never throws, so one unreachable farmer cannot stop the sweep.
         await _notifications.NotifyWeatherAsync(
             farmId,
             new WeatherAlertNotification(kind, date, value, farmName),

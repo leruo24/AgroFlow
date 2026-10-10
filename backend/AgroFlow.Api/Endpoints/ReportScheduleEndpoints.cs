@@ -8,8 +8,8 @@ using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
-// Item 4 added the last four fields. Optional, so an older admin build that
-// sends only the first four still saves exactly what it did before.
+// The last four fields are optional, so an older admin build that sends only the
+// first four still saves the same as before.
 public record ReportScheduleBody(
     bool Enabled,
     string? Frequency,
@@ -28,7 +28,6 @@ public record ReportScheduleResponse(
     long[]? ZoneIds,
     string? LastRunAt,
     string Description,
-    // ---- item 4, additive ----
     int DayOfWeek,
     bool PerZonePdf,
     bool SendToHandler,
@@ -37,7 +36,7 @@ public record ReportScheduleResponse(
     string? NextSendAt,
     string? TurnedOffBy,
     string? TurnedOffAt,
-    // False until migration 0040 is applied: daily, a chosen day, per-zone
+    // False until migration 0040 is applied: daily schedules, a chosen day, per-zone
     // PDFs and extra recipients cannot be saved yet, and the page says so.
     bool OptionsAvailable);
 
@@ -49,16 +48,11 @@ public record AutoReportSummaryResponse(
     string Description);
 
 // Who gets automatic reports, and the farmer's own off switch.
-//
-// The asymmetry is deliberate: an ADMIN decides what a farm is signed up for,
-// because they are the ones who agreed it with the farmer and who will be
-// asked why a PDF arrived. A FARMER can always stop it, without asking
-// anybody, because the alternative is them muting the bot - and the bot also
-// carries the frost warnings.
+// An admin decides what a farm is signed up for; a farmer can always stop it
+// without asking, so they never have to mute the bot (which also sends frost warnings).
 public static class ReportScheduleEndpoints
 {
-    // A test send is for checking the template, not for flooding an admin's
-    // phone with one PDF per zone of a twenty-zone farm.
+    // A test send checks the template; it must not flood an admin with one PDF per zone.
     public const int MaxTestPdfs = 5;
 
     public static void MapReportScheduleEndpoints(this WebApplication app)
@@ -77,9 +71,7 @@ public static class ReportScheduleEndpoints
         farmer.MapPost("/stop", StopAsync);
     }
 
-    // ------------------------------------------------------------------
-    // ADMIN
-    // ------------------------------------------------------------------
+    // Admin
 
     private static async Task<IResult> GetForAdminAsync(
         long farmId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
@@ -88,8 +80,7 @@ public static class ReportScheduleEndpoints
 
         var row = await LoadAsync(connection, farmId, cancellationToken);
 
-        // No row yet is the normal state, not a 404 - the admin page needs
-        // something to render the "off" form against.
+        // No row yet is normal, not a 404: the page needs something to show the "off" form.
         if (row is null)
         {
             return Results.Ok(new ReportScheduleResponse(
@@ -116,9 +107,7 @@ public static class ReportScheduleEndpoints
             .Distinct()
             .ToArray();
 
-        // Refused rather than saved as a schedule that would wake the service
-        // every hour to produce nothing. Constrained in the database too
-        // (0035), so a direct write cannot create one either.
+        // Refuse an enabled schedule with no report types. The database also blocks it (0035).
         if (request.Enabled && types.Length == 0)
         {
             return Results.BadRequest(new
@@ -134,7 +123,7 @@ public static class ReportScheduleEndpoints
 
         var frequency = ReportSchedulePolicy.ParseFrequency(request.Frequency);
 
-        // The actor is always the token's subject, never something in the body.
+        // Security: the actor is always the token's subject, never something in the body.
         Guid? actor = Guid.TryParse(user.FindFirstValue("sub"), out var adminId) ? adminId : null;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -171,8 +160,8 @@ public static class ReportScheduleEndpoints
             cmd.Parameters.AddWithValue(request.Enabled);
             cmd.Parameters.AddWithValue(ReportSchedulePolicy.ToDatabaseValue(frequency));
             cmd.Parameters.AddWithValue(types.Length == 0 ? new[] { ReportKinds.WaterUsage } : types);
-            // An empty list means "all zones", which is null - never an empty
-            // array, which would mean "no zones" and silently send nothing.
+            // An empty list means "all zones", stored as null; an empty array would mean no
+            // zones and silently send nothing.
             cmd.Parameters.AddWithValue(
                 NpgsqlDbType.Array | NpgsqlDbType.Bigint,
                 request.ZoneIds is { Length: > 0 } ? request.ZoneIds : (object)DBNull.Value);
@@ -208,9 +197,8 @@ public static class ReportScheduleEndpoints
             await cmd.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        // Deliberately does NOT touch last_run_at. Enabling a schedule must
-        // not make this period look already-done, and disabling and
-        // re-enabling must not resend a period the farmer already got.
+        // Does not touch last_run_at, so enabling a schedule does not skip this period
+        // and re-enabling does not resend one.
         var saved = await LoadAsync(connection, farmId, cancellationToken);
 
         await audit.WriteAsync(
@@ -231,9 +219,8 @@ public static class ReportScheduleEndpoints
         return Results.Ok(saved);
     }
 
-    // Item 4: "Send test now" - the schedule's reports for its current period,
-    // sent ONLY to the calling admin's own Telegram. Never the farmer, never
-    // the group chat: a test must not look like a real report to anyone else.
+    // "Send test now": this period's reports, sent only to the calling admin's own
+    // Telegram, never the farmer or the group chat.
     private static async Task<IResult> SendTestAsync(
         long farmId,
         ClaimsPrincipal user,
@@ -327,9 +314,7 @@ public static class ReportScheduleEndpoints
         });
     }
 
-    // ------------------------------------------------------------------
-    // FARMER
-    // ------------------------------------------------------------------
+    // Farmer
 
     private static async Task<IResult> GetForFarmerAsync(
         ClaimsPrincipal user,
@@ -345,10 +330,8 @@ public static class ReportScheduleEndpoints
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // "No automatic reports" is the honest answer when the table is
-            // not there yet, and it is also the right one: nothing IS being
-            // sent. A 500 here would break the whole Reports screen for a
-            // card that is hidden anyway when disabled.
+            // "No automatic reports" when the table is missing, which is also true. A 500
+            // here would break the whole Reports screen.
             loggerFactory
                 .CreateLogger("AgroFlow.Api.ReportSchedule")
                 .LogError(ex, "Could not read the auto-report schedule for {ProfileId}.", userId);
@@ -383,8 +366,8 @@ public static class ReportScheduleEndpoints
 
         if (!await reader.ReadAsync(cancellationToken))
         {
-            // No schedule is an ordinary answer - most farms have none. The
-            // Reports screen hides the card on `enabled: false`.
+            // No schedule is normal (most farms have none); the screen hides the card when
+            // `enabled` is false.
             return Results.Ok(new AutoReportSummaryResponse(
                 false, null, Array.Empty<string>(), Array.Empty<string>(),
                 ReportSchedulePolicy.Describe(false, ReportFrequency.Weekly, Array.Empty<string>())));
@@ -403,12 +386,9 @@ public static class ReportScheduleEndpoints
     }
 
     // The farmer's own off switch.
-    //
-    // Scoped by the farm-access check in the WHERE clause, so it can only ever
-    // turn off a schedule on a farm this farmer is actually on - naming
-    // somebody else's farm is impossible because no farm id is accepted at
-    // all. There is deliberately no matching "on": an admin sets up what a
-    // farmer receives, and a farmer can always stop it.
+    // Security: the farm-access check is in the WHERE clause and no farm id is
+    // accepted, so a farmer can only turn off schedules on their own farms. There is
+    // no "on": an admin sets that up.
     private static async Task<IResult> StopAsync(
         ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
     {
@@ -435,8 +415,8 @@ public static class ReportScheduleEndpoints
             changed = await cmd.ExecuteScalarAsync(cancellationToken) as long?;
         }
 
-        // Item 4: record that the farmer turned it off. Skipped quietly until
-        // migration 0040 is applied - the off switch itself must always work.
+        // Record that the farmer turned it off. Skipped until migration 0040 is applied;
+        // the off switch itself always works.
         if (changed is { } farmId && await OptionsAvailableAsync(connection, cancellationToken))
         {
             await using var who = new NpgsqlCommand(
@@ -459,8 +439,7 @@ public static class ReportScheduleEndpoints
     private static async Task<ReportScheduleResponse?> LoadAsync(
         NpgsqlConnection connection, long farmId, CancellationToken cancellationToken)
     {
-        // 0040's columns through jsonb: null before the migration, so this
-        // still answers on a database that does not have them.
+        // 0040's columns read through jsonb: null before the migration, so this still works.
         await using var cmd = new NpgsqlCommand(
             """
             select s.farm_id, s.enabled, s.frequency, s.report_types, s.zone_ids, s.last_run_at,

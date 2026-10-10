@@ -1,21 +1,9 @@
-/* Icon set - Lucide (lucide-static), the same icon family
-   apps/mobile uses via lucide-react-native, so the two apps' iconography
-   actually matches instead of coincidentally resembling each other.
-
-   Pulled in as raw SVG source via Vite's ?raw import (each file is real,
-   unmodified lucide-static output - not hand-copied path data, which
-   would risk drifting from the real glyphs) rather than the `lucide`
-   npm package's JS runtime, since this app has no DOM-framework and
-   every icon here is used as a plain string already interpolated into
-   template-literal HTML (see ui/components.ts's kpiCard, app/router.ts's
-   NAV) - a static SVG string slots into that exact same pattern with no
-   new rendering machinery. license: lucide-static is ISC, same as lucide.
-
-   Keys are the icon's own identity (lucide's name, camelCased), not the
-   first place it got used - the same glyph gets reused across several
-   unrelated KPIs/contexts (e.g. Icon.circleCheck for "Active", "Completed"
-   AND toast success), so naming by shape avoids a growing pile of
-   same-icon aliases. */
+/* Icon set: Lucide (lucide-static), the same icons apps/mobile uses through
+ * lucide-react-native. Imported as raw SVG with Vite's ?raw, because every icon here is a
+ * plain string put into template-literal HTML (see ui/components.ts's kpiCard and
+ * app/router.ts's NAV). lucide-static is ISC licensed.
+ * Keys are the icon's own lucide name in camelCase, not where it is used, because one glyph
+ * is reused in several places (e.g. Icon.circleCheck for "Active", "Completed" and toasts). */
 
 import layoutDashboard from "lucide-static/icons/layout-dashboard.svg?raw";
 import users from "lucide-static/icons/users.svg?raw";

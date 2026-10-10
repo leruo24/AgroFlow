@@ -1,30 +1,12 @@
-// The AgroFlow loading animation, played over everything while the app
-// starts.
-//
-// HOW IT FITS WITH THE NATIVE SPLASH
-// ----------------------------------
-// There are two things on screen before the app is: the NATIVE splash
-// (expo-splash-screen, drawn by the OS before any JavaScript runs) and this
-// overlay. They hand over to each other:
-//
+// The AgroFlow loading animation, shown over everything while the app starts.
+// It hands over from the native splash (expo-splash-screen, drawn before any JavaScript):
 //   1. _layout keeps the native splash up with preventAutoHideAsync().
-//   2. This component mounts, creates the player and waits for it to be
-//      ready to play.
-//   3. Only then does the native splash hide - so there is never a frame of
-//      bare app between the two.
+//   2. This component mounts, creates the player and waits until it is ready.
+//   3. Only then does the native splash hide, so there is never a frame of bare app.
 //   4. This plays, the app finishes starting, and this fades out.
-//
-// Getting (3) wrong is the difference between a seamless handover and a
-// visible flash of a half-built screen.
-//
-// THE BACKGROUND IS WHITE. The video was authored on a transparent
-// background and exported to MP4, which cannot carry an alpha channel, so
-// its background is flattened to solid #FFFFFF.
-//
-// The native splash background in app.json is now #FFFFFF too, so the
-// handover is seamless - there is no colour change between the OS splash and
-// this overlay. If the splash colour is ever changed back, change this with
-// it or a white rectangle appears inside a coloured screen.
+// The background is white: the MP4 cannot carry transparency, so the video's background
+// is solid #FFFFFF, and the native splash in app.json is #FFFFFF too. If the splash colour
+// changes, change this with it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -39,35 +21,27 @@ import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useVideoPlayer, VideoView } from 'expo-video';
 
-// The video's own background, measured from the file. See the note above.
+// The video's own background colour (see the note above).
 export const LOADING_BACKGROUND = '#FFFFFF';
 
-// HARD CEILING. Whatever happens - a video that never reports finishing, a
-// session check that hangs, a player that fails silently - the overlay is
-// gone by now and the farmer is in the app.
-//
-// 10 s, not 8: the supplied video is 9.0 s long, so an 8 s cap fired before
-// it ended and cut the last second of the animation. This leaves a second of
-// headroom past the end of the video, which is what keeps it a SAFETY limit
-// rather than the thing that normally ends the splash - in the ordinary case
-// `playToEnd` has already fired and this timer never runs.
-//
+// Safety cap: whatever happens (the video never finishes, the session check hangs, the
+// player fails silently), the overlay is gone by now and the farmer is in the app.
+// The video is 9.0 s, so 10 s leaves a second of headroom; normally `playToEnd` has
+// already fired and this timer never runs.
 // Keep in step with MAX_MS in apps/web/admin/index.html.
 const MAX_VISIBLE_MS = 10000;
 
 const FADE_MS = 300;
 
-// Long enough to recognise the logo, short enough not to be a delay in its
-// own right. Only used when the animation is skipped for reduced motion.
+// Long enough to recognise the logo. Only used when the animation is skipped for
+// reduced motion.
 const REDUCED_MOTION_HOLD_MS = 600;
 
 type Props = {
-  // True once the app has finished starting: fonts loaded and the Supabase
-  // session restored, i.e. AuthContext knows whether to show login or the
-  // app. The overlay waits for this AND the video.
+  // True once the app has finished starting (fonts loaded and the Supabase session
+  // restored). The overlay waits for this and for the video.
   appReady: boolean;
-  // Fired once the overlay is really gone. Drip uses it to hold its greeting
-  // until the animation has finished.
+  // Fired once the overlay is really gone; Drip uses it to time its greeting.
   onFinished?: () => void;
 };
 
@@ -80,8 +54,7 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
   const dismissed = useRef(false);
   const splashHidden = useRef(false);
 
-  // Asked once. A phone that cannot answer (the API is unavailable on web)
-  // is treated as "motion is fine", which is the common case.
+  // Asked once. If the phone cannot answer (unavailable on web) we assume motion is fine.
   useEffect(() => {
     let active = true;
 
@@ -99,9 +72,8 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
   }, []);
 
   const player = useVideoPlayer(
-    // Not created at all under reduced motion - nothing is decoded and
-    // nothing animates. null until the preference is known, so the first
-    // frames cannot play before we know whether they should.
+    // Not created at all under reduced motion. null until the preference is known, so nothing
+    // plays before we know whether it should.
     reduceMotion === false ? require('../../assets/media/agroflow-loading.mp4') : null,
     (p) => {
       p.loop = false;
@@ -109,8 +81,7 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
     }
   );
 
-  // The native splash comes down only once there is something to replace it
-  // with, so the handover has no gap.
+  // The native splash only comes down once there is something to replace it.
   const hideNativeSplash = useCallback(() => {
     if (splashHidden.current) return;
     splashHidden.current = true;
@@ -135,13 +106,13 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
       return;
     }
 
-    // `statusChange` covers the failure case too: a video that cannot load
-    // reports an error rather than ever ending, and must not hold the app.
+    // `statusChange` also covers failure: a video that cannot load reports an error instead
+    // of ending, and must not hold up the app.
     const statusSub = player.addListener('statusChange', ({ status, error }) => {
       if (status === 'readyToPlay') {
         hideNativeSplash();
-        // play() is explicit rather than autoplay so it cannot start before
-        // the native splash is out of the way.
+        // play() is called explicitly (no autoplay) so it cannot start before the native splash
+        // is out of the way.
         try {
           player.play();
         } catch {
@@ -157,9 +128,8 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
 
     const endSub = player.addListener('playToEnd', () => setVideoDone(true));
 
-    // Belt and braces: if the player never reports ready at all - a corrupt
-    // asset, a decoder that fails silently - this still gets the native
-    // splash out of the way so the app is reachable.
+    // Safety net: if the player never reports ready (corrupt file, silent decoder failure),
+    // the native splash still comes down so the app can be used.
     const failsafe = setTimeout(hideNativeSplash, 1500);
 
     return () => {
@@ -179,8 +149,7 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
       easing: Easing.out(Easing.quad),
       useNativeDriver: true,
     }).start(() => {
-      // Unmounted, not just transparent: a full-screen transparent layer
-      // would swallow every tap underneath it.
+      // Unmounted, not just transparent: a full-screen transparent layer would block every tap.
       setVisible(false);
       onFinished?.();
     });
@@ -208,10 +177,8 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
       style={[
         styles.overlay,
         { opacity },
-        // Web only: `fixed` keeps the overlay over the viewport rather than
-        // the document, so it cannot be scrolled away mid-animation. Not in
-        // React Native's ViewStyle union, which is why it is cast here rather
-        // than declared in the StyleSheet.
+        // Web only: `fixed` keeps the overlay over the viewport so it cannot scroll away. It is not
+        // in React Native's ViewStyle type, which is why it is cast here.
         Platform.OS === 'web' ? ({ position: 'fixed' } as object) : null,
       ]}
       pointerEvents="auto"
@@ -231,8 +198,8 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
           <VideoView
             style={StyleSheet.absoluteFill}
             player={player}
-            // contain: the video is 1080x1920 portrait with the logo in the
-            // middle. cover would crop the logo on a short screen.
+            // contain: the video is 1080x1920 portrait with the logo in the middle; cover would crop
+            // the logo on a short screen.
             contentFit="contain"
             nativeControls={false}
             allowsPictureInPicture={false}
@@ -244,8 +211,7 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
               source={require('../../assets/media/agroflow-loading-poster.jpg')}
               style={StyleSheet.absoluteFill}
               contentFit="contain"
-              // The poster is the fallback; a fade on the fallback is one
-              // animation too many for someone who asked for less motion.
+              // No fade on the still frame for someone who asked for less motion.
               transition={0}
               accessibilityLabel="AgroFlow"
             />
@@ -264,8 +230,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: LOADING_BACKGROUND,
-    // Above every screen, including login. On web this also has to beat
-    // anything the router renders.
+    // Above every screen, including login, and above anything the router renders on web.
     zIndex: 9999,
   },
   posterWrap: {

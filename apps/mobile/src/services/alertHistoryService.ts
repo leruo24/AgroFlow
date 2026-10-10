@@ -1,20 +1,10 @@
 import { supabase } from '@/lib/supabase';
 
-// Every alert and every piece of advice the farmer's zones have ever
-// produced, newest first, with whether anyone looked at it.
-//
-// WHY THIS READS SUPABASE DIRECTLY RATHER THAN GOING THROUGH THE API
-// ------------------------------------------------------------------
-// The same rule insightsService.ts follows: the apps read ordinary data
-// directly under RLS, and the API only does what a client cannot. Both tables
-// already have member SELECT policies through zone -> farm (0011 for `alert`,
-// 0011 + 0027 for `ai_recommendation`), so an endpoint would add a hop and
-// another place for the two to disagree.
-//
-// WHY THE TWO ARE MERGED INTO ONE LIST
-// A farmer does not have a mental category for "alert" versus "insight". They
-// have "things AgroFlow told me". The `kind` field keeps them filterable
-// without making the farmer learn the difference to read the screen.
+// Every alert and piece of advice for the farmer's zones, newest first,
+// with whether anyone has looked at it.
+// We read Supabase directly under RLS (like insightsService.ts): both tables
+// already have member SELECT policies, so an API endpoint would add nothing.
+// Alerts and advice share one list; `kind` keeps them apart for filtering.
 
 export type AlertHistoryKind = 'alert' | 'advice';
 
@@ -36,13 +26,9 @@ export type AlertHistoryItem = {
 
 export type AlertHistoryPeriod = 7 | 30 | 'all';
 
-// Returns [] on EVERY failure rather than throwing.
-//
-// This list is history, not a control surface - nothing the farmer does
-// depends on it. A missing column (0033 not applied yet) or a dropped network
-// must leave the History screen showing its irrigation events, not an error
-// page. The one thing it must never do is show a wrong status, which is why
-// an unreadable read_at becomes 'new' and never 'seen'.
+// Returns [] on any failure instead of throwing: this is history, so a missing
+// column or a dropped network should never turn the screen into an error page.
+// An unreadable read_at shows as 'new', never 'seen'.
 export async function fetchAlertHistory(
   zoneIds: string[],
   period: AlertHistoryPeriod = 'all'
@@ -72,12 +58,11 @@ export async function fetchAlertHistory(
       zoneNames.set(row.id, row.name ?? `Zone ${row.id}`);
     }
   } catch {
-    // Names are decoration; the list still reads without them.
+    // Names are optional; the list still reads without them.
   }
 
   const items: AlertHistoryItem[] = [];
 
-  // ---- alerts ------------------------------------------------------------
   // Read straight from Supabase with the farmer's own login. Row Level
   // Security (migration 0011) only returns alerts for their own farm.
   try {
@@ -92,9 +77,8 @@ export async function fetchAlertHistory(
 
     const { data, error } = await query;
 
-    // A missing read_at column (0033 not applied) arrives here as an error,
-    // not an exception. Retry without it so the list still works, rather than
-    // showing the farmer nothing.
+    // If the read_at column is missing (0033 not applied), Supabase returns an
+    // error, so we retry without it and the list still loads.
     if (error) {
       let fallback = supabase
         .from('alert')
@@ -116,10 +100,10 @@ export async function fetchAlertHistory(
       }
     }
   } catch {
-    // Leave alerts out; advice below may still load.
+    // Skip alerts; advice below may still load.
   }
 
-  // ---- advice (the engine's insights) ------------------------------------
+  // Advice: the engine's insights.
   try {
     let query = supabase
       .from('ai_recommendation')
@@ -143,16 +127,15 @@ export async function fetchAlertHistory(
         message: row.message,
         severity: row.severity ?? null,
         timestamp: row.created_at ?? '',
-        // Insights have no "read" concept - the farmer dismisses them or they
-        // expire with the day. So there are only two states here, and
-        // claiming "Seen" for an undismissed one would be inventing a fact.
+        // Insights are never marked read: they are dismissed or expire with the day,
+        // so there are only two states and we never claim "Seen".
         status: row.dismissed_at
           ? { state: 'dismissed', at: row.dismissed_at }
           : { state: 'new' },
       });
     }
   } catch {
-    // Leave advice out; alerts above may still have loaded.
+    // Skip advice; alerts above may still have loaded.
   }
 
   return items.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
@@ -186,14 +169,13 @@ function toAlertItem(row: AlertRow, zoneNames: Map<number, string>): AlertHistor
     message: row.message ?? '',
     severity: row.severity ?? null,
     timestamp: row.created_at ?? '',
-    // read_at is the only evidence a human looked at this. `status` is not a
-    // substitute: Resolved means the underlying problem went away, which
-    // happens on its own without anyone opening the app.
+    // read_at is the only proof a person looked at this. Resolved is not the same:
+    // the problem can go away without anyone opening the app.
     status: row.read_at ? { state: 'seen', at: row.read_at } : { state: 'new' },
   };
 }
 
-// "Seen 3 Oct, 14:05". Short enough for a list row on a phone.
+// For example "Seen 3 Oct, 14:05", short enough for a phone list row.
 export function describeStatus(status: AlertHistoryStatus): string {
   if (status.state === 'new') return 'New';
 
@@ -210,23 +192,19 @@ export function describeStatus(status: AlertHistoryStatus): string {
   return status.state === 'seen' ? `Seen ${label}`.trim() : `Dismissed ${label}`.trim();
 }
 
-// Persists that the farmer opened this alert.
-//
-// Fire-and-forget: the row has already been shown as read on screen, and
-// failing to record it must not put an error in front of someone who was just
-// reading their alerts. Returns false so a caller can log it if it ever wants
-// to.
+// Records that the farmer opened this alert.
+// Fire-and-forget: the row already shows as read, so a failed write never
+// shows an error. Returns false so a caller can log it.
 export async function markAlertReadInDatabase(alertId: string): Promise<boolean> {
-  // The app's own ids are prefixed ("database-12", "alert-12") because they
-  // share a list with locally-generated ones. Only a real row can be written.
+  // Ids are prefixed ("database-12", "alert-12") because they share a list with
+  // local ones. Only a real database row can be written.
   const numeric = Number(alertId.replace(/^(database-|alert-)/, ''));
   if (!Number.isFinite(numeric)) return false;
 
   try {
     const { error } = await supabase
       .from('alert')
-      // Only ever set, never cleared, and never overwritten: the FIRST time
-      // somebody looked is the fact worth keeping.
+      // Only ever set once: the first time someone looked is what we keep.
       .update({ read_at: new Date().toISOString() })
       .eq('id', numeric)
       .is('read_at', null);

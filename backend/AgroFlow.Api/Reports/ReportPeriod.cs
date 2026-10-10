@@ -2,25 +2,20 @@ using System.Globalization;
 
 namespace AgroFlow.Api.Reports;
 
-// Item 3: how a report talks about its own period, and how it writes dates.
-//
-// The 5 Oct reports said "the pump ran 6 times this week" in a 30-day report
-// and printed "2026-09-16T22:49:04Z (UTC)". Every report now takes its words
-// from here, so the period is always described by its real length and a date
-// always reads "Wed 7 Oct".
+// How a report describes its own period and writes dates, so the period is
+// always described by its real length and a date always reads like "Wed 7 Oct".
 internal static class ReportPeriod
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    // DATA RULE: over two weeks, daily bars crowd into an unreadable comb
-    // (the 30-bar chart of 5 Oct), so charts group by week instead.
+    // DATA RULE: past two weeks, daily bars get too crowded, so charts group by week.
     public const int MaxDailyBars = 14;
 
     public static int Days(DateOnly from, DateOnly to) => to.DayNumber - from.DayNumber + 1;
 
     public static bool Weekly(DateOnly from, DateOnly to) => Days(from, to) > MaxDailyBars;
 
-    /// "Wed 7 Oct" - never an ISO string.
+    /// "Wed 7 Oct", never an ISO string.
     public static string Day(DateOnly d) => d.ToString("ddd d MMM", Inv);
 
     /// "Wednesday", for when a farmer acts within the coming week.
@@ -34,8 +29,7 @@ internal static class ReportPeriod
     ///   7 days, ended -> "this week"
     ///   n days, ended -> "in the last 30 days"
     ///   older         -> "between Mon 1 Sep and Tue 30 Sep"
-    /// "Ended" means it ends today or yesterday; anything older is a past
-    /// period and is named by its dates, never as "this week".
+    /// "Ended" means it ends today or yesterday; older periods are named by their dates.
     public static string Words(DateOnly from, DateOnly to, DateOnly today)
     {
         var n = Days(from, to);
@@ -47,8 +41,8 @@ internal static class ReportPeriod
         return $"between {Day(from)} and {Day(to)}";
     }
 
-    /// Weekly buckets from the first day: (label, first day, last day). The
-    /// last bucket may be shorter; its label says so by its dates.
+    /// Weekly groups from the first day: (label, first day, last day). The last one
+    /// may be shorter; its label shows its dates.
     public static List<(string Label, DateOnly Start, DateOnly End)> Weeks(DateOnly from, DateOnly to)
     {
         var weeks = new List<(string, DateOnly, DateOnly)>();

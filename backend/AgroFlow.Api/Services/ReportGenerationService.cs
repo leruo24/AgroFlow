@@ -7,33 +7,20 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-// Turns `preparing` report_request rows into PDFs, delivers them, and marks
-// them ready.
-//
-// WHY A BACKGROUND SERVICE AND NOT WORK DONE IN THE REQUEST
-// ---------------------------------------------------------
-// Generating a report runs the FAO-56 engine over a date range. On a phone
-// on rural data that is long enough to time out mid-download, and the
-// farmer would have nothing to show for it. More importantly the automatic
-// weekly reports (0035) have no HTTP request to run inside at all. One
-// queue serves both.
-//
-// HOW IT REUSES OLWETHU'S REPORTS
-// -------------------------------
-// It calls her three PDF endpoints directly rather than rendering anything
-// itself, so the PDF a farmer downloads and the PDF the scheduler sends can
-// never drift apart. Those methods take a ClaimsPrincipal and do their own
-// farm-ownership check; this builds one from the REQUESTING FARMER'S OWN
-// profile id, so that check still runs for real - a queued request cannot
-// reach a farm its requester could not reach.
+// Turns `preparing` report_request rows into PDFs, sends them, and marks them ready.
+// A background service because running the engine over a date range can time out a
+// phone on rural data, and automatic weekly reports (0035) have no HTTP request at all.
+// It calls the three PDF endpoints directly, so the downloaded and the scheduled PDF
+// are identical. Those check farm ownership with a ClaimsPrincipal, and we build it
+// from the requesting farmer's own profile id, so a queued request cannot reach a
+// farm its requester could not.
 public sealed class ReportGenerationService : BackgroundService
 {
-    // Short, because a farmer is watching the list and pulling to refresh.
+    // Short, because a farmer may be watching the list and refreshing.
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(20);
 
-    // One request at a time. QuestPDF rendering is CPU-bound and this runs
-    // on a small Railway container alongside the MQTT subscriber, which must
-    // keep up with every board's 30-second reading.
+    // One request at a time: rendering is CPU-heavy and shares a small container with
+    // the MQTT subscriber, which must keep up with every board's 30-second reading.
     private const int BatchSize = 1;
 
     private readonly IServiceProvider _services;
@@ -54,10 +41,8 @@ public sealed class ReportGenerationService : BackgroundService
     {
         _logger.LogInformation("Report generation service started.");
 
-        // A container that restarts mid-generation leaves a row stuck at
-        // 'preparing' forever, with the farmer watching a spinner that will
-        // never finish. Anything already stale at startup is failed once,
-        // visibly, so they can ask again.
+        // A restart mid-generation would leave a row stuck at 'preparing' forever, so
+        // anything stale at start-up is marked failed and the farmer can ask again.
         await ReleaseStaleRequestsAsync(stoppingToken);
 
         using var timer = new PeriodicTimer(PollInterval);
@@ -74,8 +59,7 @@ public sealed class ReportGenerationService : BackgroundService
             }
             catch (Exception ex)
             {
-                // The queue must never take the host down. A failing sweep is
-                // retried on the next tick.
+                // The queue must never take the host down; a failed sweep retries on the next tick.
                 _logger.LogError(ex, "Report queue sweep failed; retrying on the next tick.");
             }
 
@@ -92,9 +76,8 @@ public sealed class ReportGenerationService : BackgroundService
         _logger.LogInformation("Report generation service stopped.");
     }
 
-    // Anything left 'preparing' from a previous process. Twenty minutes is
-    // far longer than any real generation and short enough that a farmer who
-    // asked before a deploy is not left waiting all day.
+    // Anything left 'preparing' by a previous process. Twenty minutes is far longer than
+    // any real generation, and short enough not to leave a farmer waiting all day.
     private async Task ReleaseStaleRequestsAsync(CancellationToken ct)
     {
         try
@@ -123,8 +106,7 @@ public sealed class ReportGenerationService : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Not fatal: the queue below still works, those rows just stay
-            // stuck until the next restart.
+            // Not fatal: the queue still works; those rows stay stuck until the next restart.
             _logger.LogWarning(ex, "Could not release stale report requests.");
         }
     }
@@ -141,19 +123,16 @@ public sealed class ReportGenerationService : BackgroundService
         long Id, Guid ProfileId, long FarmId, long? ZoneId,
         string ReportType, DateOnly PeriodStart, DateOnly PeriodEnd, string RequestedVia);
 
-    // `for update skip locked` so two instances - or a future second worker -
-    // cannot both pick up the same request and send the farmer two copies.
+    // `for update skip locked`, so two workers cannot pick up the same request and send
+    // the farmer two copies.
     private async Task<PendingRequest?> ClaimNextAsync(CancellationToken ct)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
 
-        // started_at is the claim. Selecting and stamping it in ONE
-        // statement, inside one transaction, is what makes the claim
-        // exclusive: `for update skip locked` only holds for the life of the
-        // transaction, and generation happens after it commits, so without
-        // the stamp the next poll 20 seconds later would pick the same row up
-        // again and the farmer would get two copies.
+        // started_at is the claim. Selecting and stamping it in one statement makes the
+        // claim exclusive; the lock ends when the transaction commits, so without the stamp
+        // the next poll would pick up the same row.
         await using var cmd = new NpgsqlCommand(
             """
             update report_request
@@ -204,17 +183,14 @@ public sealed class ReportGenerationService : BackgroundService
 
             if (pdf is null || pdf.Length == 0)
             {
-                // The endpoint refused rather than threw - most often a date
-                // range with no data in it, or a zone that has since been
-                // deleted.
+                // The endpoint refused instead of throwing, usually a period with no data or a
+                // deleted zone.
                 failure = "There was no data to put in this report for the period you chose.";
             }
         }
         catch (Exception ex)
         {
-            // The real reason goes to the log and the row; the farmer gets
-            // plain words, because "Npgsql.PostgresException: 42703" is not
-            // something they can act on.
+            // The real reason goes to the log and the row; the farmer gets plain words.
             _logger.LogError(ex,
                 "Report request {Id} ({Type}) failed for farm {FarmId}.",
                 request.Id, request.ReportType, request.FarmId);
@@ -228,15 +204,14 @@ public sealed class ReportGenerationService : BackgroundService
             return;
         }
 
-        // Marked ready BEFORE the Telegram send. The report exists and the
-        // farmer can open it in the app from this moment; a dead Telegram
-        // must not make a perfectly good report show as Failed.
+        // Marked ready before the Telegram send: the farmer can open it in the app now,
+        // and a Telegram outage must not make a good report show as Failed.
         await MarkReadyAsync(request.Id, BuildRegenerationPath(request), ct);
 
         await DeliverToTelegramAsync(request, pdf, ct);
     }
 
-    // Calls Olwethu's own PDF endpoints. See the class note on why.
+    // Calls the report PDF endpoints directly (see the class comment).
     private async Task<byte[]?> RenderAsync(PendingRequest request, CancellationToken ct)
     {
         using var scope = _services.CreateScope();
@@ -245,18 +220,15 @@ public sealed class ReportGenerationService : BackgroundService
         var dataSource = provider.GetRequiredService<NpgsqlDataSource>();
         var engine = provider.GetRequiredService<AgroFlow.Business.Fao56EngineController>();
 
-        // The farmer's own identity, so the ownership check inside each
-        // endpoint is a real check and not a bypass. "sub" is the claim
-        // TryGetUserId reads.
+        // Security: the farmer's own identity, so each endpoint's ownership check really
+        // runs. "sub" is the claim TryGetUserId reads.
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
             new[] { new Claim("sub", request.ProfileId.ToString()) }, "report-generator"));
 
         IResult result = request.ReportType switch
         {
-            // request.ZoneId travels through. A farmer who picked a zone in
-            // the app gets the designed per-zone report; one who asked about
-            // the whole farm gets the farm summary, unchanged. Both arrive by
-            // Telegram the same way.
+            // request.ZoneId is passed through: a zone gives the per-zone report, the whole
+            // farm gives the farm summary. Both arrive on Telegram the same way.
             ReportKinds.WaterUsage => await ReportEndpoints.GetWaterUsagePdfAsync(
                 principal, dataSource, request.FarmId, request.PeriodStart, request.PeriodEnd, engine,
                 request.ZoneId, ct),
@@ -270,29 +242,24 @@ public sealed class ReportGenerationService : BackgroundService
             _ => Results.BadRequest(),
         };
 
-        // A 4xx from the endpoint is a legitimate "no" - an empty range, a
-        // zone that was deleted, a farm the requester is no longer on - not
-        // a crash. It becomes a Failed row with a plain message.
+        // A 4xx from the endpoint is a normal "no" (empty range, deleted zone, farm the
+        // requester left), so it becomes a Failed row with a plain message.
         if (result is IStatusCodeHttpResult { StatusCode: >= 400 }) return null;
 
-        // Results.File(byte[], ...) produces a FileContentHttpResult, whose
-        // FileContents is the rendered PDF. Reading it here rather than
-        // writing the IResult to a response is what lets the same builder
-        // serve both a download and this queue.
+        // Results.File(byte[], ...) gives a FileContentHttpResult whose FileContents is the
+        // PDF, so the same builder serves both a download and this queue.
         return result is FileContentHttpResult file ? file.FileContents.ToArray() : null;
     }
 
-    // What `file_path` holds. Not an object key: this deployment has no
-    // object storage, and a Railway container's filesystem does not survive
-    // a deploy. The parameters ARE the stored report - see the long note at
-    // the bottom of migration 0034.
+    // What `file_path` holds: the report's parameters, not a file key. We have no object
+    // storage and Railway's filesystem does not survive a deploy (see the note at the
+    // end of migration 0034).
     private static string BuildRegenerationPath(PendingRequest request)
     {
         return request.ReportType switch
         {
-            // The zone has to be in the stored path too, or regenerating a
-            // report would hand back the farm summary instead of the document
-            // the farmer originally received.
+            // The zone is part of the stored path too, so regenerating gives back the same
+            // per-zone document.
             ReportKinds.WaterUsage =>
                 $"/api/farmer/reports/water-usage/pdf?farmId={request.FarmId}" +
                 (request.ZoneId is { } wz ? $"&zoneId={wz}" : "") +
@@ -319,8 +286,8 @@ public sealed class ReportGenerationService : BackgroundService
 
             var chatId = await GetChatIdAsync(request.ProfileId, ct);
 
-            // Item 4: an automatic report may also go to the admin who set the
-            // schedule up and to the admin group chat.
+            // An automatic report may also go to the admin who set up the schedule and to the
+            // admin group chat.
             var automatic = request.RequestedVia == "auto";
             var (toHandler, toAdminChat, handler) = automatic
                 ? await LoadScheduleRecipientsAsync(request.FarmId, ct)
@@ -333,8 +300,7 @@ public sealed class ReportGenerationService : BackgroundService
 
             if (recipients.Count == 0)
             {
-                // Ordinary, not an error: a farmer who never pressed Start in
-                // the bot has no chat, and a bot cannot message first.
+                // Normal, not an error: a farmer who never pressed Start has no chat.
                 _logger.LogInformation(
                     "Report {Id} is ready but profile {ProfileId} has no linked Telegram chat.",
                     request.Id, request.ProfileId);
@@ -342,11 +308,9 @@ public sealed class ReportGenerationService : BackgroundService
                 return;
             }
 
-            // Send once. The scheduler can legitimately retry a period, and a
-            // farmer getting the same report twice is how they learn to
-            // ignore the channel. Keyed on the request row, so two DIFFERENT
-            // requests for the same report are two sends - which is right,
-            // because the farmer asked twice.
+            // Send once per request row: the scheduler may retry a period, and duplicates teach
+            // farmers to ignore the channel. Two separate requests are two sends, because the
+            // farmer asked twice.
             var claimed = await ledger.TryClaimAsync(
                 request.FarmId,
                 $"report-{request.Id}",
@@ -366,7 +330,7 @@ public sealed class ReportGenerationService : BackgroundService
             var fileName =
                 $"agroflow-{request.ReportType.Replace('_', '-')}-{request.PeriodEnd:yyyyMMdd}.pdf";
 
-            // Each recipient: one retry, then an admin alert (item 4).
+            // Each recipient: one retry, then an admin alert.
             var failed = 0;
             foreach (var chat in recipients)
             {
@@ -380,15 +344,14 @@ public sealed class ReportGenerationService : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The report is already marked ready and openable in the app. A
-            // failed Telegram send must never undo that.
+            // The report is already ready in the app; a failed Telegram send never undoes that.
             _logger.LogWarning(ex,
                 "Could not send report {Id} to Telegram. It is still available in the app.", request.Id);
         }
     }
 
-    // The schedule's extra recipients. Read through jsonb so a database
-    // without migration 0040 answers "nobody extra" instead of failing.
+    // The schedule's extra recipients, read through jsonb so a database without 0040
+    // answers "nobody extra".
     private async Task<(bool ToHandler, bool ToAdminChat, Guid? Handler)> LoadScheduleRecipientsAsync(
         long farmId, CancellationToken ct)
     {
@@ -410,8 +373,8 @@ public sealed class ReportGenerationService : BackgroundService
         }
     }
 
-    // A report that could not be delivered even after a retry is an admin's
-    // problem to chase, not something to lose in a log (item 4).
+    // A report that could not be delivered even after a retry becomes an admin alert,
+    // not just a log line.
     private async Task RaiseDeliveryAlertAsync(PendingRequest request, int failedRecipients, CancellationToken ct)
     {
         try
@@ -478,8 +441,8 @@ public sealed class ReportGenerationService : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // If even this fails the row stays 'preparing' and
-            // ReleaseStaleRequestsAsync will fail it on the next restart.
+            // If this fails too, the row stays 'preparing' and ReleaseStaleRequestsAsync fails
+            // it on the next restart.
             _logger.LogError(ex, "Could not mark report request {Id} as failed.", id);
         }
     }

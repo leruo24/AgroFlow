@@ -3,29 +3,21 @@ using System;
 
 namespace AgroFlow.Business.Agronomy
 {
-    // The FAO-56 root-zone soil water balance: Kc through the season, TAW/RAW from
-    // soil texture and rooting depth, the daily depletion Dr, and the water-stress
+    // The FAO-56 root-zone soil water balance: Kc through the season, TAW/RAW from soil
+    // texture and rooting depth, the daily depletion Dr, and the water stress
     // coefficient Ks.
-    //
-    // Pure arithmetic throughout - every method is a function of its arguments
-    // only, so the book's worked examples (Examples 28, 36, 37) run straight
-    // through it. See Fao56EngineVerificationTests.
-    //
+    // Pure arithmetic, so the book's worked examples (Examples 28, 36, 37) run straight
+    // through it (see Fao56EngineVerificationTests).
     // Equation numbers are FAO-56 (Allen et al., 1998).
     public static class SoilWaterBalance
     {
-        // -------------------------------------------------------------------
-        // Kc through the season - FAO-56 Eq. 66, p. 132
-        // -------------------------------------------------------------------
-        // Constant at Kc_ini through the initial stage; a straight line up to
-        // Kc_mid across the development stage; constant at Kc_mid through
-        // mid-season; a straight line to Kc_end across the late season.
-        //
-        // dayOfSeason is 1-based: day 1 is the planting date (spec section 6.1,
-        // i = (today - planting_date).Days + 1).
-        //
-        // Past the end of the season Kc_end is held, and the caller flags
-        // season_complete. Kc is never extrapolated past Kc_end.
+        // Kc through the season (FAO-56 Eq. 66, p. 132)
+        // Flat at Kc_ini through the initial stage, a straight line up to Kc_mid across
+        // development, flat at Kc_mid through mid-season, and a straight line to Kc_end
+        // across the late season.
+        // dayOfSeason is 1-based: day 1 is the planting date, i = (today - planting_date).Days + 1.
+        // Past the end of the season Kc_end is held and the caller flags season_complete;
+        // Kc is never extended past Kc_end.
         public static double Kc(
             double kcIni, double kcMid, double kcEnd,
             int lIni, int lDev, int lMid, int lLate,
@@ -33,11 +25,9 @@ namespace AgroFlow.Business.Agronomy
         {
             if (dayOfSeason < 1) return kcIni;
 
-            // dayOfSeason is used directly against the cumulative stage lengths,
-            // which is the convention FAO-56's own worked example uses: Example 28
-            // (stages 25/25/30/20, Kc 0.15/1.19/0.35) gives Kc = 0.77 on day 40,
-            // which is (40 - 25) / 25 of the way from Kc_ini to Kc_mid. Counting
-            // day 40 as 39 days after planting would give 0.73 instead.
+            // dayOfSeason is used directly against the stage lengths, as in FAO-56 Example 28
+            // (stages 25/25/30/20, Kc 0.15/1.19/0.35), which gives Kc = 0.77 on day 40:
+            // (40 - 25) / 25 of the way from Kc_ini to Kc_mid.
             var dap = dayOfSeason;
 
             if (dap < lIni) return kcIni;
@@ -64,12 +54,9 @@ namespace AgroFlow.Business.Agronomy
             return kcEnd;
         }
 
-        // Which stage a day falls in, in the farmer's vocabulary (spec 5c).
-        //
-        // Boundaries are inclusive at the top so that the last day of a stage
-        // still reads as that stage - day 25 of a 25-day initial stage is the last
-        // day of Establishing, not the first day of Growing. Season complete is
-        // i > total, matching the season_complete insight trigger in spec 7.
+        // Which stage a day falls in, in the farmer's words.
+        // Boundaries are inclusive at the top, so day 25 of a 25-day initial stage is still
+        // Establishing. Season complete is i > total, matching the season_complete insight.
         public static SeasonStage Stage(int lIni, int lDev, int lMid, int lLate, int dayOfSeason)
         {
             if (dayOfSeason <= lIni) return SeasonStage.Establishing;
@@ -79,16 +66,12 @@ namespace AgroFlow.Business.Agronomy
             return SeasonStage.SeasonComplete;
         }
 
-        // -------------------------------------------------------------------
         // p adjusted for the day's ETc
-        // -------------------------------------------------------------------
-        // Table 22 footnote: p = p_Table22 + 0.04 (5 - ETc), limited to
-        // 0.1 <= p <= 0.8, with ETc in mm/day (FAO-56 p. 162).
-        //
-        // The soil factor is applied to the TABULATED p before the ETc term, per
-        // spec section 6.5: p_adj = clamp(p * soilFactor + 0.04 * (5 - ETc), 0.1, 0.8).
-        // FAO-56 Chapter 8 allows p to be cut for clay and raised for sand; the
-        // 5% used here is an ASSUMPTION recorded in the report.
+        // Table 22 footnote: p = p_Table22 + 0.04 (5 - ETc), limited to 0.1 <= p <= 0.8,
+        // with ETc in mm/day (FAO-56 p. 162).
+        // The soil factor is applied to the tabulated p first:
+        // p_adj = clamp(p * soilFactor + 0.04 * (5 - ETc), 0.1, 0.8). FAO-56 Chapter 8 allows
+        // lowering p for clay and raising it for sand; the 5% we use is an ASSUMPTION.
         public const double MinDepletionFraction = 0.1;
         public const double MaxDepletionFraction = 0.8;
 
@@ -100,12 +83,9 @@ namespace AgroFlow.Business.Agronomy
             return adjusted;
         }
 
-        // -------------------------------------------------------------------
         // Rooting depth
-        // -------------------------------------------------------------------
-        // The Table 22 figure, capped by any physical root-zone boundary
-        // (spec section 6.6). A 1.0 m maize root zone in 0.3 m of available
-        // soil would otherwise claim more water than the root zone can hold.
+        // The Table 22 figure, capped by any physical root-zone limit, so a 1.0 m maize root
+        // zone in 0.3 m of soil cannot claim more water than the soil holds.
         public static double EffectiveRootDepthM(double tableRootDepthM, double? rootDepthLimitM)
         {
             if (!rootDepthLimitM.HasValue) return tableRootDepthM;
@@ -113,9 +93,7 @@ namespace AgroFlow.Business.Agronomy
             return Math.Min(tableRootDepthM, rootDepthLimitM.Value);
         }
 
-        // -------------------------------------------------------------------
-        // TAW / RAW - FAO-56 Eq. 82 and Eq. 83, p. 162
-        // -------------------------------------------------------------------
+        // TAW / RAW (FAO-56 Eq. 82 and Eq. 83, p. 162)
         // TAW = 1000 (theta_FC - theta_WP) Zr   [mm]
         public static double TotalAvailableWaterMm(double thetaFc, double thetaWp, double rootDepthM)
         {
@@ -128,16 +106,11 @@ namespace AgroFlow.Business.Agronomy
             return adjustedP * tawMm;
         }
 
-        // -------------------------------------------------------------------
-        // Daily water balance - FAO-56 Eq. 85, p. 170
-        // -------------------------------------------------------------------
+        // Daily water balance (FAO-56 Eq. 85, p. 170)
         // Dr_i = Dr_{i-1} - (P_i - RO_i) - I_i - CR_i + ETc_i + DP_i
-        //
-        // Runoff (RO) and capillary rise (CR) are taken as zero, per spec section
-        // 6.8. Deep percolation (DP) is handled by the clamp at zero: Eq. 88 says
-        // water in excess of field capacity drains, which is exactly what
-        // "depletion cannot go below zero" expresses. The clamp at TAW stops the
-        // profile drying past wilting point, which it physically cannot.
+        // Runoff (RO) and capillary rise (CR) are taken as zero. Deep percolation (DP) is the
+        // clamp at zero: water above field capacity drains (Eq. 88). The clamp at TAW stops
+        // the soil drying past wilting point.
         public static double NextDepletionMm(
             double previousDepletionMm,
             double rainfallMm,
@@ -151,9 +124,8 @@ namespace AgroFlow.Business.Agronomy
             return dr;
         }
 
-        // Rain below this multiple of ETo is ignored (spec section 6.8): a trace of
-        // rain evaporates rather than reaching the root zone, so crediting it
-        // against depletion would overstate how wet the soil is.
+        // Rain below this multiple of ETo is ignored: a trace of rain evaporates before it
+        // reaches the roots, so counting it would overstate how wet the soil is.
         public const double RainIgnoreFractionOfEto = 0.2;
 
         public static double EffectiveRainfallMm(double rainfallMm, double etoMmPerDay)
@@ -162,15 +134,12 @@ namespace AgroFlow.Business.Agronomy
             return rainfallMm < RainIgnoreFractionOfEto * etoMmPerDay ? 0.0 : rainfallMm;
         }
 
-        // -------------------------------------------------------------------
-        // Water stress coefficient Ks - FAO-56 Eq. 84, p. 169
-        // -------------------------------------------------------------------
+        // Water stress coefficient Ks (FAO-56 Eq. 84, p. 169)
         //         TAW - Dr
         //   Ks = -----------      for Dr > RAW;   Ks = 1 otherwise.
         //        (1 - p) TAW
-        //
-        // Ks < 1 means the crop is drawing water harder than it can replace it and
-        // transpiration is being suppressed - i.e. it had a stressed day.
+        // Ks < 1 means the crop is drawing water faster than it can and transpiration drops:
+        // a stressed day.
         public static double StressCoefficient(double depletionMm, double tawMm, double rawMm, double adjustedP)
         {
             if (depletionMm <= rawMm) return 1.0;
@@ -191,16 +160,11 @@ namespace AgroFlow.Business.Agronomy
             return ksCoefficient * etcMm;
         }
 
-        // -------------------------------------------------------------------
-        // Anchoring Dr to a soil moisture reading
-        // -------------------------------------------------------------------
-        // Relative moisture % from a raw sensor reading and the zone's wet/dry
-        // calibration points, clamped 0-100.
-        //
-        // The probe is resistive: a WETTER soil conducts better, so the raw ADC
-        // value FALLS as moisture rises. The formula is written against the
-        // calibration points rather than against an assumed direction, so it works
-        // whichever way round the two points sit.
+        // Linking Dr to a soil moisture reading
+        // Relative moisture % from a raw sensor reading and the zone's wet/dry calibration
+        // points, clamped 0-100. The probe is resistive (wetter soil conducts better, so the
+        // raw value falls as moisture rises), but the formula works whichever way round the
+        // two points are.
         public static double? RelativeMoisturePercent(double reading, double? calibrationWet, double? calibrationDry)
         {
             if (!calibrationWet.HasValue || !calibrationDry.HasValue) return null;
@@ -216,13 +180,10 @@ namespace AgroFlow.Business.Agronomy
             return percent;
         }
 
-        // Dr implied by a relative moisture reading: a linear stand-in for FAO-56
-        // Eq. 87 (Dr = 1000 (theta_FC - theta) Zr), which needs a volumetric
-        // moisture content the resistive probe cannot give.
-        //
-        // ASSUMPTION, recorded in the report: relative dryness is treated as
-        // proportional to depletion. The probe reads relative conductivity, not
-        // volumetric water content, so this is a mapping and not a measurement.
+        // Dr from a relative moisture reading: a linear stand-in for FAO-56 Eq. 87
+        // (Dr = 1000 (theta_FC - theta) Zr), which needs volumetric moisture the probe cannot
+        // give. ASSUMPTION: relative dryness is proportional to depletion. It is a mapping,
+        // not a measurement.
         public static double DepletionFromRelativeMoistureMm(double relativeMoisturePercent, double tawMm)
         {
             var dryness = 1.0 - relativeMoisturePercent / 100.0;
@@ -231,14 +192,10 @@ namespace AgroFlow.Business.Agronomy
             return dryness * tawMm;
         }
 
-        // -------------------------------------------------------------------
         // Turning a depletion into an irrigation instruction
-        // -------------------------------------------------------------------
-        // Litres to refill the root zone: a depth of water over the zone's area.
-        // 1 mm over 1 m2 is 1 litre, so litres = Dr [mm] * area [m2].
-        //
-        // Net irrigation never exceeds Dr (spec section 6.12): watering past field
-        // capacity drains away, so advising more would waste it.
+        // Litres to refill the root zone: 1 mm over 1 m2 is 1 litre, so litres = Dr [mm] *
+        // area [m2]. Net irrigation never exceeds Dr, because water past field capacity
+        // drains away.
         public static double? IrrigationLitres(double depletionMm, double? areaM2)
         {
             if (!areaM2.HasValue || areaM2.Value <= 0.0) return null;
@@ -246,8 +203,8 @@ namespace AgroFlow.Business.Agronomy
             return depletionMm * areaM2.Value;
         }
 
-        // Whole minutes, rounded up: a part-minute of pump time is not something a
-        // farmer can act on, and rounding down would under-water.
+        // Whole minutes, rounded up: a part-minute is not something a farmer can act on, and
+        // rounding down would under-water.
         public static int? IrrigationMinutes(double? litres, double? flowRateLpm)
         {
             if (!litres.HasValue) return null;
@@ -256,8 +213,8 @@ namespace AgroFlow.Business.Agronomy
             return (int)Math.Ceiling(litres.Value / flowRateLpm.Value);
         }
 
-        // Exact runtime for farmer-facing dosing. Keeping seconds avoids turning
-        // a fraction-of-a-second requirement into a whole minute of watering.
+        // Exact runtime in seconds, so a requirement of a fraction of a second does not
+        // become a whole minute of watering.
         public static double? IrrigationRuntimeSeconds(double? litres, double? flowRateLpm)
         {
             if (!litres.HasValue) return null;

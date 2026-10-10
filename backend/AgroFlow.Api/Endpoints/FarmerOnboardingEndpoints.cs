@@ -29,8 +29,8 @@ public record FarmerOnboardingZone(
     string Name,
     double SizeHectares,
     string CropType,
-    // Item 6: the setup the advice needs (zone columns from 0017, 0018,
-    // 0027). Optional so older admin builds still register farms.
+    // The zone setup the advice needs (columns from 0017, 0018, 0027). Optional so
+    // older admin builds can still register farms.
     string? SoilType = null,
     double? AreaM2 = null,
     DateOnly? PlantingDate = null,
@@ -54,17 +54,12 @@ public record FarmerOnboardingRequest(
 
 public record FarmerOnboardingResponse(string Message);
 
-// What /onboard returns now that there is no welcome email.
-//
-// TemporaryPassword is returned EXACTLY ONCE, here, and is never stored by
-// AgroFlow. The admin screen shows it so the installer can read it out to a
-// farmer who has no Telegram; there is no endpoint that can retrieve it
-// later, because there is nothing to retrieve. "Show it again" is a reset
-// that mints a new one.
-//
-// TelegramDeepLink is what the admin screen renders as a QR code. It is null
-// when Telegram:BotUsername is not configured, in which case onboarding still
-// succeeded and the password above is the whole delivery mechanism.
+// What /onboard returns.
+// Security: TemporaryPassword is returned only once, here, and never stored. The
+// admin screen shows it so the installer can read it to a farmer without
+// Telegram; showing it again means a reset with a new one.
+// TelegramDeepLink is shown as a QR code. It is null when Telegram:BotUsername is
+// not set, and onboarding still succeeds.
 public record FarmerOnboardedResponse(
     string Message,
     Guid ProfileId,
@@ -81,10 +76,8 @@ internal sealed record SupabaseFarmResponse(
     [property: JsonPropertyName("farm_id")] long FarmId
 );
 
-// Open-Meteo geocoding response.
-// The admin enters a human-readable location such as
-// "Ceres, Western Cape". Open-Meteo resolves that location to
-// latitude and longitude so the weather service can use it.
+// Open-Meteo geocoding response: turns a location like "Ceres, Western Cape"
+// into latitude and longitude for the weather service.
 internal sealed record OpenMeteoGeocodingResponse(
     [property: JsonPropertyName("results")]
     List<OpenMeteoGeocodingResult>? Results
@@ -101,15 +94,10 @@ internal sealed record OpenMeteoGeocodingResult(
     double Longitude
 );
 
-// Both onboarding paths go through Supabase's own Admin Auth API rather than
-// a hand-rolled invite-token table - see supabase/migrations/
-// 0008_device_enrollment_and_onboarding.sql's handle_new_auth_user(),
-// which creates the profile/farm_member rows for either path uniformly once
-// Supabase creates the underlying auth.users row.
-//
-// SECURITY: Supabase:ServiceRoleKey (read in GetSupabaseAdminConfig) bypasses
-// Row Level Security entirely - it must only ever live in this server-side
-// config, never in web-dashboard/admin's client-side code.
+// Both onboarding paths use Supabase's Admin Auth API; handle_new_auth_user()
+// (migration 0008) then creates the profile and farm_member rows.
+// Security: Supabase:ServiceRoleKey bypasses Row Level Security, so it must only
+// ever be in this server config, never in the admin web app.
 public static class FarmerOnboardingEndpoints
 {
     public static void MapFarmerOnboardingEndpoints(this WebApplication app)
@@ -123,9 +111,7 @@ public static class FarmerOnboardingEndpoints
         group.MapPost("/onboard", OnboardAsync);
     }
 
-    // ========================================================================
-    // FULL FARMER ONBOARDING
-    // ========================================================================
+    // Full farmer onboarding
 
     private static async Task<IResult> OnboardAsync(
         FarmerOnboardingRequest request,
@@ -137,9 +123,7 @@ public static class FarmerOnboardingEndpoints
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmerOnboarding");
 
-        // --------------------------------------------------------------------
-        // SERVER-SIDE VALIDATION
-        // --------------------------------------------------------------------
+        // Server-side validation
 
         if (string.IsNullOrWhiteSpace(request.Farmer.FullName))
         {
@@ -242,11 +226,7 @@ public static class FarmerOnboardingEndpoints
             }
         }
 
-        // --------------------------------------------------------------------
-        // VALIDATE TOTAL ZONE AREA
-        // --------------------------------------------------------------------
-        // The combined area of all irrigation zones cannot exceed
-        // the total farm area.
+        // The zones together cannot be bigger than the farm.
 
         var totalZoneSize =
             request.Farm.Zones.Sum(zone => zone.SizeHectares);
@@ -262,14 +242,9 @@ public static class FarmerOnboardingEndpoints
             });
         }
 
-        // --------------------------------------------------------------------
-        // GEOCODE FARM LOCATION
-        // --------------------------------------------------------------------
-        // The admin enters a readable location such as:
-        // "Ceres, Western Cape"
-        //
-        // We use a separate HttpClient here so the Supabase service-role key
-        // is NOT sent to Open-Meteo.
+        // Geocode the farm location (e.g. "Ceres, Western Cape").
+        // Security: a separate HttpClient, so the Supabase service-role key is never sent
+        // to Open-Meteo.
 
         var location = request.Farm.Location?.Trim() ?? "";
 
@@ -332,14 +307,9 @@ public static class FarmerOnboardingEndpoints
                 serviceRoleKey
             );
 
-        // --------------------------------------------------------------------
-        // GENERATE TEMPORARY PASSWORD
-        // --------------------------------------------------------------------
-        // The actual password used for the Supabase Auth account is generated
-        // by the backend and returned to the admin screen exactly once. It is
-        // not persisted anywhere. If the farmer links Telegram, the bot
-        // replaces it with a fresh one at that moment (see
-        // TelegramPollingService) - the admin screen says so.
+        // Generate a temporary password for the Supabase account. It is shown to the
+        // admin once and never stored. If the farmer links Telegram, the bot replaces it
+        // with a new one (see TelegramPollingService).
 
         var temporaryPassword = TemporaryPasswordGenerator.Generate();
 
@@ -348,9 +318,7 @@ public static class FarmerOnboardingEndpoints
 
         try
         {
-            // ----------------------------------------------------------------
-            // CREATE FARM
-            // ----------------------------------------------------------------
+            // Create the farm
 
             var farmPayload = new
             {
@@ -358,8 +326,7 @@ public static class FarmerOnboardingEndpoints
                 location = location,
                 total_area = request.Farm.SizeHectares,
 
-                // Explicit coordinates take precedence; otherwise these come
-                // from Open-Meteo geocoding of the readable locality.
+                // Explicit coordinates win; otherwise we use Open-Meteo's geocoding of the place name.
                 latitude = coordinates.Value.Latitude,
                 longitude = coordinates.Value.Longitude,
 
@@ -417,15 +384,13 @@ public static class FarmerOnboardingEndpoints
                 );
             }
 
-            // ----------------------------------------------------------------
-            // CREATE AUTH USER
-            // ----------------------------------------------------------------
+            // Create the Auth user
 
             var authPayload = new
             {
                 email = request.Farmer.Email.Trim(),
 
-                // Use the server-generated temporary password.
+                // The server-generated temporary password.
                 password = temporaryPassword,
 
                 email_confirm = true,
@@ -485,9 +450,7 @@ public static class FarmerOnboardingEndpoints
 
             userId = authUser.Id;
 
-            // ----------------------------------------------------------------
-            // ASSIGN FARM OWNER
-            // ----------------------------------------------------------------
+            // Make the farmer the farm owner
 
             var ownerPayload = new
             {
@@ -524,9 +487,7 @@ public static class FarmerOnboardingEndpoints
                 );
             }
 
-            // ----------------------------------------------------------------
-            // CREATE ZONES
-            // ----------------------------------------------------------------
+            // Create the zones
 
             var zonePayload = request.Farm.Zones
                 .Select(zone => new
@@ -537,7 +498,7 @@ public static class FarmerOnboardingEndpoints
                     size_unit = "ha",
                     location = coordinates.Value.Location,
                     crop_type = zone.CropType.Trim(),
-                    // Item 6: soil defaults to loam exactly as the column does.
+                    // Soil defaults to loam, the same as the column default.
                     soil_type = zone.SoilType?.Trim().ToLowerInvariant() ?? "loam",
                     area_m2 = zone.AreaM2,
                     planting_date = zone.PlantingDate?.ToString("yyyy-MM-dd"),
@@ -576,10 +537,8 @@ public static class FarmerOnboardingEndpoints
                 );
             }
 
-            // Onboarding is COMPLETE at this point: the farm, the Auth user
-            // and every zone exist and are staying. Everything after this
-            // line is delivery, and delivery is deliberately outside the try
-            // block below - see the note there.
+            // Onboarding is complete here: the farm, the Auth user and the zones stay.
+            // Everything after this is delivery, which sits outside the try block below.
         }
         catch (Exception ex)
         {
@@ -588,9 +547,8 @@ public static class FarmerOnboardingEndpoints
                 "Farmer onboarding failed."
             );
 
-            // If the Auth user was created, remove it.
-            // The Supabase trigger-created profile/farm_member records
-            // should be removed through the Auth user deletion cascade.
+            // If the Auth user was created, remove it; the trigger-created profile and
+            // farm_member rows go with it.
             if (userId.HasValue)
             {
                 await TryDeleteAuthUserAsync(
@@ -601,7 +559,7 @@ public static class FarmerOnboardingEndpoints
                 );
             }
 
-            // Remove zones and farm created during this onboarding attempt.
+            // Remove the zones and farm created in this attempt.
             if (farmId.HasValue)
             {
                 await TryDeleteZonesAsync(
@@ -628,33 +586,19 @@ public static class FarmerOnboardingEndpoints
             );
         }
 
-        // --------------------------------------------------------------------
-        // TELEGRAM ONBOARDING CODE - AFTER THE COMMIT, OUTSIDE THE ROLLBACK
-        // --------------------------------------------------------------------
-        // This is the fix for the behaviour the Resend welcome email had: that
-        // send sat INSIDE the try block above, so an email provider outage
-        // landed in the catch and deleted the Auth user, the farm and every
-        // zone that had just been created on-site. A messaging failure used to
-        // destroy a completed onboarding.
-        //
-        // Nothing below may do that. The farmer, the farm and the zones exist
-        // and are staying, whatever happens here. The worst case is a response
-        // carrying a warning and no QR code, which the admin resolves with the
-        // "Regenerate code" button - or by reading the temporary password out
-        // loud, which is right there in the same response.
+        // Telegram onboarding code, after the commit and outside the rollback.
+        // Nothing here may undo a finished onboarding. At worst the response has a warning
+        // and no QR code, and the admin can use "Regenerate code" or read out the
+        // temporary password.
 
         string? deepLink = null;
         string? code = null;
         DateTimeOffset? expiresAt = null;
         string? warning = null;
 
-        // The temporary password below is about to be read off an admin's
-        // screen, and possibly written on a piece of paper. That applies
-        // whether or not the farmer ever links Telegram, so the forced change
-        // is set here rather than only on the bot's redemption path.
-        //
-        // The profile row exists by now: handle_new_auth_user() (migration
-        // 0008) creates it from the auth.users insert above.
+        // Security: the temporary password is read off an admin's screen, so we always
+        // force a password change, whether or not the farmer links Telegram.
+        // The profile row already exists: handle_new_auth_user() (0008) created it.
         try
         {
             await telegramOnboarding.SetMustChangePasswordAsync(
@@ -665,9 +609,7 @@ public static class FarmerOnboardingEndpoints
         }
         catch (Exception ex)
         {
-            // Not worth failing or warning the admin over: the farmer can
-            // still sign in and change their password themselves, and the
-            // account is otherwise complete.
+            // Not worth failing for: the farmer can still sign in and change the password.
             logger.LogWarning(
                 ex,
                 "Could not set must_change_password for {UserId} after onboarding.",
@@ -727,9 +669,7 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
-    // ========================================================================
-    // OPEN-METEO GEOCODING
-    // ========================================================================
+    // Open-Meteo geocoding
 
     private static async Task<
         (string Location, double Latitude, double Longitude)?
@@ -781,9 +721,7 @@ public static class FarmerOnboardingEndpoints
     private static bool ValidCoordinates(double? latitude, double? longitude) =>
         latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180;
 
-    // ========================================================================
-    // EXISTING CREATE FARMER
-    // ========================================================================
+    // Create farmer (older route)
 
     private static async Task<IResult> CreateAsync(
         CreateFarmerRequest request,
@@ -840,11 +778,8 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
-    // ========================================================================
-    // EXISTING INVITE FARMER
-    // ========================================================================
-    // Supabase /auth/v1/invite creates the user and emails them a magic link
-    // to set their own password. Requires SMTP config to actually reach inbox.
+    // Invite farmer (older route). Supabase /auth/v1/invite creates the user and
+    // emails a link to set their own password. Needs SMTP to be configured.
 
     private static async Task<IResult> InviteAsync(
         InviteFarmerRequest request,
@@ -899,9 +834,7 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
-    // ========================================================================
-    // SUPABASE ADMIN CLIENT
-    // ========================================================================
+    // Supabase admin client
 
     private static HttpClient BuildAdminClient(
         IHttpClientFactory httpClientFactory,
@@ -923,9 +856,7 @@ public static class FarmerOnboardingEndpoints
         return client;
     }
 
-    // ========================================================================
-    // SUPABASE CONFIG
-    // ========================================================================
+    // Supabase config
 
     private static (
         string SupabaseUrl,
@@ -951,9 +882,7 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
-    // ========================================================================
-    // CLEANUP HELPERS
-    // ========================================================================
+    // Cleanup helpers
 
     private static async Task TryDeleteAuthUserAsync(
         HttpClient client,

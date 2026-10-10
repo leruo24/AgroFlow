@@ -4,11 +4,9 @@ using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Item 2c: "Why am I seeing this?" for the alerts that go out on Telegram.
-// Built from the same thresholds that fired the alert (the options the
-// services were configured with, and Zone's own health constants), so a
-// changed threshold changes its explanation. Plain words only; the
-// technical line names the rule for admins.
+// "Why am I seeing this?" for the Telegram alerts, built from the same thresholds
+// that fired the alert, so changing a threshold changes its explanation. Plain
+// words only; the technical line names the rule for admins.
 public static class AlertExplanations
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;

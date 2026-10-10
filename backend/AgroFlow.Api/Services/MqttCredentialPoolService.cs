@@ -6,9 +6,8 @@ namespace AgroFlow.Api.Services;
 // A login handed to a board, and where it came from.
 public sealed record MqttCredential(string Username, string Password, MqttCredentialSource Source);
 
-// One row of the admin "MQTT logins" page. Note what is absent: the password.
-// It is never returned by this service to anything except the device that
-// owns it.
+// Security: one row of the admin "MQTT logins" page, without the password. The
+// password only ever goes to the device that owns it.
 public sealed record MqttPoolEntry(
     long Id,
     string Username,
@@ -21,19 +20,10 @@ public sealed record MqttPoolEntry(
 public sealed record MqttPoolSummary(
     IReadOnlyList<MqttPoolEntry> Entries, int FreeCount, int AssignedCount, int BurnedCount, bool RunningLow);
 
-// Hands out the hand-created HiveMQ logins in mqtt_credential_pool
-// (migration 0029).
-//
-// WHY THIS IS NOT JUST A QUERY
-// ----------------------------
-// Assignment has to be exactly-once under concurrency. Two boards claiming
-// within the same second - which happens on an install day when an engineer
-// powers up a batch - must not be handed the same login, because the second
-// board's connection would evict the first from the broker and the two would
-// then fight over the session indefinitely. `for update skip locked` is what
-// makes that impossible: each transaction locks a different row, and a
-// transaction that finds every candidate locked takes the next one rather
-// than blocking.
+// Hands out the hand-created HiveMQ logins in mqtt_credential_pool (0029).
+// Each login must go to exactly one board, even when a batch of boards claims in
+// the same second; two boards on one login would keep kicking each other off the
+// broker. `for update skip locked` gives each transaction a different row.
 public sealed class MqttCredentialPoolService
 {
     private readonly NpgsqlDataSource _dataSource;
@@ -48,21 +38,17 @@ public sealed class MqttCredentialPoolService
         _logger = logger;
     }
 
-    // Resolved per call rather than cached, so rotating Mqtt:PoolEncryptionKey
-    // on Railway takes effect on the next request instead of the next deploy.
+    // Read on every call, so a new Mqtt:PoolEncryptionKey on Railway applies on the
+    // next request instead of the next deploy.
     private byte[] EncryptionKey => MqttPoolSecretBox.ParseKey(_configuration["Mqtt:PoolEncryptionKey"]);
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_configuration["Mqtt:PoolEncryptionKey"]);
 
-    // ------------------------------------------------------------------
-    // CLAIM-TIME ASSIGNMENT
-    // ------------------------------------------------------------------
+    // Claim-time assignment
 
-    // Assigns the oldest free, non-burned login to this device, INSIDE the
-    // caller's claim transaction. Returns null when the pool is empty - the
-    // caller then falls back to the shared credential and raises the alert,
-    // because a claim that fails outright leaves an engineer standing in a
-    // field with a kit that will not enrol.
+    // Gives this device the oldest free, non-burned login, inside the caller's claim
+    // transaction. Returns null when the pool is empty: the caller then uses the shared
+    // login and raises the alert, because a failed claim leaves an installer stuck.
     public async Task<MqttCredential?> AssignToDeviceAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -78,14 +64,10 @@ public sealed class MqttCredentialPoolService
             return null;
         }
 
-        // A re-enrolled or factory-reset board claims again. It must end up
-        // with exactly one login, so an existing assignment is REUSED rather
-        // than a second one taken - otherwise every factory reset would eat
-        // another entry out of a pool that has to be refilled by hand.
-        //
-        // A burned row is excluded: that password is loose in the world and
-        // must be rotated in the HiveMQ console before it is used again, so
-        // the board gets a fresh assignment below instead.
+        // A re-enrolled or factory-reset board claims again and must still have only one
+        // login, so we reuse its existing one instead of using up another pool entry.
+        // Burned rows are skipped: that password is compromised and must be changed in
+        // HiveMQ first, so the board gets a fresh one below.
         await using (var existing = new NpgsqlCommand(
             "select id, username, password_encrypted from mqtt_credential_pool " +
             "where assigned_device_id = $1 and burned_at is null", connection, transaction))
@@ -110,9 +92,8 @@ public sealed class MqttCredentialPoolService
                     return new MqttCredential(username, reused, MqttCredentialSource.Pool);
                 }
 
-                // Undecryptable: the key was rotated without re-pasting the
-                // pool. Fall through and take a fresh entry rather than
-                // handing the board a password we cannot read.
+                // Cannot decrypt: the key changed without re-pasting the pool. Take a fresh entry
+                // instead of giving the board a password we cannot read.
                 _logger.LogError(
                     "Pool entry {Id} is assigned to device {DeviceId} but could not be decrypted - " +
                     "taking a fresh entry instead. Re-paste the pool after rotating Mqtt:PoolEncryptionKey.",
@@ -120,10 +101,7 @@ public sealed class MqttCredentialPoolService
             }
         }
 
-        // Oldest free, non-burned entry. `skip locked` is the part that makes
-        // concurrent claims safe; `limit 1` without it would have two
-        // transactions queue on the same row and the loser would then see it
-        // already assigned.
+        // Oldest free, non-burned entry. `skip locked` makes concurrent claims safe.
         long poolId;
         string poolUsername;
         string poolEncrypted;
@@ -154,10 +132,8 @@ public sealed class MqttCredentialPoolService
             await reader.CloseAsync();
         }
 
-        // Release any login this device held before (a factory-reset board
-        // whose old entry was burned, say), so the one-login-per-device
-        // partial unique index in 0029 cannot be violated by the update
-        // below.
+        // Release any login this device held before (e.g. a burned one after a factory
+        // reset), so 0029's one-login-per-device unique index is not broken by the update below.
         await using (var release = new NpgsqlCommand(
             "update mqtt_credential_pool set assigned_device_id = null, assigned_at = null " +
             "where assigned_device_id = $1 and id <> $2 and burned_at is null", connection, transaction))
@@ -176,9 +152,8 @@ public sealed class MqttCredentialPoolService
 
             if (await assign.ExecuteNonQueryAsync(cancellationToken) == 0)
             {
-                // The row changed under the lock. Should be unreachable with
-                // `for update`, but a claim must never report a login it did
-                // not actually get.
+                // The row changed under the lock. Should not happen with `for update`, but a claim
+                // must never report a login it did not get.
                 _logger.LogWarning(
                     "Pool entry {Id} was taken by another claim before device {DeviceId} could be assigned " +
                     "it; falling back to the shared credential for this claim.", poolId, deviceId);
@@ -190,10 +165,8 @@ public sealed class MqttCredentialPoolService
         var password = TryDecrypt(poolId, poolEncrypted);
         if (password is null)
         {
-            // Assigned but unreadable. The assignment stands - the row is
-            // genuinely spoken for - but this board cannot be given the
-            // password, so it falls back for now and gets the right one on
-            // its next boot once the key is fixed.
+            // Assigned but unreadable: the assignment stays, but the board falls back for now
+            // and gets the right password on its next boot once the key is fixed.
             return null;
         }
 
@@ -203,13 +176,10 @@ public sealed class MqttCredentialPoolService
         return new MqttCredential(poolUsername, password, MqttCredentialSource.Pool);
     }
 
-    // ------------------------------------------------------------------
     // GET /api/devices/mqtt-credentials
-    // ------------------------------------------------------------------
 
-    // The board's own login, or the shared one if it has none. Called on
-    // every boot, which is what makes a password rotation reach the fleet
-    // with no reflash.
+    // The board's own login, or the shared one if it has none. Called on every boot,
+    // so a password change reaches every board without a reflash.
     public async Task<MqttCredential> ResolveForDeviceAsync(
         string deviceId, CancellationToken cancellationToken = default)
     {
@@ -262,13 +232,10 @@ public sealed class MqttCredentialPoolService
         }
     }
 
-    // ------------------------------------------------------------------
-    // ADMIN
-    // ------------------------------------------------------------------
+    // Admin
 
-    // Adds hand-created logins. Returns how many were stored and how many
-    // were already in the pool - pasting the same batch twice is a realistic
-    // accident and must not be an error.
+    // Adds hand-created logins. Returns how many were added and how many were already
+    // there (pasting a batch twice is an easy mistake, not an error).
     public async Task<(int Added, int Duplicates)> AddAsync(
         IEnumerable<(string Username, string Password)> credentials,
         CancellationToken cancellationToken = default)
@@ -294,8 +261,7 @@ public sealed class MqttCredentialPoolService
             else added++;
         }
 
-        // Usernames are safe to log; the password never appears in any log
-        // line in this file.
+        // Security: usernames are safe to log; passwords never appear in any log line here.
         _logger.LogInformation(
             "MQTT login pool: {Added} added, {Duplicates} already present.", added, duplicates);
 
@@ -308,9 +274,8 @@ public sealed class MqttCredentialPoolService
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
-        // password_encrypted is deliberately NOT selected. The admin page has
-        // no use for it, and a value that is never read cannot be leaked by
-        // a logging change or a serialisation mistake later.
+        // Security: password_encrypted is not selected; a value we never read cannot leak
+        // through a later logging or serialisation mistake.
         await using var cmd = new NpgsqlCommand(
             "select p.id, p.username, p.assigned_device_id, p.assigned_at, p.burned_at, p.created_at, " +
             "       h.device_name, z.name " +
@@ -327,9 +292,8 @@ public sealed class MqttCredentialPoolService
             var deviceName = reader.IsDBNull(6) ? null : reader.GetString(6);
             var zoneName = reader.IsDBNull(7) ? null : reader.GetString(7);
 
-            // "assigned to kit X" wants a name a person recognises, so the
-            // zone or device name is preferred over the efuse ID. The ID is
-            // returned separately for the cases where that is what you need.
+            // "assigned to kit X" uses a name people recognise (zone or device name) before
+            // the efuse ID, which is returned separately.
             var kit = zoneName ?? deviceName ?? assignedDeviceId;
 
             var status = burnedAt.HasValue
@@ -354,13 +318,9 @@ public sealed class MqttCredentialPoolService
             MqttCredentialResolution.PoolIsRunningLow(free));
     }
 
-    // Burns and unassigns whatever login a revoked device held.
-    //
-    // Burned rather than returned to the pool: the board that held this
-    // password was just cut off, usually because it was lost or stolen, so
-    // the password has to be treated as known to whoever has the board.
-    // Handing it to the next kit would re-expose the broker. The admin
-    // rotates it in the HiveMQ console and re-adds it as a new row.
+    // Security: burns and unassigns the login a revoked device held. Burned, not
+    // returned to the pool, because the board was probably lost or stolen, so the
+    // password must be treated as known. The admin changes it in HiveMQ and re-adds it.
     public async Task<string?> BurnForDeviceAsync(
         string deviceId, CancellationToken cancellationToken = default)
     {
@@ -386,8 +346,8 @@ public sealed class MqttCredentialPoolService
         return username;
     }
 
-    // Returns null and logs rather than throwing. A single corrupt or
-    // stale-keyed row must not take down the admin page or a claim.
+    // Returns null and logs instead of throwing, so one bad row cannot break the admin
+    // page or a claim.
     private string? TryDecrypt(long poolId, string encrypted)
     {
         try

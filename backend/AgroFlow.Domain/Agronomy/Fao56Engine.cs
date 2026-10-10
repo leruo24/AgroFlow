@@ -7,23 +7,19 @@ using AgroFlow.Business.Agronomy.RuleBook;
 
 namespace AgroFlow.Business.Agronomy
 {
-    // The per-zone daily water balance: the piece that turns FAO-56 into "water
-    // for 4 minutes".
-    //
-    // Deterministic and synchronous. No I/O, no clock, no database - the caller
-    // (Fao56EngineXDB / the hosted service) reads the rows and hands them in, so
-    // this whole file is verifiable against the book offline.
-    //
-    // Equation references are FAO-56 (Allen et al., 1998).
+    // The daily water balance for one zone: turns FAO-56 into "water for 4 minutes".
+    // Synchronous with no I/O, clock or database: the caller passes the rows in, so
+    // the maths can be checked against the book offline.
+    // Equation numbers refer to FAO-56 (Allen et al., 1998).
 
-    // One soil moisture reading as stored: raw as the device sent it.
+    // One soil moisture reading, raw as the device sent it.
     public sealed class ZoneMoistureReading
     {
         public DateTime RecordedAtUtc { get; set; }
         public double RawValue { get; set; }
 
-        // False when the reading failed the spec 3b plausibility checks. Kept in
-        // the list - never dropped - but excluded from every calculation.
+        // False when the reading fails the plausibility checks. It stays in the list
+        // but is left out of every calculation.
         public bool IsValid { get; set; } = true;
     }
 
@@ -34,8 +30,7 @@ namespace AgroFlow.Business.Agronomy
         public string Feel { get; set; } = "moist"; // dry | moist | wet
     }
 
-    // One day of weather for a farm, as weather_daily holds it plus the dht_daily
-    // view's values for the same day.
+    // One day of weather for a farm (weather_daily) plus the dht_daily values for that day.
     public sealed class ZoneWeatherDay
     {
         public DateOnly Date { get; set; }
@@ -69,45 +64,41 @@ namespace AgroFlow.Business.Agronomy
         public double? CalibrationWet { get; set; }
         public double? CalibrationDry { get; set; }
 
-        // The farmer's own trigger levels, in whatever units the zone records them.
+        // The farmer's own trigger levels, in the zone's own units.
         public double? MoistureThreshold { get; set; }
         public double? DesiredMoisture { get; set; }
 
         public double? FarmLatitudeDegrees { get; set; }
         public double? FarmElevationM { get; set; }
 
-        // Today in Africa/Johannesburg, decided by the caller.
+        // Today in SAST, chosen by the caller.
         public DateOnly Today { get; set; }
 
-        // Observed days first, then forecast days. Order does not matter.
+        // Observed and forecast days, in any order.
         public List<ZoneWeatherDay> Weather { get; set; } = new List<ZoneWeatherDay>();
 
-        // Newest last. Raw values.
+        // Raw values, newest last.
         public List<ZoneMoistureReading> Readings { get; set; } = new List<ZoneMoistureReading>();
 
-        // Irrigation actually applied, in mm of depth, per day. The caller derives
-        // mm from runtime_seconds / 60 * flow_rate_lpm / area_m2 so that this file
-        // never has to know about pumps.
+        // Irrigation applied per day, in mm. The caller works out
+        // mm = runtime_seconds / 60 * flow_rate_lpm / area_m2, so this file never deals with pumps.
         public Dictionary<DateOnly, double> IrrigationMmByDay { get; set; } = new Dictionary<DateOnly, double>();
 
-        // The longest single pump run per day (SAST), in seconds. Used only when
-        // the zone has no flow rate or no size, so a watering cannot be turned
-        // into millimetres: a real watering then resets the balance instead
+        // The longest pump run per day (SAST), in seconds. Only used when the zone has
+        // no flow rate or size: a real watering then resets the balance
         // (WaterRules.WateringResetsBalance).
         public Dictionary<DateOnly, double> LongestRunSecondsByDay { get; set; } = new Dictionary<DateOnly, double>();
 
-        // The time "now" for deciding whether the latest reading is
-        // fresh. Null keeps the old behaviour (every reading counts as fresh),
-        // so callers that have not been updated are unaffected.
+        // "Now", for deciding whether the latest reading is fresh. Null means every
+        // reading counts as fresh.
         public DateTime? NowUtc { get; set; }
 
-        // The farmer's own soil checks, newest last. Each corrects the
-        // balance on its day (WaterRules.SoilFeelDepletion).
+        // The farmer's own soil checks, newest last. Each corrects the balance on its
+        // day (WaterRules.SoilFeelDepletion).
         public List<ZoneSoilFeelCheck> SoilFeelChecks { get; set; } = new List<ZoneSoilFeelCheck>();
 
-        // The last persisted end-of-day state immediately before the replay
-        // window. This keeps Dr continuous without querying an unbounded amount
-        // of history on every run. It is derived state, never a weekly reset.
+        // The last saved end-of-day state just before the replay window. It keeps Dr
+        // continuous without loading all history on every run.
         public DateOnly? InitialDepletionDate { get; set; }
         public double? InitialDepletionMm { get; set; }
         public DateOnly? BalanceStartDate { get; set; }
@@ -182,7 +173,7 @@ namespace AgroFlow.Business.Agronomy
         public Fao56EngineCrop? Crop { get; set; }
         public Fao56SoilClass Soil { get; set; } = Fao56EngineReference.DefaultSoil;
 
-        // True when soil_type was not set and the loam default stood in.
+        // True when soil_type was not set and we used loam.
         public bool SoilWasDefaulted { get; set; }
 
         public List<WaterBalanceDay> Days { get; } = new List<WaterBalanceDay>();
@@ -209,8 +200,7 @@ namespace AgroFlow.Business.Agronomy
         public bool CalibrationValid { get; set; }
         public string? SensorModifier { get; set; }
 
-        // Days until Dr reaches RAW, projected on the forecast. Null when there is
-        // no forecast to project onto.
+        // Days until Dr reaches RAW on the forecast. Null when there is no forecast.
         public int? DaysToNextWatering { get; set; }
         public DateOnly? NextWateringDate { get; set; }
 
@@ -223,34 +213,30 @@ namespace AgroFlow.Business.Agronomy
         // Whether the balance could run at all.
         public bool BalanceRan { get; set; }
 
-        // Field names from spec section 7's setup_missing list, farmer-worded.
+        // Missing setup fields, in farmer-friendly words.
         public List<string> MissingSetup { get; } = new List<string>();
 
         public List<string> Limitations { get; } = new List<string>();
         public List<AdviceFact> Facts { get; } = new List<AdviceFact>();
 
-        // ---- Advice is never blocked ---------------------------------------
-
-        // True when there was no planting date and the crop was assumed to be
-        // at peak growth (CropRules.KcWhenStageUnknown). Stage is then
-        // PeakGrowth and DayOfSeason is null.
+        // True when there is no planting date, so we assume peak growth
+        // (CropRules.KcWhenStageUnknown). Stage is then PeakGrowth and DayOfSeason is null.
         public bool StageAssumed { get; set; }
 
-        // True when the latest reading is older than
-        // ConfidenceRules.FreshReadingHours: advice is then from the weather
-        // alone, and the reading is not used to start the balance.
+        // True when the latest reading is older than ConfidenceRules.FreshReadingHours:
+        // the advice then comes from the weather alone.
         public bool ReadingStale { get; set; }
 
-        // How much water to give, as a depth. Always set when the balance ran,
+        // How much water to give, as a depth in mm. Always set when the balance ran,
         // so a zone with no size or flow rate still gets an amount.
         public double? RecommendedDepthMm { get; set; }
 
-        // Minutes per square metre, when the zone's size is unknown but its
-        // flow rate is (WaterRules.MinutesPerSquareMetre).
+        // Minutes per square metre, when the zone's size is unknown but its flow rate
+        // is known (WaterRules.MinutesPerSquareMetre).
         public double? RecommendedMinutesPerSquareMetre { get; set; }
 
-        // True when a watering whose depth could not be measured reset the
-        // balance (WaterRules.WateringResetsBalance).
+        // True when a watering we could not measure reset the balance
+        // (WaterRules.WateringResetsBalance).
         public bool BalanceResetByWatering { get; set; }
 
         // The latest soil check the balance used, if any.
@@ -272,14 +258,13 @@ namespace AgroFlow.Business.Agronomy
     // inputs always give the same advice.
     public static class Fao56Engine
     {
-        // Spec 3b: a raw ADC reading must sit in 0-4095, or 0-100 if the firmware
-        // already converted to a percentage. The current firmware sends a
-        // percentage (see AgroFlowIrrigationNode.ino, readMoisturePercent), but the
-        // column is raw-valued by design so both are accepted.
+        // A raw ADC reading must be in 0-4095, or 0-100 if the firmware already sends a
+        // percentage. The current firmware sends a percentage (readMoisturePercent in
+        // AgroFlowIrrigationNode.ino), but both are accepted.
         public const double MaxAdcReading = 4095.0;
 
-        // How far outside the calibrated range a reading may sit before it is
-        // treated as implausible: 10% of (wet - dry), per spec 3b.
+        // How far outside the calibrated range a reading may be before we treat it as
+        // implausible: 10% of (wet - dry).
         public const double CalibrationToleranceFraction = 0.10;
 
         public static SoilMoistureDomain DetectSensorDomain(
@@ -293,9 +278,8 @@ namespace AgroFlow.Business.Agronomy
                 return wetPercent ? SoilMoistureDomain.RelativePercent : SoilMoistureDomain.LegacyRawAdc;
             }
 
-            // A lone value cannot identify its domain: a legacy ADC can also be
-            // between 0 and 100. Only same-domain wet/dry calibration points make
-            // the distinction safe; otherwise keep and display the raw signal.
+            // A single value cannot tell us its units, because an old ADC value can also
+            // be 0-100. Only wet/dry calibration points in the same units make it safe.
             return SoilMoistureDomain.Unknown;
         }
 
@@ -336,7 +320,7 @@ namespace AgroFlow.Business.Agronomy
                 ZoneName = input.ZoneName,
             };
 
-            // ---- Crop ---------------------------------------------------------
+            // Crop
             var crop = Fao56EngineReference.TryResolveCrop(input.CropType);
             result.Crop = crop;
 
@@ -356,7 +340,7 @@ namespace AgroFlow.Business.Agronomy
                     : "This zone has no planting date, so its growth stage and water need over the season are unknown.");
             }
 
-            // ---- Soil ---------------------------------------------------------
+            // Soil
             var soil = Fao56EngineReference.TryResolveSoil(input.SoilType);
             if (soil == null)
             {
@@ -407,7 +391,7 @@ namespace AgroFlow.Business.Agronomy
                 result.MissingSetup.Add("the farm location");
             }
 
-            // ---- Latest reading and relative moisture -------------------------
+            // Latest reading and relative moisture
             var validReadings = input.Readings
                 .Where(r => r.IsValid && IsPlausibleReading(r.RawValue, input.CalibrationWet, input.CalibrationDry))
                 .OrderBy(r => r.RecordedAtUtc)
@@ -415,8 +399,8 @@ namespace AgroFlow.Business.Agronomy
 
             var latest = validReadings.LastOrDefault();
 
-            // A reading older than a day no longer describes today's
-            // soil. It is still shown, but advice comes from the weather.
+            // A reading older than a day no longer describes today's soil. We still show
+            // it, but the advice comes from the weather.
             if (latest != null && input.NowUtc.HasValue
                 && (input.NowUtc.Value - latest.RecordedAtUtc).TotalHours > ConfidenceRules.FreshReadingHours)
             {
@@ -455,10 +439,9 @@ namespace AgroFlow.Business.Agronomy
                 }
             }
 
-            // Without a crop there is no crop water use at all, so there is no
-            // water balance to run. Say so and stop - do not invent a crop.
-            // Without a planting date the balance still runs, on the assumed
-            // stage (CropRules.KcWhenStageUnknown).
+            // Without a crop there is no crop water use, so no balance to run; we say so
+            // instead of guessing a crop. Without a planting date the balance still runs
+            // on the assumed stage (CropRules.KcWhenStageUnknown).
             if (crop == null)
             {
                 return Finish(input, result, calibrated);
@@ -466,7 +449,7 @@ namespace AgroFlow.Business.Agronomy
 
             result.StageAssumed = !input.PlantingDate.HasValue;
 
-            // ---- Soil water holding ------------------------------------------
+            // Soil water holding
             var rootDepth = SoilWaterBalance.EffectiveRootDepthM(crop.RootDepthM, input.RootDepthLimitM);
             var taw = SoilWaterBalance.TotalAvailableWaterMm(
                 soil.ThetaFieldCapacity, soil.ThetaWiltingPoint, rootDepth);
@@ -496,8 +479,7 @@ namespace AgroFlow.Business.Agronomy
                 "Stage lengths come from FAO-56 Table 11 (" + crop.Table11Row +
                 "), which the book says are indicative only - a real season may run shorter or longer.");
 
-            // A future planting and a completed annual crop are explicit terminal
-            // states. They must never inherit an ordinary Kc watering schedule.
+            // A crop not yet planted or a finished annual crop gets no watering schedule.
             if (input.PlantingDate.HasValue && input.PlantingDate.Value > input.Today)
             {
                 result.PrimaryAction = IrrigationPrimaryAction.CropNotPlanted;
@@ -517,9 +499,8 @@ namespace AgroFlow.Business.Agronomy
                 }
             }
 
-            // ---- Reconstruct actual history in calendar order -----------------
-            // Today's Open-Meteo row is still a forecast. It belongs in the
-            // projection, never in historical truth.
+            // Rebuild past days in calendar order. Today's Open-Meteo row is still a
+            // forecast, so it only goes into the projection.
             var observedByDate = input.Weather
                 .Where(w => !w.IsForecast && w.Date <= input.Today)
                 .GroupBy(w => w.Date)
@@ -546,10 +527,9 @@ namespace AgroFlow.Business.Agronomy
                 .OrderBy(w => w.Date)
                 .ToList();
 
-            // Continue from the persisted day immediately before this bounded
-            // replay. A fresh sensor is deliberately not used as a historical
-            // starting state: doing so would replay old weather after a current
-            // observation. The point sensor remains supporting evidence below.
+            // Continue from the saved day just before this window. We do not start from a
+            // fresh sensor reading, because that would replay old weather on top of today's
+            // observation. The sensor is supporting evidence further down.
             var dr = Math.Max(0.0, Math.Min(taw, input.InitialDepletionMm ?? 0.0));
             if (input.InitialDepletionMm.HasValue)
             {
@@ -568,8 +548,8 @@ namespace AgroFlow.Business.Agronomy
 
                 if (!day.EtoMm.HasValue)
                 {
-                    // Spec 3c fallback 5: carry Dr forward unchanged for at most
-                    // one day, then stop the balance for this zone.
+                    // If weather is missing, carry Dr forward for at most one day, then stop the
+                    // balance for this zone.
                     consecutiveGapDays++;
                     if (consecutiveGapDays > 1)
                     {
@@ -590,8 +570,8 @@ namespace AgroFlow.Business.Agronomy
                 dr = day.DrEndMm!.Value;
                 result.Days.Add(day);
 
-                // The farmer's own soil check on this day corrects the
-                // estimate - the latest one that day wins.
+                // A soil check by the farmer corrects the estimate for that day; the latest
+                // one that day wins.
                 var feel = input.SoilFeelChecks
                     .Where(c => DateOnly.FromDateTime(c.CheckedAtUtc.AddHours(2)) == w.Date)
                     .OrderBy(c => c.CheckedAtUtc)
@@ -603,7 +583,7 @@ namespace AgroFlow.Business.Agronomy
                     result.LatestSoilFeel = feel;
                 }
 
-                // A watering that cannot be measured in mm still counts.
+                // A watering we cannot measure in mm still counts.
                 double runtimeSeconds;
                 if (input.LongestRunSecondsByDay.TryGetValue(w.Date, out runtimeSeconds)
                     && WaterRules.WateringResetsBalance(runtimeSeconds, depthMeasurable))
@@ -632,9 +612,8 @@ namespace AgroFlow.Business.Agronomy
                                 || forecastDays.Count > 0;
             result.DepletionMm = dr;
 
-            // Today's agronomic inputs come from the observed row when it exists,
-            // otherwise from today's forecast row. Forecast rain remains a
-            // projection and does not mutate the historical Dr above.
+            // Today's inputs come from the observed row if there is one, otherwise from
+            // today's forecast. Forecast rain is only used in the projection, never in past Dr.
             var todayWeather = input.Weather
                 .Where(w => w.Date == input.Today)
                 .OrderBy(w => w.IsForecast ? 1 : 0)
@@ -851,9 +830,9 @@ namespace AgroFlow.Business.Agronomy
                     result.DaysToNextWatering = offset;
                 }
 
-                // The projection assumes a recommended irrigation is performed,
-                // solely to avoid showing the same event on every following day.
-                // Only real irrigation_event rows alter the next actual run.
+                // The projection assumes the recommended watering happens, so the same event
+                // is not repeated on every following day. Only real irrigation_event rows
+                // change the actual balance.
                 projected = depth.HasValue ? Math.Max(0.0, postRain - depth.Value) : postRain;
             }
 
@@ -987,7 +966,7 @@ namespace AgroFlow.Business.Agronomy
             }
         }
 
-        // Every way out of Run says how sure it is and names one next step.
+        // Every way out of Run says how sure it is and gives one next step.
         private static ZoneEngineResult Finish(ZoneEngineInput input, ZoneEngineResult result, bool calibrated)
         {
             DateTime? newestAny = input.Readings.Count > 0
@@ -1007,8 +986,8 @@ namespace AgroFlow.Business.Agronomy
                 WeatherAvailable = result.Crop == null ? input.Weather.Count > 0 : result.BalanceRan,
                 LastReadingAtUtc = result.LatestReadingAtUtc ?? newestAny,
 
-                // A soil check by hand in the last day stands in for a
-                // reading - at lower confidence than a set-up sensor.
+                // A hand soil check in the last day stands in for a reading, at lower
+                // confidence than a set-up sensor.
                 ManualCheckFresh = input.NowUtc.HasValue && result.LatestSoilFeel != null
                     && (input.NowUtc.Value - result.LatestSoilFeel.CheckedAtUtc).TotalHours <= ConfidenceRules.FreshReadingHours,
             };
@@ -1027,10 +1006,8 @@ namespace AgroFlow.Business.Agronomy
             return result;
         }
 
-        // One day of the balance.
         // One day of the FAO-56 water balance (Eq. 85): start from yesterday's
-        // dryness, add what the crop used, take off effective rain and
-        // irrigation.
+        // dryness, add what the crop used, take off effective rain and irrigation.
         private static WaterBalanceDay BuildDay(
             ZoneEngineInput input, Fao56EngineCrop crop, Fao56SoilClass soil,
             double taw, double rootDepth, ZoneWeatherDay w, double drPrevious, bool isForecast)
@@ -1080,7 +1057,7 @@ namespace AgroFlow.Business.Agronomy
             }
             else
             {
-                // No planting date - assume peak growth, never a day number.
+                // No planting date: assume peak growth and give no day number.
                 day.DayOfSeason = null;
                 day.Stage = SeasonStage.PeakGrowth;
                 day.Kc = CropRules.KcWhenStageUnknown(crop);
@@ -1101,8 +1078,8 @@ namespace AgroFlow.Business.Agronomy
             day.AdjustedP = adjustedP;
             day.RawMm = SoilWaterBalance.ReadilyAvailableWaterMm(adjustedP, taw);
 
-            // Ks from yesterday's depletion, applied to today's ETc (Eq. 81) - the
-            // order FAO-56's own daily table advances in.
+            // Ks from yesterday's depletion, applied to today's ETc (Eq. 81), the same
+            // order as FAO-56's daily table.
             var ks = SoilWaterBalance.StressCoefficient(drPrevious, taw, day.RawMm.Value, adjustedP);
             day.Ks = ks;
             var etcAdj = SoilWaterBalance.StressAdjustedEtcMm(ks, etc);
@@ -1119,9 +1096,9 @@ namespace AgroFlow.Business.Agronomy
             return day;
         }
 
-        // Did a valid reading on this day reach the wet calibration point? The
-        // probe is resistive, so "wetter" may be a lower or a higher raw number
-        // depending on which way the two calibration points sit.
+        // Did a valid reading on this day reach the wet calibration point? The probe is
+        // resistive, so "wetter" can be a lower or higher raw number depending on the
+        // calibration.
         private static bool WasRefilledOn(ZoneEngineInput input, DateOnly date)
         {
             if (!input.CalibrationWet.HasValue || !input.CalibrationDry.HasValue) return false;

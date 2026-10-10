@@ -1,17 +1,13 @@
-// Every word of in-app page help, in one file, keyed by screen.
-//
-// It lives here rather than inside each screen so that the copy can be reviewed
-// and edited in one pass, by someone who does not read React.
-//
-// COPY RULES (same as the insight messages):
-//   Plain words. No jargon - never Kc, ETo, ETc, depletion, evapotranspiration
-//   or "coefficient". Say what the page shows and what the farmer can do on it,
-//   in two to four short sentences. Friendly, not chatty.
+// All in-app page help, in one file keyed by screen, so the wording can be reviewed and
+// edited in one pass by someone who does not read React.
+// Writing rules (same as the insight messages): plain words, no jargon (never Kc, ETo,
+// ETc, depletion, evapotranspiration or "coefficient"). Say what the page shows and what
+// the farmer can do there, in two to four short sentences. Friendly, not chatty.
 
 export type HelpTopic = {
   readonly title: string;
-  // Two to four short sentences, rendered as separate paragraphs. Readonly
-  // because the content below is `as const` - nothing should mutate the copy.
+  // Two to four short sentences, shown as separate paragraphs. Readonly because the content
+  // below is `as const`.
   readonly body: readonly string[];
 };
 

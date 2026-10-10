@@ -3,48 +3,27 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-// Historical weather backfill from Open-Meteo's ARCHIVE endpoint (ERA5
-// reanalysis), as opposed to the forecast endpoint WeatherCollectionService
-// uses for the rolling window.
-//
-// ############################################################
-// #  THIS IS NOT WIRED TO ANYTHING AND DOES NOT RUN BY ITSELF #
-// ############################################################
-//
-// It is registered as a plain singleton, NOT as an IHostedService, and nothing
-// calls RunAsync. That is deliberate: the overnight brief said write the
-// routine but do not run it, because weather_daily does not exist in the live
-// database yet - migration 0016 is still waiting to be pasted into the
-// Supabase SQL editor.
-//
-// TO ACTUALLY RUN IT, once 0016 has been applied:
-//   1. Confirm the table exists:  select count(*) from weather_daily;
-//   2. Resolve this service from DI and await RunAsync(farmId, start, end, ct)
-//      - either from a temporary admin-only endpoint or from a one-off
-//        console harness.
-//   3. Check what landed:
-//        select date, tmin_c, tmax_c, precipitation_mm, is_forecast, source
-//          from weather_daily where farm_id = <id> order by date;
-//
-// Why backfill at all: the advice engine only needs today, but anything that
-// wants to show a farmer how this season compares to last, or to compute
-// seasonal ETc totals, needs history that no live sensor can provide
-// retroactively.
+// Historical weather backfill from Open-Meteo's archive endpoint (ERA5 reanalysis),
+// not the forecast endpoint WeatherCollectionService uses.
+// It is a plain singleton, not a hosted service, so it never runs by itself;
+// WeatherBackfillStartupService runs it when Weather:BackfillDays is set.
+// To check what landed:
+//   select date, tmin_c, tmax_c, precipitation_mm, is_forecast, source
+//     from weather_daily where farm_id = <id> order by date;
+// History lets us compare seasons and add up seasonal ETc, which live sensors cannot
+// provide after the fact.
 public class WeatherBackfillService
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WeatherBackfillService> _logger;
 
-    // Open-Meteo's archive serves long ranges in one request, but a decade in
-    // a single call is a large response to hold in memory and a large
-    // transaction to replay if it fails halfway. Chunking also means a failure
-    // costs one year, not the whole run.
+    // One year per request: a decade in one call is a big response to hold, and a
+    // failure then only costs one year.
     private const int ChunkDays = 365;
 
-    // ERA5 reanalysis lags real time by roughly five days. Asking for
-    // yesterday from the archive returns nulls; that window belongs to the
-    // forecast endpoint's past_days instead.
+    // ERA5 lags real time by about five days, so recent days come from the forecast
+    // endpoint's past_days instead.
     private const int ArchiveLagDays = 5;
 
     public WeatherBackfillService(
@@ -115,12 +94,8 @@ public class WeatherBackfillService
 
                 var json = await response.Content.ReadAsStringAsync(ct);
 
-                // treatAllAsActuals: every row from the archive endpoint is an
-                // observation-based reanalysis value, never a prediction, even
-                // though some of these dates would look like "the future"
-                // relative to nothing in particular. Marking them is_forecast
-                // would make the collector's upsert guard refuse to let real
-                // forecasts replace them later.
+                // treatAllAsActuals: archive rows are observations, never predictions. Marking them
+                // as forecasts would stop the collector's upsert from replacing them later.
                 var rows = OpenMeteoDailyParser.Parse(json, chunkStart, treatAllAsActuals: true);
 
                 var written = 0;
@@ -149,9 +124,8 @@ public class WeatherBackfillService
 
             chunkStart = chunkEnd.AddDays(1);
 
-            // Open-Meteo's free tier is generous but not unlimited, and a
-            // multi-year backfill is exactly the shape of request that looks
-            // like abuse. Be a good citizen of a service that costs us nothing.
+            // Pause between requests: Open-Meteo is free, and a multi-year backfill looks like
+            // abuse if sent all at once.
             await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
 
@@ -194,8 +168,8 @@ public class WeatherBackfillService
         return total;
     }
 
-    // Archive rows are actuals, so this upsert has no is_forecast guard: an
-    // actual may always replace whatever is there.
+    // Archive rows are actuals, so this upsert has no is_forecast guard: an actual may
+    // always replace what is there.
     private static async Task UpsertAsync(
         NpgsqlConnection connection, long farmId, WeatherDailyRow row, CancellationToken ct)
     {

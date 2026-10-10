@@ -5,33 +5,15 @@ using System.Linq;
 namespace AgroFlow.Business
 {
     // The sensor types AgroFlow accepts, in one place.
-    //
-    // WHY THIS EXISTS
-    // ---------------
-    // sensor_reading.sensor_type has carried a CHECK constraint allowing
-    // exactly SoilMoisture/Temperature/Humidity since
-    // 0002_relationships.sql, and SensorReadingEndpoints has had the same
-    // three in a private array since it was written. The MQTT subscriber had
-    // no list at all: it passed whatever sensorType arrived in the payload
-    // straight into the insert.
-    //
-    // That was survivable while the firmware only ever published
-    // SoilMoisture. v1.3.0 publishes Temperature and Humidity from the DHT11
-    // as well, on the same topic and in the same {"sensorType","value"}
-    // shape, so the subscriber's behaviour on the other two values now
-    // matters. Both are already allowed by the constraint, so no migration
-    // is needed - but an unrecognised value would reach Postgres, violate
-    // the CHECK, and surface as a logged exception per message rather than
-    // as the "ignored one bad message" it actually is.
-    //
-    // Additive by design: this widens nothing and forbids nothing that the
-    // database did not already forbid. It gives the two transports one list
-    // to agree on, and gives the subscriber a cheap, clear rejection before
-    // the insert.
+    // sensor_reading.sensor_type has a CHECK constraint allowing exactly
+    // SoilMoisture/Temperature/Humidity (0002). The HTTP endpoint and the MQTT subscriber
+    // both check against this list, so an unknown type is rejected cleanly before the
+    // insert instead of failing the CHECK and logging an exception per message.
+    // It allows nothing the database does not already allow.
     public static class SensorReadingTypes
     {
-        // Soil moisture, as a percentage. The ONLY type that drives watering
-        // decisions - see SensorReadingProcessor.
+        // Soil moisture as a percentage: the only type that drives watering decisions (see
+        // SensorReadingProcessor).
         public const string SoilMoisture = "SoilMoisture";
 
         // Air temperature in degrees Celsius, from the DHT11 on pin 27.
@@ -40,24 +22,20 @@ namespace AgroFlow.Business
         // Relative humidity as a percentage, from the same DHT11.
         public const string Humidity = "Humidity";
 
-        // Order matches the CHECK constraint in 0002_relationships.sql. If a
-        // fourth type is ever added, the constraint has to be extended in the
-        // same migration that extends this array.
+        // Same order as the CHECK constraint in 0002. Adding a fourth type means extending the
+        // constraint in the same migration.
         public static readonly string[] All = { SoilMoisture, Temperature, Humidity };
 
-        // Case-sensitive on purpose. The constraint is case-sensitive, so
-        // accepting "temperature" here would simply move the failure to
-        // Postgres. The firmware sends the exact strings above.
+        // Case-sensitive, like the constraint; accepting "temperature" here would only move
+        // the failure to Postgres. The firmware sends the exact strings above.
         public static bool IsValid(string? sensorType)
         {
             return sensorType != null && All.Contains(sensorType);
         }
 
-        // True for the one type that is allowed to start or stop a pump.
-        // Temperature and Humidity are stored and feed zone health, the
-        // FAO-56 engine and the Kit screen's sensor readout, but must never
-        // reach the irrigation decision - a hot afternoon is not a reason to
-        // open a valve.
+        // True for the one type allowed to start or stop a pump. Temperature and Humidity
+        // feed zone health, the engine and the Kit screen, but never the irrigation decision:
+        // a hot afternoon is no reason to open a valve.
         public static bool DrivesIrrigation(string? sensorType)
         {
             return sensorType == SoilMoisture;

@@ -1,17 +1,11 @@
 namespace AgroFlow.Api.Reports;
 
-/// The single-zone water usage PDF.
-///
-/// Item 3 replaced the three-page designed layout with the action report
-/// (ActionReportPdf): "This week, do this" first, the period described by its
-/// real length, weekly charts past two weeks, jargon only in the appendix.
-/// This name stays because callers and tests know it; it renders exactly what
-/// the endpoints render.
+/// The single-zone water usage PDF, rendered as the action report (ActionReportPdf).
+/// The class name is kept because callers and tests use it.
 internal static class DesignedWaterUsagePdf
 {
-    /// On every page, deliberately. A reader who only has one page in their
-    /// hand still has to know the litres are inferred - there is no flow
-    /// meter on any AgroFlow node.
+    /// On every page, so even a single page says the litres are estimates: there is
+    /// no flow meter on any AgroFlow node.
     internal const string EstimateNote =
         "Litres are estimated (pump running time × flow rate). " +
         "Soil moisture is relative to this zone's setup.";

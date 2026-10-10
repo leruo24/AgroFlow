@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace AgroFlow.Business
 {
-    /// <summary>What the public "Get a call back" form sends (item 6c).</summary>
+    /// <summary>What the public "Get a call back" form sends.</summary>
     public sealed class EnquiryForm
     {
         public string? FullName { get; set; }
@@ -25,8 +25,8 @@ namespace AgroFlow.Business
         public string? Website { get; set; }
     }
 
-    // Item 6c: the rules behind the public enquiry form and the call log.
-    // Pure, so every check is tested without a database.
+    // The rules behind the public enquiry form and the call log. Pure, so every check is
+    // tested without a database.
     public static class EnquiryRules
     {
         public static readonly string[] Provinces =

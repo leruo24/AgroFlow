@@ -1,11 +1,9 @@
-/* Item 6c: the Enquiries tab on Requests - people interested in AgroFlow who
-   asked for a call back from the landing page or the app's login screen.
-
-   [I'll handle this] → [Log call] → an outcome. "Wants AgroFlow" offers
-   [Start onboarding]; "Call back later" sets a reminder that shows on Home
-   when due; three "No answer"s suggest closing; "Not interested" needs a
-   reason. An enquiry that has ended can have its personal details deleted
-   (POPIA), keeping what the statistics need. Every step is on the record. */
+/* The Enquiries tab on Requests: people interested in AgroFlow who asked for a call back
+ * from the landing page or the app's login screen.
+ * [I'll handle this] → [Log call] → an outcome. "Wants AgroFlow" offers [Start onboarding];
+ * "Call back later" sets a reminder that shows on Home when due; three "No answer"s suggest
+ * closing; "Not interested" needs a reason. A finished enquiry can have its personal details
+ * deleted (POPIA), keeping what the statistics need. Every step is recorded. */
 
 import { badge } from "@/ui/components";
 import { ZONE_CROPS } from "@/data/referenceData";

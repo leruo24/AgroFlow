@@ -4,20 +4,16 @@ import { useTheme } from '@/context/ThemeContext';
 import { createZoneInsightsStyles } from '@/styles/zoneInsightsStyles';
 
 type Props = {
-  // Farmer-facing stage name: Establishing, Growing, Peak growth,
-  // Nearing harvest or Season complete. The engine supplies it already
-  // translated - no FAO stage names reach this component.
+  // Farmer-facing stage name: Establishing, Growing, Peak growth, Nearing harvest or Season
+  // complete, already translated by the engine.
   stage: string | null | undefined;
   dayOfSeason: number | null | undefined;
   totalDays: number | null | undefined;
   cropLabel?: string | null;
 };
 
-// "Peak growth, day 62 of 140" with a progress bar.
-//
-// Renders nothing at all when the planting date is unknown, rather than a bar at
-// zero: an empty bar reads as "the season has not started", which is a claim the
-// app cannot make.
+// "Peak growth, day 62 of 140" with a progress bar. Renders nothing when the planting date
+// is unknown: an empty bar would wrongly say the season has not started.
 export function ZoneGrowthBar({ stage, dayOfSeason, totalDays, cropLabel }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneInsightsStyles(colors), [colors]);

@@ -32,15 +32,14 @@ namespace AgroFlow.Business
         #endregion
 
         #region Methods
-        // override: a Pump's "value" is its flow rate while running, else 0.
+        // override: a pump's value is its flow rate while running, otherwise 0.
         public override float ReadValue()
         {
             return isRunning ? flowRate : 0f;
         }
 
-        // override: a Pump is only "working" if it's online AND actually pumping
-        // when it's meant to - a slightly stricter check than the base version,
-        // showing that IsWorking is genuinely polymorphic, not just inherited.
+        // override: a pump only counts as working if it is online and pumping when
+        // it should be, a stricter check than the base class (Notes 2.4).
         public override bool IsWorking()
         {
             return status == "Online" || status == "Running";

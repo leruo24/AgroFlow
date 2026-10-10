@@ -20,12 +20,9 @@ const FEELS: { key: SoilFeel; label: string; hint: string }[] = [
   { key: 'wet', label: 'Wet', hint: 'Sticky, water on your finger' },
 ];
 
-// Item 6: "I watered" and "How does the soil feel?" - for a farm with no kit,
-// or a kit that is offline. Both count in today's advice, are labelled as
-// entered by hand, and show in reports and the history.
-//
-// The request goes through the single-flight write path, so a double tap
-// logs one watering, not two. The buttons are also disabled while it runs.
+// "I watered" and "How does the soil feel?" for a farm without a kit, or with an offline
+// kit. Both count in today's advice, are marked as entered by hand, and show in reports
+// and history. It uses the single-flight write path, so a double tap logs one watering.
 export function ManualLogSheet({ zoneId, zoneName, mode, onClose, onSaved }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);

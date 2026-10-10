@@ -9,31 +9,18 @@ using QuestPDF.Infrastructure;
 namespace AgroFlow.Api.Endpoints;
 
 /// The platform summary as a PDF.
-///
-/// WHY THIS IS SERVER-SIDE
-/// The .xlsx export is built in the browser from what the console already
-/// fetched, which is right for a spreadsheet - it is the same data the admin
-/// is looking at. A PDF is different: it gets printed, filed and attached to
-/// an email, so it has to carry its own figures, its own timestamp and the
-/// name of whoever produced it. Rebuilding it from SQL means the document can
-/// be trusted on its own, away from the session that asked for it.
-///
-/// Everything here is a read. The SQL is the same aggregates the console
-/// shows, counted in the database rather than over a fetched list, so a
-/// summary of three hundred farms is one query rather than three hundred
-/// rows crossing the wire.
+/// Built on the server (unlike the browser-built .xlsx) because a PDF gets printed
+/// and filed, so it carries its own figures, timestamp and author.
+/// All reads; the counts are done in SQL, so 300 farms is still one query.
 public static class AdminSummaryEndpoints
 {
-    /// UTC+2, no DST. Every date on the page is stamped in it, because the
-    /// person reading the PDF is in South Africa and "14:05" has to mean
-    /// what their watch says.
+    /// SAST (UTC+2, no daylight saving): every date on the page uses it.
     private static readonly TimeSpan Sast = TimeSpan.FromHours(2);
 
     public static void MapAdminSummaryEndpoints(this WebApplication app)
     {
-        // AdminOnlyFilter, not just RequireAuthorization: a farmer holds a
-        // valid token too, and this document lists every farm on the
-        // platform with its owner's name.
+        // Security: AdminOnlyFilter, not just RequireAuthorization, because farmers have
+        // valid tokens too and this lists every farm with its owner.
         app.MapGet("/api/admin/summary.pdf", GetSummaryPdfAsync)
             .RequireAuthorization()
             .AddEndpointFilter<AdminOnlyFilter>();
@@ -113,9 +100,7 @@ public static class AdminSummaryEndpoints
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Never a bare 500. The diagnosis goes in the log where it can be
-            // acted on; the admin gets a sentence, because "500" tells them
-            // nothing they can do anything about.
+            // Never a bare 500: the details go to the log and the admin gets a sentence.
             var diagnosis = ex is PostgresException pg
                 ? pg.SqlState switch
                 {
@@ -154,15 +139,9 @@ public static class AdminSummaryEndpoints
     private static async Task<SummaryCounts> ReadCountsAsync(
         NpgsqlConnection connection, CancellationToken ct)
     {
-        // One round trip. Each scalar subquery is independent, so the planner
-        // runs them once; doing this as nine queries would be nine times the
-        // latency for the same answer.
-        //
-        // Archiving is farm.status = 'Inactive' (migration 0036), not an
-        // `archived` flag - there is no such column. The comparison is
-        // lower()'d because farm.status has never had a CHECK constraint and
-        // both 'Active' and 'active' exist in the live data; 0036 explains
-        // why the rows were not rewritten.
+        // One round trip with independent scalar subqueries.
+        // Archived farms have status = 'Inactive' (0036). We compare with lower() because
+        // the live data has both 'Active' and 'active'.
         const string sql = """
             select
               (select count(*) from farm where lower(coalesce(status, 'Active')) <> 'inactive'),
@@ -190,10 +169,7 @@ public static class AdminSummaryEndpoints
     private static async Task<List<FarmLine>> ReadFarmsAsync(
         NpgsqlConnection connection, CancellationToken ct)
     {
-        // Archived farms (status 'Inactive', case-insensitively - see 0036)
-        // are left out for the same reason the console's lists leave them
-        // out: they are retired, and a summary that counts them reads as a
-        // platform twice the size it is.
+        // Archived farms ('Inactive', any case, see 0036) are left out, like the console's lists.
         const string sql = """
             select f.name,
                    coalesce(nullif(p.name, ''), p.email, 'No owner on file'),
@@ -300,10 +276,8 @@ public static class AdminSummaryEndpoints
 
         if (c.FarmersWithoutTelegram > 0)
         {
-            // Called out rather than left as a number in a list: these
-            // farmers receive nothing at all - no weather warning, no
-            // equipment failure, no password reset - and nobody finds out
-            // until something urgent fails to arrive.
+            // Shown as its own line, not just a number: these farmers get no messages at all,
+            // not even urgent ones.
             col.Item().Text(
                 $"{c.FarmersWithoutTelegram} farmer account(s) have no Telegram connection, so they " +
                 "currently receive no alerts of any kind.")

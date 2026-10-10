@@ -4,9 +4,8 @@ using System.Text;
 
 namespace AgroFlow.Api.Reports;
 
-/// The cell treatments the reports use. The order matters: each one is an
-/// index into the `cellXfs` list written in styles.xml below, so inserting a
-/// value in the middle re-styles every sheet.
+/// The cell styles the reports use. Order matters: each one is an index into
+/// the `cellXfs` list in styles.xml below.
 internal enum XlsxStyle
 {
     Normal = 0,
@@ -24,16 +23,9 @@ internal enum XlsxStyle
     TotalInteger = 12,
 }
 
-/// A minimal .xlsx writer.
-///
-/// WHY THIS EXISTS RATHER THAN A PACKAGE
-/// The brief allows exactly one new dependency, spent on exceljs in the admin
-/// console. The API has no spreadsheet library and may not gain one, but the
-/// farmer's report has a workbook half (agroflow-data-template.xlsx) that has
-/// to come from the same place as the PDF so the two cannot disagree.
-///
-/// An .xlsx is a zip of XML parts, and the subset needed for "several sheets
-/// of labelled numbers" is small enough to write honestly:
+/// A small .xlsx writer, because the API has no spreadsheet library and the
+/// workbook must come from the same place as the PDF.
+/// An .xlsx is a zip of XML parts:
 ///
 ///   [Content_Types].xml   what each part is
 ///   _rels/.rels           points at the workbook
@@ -42,30 +34,17 @@ internal enum XlsxStyle
 ///   xl/styles.xml         fonts, fills and number formats
 ///   xl/worksheets/*.xml   the cells
 ///
-/// Strings are written INLINE (`t="inlineStr"`) rather than through a shared
-/// string table. A shared table is how real spreadsheets deduplicate text,
-/// and it is the single most fiddly part of the format - every cell becomes
-/// an index that must stay in step. These sheets have a few hundred cells, so
-/// the saving is irrelevant and the risk is not.
+/// Strings are written inline (`t="inlineStr"`) instead of through a shared string
+/// table, which is the fiddliest part of the format and saves nothing at our size.
 internal static class XlsxWriter
 {
     internal sealed record Cell(string? Text, double? Number, XlsxStyle Style, string? Formula = null)
     {
         /// A live Excel formula, written without its leading `=`.
-        ///
-        /// WHY ANY FORMULA AT ALL
-        /// The sheet states that litres are pump minutes times the flow rate.
-        /// Written as a value, that is a claim the reader has to take on
-        /// trust and cannot correct: a farmer who measures their pump at 1.3
-        /// L/min instead of the 1.5 on file has to redo every row by hand.
-        /// Written as a formula, they change the flow rate on the Summary
-        /// sheet and the whole workbook follows.
-        ///
-        /// No cached <v> is written alongside, so Excel calculates on open.
-        /// That is correct for Excel and LibreOffice; a plain XML reader that
-        /// does not evaluate formulas sees an empty cell, which is why the
-        /// columns somebody is most likely to script against - the totals -
-        /// stay values.
+        /// Litres are minutes x flow rate as a formula, so a farmer can change the flow rate
+        /// on the Summary sheet and every row follows.
+        /// No cached <v> is written, so Excel calculates on open. A plain XML reader sees an
+        /// empty cell, which is why the totals stay values.
         public static Cell Calc(string formula, XlsxStyle style) =>
             new(null, null, style, formula);
 
@@ -73,10 +52,8 @@ internal static class XlsxWriter
 
         public static Cell Of(double value, XlsxStyle style = XlsxStyle.Normal) => new(null, value, style);
 
-        /// A missing value. Deliberately an empty cell rather than a 0 or a
-        /// dash: a spreadsheet is going to be summed and averaged, and a 0
-        /// standing in for "no estimate" would silently drag both down. Blank
-        /// is what Excel's own AVERAGE ignores.
+        /// A missing value: an empty cell, not 0 or a dash, because a 0 would drag sums and
+        /// averages down. Excel's AVERAGE skips blanks.
         public static Cell Blank() => new(null, null, XlsxStyle.Normal);
 
         public static Cell Maybe(double? value, XlsxStyle style) =>
@@ -123,16 +100,14 @@ internal static class XlsxWriter
         var entry = zip.CreateEntry(path, CompressionLevel.Optimal);
         using var stream = entry.Open();
 
-        // UTF-8 with NO byte order mark. Excel treats a BOM at the head of an
-        // XML part as content and refuses to open the file at all, which is
-        // the opposite of the CSV case where the BOM is what makes it work.
+        // UTF-8 without a byte order mark: Excel refuses to open an XML part that starts
+        // with one.
         using var writer = new StreamWriter(stream, new UTF8Encoding(false));
         writer.Write(xml);
     }
 
-    /// XML's five predefined entities. A farm called "Smith & Son" writes a
-    /// bare ampersand into a cell otherwise, and Excel rejects the entire
-    /// workbook as corrupt rather than skipping that one cell.
+    /// XML's five predefined entities. A bare & ("Smith & Son") makes Excel reject the
+    /// whole workbook as corrupt.
     private static string E(string? text)
     {
         return ReportText.Clean(text)
@@ -143,9 +118,8 @@ internal static class XlsxWriter
             .Replace("'", "&apos;");
     }
 
-    /// Excel forbids : \ / ? * [ ] in a sheet name and caps it at 31
-    /// characters. A zone called "North / Seedlings" would otherwise produce a
-    /// file that will not open - and a zone name is user input.
+    /// Excel forbids : \ / ? * [ ] in sheet names and caps them at 31 characters, and
+    /// zone names are user input ("North / Seedlings").
     private static string SafeSheetName(string name)
     {
         var cleaned = new string(name.Select(c => ":\\/?*[]".Contains(c) ? ' ' : c).ToArray());
@@ -213,9 +187,8 @@ internal static class XlsxWriter
                 $"<Relationship Id=\"rId{i}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{i}.xml\"/>");
         }
 
-        // The style part is a relationship of the workbook too, numbered
-        // after the sheets. Leaving it out does not fail loudly - Excel opens
-        // the file with every cell unstyled, which looks like a layout bug.
+        // The styles part is also a workbook relationship, numbered after the sheets.
+        // Without it Excel opens the file with every cell unstyled.
         sb.Append(CultureInfo.InvariantCulture,
             $"<Relationship Id=\"rId{sheetCount + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>");
 
@@ -223,8 +196,7 @@ internal static class XlsxWriter
         return sb.ToString();
     }
 
-    /// The colours match the PDF's header and tables, so the two halves of
-    /// the report look like one thing. ARGB, no hash - Excel's own notation.
+    /// The colours match the PDF's header and tables. ARGB without a hash, Excel's notation.
     private static string Styles()
     {
         const string brand = "FF184D35";
@@ -234,8 +206,7 @@ internal static class XlsxWriter
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.Append("<styleSheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
 
-        // 164 is the first id available for a custom format; 0-163 are
-        // reserved by the spec for the built-ins.
+        // 164 is the first id for a custom format; 0-163 are reserved for built-ins.
         sb.Append("<numFmts count=\"1\"><numFmt numFmtId=\"164\" formatCode=\"0.0\"/></numFmts>");
 
         sb.Append("<fonts count=\"5\">");
@@ -247,8 +218,7 @@ internal static class XlsxWriter
         sb.Append("<font><sz val=\"10\"/><name val=\"Calibri\"/><color rgb=\"FF6B7A72\"/></font>");
         sb.Append("</fonts>");
 
-        // Fills 0 and 1 are mandated by the spec and must be exactly these
-        // two, in this order, even though nothing references fill 1.
+        // Fills 0 and 1 are required by the spec, in this order, even though nothing uses fill 1.
         sb.Append("<fills count=\"4\">");
         sb.Append("<fill><patternFill patternType=\"none\"/></fill>");
         sb.Append("<fill><patternFill patternType=\"gray125\"/></fill>");
@@ -261,7 +231,7 @@ internal static class XlsxWriter
         sb.Append("<borders count=\"1\"><border><left/><right/><top/><bottom/><diagonal/></border></borders>");
         sb.Append("<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>");
 
-        // The order here IS the XlsxStyle enum. See the note on it.
+        // The order here is the XlsxStyle enum; see the note on it.
         sb.Append("<cellXfs count=\"13\">");
         sb.Append("<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>");                                        // Normal
         sb.Append("<xf numFmtId=\"0\" fontId=\"2\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyFont=\"1\"/>");                        // Title
@@ -283,8 +253,7 @@ internal static class XlsxWriter
         return sb.ToString();
     }
 
-    /// A1, B1 … Z1, AA1. Excel addresses columns in base-26 with no zero,
-    /// which is why this is a loop and not a division.
+    /// A1, B1 ... Z1, AA1: Excel columns are base 26 with no zero, so this is a loop.
     private static string ColumnName(int index)
     {
         var name = string.Empty;
@@ -336,10 +305,8 @@ internal static class XlsxWriter
                 }
                 else if (cell.Number is { } number)
                 {
-                    // "R" round-trips, and InvariantCulture keeps the decimal
-                    // point a point. A comma here is not a formatting nicety:
-                    // Excel reads the cell as text and every total silently
-                    // stops adding it up.
+                    // "R" round-trips, and InvariantCulture keeps the decimal point. With a comma
+                    // Excel reads the cell as text and totals stop adding it.
                     sb.Append(CultureInfo.InvariantCulture,
                         $"<c r=\"{reference}\" s=\"{style}\"><v>{number.ToString("R", CultureInfo.InvariantCulture)}</v></c>");
                 }

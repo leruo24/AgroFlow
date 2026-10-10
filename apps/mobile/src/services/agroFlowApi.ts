@@ -6,9 +6,8 @@ import {
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-/* The sentence to show for a refused or failed call (Part 2). The API sends
-   its sentence as `error` or `message` in JSON; this used to show the raw
-   body, so the farmer read {"error":"..."} on screen. */
+/* The sentence to show for a refused or failed call. The API sends it as `error` or
+ * `message` in JSON, so we pull it out instead of showing raw JSON. */
 export function errorMessage(text: string, fallback: string): string {
   try {
     const problem = JSON.parse(text) as Record<string, unknown>;
@@ -37,15 +36,14 @@ function resolveApiBase() {
 
   const port = process.env.EXPO_PUBLIC_AGROFLOW_API_PORT ?? '5080';
 
-  // Expo web does not always populate expoConfig.hostUri. The browser's own
-  // host is the reliable address when Metro and the API run on the same PC.
+  // Expo web does not always set expoConfig.hostUri. The browser's own host is reliable when
+  // Metro and the API run on the same PC.
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     return `http://${window.location.hostname}:${port}`;
   }
 
-  // In Expo development, hostUri is the Metro server address advertised to
-  // the phone (for example 192.168.1.20:8081). Reusing that host avoids
-  // hardcoding a LAN IP that changes when the developer changes network.
+  // In Expo development, hostUri is the Metro address shown to the phone (e.g.
+  // 192.168.1.20:8081). Reusing that host avoids hardcoding a LAN IP that changes with the network.
   const expoHostUri =
     Constants.expoConfig?.hostUri;
 
@@ -92,9 +90,8 @@ export type CurrentWeatherResponse = {
   };
 };
 
-/* Every authorised call. READS go straight through; an identical WRITE that
-   is already in flight is shared rather than sent twice - see
-   lib/singleFlight.ts, and "Water now" for why it matters. */
+/* Every authorised call. Reads go straight through; an identical write already in flight is
+ * shared instead of sent twice (see lib/singleFlight.ts). */
 function authorizedRequest<T>(
   path: string,
   init?: RequestInit
@@ -180,9 +177,7 @@ async function sendAuthorizedRequest<T>(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Item 6c: "Not a farmer on AgroFlow yet? Ask for a call" - no login.
-// ---------------------------------------------------------------------------
+// "Not a farmer on AgroFlow yet? Ask for a call" (no login).
 
 export type EnquiryInput = {
   fullName: string;
@@ -292,10 +287,8 @@ export function fetchTelegramLinkStatus() {
   );
 }
 
-/* Generates this farmer's own single-use link code and returns the t.me deep
-   link for it. This is how farmers who were onboarded before Telegram existed
-   connect themselves: they are already holding the phone, so tapping the link
-   opens the bot with the code filled in - no QR code and no admin needed. */
+/* Creates this farmer's own single-use link code and returns the t.me link. They are
+ * holding the phone, so the link opens the bot with the code filled in: no QR, no admin. */
 export function requestTelegramLinkCode() {
   return authorizedRequest<TelegramCode>(
     '/api/telegram/me/code',
@@ -329,10 +322,9 @@ export function disconnectTelegram() {
   );
 }
 
-/* Clears the forced-password-change flag after the farmer has actually set
-   their own password. The flag lives server-side and is not client-writable
-   (migration 0024 withholds the column grant on purpose), so this is the only
-   way off the forced-change screen. */
+/* Clears the forced-password-change flag after the farmer has set their own password.
+ * Security: the flag is server-side and clients cannot write it (migration 0024), so this is
+ * the only way off the forced-change screen. */
 export function confirmPasswordChanged() {
   return authorizedRequest<void>(
     '/api/farmer/password-changed',
@@ -343,19 +335,13 @@ export function confirmPasswordChanged() {
   );
 }
 
-/* Self-service password recovery, delivered over Telegram.
-
-   This endpoint is anonymous - a farmer who has forgotten their password
-   cannot authenticate to ask for a new one - so it is the one call here that
-   does not go through authorizedRequest.
-
-   The response is deliberately identical whether the address exists, has no
-   Telegram connected, or was rate limited. The screen must not try to be more
-   helpful than that: telling the farmer "no such account" would tell anyone
-   else the same thing about any address they cared to try. */
+/* Password recovery over Telegram. Anonymous, because a farmer who forgot their password
+ * cannot log in, so this is the one call that skips authorizedRequest.
+ * Security: the response is the same whether the address exists, has no Telegram, or was
+ * rate limited. The screen must not say more, or anyone could test which emails are real. */
 export function requestPasswordReset(email: string): Promise<string> {
-  // Keyed on the address as typed-and-trimmed: two taps of Send for the same
-  // email are one reset, and one Telegram message, not two.
+  // Keyed on the trimmed address: two taps of Send for the same email are one reset and one
+  // Telegram message.
   return singleFlight(
     writeKey('POST', '/api/auth/forgot-password', email.trim().toLowerCase()),
     () => sendPasswordReset(email)
@@ -444,18 +430,12 @@ export function createFarmerServiceRequest(
   );
 }
 
-// ---------------------------------------------------------------------------
-// FAO-56 insight engine (migration 0027).
-//
-// These are NEW endpoints in a NEW backend file. Luba's
-// PUT /api/farmer/zones/{id}/settings is in flight and is deliberately not
-// extended - the soil type has its own endpoint.
-// ---------------------------------------------------------------------------
+// FAO-56 insight engine endpoints (migration 0027). The soil type has its own endpoint.
 
 export type ZoneSoilType = 'sandy' | 'loam' | 'clay';
 
-// Item 2c: "Why am I seeing this?", built on the server by the same rule that
-// produced the message. `technical` never reaches a farmer's app.
+// "Why am I seeing this?", built on the server by the same rule that produced the message.
+// `technical` never reaches the farmer's app.
 export type ExplanationFact = { label: string; value: string; source: string };
 export type Explanation = {
   summary: string;
@@ -470,16 +450,13 @@ export type ZoneInsight = {
   insightType: string;
   severity: 'act_now' | 'heads_up' | 'info';
   message: string;
-  // Optional: rows written before explanations existed have none.
+  // Optional: older rows have no explanation.
   explanation?: Explanation | null;
 };
 
-// How far through its season this zone's crop is.
-//
-// Null whenever the crop or the planting date is unknown, which is the
-// ordinary state for a zone the farmer has not filled in yet. ZoneGrowthBar
-// renders nothing at all for null rather than an empty bar, because an empty
-// bar reads as "the season has not started".
+// How far through its season this zone's crop is. Null when the crop or planting date is
+// unknown, the normal state for a zone not filled in yet. ZoneGrowthBar then shows nothing,
+// because an empty bar would say the season has not started.
 export type ZoneGrowth = {
   stage: string;
   dayOfSeason: number;
@@ -493,7 +470,7 @@ export function fetchZoneInsights(zoneId: number) {
     day: string;
     insights: ZoneInsight[];
     growth: ZoneGrowth | null;
-    // Item 2, optional: older APIs do not send them.
+    // Optional: older APIs do not send them.
     confidence?: { level: 'high' | 'medium' | 'low'; reason: string } | null;
     nextStep?: { field: string; ask: string } | null;
     stageAssumed?: boolean | null;
@@ -501,9 +478,7 @@ export function fetchZoneInsights(zoneId: number) {
   }>(`/api/farmer/zones/${zoneId}/insights`);
 }
 
-// ---------------------------------------------------------------------------
-// Item 6: one card per zone, logging by hand, and finishing setup.
-// ---------------------------------------------------------------------------
+// One card per zone, logging by hand, and finishing setup.
 
 export type TodayActionKind = 'water' | 'skip' | 'kit' | 'setup' | 'soon' | 'none';
 
@@ -561,9 +536,7 @@ export function saveZoneSetup(
   );
 }
 
-// ---------------------------------------------------------------------------
-// Item 6b: "Recommended for you", and changing the crop.
-// ---------------------------------------------------------------------------
+// "Recommended for you", and changing the crop.
 
 export type RecommendedSettings = {
   available: boolean;
@@ -592,9 +565,7 @@ export function changeZoneCrop(zoneId: number, change: { cropType: string; plant
   );
 }
 
-// ---------------------------------------------------------------------------
-// Admin polish, item 1: dismiss and history. Who and when come from the login.
-// ---------------------------------------------------------------------------
+// Dismiss and history. Who and when come from the login.
 
 export type Dismissal = {
   id: number;
@@ -676,16 +647,12 @@ export function resetZoneToRecommended(zoneId: number) {
   }>(`/api/farmer/zones/${zoneId}/reset-recommended`, { method: 'POST' });
 }
 
-/* ------------------------------------------------------------------------
-   THE KIT (hardware) SCREEN - firmware v1.3.0
-   ------------------------------------------------------------------------ */
+/* The Kit (hardware) screen */
 
 // Everything the Kit screen shows about one zone's board.
-//
-// The three sensors report separately because they fail separately: a dead
-// DHT11 alongside a working soil probe is a real and ordinary state. The kit
-// keeps watering correctly and the app falls back to weather-app temperature,
-// so reporting it as "your kit is broken" would be both wrong and alarming.
+// The three sensors are reported separately because they fail separately: a dead DHT11
+// with a working soil probe is normal, and the kit still waters correctly, so "your kit is
+// broken" would be wrong and alarming.
 export type ZoneHardware = {
   hardwareId: number | null;
   deviceId: string | null;
@@ -701,10 +668,8 @@ export type ZoneHardware = {
   humidityLastReadingAt: string | null;
   // active / revoked / legacy key / no device.
   tokenStatus: string;
-  // What the farmer has to join after a WiFi change. Supplied by the server
-  // (derived from the device ID the same way the firmware derives it) rather
-  // than worked out here, so one change to the firmware's naming does not
-  // need finding in two codebases.
+  // What the farmer has to join after a WiFi change. The server works it out from the device
+  // ID (the same way the firmware does), so a naming change only needs updating in one place.
   setupNetworkName: string | null;
   setupNetworkPassword: string | null;
 };
@@ -721,9 +686,8 @@ export type ChangeWifiResult = {
   setupNetworkPassword: string;
 };
 
-// Thrown when the kit is offline (HTTP 409). A distinct type because the
-// screen has to show a completely different thing for it - the power-cycle
-// instructions - rather than the generic error banner.
+// Thrown when the kit is offline (HTTP 409). Its own type because the screen shows the
+// power-cycle instructions instead of the generic error banner.
 export class KitOfflineError extends Error {
   readonly hint: string;
   readonly setupNetworkName: string | null;
@@ -744,15 +708,11 @@ export class KitOfflineError extends Error {
 }
 
 // Tells the kit to forget its WiFi and open its own setup network.
-//
-// Not routed through authorizedRequest, because that helper turns every
-// non-2xx into a generic Error and the 409 body here carries the three
-// things the offline screen needs. The auth header work is duplicated
-// deliberately rather than widening the shared helper, which every other
-// call in this file depends on.
+// Not through authorizedRequest, which turns every non-2xx into a generic Error, while this
+// 409 body carries what the offline screen needs. The auth header code is repeated here
+// instead of changing the shared helper.
 export function requestZoneWifiChange(zoneId: number): Promise<ChangeWifiResult> {
-  // One command to the kit per intention. Two would put it into setup mode
-  // and then, a moment later, try to put it there again.
+  // One command per intention; a second would try to put the kit into setup mode again.
   return singleFlight(
     writeKey('POST', `/api/farmer/zones/${zoneId}/hardware/change-wifi`),
     () => sendZoneWifiChange(zoneId)
@@ -812,16 +772,11 @@ async function sendZoneWifiChange(
   return (await response.json()) as ChangeWifiResult;
 }
 
-/* ------------------------------------------------------------------------
-   FORECAST
-   ------------------------------------------------------------------------ */
+/* Forecast */
 
 // One day of the 7-day outlook.
-//
-// `advice` is null whenever the engine cannot speak to that day - no zone was
-// asked for, or the zone has no crop or planting date. The screen renders
-// nothing in that case rather than inventing a sentence: advice the app made
-// up is worse than no advice, because the farmer cannot tell the two apart.
+// `advice` is null when the engine cannot speak to that day (no zone asked for, or no crop
+// or planting date). The screen then shows nothing instead of making up a sentence.
 export type ForecastDay = {
   date: string;
   weekday: string;
@@ -839,8 +794,8 @@ export type ForecastResponse = {
   zoneName: string | null;
   days: ForecastDay[];
   source: string;
-  // Set when there are no forecast rows at all, so the screen can say which
-  // of "nothing to show" and "something is broken" it is.
+  // Set when there are no forecast rows, so the screen can say "nothing to show" instead of
+  // looking broken.
   message: string | null;
 };
 
@@ -858,9 +813,7 @@ export function fetchForecast(params?: {
   );
 }
 
-/* ------------------------------------------------------------------------
-   REPORTS
-   ------------------------------------------------------------------------ */
+/* Reports */
 
 export type ReportKind = 'water_usage' | 'moisture' | 'schedule';
 export type ReportPeriodChoice = 'last_7_days' | 'last_30_days' | 'custom';
@@ -876,8 +829,7 @@ export type ReportRequestRow = {
   periodLabel: string;
   status: 'preparing' | 'ready' | 'failed';
   statusLabel: string;
-  // The API path that regenerates the PDF. Not an object key - see migration
-  // 0034 for why this deployment stores no files.
+  // The API path that regenerates the PDF, not a file key (see migration 0034).
   filePath: string | null;
   requestedVia: 'app' | 'auto';
   createdAt: string;
@@ -904,13 +856,10 @@ export function createReportRequest(input: {
   );
 }
 
-// Fetches a finished report and hands it to the phone to open.
-//
-// The PDF needs the sign-in token in a header, so it cannot be a plain link -
-// it is fetched as a blob and opened from there. On web that is an object
-// URL; on a phone there is no filesystem to write to without another native
-// module, so it opens in the system browser, which already knows how to
-// display a PDF.
+// Fetches a finished report and opens it.
+// The PDF needs the sign-in token in a header, so it cannot be a plain link; we fetch it as
+// a blob. On web that becomes an object URL; on a phone it opens in the system browser,
+// which can show a PDF without another native module.
 export async function openReportPdf(filePath: string): Promise<void> {
   const apiBase = resolveApiBase();
 
@@ -936,14 +885,13 @@ export async function openReportPdf(filePath: string): Promise<void> {
   if (Platform.OS === 'web') {
     const url = URL.createObjectURL(blob);
     if (typeof window !== 'undefined') window.open(url, '_blank');
-    // Revoked on a delay: revoking immediately races the new tab's load.
+    // Revoked after a delay: revoking straight away races the new tab loading.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return;
   }
 
-  // Data URL rather than a temporary file: writing one would need
-  // expo-file-system, and a new native module means a new APK for a feature
-  // that works without one.
+  // A data URL instead of a temporary file: a file would need expo-file-system, and a new
+  // native module means a new APK.
   const base64 = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('The report could not be read.'));
@@ -955,7 +903,7 @@ export async function openReportPdf(filePath: string): Promise<void> {
   await openBrowserAsync(base64);
 }
 
-/* ---- Automatic reports (the farmer's half of step 4) ---- */
+/* Automatic reports (the farmer's side) */
 
 export type AutoReportSummary = {
   enabled: boolean;
@@ -969,9 +917,8 @@ export function fetchAutoReportSummary() {
   return authorizedRequest<AutoReportSummary>('/api/farmer/auto-reports');
 }
 
-// The farmer's own off switch. Scoped server-side to their own farm; there
-// is deliberately no way to turn it back ON from here - an admin sets up
-// what a farmer gets, and a farmer can always stop it.
+// The farmer's own off switch, limited on the server to their own farm. There is no way to
+// turn it back on from here: an admin sets up what a farmer gets.
 export function stopAutoReports() {
   return authorizedRequest<{ message: string }>('/api/farmer/auto-reports/stop', {
     method: 'POST',

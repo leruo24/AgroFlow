@@ -3,10 +3,8 @@ import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Styles for the Soil type screen.
-//
-// The three cards are deliberately large: this is a once-a-season decision made
-// standing in a field, often one-handed, so each card is a big target with room
-// for two lines of plain explanation.
+// The three cards are large: this is a once-a-season choice made standing in a field, often
+// one-handed, so each card is a big target with room for two lines of plain explanation.
 export function createZoneSoilStyles(colors: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
@@ -26,8 +24,8 @@ export function createZoneSoilStyles(colors: AppColors) {
       backgroundColor: colors.surface,
       minHeight: 96,
     },
-    // The selected card is marked by a thicker, brand-coloured border AND a
-    // check icon, so selection never rests on colour alone.
+    // The selected card has a thicker brand-coloured border and a check icon, so selection
+    // never relies on colour alone.
     cardSelected: {
       borderWidth: 2,
       borderColor: colors.primaryDark,

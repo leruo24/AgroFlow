@@ -5,21 +5,11 @@ using NpgsqlTypes;
 namespace AgroFlow.Api.Services;
 
 // Creates report_request rows for farms whose automatic schedule is due.
-//
-// It does NOT generate anything itself: it puts rows in the same queue the
-// app's own Request button fills, and ReportGenerationService drains both.
-// One pipeline means an automatic report and a hand-requested one cannot
-// render differently or deliver differently.
-//
-// WHY HOURLY AND NOT A CRON AT 07:00
-// ----------------------------------
-// A once-a-day timer has to survive the container being awake at exactly the
-// right minute. Railway restarts on every deploy, and a deploy at 06:58 would
-// silently skip that week entirely - with nobody noticing until a farmer asks
-// where their report is. Checking hourly and keying the duplicate check on the
-// PERIOD rather than on a timestamp makes the run idempotent: whenever the
-// container happens to be up after 07:00 on the right day, the reports go out
-// once.
+// It only fills the same queue as the app's Request button; ReportGenerationService
+// renders both, so they behave the same.
+// It runs hourly instead of a 07:00 cron, because a deploy at 06:58 would skip the
+// week. The duplicate check is keyed on the period, so reports go out once
+// whenever the service runs after 07:00 on the right day.
 public sealed class AutoReportSchedulerService : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);
@@ -39,9 +29,8 @@ public sealed class AutoReportSchedulerService : BackgroundService
         _logger.LogInformation(
             "Automatic report scheduler started; checking hourly in Africa/Johannesburg time.");
 
-        // A first pass shortly after startup rather than waiting a full hour,
-        // so a deploy that lands at 07:05 on a Monday still sends that day's
-        // reports instead of waiting until 08:05.
+        // A first pass soon after start-up, so a deploy at 07:05 on a Monday still sends
+        // that day's reports.
         try
         {
             await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
@@ -106,9 +95,8 @@ public sealed class AutoReportSchedulerService : BackgroundService
 
             if (schedule.OwnerId is null)
             {
-                // Nothing to deliver to, and report_request.profile_id is NOT
-                // NULL. A farm whose owner was removed is a data problem for a
-                // human, not something to retry hourly in silence.
+                // No one to deliver to, and report_request.profile_id is NOT NULL. A farm whose
+                // owner was removed needs a person to fix it, not hourly retries.
                 _logger.LogWarning(
                     "Schedule {Id} on farm {FarmId} is due but the farm has no owner; skipping.",
                     schedule.Id, schedule.FarmId);
@@ -120,10 +108,8 @@ public sealed class AutoReportSchedulerService : BackgroundService
 
             var created = await QueueReportsAsync(schedule, start, end, ct);
 
-            // Stamped even when `created` is 0 - every row was already there
-            // from an earlier attempt - because the period IS done. Not
-            // stamping would make the service retry this period every hour
-            // for the rest of the day.
+            // Stamped even when nothing was created (the rows already existed), because the
+            // period is done; otherwise we would retry every hour.
             await MarkRunAsync(schedule.Id, ct);
 
             _logger.LogInformation(
@@ -138,9 +124,7 @@ public sealed class AutoReportSchedulerService : BackgroundService
 
         await using var connection = await _dataSource.OpenConnectionAsync(ct);
 
-        // Archived farms are excluded (0036). An archived farm is test data or
-        // a farm that has left - either way nobody should still be getting
-        // weekly PDFs about it.
+        // Archived farms (0036) are left out: nobody should get weekly PDFs about them.
         await using var cmd = new NpgsqlCommand(
             """
             select s.id, s.farm_id, f.owner_id, s.frequency, s.report_types, s.zone_ids, s.last_run_at,
@@ -178,18 +162,17 @@ public sealed class AutoReportSchedulerService : BackgroundService
     {
         await using var connection = await _dataSource.OpenConnectionAsync(ct);
 
-        // The zones this schedule covers. Resolved now rather than stored,
-        // so a zone added to the farm since the schedule was set up is
-        // included, and a deleted one quietly drops out.
+        // The zones this schedule covers, looked up now (not stored), so zones added since
+        // are included and deleted ones drop out.
         var zoneIds = schedule.ZoneIds is { Length: > 0 }
             ? schedule.ZoneIds
             : await LoadFarmZonesAsync(connection, schedule.FarmId, ct);
 
         var created = 0;
 
-        // Which PDFs: moisture is per zone; water usage and the schedule are
-        // one all-zones PDF, or one tailored PDF per zone when per_zone_pdf
-        // is set; the farm summary is the whole farm (ReportSchedulePolicy).
+        // Which PDFs: moisture is per zone; water usage and the schedule are one all-zones
+        // PDF, or one per zone when per_zone_pdf is set; the farm summary covers the whole
+        // farm (ReportSchedulePolicy).
         foreach (var (reportType, zoneId) in ReportSchedulePolicy.RequestsFor(
                      schedule.ReportTypes, schedule.PerZonePdf, zoneIds))
         {
@@ -216,14 +199,9 @@ public sealed class AutoReportSchedulerService : BackgroundService
         return ids.ToArray();
     }
 
-    // The belt to IsDue's braces.
-    //
-    // IsDue already stops a second run in the same day, but this makes the
-    // whole sweep safe to repeat for any reason at all - two containers
-    // briefly overlapping during a deploy, a clock stepping backwards, a
-    // manual re-run. The `not exists` is scoped to requested_via = 'auto', so
-    // it can never suppress a report the FARMER asked for that happens to
-    // cover the same period.
+    // A second safety check on top of IsDue: this makes the sweep safe to repeat (two
+    // containers during a deploy, a clock change, a manual re-run). `not exists` only
+    // looks at requested_via = 'auto', so it never blocks a report the farmer asked for.
     private static async Task<int> InsertIfAbsentAsync(
         NpgsqlConnection connection,
         DueSchedule schedule,

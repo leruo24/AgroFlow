@@ -1,9 +1,6 @@
-//Centralises the current Supabase authentication state
-//and makes it available throughout the AgroFlow app.
-//Supabase manages session persistence and token refreshing.
-//The context listens for authentication changes and updates
-//the app whenever a farmer signs in, signs out or updates
-//their account.
+// Holds the current Supabase auth state and shares it with the whole app. Supabase handles
+// session storage and token refresh; this context listens for auth changes and updates the
+// app when a farmer signs in, signs out or updates their account.
 
 import type {
   Session,
@@ -56,12 +53,11 @@ type AuthContextType = {
     profile: UpdateProfileInput
   ) => Promise<void>;
 
-  //True while the farmer is still on the temporary password they were given
-  //at onboarding. That password is read off an admin screen or sits in their
-  //Telegram chat history, so the app forces a change before letting them in.
+  // Security: true while the farmer is still on their onboarding password. It was read off an
+  // admin screen or sits in their Telegram chat, so the app forces a change first.
   mustChangePassword: boolean;
 
-  //Called once the farmer has actually set a new password.
+  // Called once the farmer has set a new password.
   clearMustChangePassword:
     () => Promise<void>;
 };
@@ -104,9 +100,8 @@ export function AuthProvider({
   ] =
     useState(false);
 
-  //Reads the flag straight from the farmer's own profile row. Failing to
-  //read it is treated as "no forced change": a network blip must lock nobody
-  //out of their own farm, and the admin can always reset the password again.
+  // Reads the flag from the farmer's own profile row. A failed read counts as "no forced
+  // change": a network blip must not lock anyone out, and the admin can reset the password again.
   async function loadMustChangePassword(
     userId: string | undefined
   ) {
@@ -330,9 +325,8 @@ export function AuthProvider({
   async function signOut() {
     await logoutUser();
 
-    // The raindrop helper greets once per login; clearing the flag here means
-    // the next farmer to sign in on this device gets their own greeting rather
-    // than inheriting the previous session's "already shown".
+    // The raindrop helper greets once per login; clearing the flag here means the next farmer
+    // to sign in on this device gets their own greeting.
     resetDripHelperSession();
 
     setSession(

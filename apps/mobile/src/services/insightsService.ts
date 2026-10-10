@@ -1,32 +1,24 @@
 import { supabase } from '@/lib/supabase';
 import type { Explanation } from '@/services/agroFlowApi';
 
-// Today's insights for the farmer's own zones, read straight from Supabase
-// under RLS rather than through AgroFlow.Api.
-//
-// This follows the project rule that the apps read ordinary data directly and
-// the API only does what a client cannot: ai_recommendation already has a
-// member SELECT policy through zone -> farm, so there is nothing for an
-// endpoint to add here.
-//
-// EVERY failure path returns an empty list rather than throwing. The raindrop
-// helper is decoration over real data: if the table is missing, the columns are
-// older than the engine, or the network is down, the helper must fall back to
-// alerts and then to "all good" - never crash the Home screen, and never show
-// placeholder text pretending to be advice.
+// Today's insights for the farmer's own zones, read straight from Supabase under RLS.
+// The apps read ordinary data directly and the API only does what a client cannot;
+// ai_recommendation already has a member SELECT policy through zone -> farm.
+// Every failure returns an empty list instead of throwing: if the table is missing, the
+// columns are older than the engine, or the network is down, the helper falls back to
+// alerts and then "all good", and never shows made-up advice.
 
 export type ZoneInsightRow = {
   zoneId: string;
   insightType: string;
   severity: 'act_now' | 'heads_up' | 'info';
   message: string;
-  // Item 2c: stored with the insight in ai_recommendation.data.explanation.
+  // Stored with the insight in ai_recommendation.data.explanation.
   explanation?: Explanation | null;
 };
 
-// The explanation inside an insight's data column, if it has one and it has
-// the shape the app shows. Anything else is treated as absent - never shown
-// half-formed.
+// The explanation in an insight's data column, if it has the shape the app shows. Anything
+// else is treated as missing, never shown half-formed.
 export function explanationFrom(data: unknown): Explanation | null {
   if (!data || typeof data !== 'object') return null;
   const e = (data as { explanation?: unknown }).explanation;
@@ -44,13 +36,12 @@ export function explanationFrom(data: unknown): Explanation | null {
     rule: typeof candidate.rule === 'string' ? candidate.rule : '',
     confidence: typeof candidate.confidence === 'string' ? candidate.confidence : '',
     whatWouldChangeIt: typeof candidate.whatWouldChangeIt === 'string' ? candidate.whatWouldChangeIt : null,
-    // technical is deliberately dropped: admins and report appendices only.
+    // technical is dropped on purpose: admins and report appendices only.
   };
 }
 
-// A "day" is a calendar day in Africa/Johannesburg, matching the engine and the
-// report endpoints. South Africa has no daylight saving, so a fixed +2 h offset
-// is correct and needs no timezone database.
+// A "day" is a calendar day in SAST, like the engine and the reports. South Africa has no
+// daylight saving, so a fixed +2 h offset is correct.
 export function todayInSast(): string {
   const sast = new Date(Date.now() + 2 * 60 * 60 * 1000);
   return sast.toISOString().slice(0, 10);
@@ -75,7 +66,7 @@ export async function fetchTodayZoneInsights(
       .eq('valid_for', todayInSast())
       .is('dismissed_at', null);
 
-    // A missing table or column arrives here as an error, not an exception.
+    // A missing table or column comes back as an error, not an exception.
     if (error || !data) return [];
 
     return data
@@ -106,16 +97,16 @@ export async function fetchTodayZoneInsights(
   }
 }
 
-// Item 2c: explanations for alert rows (table `explanation`, migration 0039),
-// keyed by the app's alert id. Read under RLS - farm members only. Never
-// throws: no table, no network or no rows all mean "no Why link".
+// Explanations for alert rows (table `explanation`, migration 0039), keyed by the app's
+// alert id. Read under RLS, farm members only. Never throws: no table, network or rows all
+// mean "no Why link".
 export async function fetchAlertExplanations(
   alertIds: string[]
 ): Promise<Record<string, Explanation>> {
   const byNumeric = new Map<number, string>();
   for (const id of alertIds) {
-    // The app's alert ids are prefixed ("database-12", "alert-12") because
-    // they share a list with locally-made ones; only real rows have one.
+    // Alert ids are prefixed ("database-12", "alert-12") because they share a list with local
+    // ones; only real rows have an explanation.
     const numeric = Number(id.replace(/^(database-|alert-)/, ''));
     if (Number.isFinite(numeric) && numeric > 0) byNumeric.set(numeric, id);
   }

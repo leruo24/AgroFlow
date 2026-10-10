@@ -1,4 +1,4 @@
-// Defines the bottom tab navigation structure for AgroFlow.
+// The bottom tab navigation for AgroFlow.
 import { Tabs } from 'expo-router';
 
 import {//importing icons for the bottom navigation bar
@@ -20,8 +20,7 @@ import { createTabsLayoutStyles, tabsLayoutStyles as styles } from '@/styles/tab
 
 type TabIconProps = { size?: number; color?: ColorValue; strokeWidth?: number };
 
-// The five tab icons were each wrapped in an identical 38x38 chip View -
-// one shared render function instead of five copies of the same JSX.
+// One shared render function for the 38x38 chip around each tab icon.
 function TabIcon(Icon: ComponentType<TabIconProps>) {
   return function RenderTabIcon({ color, size }: { color: ColorValue; size: number; focused: boolean }) {
     return (
@@ -51,7 +50,7 @@ export default function TabsLayout() {//creates layout component
         // Aqua identifies the selected tab against the forest-green bar.
         tabBarActiveTintColor: colors.secondaryDark,
 
-        // Inactive icons and labels remain readable on forest green.
+        // Inactive icons and labels stay readable on forest green.
         tabBarInactiveTintColor: colors.textMuted,
 
         tabBarStyle: themedStyles.tabBar,

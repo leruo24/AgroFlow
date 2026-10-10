@@ -2,39 +2,19 @@ using System.Collections.Concurrent;
 
 namespace AgroFlow.Api.Services;
 
-// Rate-limits FAILED device claims, per source IP.
-//
-// WHY THIS IS NEEDED NOW AND WAS NOT BEFORE
-// -----------------------------------------
-// POST /api/devices/claim used to sit behind the shared X-Api-Key gate, so
-// only something holding the fleet key could even attempt a code. v1.3.0
-// removes that deliberately: the one-time enrollment code IS the
-// authorisation, and requiring a compiled-in shared secret alongside it is
-// what the whole token change exists to get away from.
-//
-// That leaves the code itself as the only secret on an endpoint anyone can
-// reach. The codes are 8 characters from a 31-character alphabet - about
-// 8.5e11 combinations - and they expire in 24 hours, so brute force is not
-// remotely practical at human speed. It is practical at machine speed if the
-// endpoint will answer unlimited guesses, and a successful guess claims
-// someone else's kit onto an attacker's board.
-//
-// So: unlimited SUCCESSFUL claims (an install day is a burst of them from one
-// office IP, and a kit that will not enrol is a real support cost), and a
-// hard ceiling on consecutive failures from one address.
-//
-// WHY IN-MEMORY AND NOT A TABLE
-// -----------------------------
-// This has to be cheap on the request path and it has to survive nothing. A
-// restart clearing the counters is acceptable - the attacker gains one
-// window's worth of guesses, which against 8.5e11 combinations is noise -
-// and it saves a write per failed attempt on a free-tier database. It is also
-// per-instance, which on a single Railway container is the whole fleet.
+// Security: rate-limits failed device claims per source IP.
+// POST /api/devices/claim has no shared key, so the enrollment code is the only
+// secret on an endpoint anyone can reach. Codes are 8 characters from 31 (about
+// 8.5e11 combinations) and expire in 24 hours, so guessing is only possible at
+// machine speed; a lucky guess would claim someone else's kit.
+// Successful claims are unlimited (an install day is a burst from one office);
+// failures from one address have a hard limit.
+// In memory, not a table: it must be cheap, and a restart only gives an attacker
+// one more window of guesses. On our single Railway container it covers everything.
 public sealed class ClaimRateLimiter
 {
-    // Generous enough to absorb an engineer mistyping a code with an O for a
-    // 0 a few times (the alphabet excludes both, but the sticker is read by a
-    // human), and far below anything useful for searching the space.
+    // Enough for an installer mistyping a code a few times, far too few to search
+    // the code space.
     public const int MaxFailuresPerWindow = 10;
 
     public static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
@@ -48,9 +28,8 @@ public sealed class ClaimRateLimiter
     private readonly ConcurrentDictionary<string, Attempts> _byAddress = new();
     private readonly ILogger<ClaimRateLimiter> _logger;
 
-    // Bounds memory against an attacker rotating source addresses, which
-    // would otherwise make this dictionary the vulnerability. Well above any
-    // plausible number of real installer locations.
+    // Security: caps memory so an attacker rotating addresses cannot make this
+    // dictionary the weak point.
     private const int MaxTrackedAddresses = 10_000;
 
     public ClaimRateLimiter(ILogger<ClaimRateLimiter> logger)
@@ -82,8 +61,7 @@ public sealed class ClaimRateLimiter
 
         if (_byAddress.Count >= MaxTrackedAddresses && !_byAddress.ContainsKey(address!))
         {
-            // Drop everything whose window has already closed rather than
-            // refusing to track anything new.
+            // Drop entries whose window has closed instead of refusing new ones.
             foreach (var pair in _byAddress)
             {
                 if (now - pair.Value.WindowStartedAt > Window)
@@ -116,8 +94,8 @@ public sealed class ClaimRateLimiter
         }
     }
 
-    // A successful claim clears the address. An installer who finally gets
-    // the right code should not stay blocked for the rest of the window.
+    // A successful claim clears the address, so an installer who gets the code right
+    // is not left blocked.
     public void RecordSuccess(string? address)
     {
         if (string.IsNullOrEmpty(address)) return;
@@ -125,18 +103,16 @@ public sealed class ClaimRateLimiter
         _byAddress.TryRemove(address!, out _);
     }
 
-    // Prefers the proxy header, because on Railway every request arrives from
-    // the platform's own edge and RemoteIpAddress would be the same value for
-    // the entire internet - which would make this a global kill switch rather
-    // than a per-IP limit. Falls back to the socket address locally, where
-    // there is no proxy.
+    // Uses the proxy header first: on Railway every request comes from the platform's
+    // edge, so RemoteIpAddress would be the same for everyone and turn this into a
+    // global block. Locally (no proxy) we use the socket address.
     public static string? ResolveAddress(HttpContext context)
     {
         var forwarded = context.Request.Headers["X-Forwarded-For"].ToString();
 
         if (!string.IsNullOrWhiteSpace(forwarded))
         {
-            // Left-most entry is the original client; the rest are proxies.
+            // The left-most entry is the original client; the rest are proxies.
             var first = forwarded.Split(',')[0].Trim();
             if (first.Length > 0) return first;
         }

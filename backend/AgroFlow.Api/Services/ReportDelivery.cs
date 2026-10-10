@@ -1,12 +1,9 @@
 namespace AgroFlow.Api.Services;
 
-// Item 4: how a finished report reaches Telegram.
-//
-// A failed send is tried ONCE more after a short wait - a blip on Telegram's
-// side or the container's network is the common case - and if that fails too,
-// the caller raises an admin alert rather than letting a farmer quietly miss
-// their report. Never more than one retry: a farmer who blocked the bot will
-// keep refusing, and hammering is how a bot gets rate-limited for everyone.
+// How a finished report reaches Telegram. A failed send is retried once after a
+// short wait (usually a network blip); if that fails too, the caller raises an admin
+// alert. Only one retry: a farmer who blocked the bot will keep refusing, and
+// hammering gets the bot rate-limited for everyone.
 internal static class ReportDelivery
 {
     public static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(20);
@@ -29,9 +26,8 @@ internal static class ReportDelivery
         return await send();
     }
 
-    /// Everyone this report goes to: the farmer, plus - for automatic reports,
-    /// when the schedule asks - the admin who set it up and the admin group
-    /// chat. Distinct, so an admin who is also the farmer gets one copy.
+    /// Everyone this report goes to: the farmer, plus for automatic reports (when asked)
+    /// the admin who set it up and the admin group chat. Distinct, so nobody gets two copies.
     public static List<long> Recipients(
         long? farmerChat, bool automatic, bool sendToHandler, long? handlerChat,
         bool adminChatEnabled, long? adminGroupChat)

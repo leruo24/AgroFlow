@@ -61,8 +61,7 @@ export function createSettingsStyles(colors: AppColors) {
       fontSize: Type.caption,
       color: colors.secondaryDark,
     },
-    // Radius.full, not Radius.sm - these are circular radio controls, and a
-    // mechanical token swap had turned them into rounded squares.
+    // Radius.full, not Radius.sm: these are circular radio buttons.
     radio: {
       width: 20,
       height: 20,
@@ -126,9 +125,8 @@ export function createSettingsStyles(colors: AppColors) {
       gap: Spacing.two,
     },
 
-    // Connected / Not connected. Carries the WORD as well as the colour -
-    // "Not connected" is not a failure and must not read as a red error, and
-    // neither state may depend on colour alone to be understood.
+    // Connected / Not connected shows the word as well as the colour. "Not connected" is not
+    // an error and must not look like a red one.
     statusConnected: {
       fontSize: Type.caption,
       fontWeight: '600',

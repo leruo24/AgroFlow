@@ -1,14 +1,12 @@
 namespace AgroFlow.Api.Mqtt;
 
-// Topic structure - full write-up in hardware/shared/MQTT_TOPICS.md (also documents
-// how future device types should extend this).
+// Topic structure (details in hardware/shared/MQTT_TOPICS.md):
 //
 //   Device -> backend: agroflow/farm/{farmId}/device/{deviceId}/sensors
 //   Backend -> device: agroflow/farm/{farmId}/device/{deviceId}/commands
 //
-// {deviceId} is hardware.device_id (ESP.getEfuseMac(), not WiFi MAC).
-// zoneId/farmId/deviceId are never duplicated inside payloads - they're
-// already in the topic.
+// {deviceId} is hardware.device_id (ESP.getEfuseMac(), not the WiFi MAC).
+// The ids are in the topic, so payloads never repeat them.
 public static class MqttTopics
 {
     public const string SensorTopicFilter = "agroflow/farm/+/device/+/sensors";
@@ -16,12 +14,8 @@ public static class MqttTopics
     public static string CommandsTopic(long farmId, string deviceId) =>
         $"agroflow/farm/{farmId}/device/{deviceId}/commands";
 
-    // Parses "agroflow/farm/{farmId}/device/{deviceId}/sensors" (or any
-    // topic following the same farm/device shape, regardless of the
-    // trailing channel segment - see the "extending this" note in
-    // hardware/shared/MQTT_TOPICS.md). Returns null for anything that doesn't
-    // match, rather than throwing - a malformed/unexpected topic should be
-    // logged and ignored, not crash the subscriber.
+    // Parses "agroflow/farm/{farmId}/device/{deviceId}/<channel>". Returns null for
+    // anything else instead of throwing, so a bad topic is logged and ignored.
     public static (long FarmId, string DeviceId)? ParseFarmAndDevice(string topic)
     {
         var segments = topic.Split('/');

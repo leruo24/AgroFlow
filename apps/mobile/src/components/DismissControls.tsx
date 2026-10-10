@@ -5,9 +5,8 @@ import { BlurSheet } from '@/components/BlurSheet';
 import { createTodayStyles } from '@/styles/todayStyles';
 import type { DismissView } from '@/lib/dismissals';
 
-// Admin polish, item 1: the app's dismiss pieces - the × button, the
-// Active / Dismissed / All switch, the 5-second Undo bar, and the note sheet
-// a critical item asks for.
+// The app's dismiss pieces: the x button, the Active / Dismissed / All switch, the
+// 5-second Undo bar, and the note sheet a critical item asks for.
 
 export function DismissButton({ label, onPress }: { label: string; onPress: () => void }) {
   const { colors } = useTheme();

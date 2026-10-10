@@ -2,17 +2,11 @@ using System;
 
 namespace AgroFlow.Business
 {
-    // No flow meter on the confirmed hardware, so water volume is split into
-    // runtimeSeconds (measured) and estimatedLitres (derived) - keeps the
-    // estimate auditable.
-    //
-    // This class NO LONGER DERIVES THE VOLUME ITSELF. It used to carry a
-    // RatedFlowLitresPerSecond constant flagged as an unverified placeholder,
-    // which made it a second source of truth competing with zone.flow_rate_lpm
-    // and with the firmware's own constant - three answers for one number.
-    // There is now exactly one: zone.flow_rate_lpm, applied by
-    // WaterUsageEstimator.EstimateEventLitres. EstimatedLitres here is a plain
-    // carrier, set by whoever already did that arithmetic.
+    // There is no flow meter, so water is split into runtimeSeconds (measured) and
+    // estimatedLitres (derived), which keeps the estimate checkable.
+    // This class does not work out the volume itself: zone.flow_rate_lpm through
+    // WaterUsageEstimator.EstimateEventLitres is the only source. EstimatedLitres here
+    // only carries the result.
     public class IrrigationLog
     {
         #region Data Members
@@ -40,11 +34,9 @@ namespace AgroFlow.Business
             action = "";
         }
 
-        // estimatedLitres is deliberately left at 0 here rather than derived:
-        // this constructor has no zone flow rate to work from. Set
-        // EstimatedLitres from WaterUsageEstimator.EstimateEventLitres, which
-        // takes the zone's configured rate and returns null when there isn't
-        // one.
+        // estimatedLitres stays 0 here because this constructor has no flow rate. Set it
+        // from WaterUsageEstimator.EstimateEventLitres, which returns null when the zone has
+        // no rate.
         public IrrigationLog(int pLogID, int pZoneID, int pRuntimeSeconds, string pAction)
         {
             logId = pLogID;

@@ -1,31 +1,13 @@
 namespace AgroFlow.Api.Services;
 
-// Config-triggered one-shot runner for WeatherBackfillService.
-//
-// WeatherBackfillService knows how to pull ERA5 history out of Open-Meteo's
-// archive endpoint, but nothing ever called it - it was written under a brief
-// that said "write the routine, do not run it", because weather_daily did not
-// exist in the live database yet. This class is the trigger, and it is
-// deliberately a trigger rather than a schedule: a historical backfill is a
-// one-off, not something that should happen on every container start.
-//
-// HOW TO RUN IT
-//   Set Weather__BackfillDays on Railway (e.g. 90) and redeploy. On the next
-//   start this runs once for every farm that has coordinates, then the service
-//   completes and does nothing further for the life of the process.
-//
-//   REMOVE THE VARIABLE AFTERWARDS. While it is set, every redeploy re-runs
-//   the backfill. That is harmless in terms of data - the upsert on
-//   (farm_id, date) makes a re-run converge on the same rows rather than
-//   duplicate them - but it is a pointless few thousand Open-Meteo requests
-//   on each deploy, and Open-Meteo is a free service we should not abuse.
-//
-// WHY A BackgroundService AND NOT A CALL IN Program.cs
-//   Awaiting the backfill inline during startup would hold the container in
-//   "starting" for as long as the fetch takes - minutes, for a multi-year
-//   range across several farms - and Railway would see a service that is not
-//   answering health checks. Running it here, after ApplicationStarted, means
-//   the API is already serving requests while the backfill works behind it.
+// Runs WeatherBackfillService once, when configured. A backfill is a one-off, so
+// this is a trigger, not a schedule.
+// To run it: set Weather__BackfillDays on Railway (e.g. 90) and redeploy. On the next
+// start it runs once for every farm with coordinates, then does nothing more.
+// Remove the variable afterwards, or every redeploy runs it again (harmless thanks
+// to the (farm_id, date) upsert, but thousands of wasted requests to a free service).
+// A BackgroundService instead of awaiting it in Program.cs, so the API is already
+// serving (and passing Railway's health checks) while the backfill runs.
 public class WeatherBackfillStartupService : BackgroundService
 {
     private readonly WeatherBackfillService _backfill;
@@ -47,10 +29,8 @@ public class WeatherBackfillStartupService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Unset, unparseable or non-positive all mean "not requested". Staying
-        // silent on the common path keeps the ordinary startup log clean;
-        // there is no value in a line saying the backfill did not run on every
-        // single deploy for the rest of the project's life.
+        // Unset, unparseable or not positive all mean "not requested", and we log nothing
+        // so the normal start-up log stays clean.
         var raw = _configuration["Weather:BackfillDays"];
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -66,9 +46,8 @@ public class WeatherBackfillStartupService : BackgroundService
             return;
         }
 
-        // Let the app finish starting first. Without this the backfill competes
-        // with startup for the connection pool and the HTTP stack while Railway
-        // is still deciding whether the container came up.
+        // Let the app finish starting first, so the backfill does not compete for the
+        // connection pool while Railway checks the container.
         try
         {
             var started = new TaskCompletionSource();
@@ -91,12 +70,10 @@ public class WeatherBackfillStartupService : BackgroundService
 
         var startedAt = DateTime.UtcNow;
 
-        // Nothing below may be allowed to escape. An unhandled exception out of
-        // ExecuteAsync stops the whole host by default
-        // (BackgroundServiceExceptionBehavior.StopHost), which would turn a
-        // failed optional backfill into a dead API. RunForAllFarmsAsync already
-        // swallows per-farm failures; this catch is for anything structural,
-        // such as weather_daily not existing because 0016 has not been applied.
+        // Nothing may escape: an unhandled exception in ExecuteAsync stops the whole host
+        // by default, turning an optional backfill into a dead API. RunForAllFarmsAsync
+        // already handles per-farm failures; this catches structural ones (e.g. no
+        // weather_daily table).
         try
         {
             var rows = await _backfill.RunForAllFarmsAsync(start, end, stoppingToken);

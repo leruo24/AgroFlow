@@ -1,8 +1,7 @@
-// Item 2: a soil reading is a percentage only after the wet/dry setup.
-//
-// The probe is resistive: its number means "how wet" only once the zone's
-// wet and dry points are known. Before that it is a sensor number, and
-// showing it with a % would claim a measurement the app does not have.
+// A soil reading is only a percentage after the wet/dry setup.
+// The probe is resistive, so its number only means "how wet" once the zone's wet and dry
+// points are known. Before that it is a sensor number, and a % would claim a measurement we
+// do not have.
 
 export const NOT_SET_UP = 'not yet set up';
 

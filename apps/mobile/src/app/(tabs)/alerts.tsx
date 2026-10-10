@@ -29,18 +29,18 @@ export default function AlertsScreen() {
   const error = farmError || zonesError;
   const ordered = [...alerts].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
 
-  // Item 2c: each alert's "Why am I seeing this?", read once per set of alerts.
+  // Each alert's "Why am I seeing this?", read once per set of alerts.
   const alertKeyList = alerts.map(a => a.id).join(',');
   const [why, setWhy] = useState<Record<string, Explanation>>({});
   useEffect(() => {
     let active = true;
     fetchAlertExplanations(alerts.map(a => a.id)).then(result => { if (active) setWhy(result); });
     return () => { active = false; };
-    // alertKeyList rather than alerts: the context rebuilds an equal array often.
+    // alertKeyList instead of alerts: the context rebuilds an equal array often.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alertKeyList]);
 
-  // Admin polish, item 1: dismiss (×) with Undo, and Active / Dismissed / All.
+  // Dismiss (x) with Undo, and Active / Dismissed / All.
   const [view, setView] = useState<DismissView>('active');
   const [dismissals, setDismissals] = useState<Dismissal[]>([]);
   const [undo, setUndo] = useState<{ id: number; message: string } | null>(null);

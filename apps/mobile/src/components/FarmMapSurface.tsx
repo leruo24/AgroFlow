@@ -17,8 +17,8 @@ export default function FarmMapSurface({ latitude, longitude, zoom, onFailure }:
   if (width) for (let tx = Math.floor((x - width / 2) / size); tx <= Math.floor((x + width / 2) / size); tx++) {
     for (let ty = Math.floor((y - height / 2) / size); ty <= Math.floor((y + height / 2) / size); ty++) {
       if (ty < 0 || ty >= scale) continue;
-      // Per-tile position is computed from pan/zoom state - genuinely
-      // dynamic, so it stays inline rather than in the style file.
+      // Each tile's position comes from pan/zoom state, so it stays inline instead of in the
+      // style file.
       tiles.push(<Image key={`${zoom}-${tx}-${ty}`} source={{ uri: `https://tile.openstreetmap.org/${zoom}/${((tx % scale) + scale) % scale}/${ty}.png` }}
         onLoad={() => setLoadedZoom(zoom)} onError={onFailure} style={{ position: 'absolute', width: size, height: size, left: tx * size - x + width / 2, top: ty * size - y + height / 2 }} />);
     }

@@ -8,11 +8,10 @@ namespace AgroFlow.Api.Endpoints;
 public record SoilTypeRequest(string? Soil_Type);
 public record CalibrationRequest(string? Point);
 
-// The farmer-facing engine endpoints: reset a zone's watering levels to the
-// FAO-56 recommendation, save a wet/dry calibration point, and set the soil type.
-//
-// Every one checks that the caller can reach the zone's farm, using the same rule
-// the report endpoints use: owner, farm member, or an admin profile.
+// Farmer-facing engine endpoints: reset a zone's watering levels to the FAO-56
+// recommendation, save a wet/dry calibration point, and set the soil type.
+// Security: each one checks the caller can reach the zone's farm (owner, member
+// or admin), the same rule as the report endpoints.
 public static class Fao56EngineEndpoints
 {
     public static void MapFao56EngineEndpoints(this WebApplication app)
@@ -25,13 +24,9 @@ public static class Fao56EngineEndpoints
         group.MapGet("/zones/{zoneId:long}/insights", GetInsights);
         group.MapPost("/insights/{insightType}/dismiss", DismissInsight);
 
-        // ADMIN: "Run advice now" on a zone.
-        //
-        // Exists so the engine can be PROVEN to work, live, during setup and
-        // during the presentation - rather than everyone waiting until just
-        // after midnight for the nightly pass and hoping. It writes the
-        // normal zone_water_balance and ai_recommendation rows, exactly as
-        // that pass does, and never touches the pump: advisory only.
+        // Admin: "Run advice now" on a zone, so we can show the engine working without
+        // waiting for the nightly run. It writes the same zone_water_balance and
+        // ai_recommendation rows and never touches the pump.
         app.MapPost("/api/admin/zones/{zoneId:long}/run-advice", RunAdviceNow)
             .RequireAuthorization()
             .AddEndpointFilter<AgroFlow.Api.Auth.AdminOnlyFilter>();
@@ -56,16 +51,13 @@ public static class Fao56EngineEndpoints
 
         try
         {
-            // The same call the nightly pass makes, so what an admin sees
-            // here is what the farmer will get - not a parallel code path
-            // that could disagree with it.
+            // The same call the nightly run makes, so the admin sees what the farmer will get.
             insights = engine.RunZoneAndWriteInsights(zone, today);
             result = engine.RunZone(zone, today, persist: false);
         }
         catch (Exception ex)
         {
-            // An engine fault during a live demonstration should say what
-            // broke, not vanish into a 500.
+            // An engine error should say what broke, not turn into a 500.
             logger.LogError(ex, "Run-advice failed for zone {ZoneId}.", zoneId);
 
             return Results.Problem(
@@ -78,11 +70,8 @@ public static class Fao56EngineEndpoints
             "Ran advice for zone {ZoneId} ({Name}): {Count} insight(s), {Missing} setup item(s) missing.",
             zoneId, zone.ZoneName, insights.Count, result.MissingSetup.Count);
 
-        // Advisory, but it WRITES - new zone_water_balance and
-        // ai_recommendation rows - so "why did this zone's advice change on
-        // Tuesday?" should have an answer. Fire-and-forget: this handler is
-        // synchronous by the engine's DB/XDB/Controller pattern, and an audit
-        // row must not be what makes it async.
+        // It writes new rows, so we audit it. Fire-and-forget because this handler is
+        // synchronous (DB/XDB/Controller pattern).
         _ = audit.WriteAsync(
             user, AgroFlow.Api.Services.AuditActions.ZoneAdviceRun,
             "zone", zoneId.ToString(), farmId: zone.FarmId,
@@ -94,15 +83,14 @@ public static class Fao56EngineEndpoints
             zoneName = zone.ZoneName,
             ranFor = today.ToString("yyyy-MM-dd"),
 
-            // The headline numbers, in the order somebody checking the
-            // engine reads them.
+            // The main numbers, in the order someone checking the engine reads them.
             stage = result.Stage is { } st ? Fao56EngineReference.StageLabel(st) : null,
             dayOfSeason = result.DayOfSeason,
             crop = result.Crop?.Label,
             soil = result.Soil.Label,
             soilWasDefaulted = result.SoilWasDefaulted,
 
-            // "Water need" - what the crop used today and what is owed.
+            // "Water need": what the crop used today and what is owed.
             etcTodayMm = Round(result.EtcTodayMm),
             etoTodayMm = Round(result.EtoTodayMm),
             depletionMm = Round(result.DepletionMm),
@@ -140,9 +128,7 @@ public static class Fao56EngineEndpoints
                 advice = d.Advice,
             }),
 
-            // Why the engine could NOT answer, when it could not. This is the
-            // half that makes the action useful during setup: it names the
-            // missing field instead of leaving a blank screen.
+            // Why the engine could not answer, if it could not: the missing fields.
             setupMissing = result.MissingSetup,
             limitations = result.Limitations,
 
@@ -151,7 +137,7 @@ public static class Fao56EngineEndpoints
                 insightType = i.InsightType,
                 severity = i.Severity,
                 message = i.Message,
-                // Item 2c: admins see the full explanation, technical part included.
+                // Admins see the full explanation, including the technical part.
                 explanation = i.Explanation,
             }),
         });
@@ -160,8 +146,8 @@ public static class Fao56EngineEndpoints
     private static double? Round(double? value) =>
         value is { } v ? Math.Round(v, 1) : null;
 
-    // Synchronous bodies: the engine's data layer is synchronous by the project's
-    // DB/XDB/Controller pattern. Minimal APIs accept a non-Task return directly.
+    // Synchronous handlers: the engine's data layer is synchronous (DB/XDB/Controller
+    // pattern), and Minimal APIs accept a non-Task return.
     private static IResult ResetRecommended(
         long zoneId, ClaimsPrincipal user, Fao56EngineController engine)
     {
@@ -170,8 +156,8 @@ public static class Fao56EngineEndpoints
 
         var outcome = engine.ResetToRecommended(zoneId);
 
-        // A missing crop or calibration is a normal answer, not a server fault, so
-        // it comes back 400 with the plain message the farmer should see.
+        // A missing crop or calibration is a normal answer, so it is a 400 with the
+        // plain message for the farmer.
         return outcome.Ok
             ? Results.Ok(new { message = outcome.Message, threshold = outcome.Threshold, desired = outcome.Desired })
             : Results.BadRequest(new { error = outcome.Message });
@@ -203,9 +189,8 @@ public static class Fao56EngineEndpoints
             : Results.BadRequest(new { error = outcome.Message });
     }
 
-    // Today's insights for a zone. The app can also read ai_recommendation
-    // directly under RLS; this exists so the app does not have to know the
-    // severity ordering or the day boundary.
+    // Today's insights for a zone. The app could read ai_recommendation under RLS,
+    // but this way it does not need to know the severity order or the day boundary.
     private static IResult GetInsights(
         long zoneId, ClaimsPrincipal user, Fao56EngineController engine)
     {
@@ -226,49 +211,37 @@ public static class Fao56EngineEndpoints
                 severity = i.Severity,
                 message = i.Message,
 
-                // ADDITIVE (item 2c): the explanation stored with the insight,
-                // exactly as it was when written. Null for rows written before
-                // explanations existed. Farmers never get the technical part.
+                // The explanation stored with the insight, as it was when written (null for
+                // older rows). Farmers never get the technical part.
                 explanation = StoredExplanation(i, includeTechnical: false),
             }),
 
-            // ADDITIVE: the growth summary, so one call fills both the
-            // insights card and the growth bar on the zone screen.
-            //
-            // It is served here rather than read from zone_water_balance.
-            // That table has `stage` and `day_of_season` but NOT the season
-            // length, and the growth bar needs all three - "day 62" with no
-            // total is not a progress bar. The length comes from the crop's
-            // Table 11 stage lengths, which only the knowledge base has, so
-            // computing it here is the only place all three exist at once.
-            //
-            // Null when the crop or the planting date is unknown, and the
-            // component renders nothing at all in that case rather than an
-            // empty bar - an empty bar reads as "the season has not started",
-            // which is a claim the app cannot make.
+            // The growth summary, so one call fills both the insights card and the growth bar.
+            // zone_water_balance has the stage and day but not the season length, which only
+            // the crop knowledge (Table 11) has, so we build it here.
+            // Null when the crop or planting date is unknown, and the app then shows nothing.
             growth = BuildGrowthSummary(engine, zoneId, today),
 
-            // ADDITIVE (item 2): how sure today's advice is, and the ONE
-            // step that would improve it. Null if the engine could not run;
-            // older app builds ignore both fields.
+            // How sure today's advice is and the one step that would improve it.
+            // Null if the engine could not run.
             confidence = advice?.Confidence is { } c ? new { level = c.Key, reason = c.Reason } : null,
             nextStep = advice?.NextStep is { } s ? new { field = s.Field, ask = s.Ask } : null,
             stageAssumed = advice?.StageAssumed,
 
-            // ADDITIVE (item 2c): "Why am I seeing this?" for the confidence
-            // badge, from the same setup state ConfidenceRules judged.
+            // "Why am I seeing this?" for the confidence badge, from the same setup state
+            // ConfidenceRules used.
             confidenceExplanation = advice is null ? null : WithoutTechnical(Explanations.Confidence(advice)),
         });
     }
 
-    // Farmers never get the technical line; it is for admins and appendices.
+    // Farmers never get the technical line; it is for admins and report appendices.
     private static Explanation WithoutTechnical(Explanation e)
     {
         e.Technical = string.Empty;
         return e;
     }
 
-    // Item 2c: the explanation saved in ai_recommendation.data, or null.
+    // The explanation saved in ai_recommendation.data, or null.
     internal static System.Text.Json.Nodes.JsonObject? StoredExplanation(ZoneInsight insight, bool includeTechnical)
     {
         if (!insight.Data.TryGetValue("raw", out var raw) || raw is not string json) return null;
@@ -288,8 +261,8 @@ public static class Fao56EngineEndpoints
         }
     }
 
-    // Item 2: a read-only engine run for the confidence badge. Never persists;
-    // a failure leaves the insights themselves untouched.
+    // A read-only engine run for the confidence badge. Never saves; a failure leaves
+    // the insights untouched.
     private static ZoneEngineResult? TryRunAdvice(Fao56EngineController engine, long zoneId, DateOnly today)
     {
         try
@@ -321,12 +294,10 @@ public static class Fao56EngineEndpoints
 
         if (totalDays <= 0) return null;
 
-        // Day 1 is the planting date itself, matching
-        // zone_water_balance.day_of_season.
+        // Day 1 is the planting date itself, matching zone_water_balance.day_of_season.
         var dayOfSeason = today.DayNumber - zone.PlantingDate.Value.DayNumber + 1;
 
-        // A planting date in the future is a typo or a crop not yet in the
-        // ground. Either way there is no season to show progress through.
+        // A future planting date is a typo or a crop not yet planted: no season to show.
         if (dayOfSeason < 1) return null;
 
         var stage = SoilWaterBalance.Stage(
@@ -340,12 +311,9 @@ public static class Fao56EngineEndpoints
             crop.DisplayName);
     }
 
-    // Dismissing is a farmer write, so it goes through RLS from the app rather
-    // than here. This endpoint exists only so the app has one path for it when it
-    // is already holding an API token.
-    // Admin polish: this used to DELETE the insight row. It now dismisses it
-    // like every other notification - recorded, never deleted, restorable.
-    // The route and its answer are unchanged for older apps.
+    // Dismissing normally goes through RLS from the app; this route is for when the
+    // app already holds an API token. It records the dismissal (never deletes) so it
+    // can be restored.
     private static async Task<IResult> DismissInsight(
         string insightType, long zoneId, ClaimsPrincipal user, Fao56EngineController engine,
         AgroFlow.Api.Services.DismissalService dismissals, CancellationToken ct)

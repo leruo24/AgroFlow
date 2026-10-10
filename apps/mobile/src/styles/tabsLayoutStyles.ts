@@ -1,9 +1,8 @@
 import { Platform, StyleSheet } from 'react-native';
 import { Radius, Type, type AppColors } from '@/constants/colors';
 
-// The tab icon wrapper: identical for all five tabs, previously
-// re-declared per Tabs.Screen. No theme dependency, so a plain constant
-// rather than a colors(...) factory.
+// The tab icon wrapper, the same for all five tabs. No theme dependency, so a plain
+// constant instead of a colors(...) factory.
 export const tabsLayoutStyles = StyleSheet.create({
   tabIconWrapper: { width: 38, height: 38, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
   tabBarLabel: { fontSize: Type.label, fontWeight: '600', paddingTop: 3, backgroundColor: 'transparent' },
@@ -13,16 +12,10 @@ export const tabsLayoutStyles = StyleSheet.create({
 
 export function createTabsLayoutStyles(colors: AppColors) {
   return StyleSheet.create({
-    // The bar used to be transparent, with an expo-blur layer supplied via
-    // tabBarBackground painting the rounded surface behind it. With blur gone
-    // the bar paints itself: a solid token surface, a hairline border and a
-    // soft shadow to lift it off the canvas.
-    //
-    // The border runs the whole way round rather than only along the top. On a
-    // rounded, inset, floating bar a top-only hairline is clipped by the corner
-    // radius and reads as an unfinished line; a full hairline reads as chrome.
-    // `overflow: 'hidden'` is also gone - it existed to clip the blur layer to
-    // the corner radius, and it would clip the new shadow on iOS.
+    // The bar has a solid surface, a hairline border and a soft shadow.
+    // The border goes all the way round: on a rounded floating bar a top-only line is clipped
+    // by the corners and looks unfinished. No `overflow: 'hidden'`, which would clip the
+    // shadow on iOS.
     tabBar: {
       height: Platform.OS === 'ios' ? 82 : 72,
       marginHorizontal: 16,

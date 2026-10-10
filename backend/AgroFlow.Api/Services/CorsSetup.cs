@@ -1,24 +1,12 @@
 namespace AgroFlow.Api.Services;
 
-/* Admin polish, item 8: the API's one CORS policy.
- *
- * Program.cs used to register CORS three times - two "AdminFrontend" policies
- * (the second silently replaced the first, dropping localhost:5174) and a
- * default policy - and apply two of them. Now there is one named policy,
- * applied once:
- *
- *   - every origin in Cors:AllowedOrigins (on Railway: Cors__AllowedOrigins__0,
- *     Cors__AllowedOrigins__1, ...), matched exactly, ignoring case and a
- *     trailing slash;
- *   - the local dev origins (the admin's Vite ports and Expo web), in every
- *     environment, as before;
- *   - in Development, any http(s) loopback origin, so a dev server on another
- *     port works without configuration, as before.
- *
- * Any header and method: the admin and the mobile web app send Authorization
- * and Content-Type today; listing headers would break the next one added
- * without making anything safer - every route still checks its own JWT or
- * device key, and no credentials (cookies) are allowed. */
+/* The API's one CORS policy, applied once:
+ * - every origin in Cors:AllowedOrigins (on Railway: Cors__AllowedOrigins__0,
+ *   Cors__AllowedOrigins__1, ...), matched exactly, ignoring case and a trailing slash;
+ * - the local dev origins (the admin's Vite ports and Expo web), in every environment;
+ * - in Development, any http(s) loopback origin, so a dev server on another port works.
+ * Any header and method are allowed: every route still checks its own JWT or device
+ * key, and no credentials (cookies) are allowed. */
 public static class CorsSetup
 {
     public const string PolicyName = "AgroFlowWeb";

@@ -5,15 +5,12 @@ using Microsoft.Extensions.Options;
 
 namespace AgroFlow.Api.Services.Notifications;
 
-// Thin wrapper over the two Telegram Bot API methods AgroFlow uses:
-// sendMessage (outbound) and getUpdates (inbound long poll). Deliberately not
-// a full Bot API client library - two methods is the whole surface, and a
-// dependency here would be more code to audit than the code it replaces.
+// A thin wrapper over the two Telegram Bot API methods we use: sendMessage and
+// getUpdates (long poll). Two methods do not justify a library dependency.
 public sealed class TelegramClient
 {
-    // Telegram rejects a message over 4096 UTF-16 code units outright. Every
-    // message AgroFlow sends is far under this; the guard exists so a
-    // pathological farm/zone name can never turn into a failed alert.
+    // Telegram rejects messages over 4096 UTF-16 code units. Ours are far shorter;
+    // this guard stops a very long farm or zone name from failing an alert.
     private const int MaxMessageLength = 4096;
 
     private readonly IHttpClientFactory _httpClientFactory;
@@ -32,24 +29,17 @@ public sealed class TelegramClient
 
     public bool IsConfigured => _options.IsConfigured;
 
-    // Returns false instead of throwing on every failure mode, so callers can
-    // stay on the INotificationService "never throws" contract without
-    // wrapping each call in its own try/catch.
-    //
-    // Messages are sent as PLAIN TEXT with no parse_mode on purpose. The
-    // welcome message contains a generated password whose alphabet includes
-    // the characters Markdown and HTML treat as markup (_ * ` [ < &), and a
-    // password is exactly the kind of string that must arrive byte-for-byte.
-    // Asking Telegram to parse it would either mangle it or fail the send.
+    // Returns false instead of throwing, so callers keep the "never throws" contract.
+    // Sent as plain text with no parse_mode: the welcome message contains a generated
+    // password that can include _ * ` [ < &, and Markdown or HTML parsing would mangle it.
     public Task<bool> SendMessageAsync(
         long chatId,
         string text,
         CancellationToken cancellationToken) =>
         SendMessageAsync(chatId, text, whyExplanationId: null, cancellationToken);
 
-    // Item 2c: callback data for the "Why am I seeing this?" button. Only the
-    // explanation row id - no names, no farm, nothing personal - and well
-    // under Telegram's 64-byte limit.
+    // Callback data for the "Why am I seeing this?" button: only the explanation row
+    // id (nothing personal), well under Telegram's 64-byte limit.
     public const string WhyCallbackPrefix = "why:";
     public const string WhyButtonText = "Why am I seeing this?";
 
@@ -105,9 +95,8 @@ public sealed class TelegramClient
 
             var error = await response.Content.ReadAsStringAsync(cancellationToken);
 
-            // 403 is the ordinary "this farmer blocked the bot, or deleted
-            // the chat" case. It is not an incident and must not be logged as
-            // an error every 30 seconds for a zone that stays Critical.
+            // 403 means the farmer blocked the bot or deleted the chat. That is normal, so we
+            // do not log it as an error every 30 seconds.
             if (response.StatusCode == HttpStatusCode.Forbidden)
             {
                 _logger.LogInformation(
@@ -130,17 +119,11 @@ public sealed class TelegramClient
         }
     }
 
-    // Unlike SendMessageAsync this DOES throw, because its only caller is the
-    // polling loop, which needs to distinguish "nothing happened" from "the
-    // call failed" so it can back off rather than hammer the API.
-    // sendDocument, for the PDF reports.
-    //
-    // Multipart rather than a URL, because the PDF is generated in memory and
-    // never written anywhere a URL could point at - see migration 0034 on why
-    // this deployment stores no files.
-    //
-    // Returns false instead of throwing, like SendMessageAsync, so a failed
-    // delivery can never undo a report that is already marked ready.
+    // Unlike SendMessageAsync this throws, because the polling loop needs to tell
+    // "nothing happened" from "the call failed" so it can back off.
+    // sendDocument, for the PDF reports: multipart, because the PDF is made in memory
+    // and never stored (see migration 0034). Returns false instead of throwing, so a
+    // failed delivery never undoes a report already marked ready.
     public async Task<bool> SendDocumentAsync(
         long chatId,
         byte[] document,
@@ -154,10 +137,8 @@ public sealed class TelegramClient
             return false;
         }
 
-        // Telegram's own limit for a bot upload is 50 MB. An AgroFlow report
-        // is a few pages, so this only ever catches a runaway render - but a
-        // 50 MB POST from a small container is worth refusing locally rather
-        // than discovering at the far end.
+        // Telegram's bot upload limit is 50 MB. Our reports are a few pages, so this only
+        // catches a runaway render before we send it.
         const int maxBytes = 50 * 1024 * 1024;
         if (document.Length == 0 || document.Length > maxBytes)
         {
@@ -167,8 +148,8 @@ public sealed class TelegramClient
             return false;
         }
 
-        // Telegram truncates a caption over 1024 characters; ours are one
-        // line, so this only guards a pathological farm name.
+        // Telegram cuts captions over 1024 characters; ours are one line, so this only
+        // guards against a very long farm name.
         const int maxCaption = 1024;
         if (caption.Length > maxCaption) caption = caption[..maxCaption];
 
@@ -189,8 +170,7 @@ public sealed class TelegramClient
 
             if (!response.IsSuccessStatusCode)
             {
-                // The body carries Telegram's own reason (blocked bot, bad
-                // chat id), which is the useful half.
+                // The body has Telegram's reason (blocked bot, bad chat id), which is the useful part.
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
                 _logger.LogWarning(
@@ -214,8 +194,8 @@ public sealed class TelegramClient
     {
         var client = _httpClientFactory.CreateClient();
 
-        // Slightly longer than the server-side long poll so the HTTP client
-        // never times out a connection Telegram is legitimately holding open.
+        // A bit longer than the long poll, so the HTTP client never drops a connection
+        // Telegram is holding open.
         client.Timeout = TimeSpan.FromSeconds(_options.LongPollSeconds + 15);
 
         using var response = await client.PostAsJsonAsync(
@@ -225,9 +205,8 @@ public sealed class TelegramClient
                 offset,
                 timeout = _options.LongPollSeconds,
 
-                // Messages, and button taps (item 2c's "Why am I seeing
-                // this?"). Edited messages, reactions and channel posts stay
-                // out of the loop entirely.
+                // Messages and button taps ("Why am I seeing this?") only; edited messages,
+                // reactions and channel posts are ignored.
                 allowed_updates = new[] { "message", "callback_query" },
             },
             cancellationToken);
@@ -247,8 +226,7 @@ public sealed class TelegramClient
         return payload?.Result ?? [];
     }
 
-    // Stops the spinner on a tapped inline button. Telegram shows it until
-    // this is called. Never throws - a spinner that keeps turning is not
+    // Stops the spinner on a tapped inline button. Never throws: a spinner is not
     // worth failing anything over.
     public async Task<bool> AnswerCallbackQueryAsync(
         string callbackQueryId,
@@ -276,9 +254,8 @@ public sealed class TelegramClient
     private string BuildUrl(string method) =>
         $"https://api.telegram.org/bot{_options.BotToken}/{method}";
 
-    // Telegram echoes the request URL - which contains the bot token - in
-    // some error bodies. Anything logged from a response body goes through
-    // here first so the token cannot reach the Railway log stream.
+    // Security: Telegram sometimes echoes the request URL (which contains the bot token)
+    // in error bodies, so anything logged from a response goes through here first.
     private string Redact(string text)
     {
         var token = _options.BotToken;
@@ -308,8 +285,8 @@ public sealed record TelegramUpdate(
     [property: JsonPropertyName("message")] TelegramMessage? Message,
     [property: JsonPropertyName("callback_query")] TelegramCallbackQuery? CallbackQuery = null);
 
-// A tap on an inline button. Message is the message the button was on, so
-// its chat is the chat that tapped.
+// A tap on an inline button. Message is the message the button was on, so its
+// chat is the chat that tapped.
 public sealed record TelegramCallbackQuery(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("message")] TelegramMessage? Message,

@@ -16,9 +16,8 @@ import {
   type AlertHistoryPeriod,
 } from '@/services/alertHistoryService';
 
-// Which half of the screen is showing. Irrigation events and alerts are both
-// "what happened", but a farmer looking for one is never looking for the
-// other, so they are tabs rather than one merged stream.
+// Which half of the screen is showing. Irrigation events and alerts are separate
+// tabs, because a farmer looking for one is never looking for the other.
 type Section = 'activity' | 'alerts';
 
 type TypeFilter = 'all' | 'alert' | 'advice';
@@ -48,9 +47,8 @@ export default function HistoryScreen() {
 
   const zoneIds = useMemo(() => zones.map((z) => z.id), [zones]);
 
-  // Only fetched once the farmer actually opens the Alerts section - this is
-  // two more queries and nobody opening History for an irrigation event needs
-  // to pay for them.
+  // Only fetched when the farmer opens the Alerts section, so opening History for an
+  // irrigation event costs no extra queries.
   const loadAlerts = useCallback(async () => {
     if (zoneIds.length === 0) {
       setAlertItems([]);
@@ -153,7 +151,7 @@ export default function HistoryScreen() {
           </>
         ) : (
           <>
-            {/* ---- Filters ------------------------------------------- */}
+            {/* Filters */}
             <View style={styles.filterGroup}>
               <Text style={styles.filterLabel}>Zone</Text>
               <View style={styles.filterRow}>
@@ -182,7 +180,7 @@ export default function HistoryScreen() {
               </View>
             </View>
 
-            {/* ---- The list ------------------------------------------ */}
+            {/* The list */}
             {alertsLoading ? (
               <DataState kind="loading" title="Loading alerts" />
             ) : visible.length === 0 ? (

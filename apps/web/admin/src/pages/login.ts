@@ -1,6 +1,5 @@
-/* Login screen markup + wiring. One of the three mutually exclusive
-   states main.ts's render() puts into #root. Not a PageId in the router
-   (see app/router.ts): outside the authenticated app shell entirely. */
+/* Login screen markup and wiring. One of the three states main.ts's render() puts into
+ * #root. Not a PageId in the router (see app/router.ts): it is outside the signed-in shell. */
 
 import { signIn } from "@/app/auth";
 import { plainError } from "@/lib/plainError";
@@ -41,11 +40,10 @@ export const LOGIN_HTML = `
     </form>
   </div>`;
 
-/** Wires the login form. Called by main.ts right after it puts
-    LOGIN_HTML into #root - always a brand-new form node (#root was just
-    cleared), so binding fresh listeners here every call is correct, not
-    an accumulating leak: the previous form and its listeners, if any,
-    are already gone with the DOM they were attached to. */
+/**
+ * Wires the login form. main.ts calls it after putting LOGIN_HTML into #root, which was
+ * just cleared, so this is always a new form and fresh listeners do not pile up.
+ */
 export function wireLogin(root: HTMLElement): void {
   const form = root.querySelector<HTMLFormElement>("#loginForm");
   const emailInput = root.querySelector<HTMLInputElement>("#loginEmail");
@@ -85,9 +83,8 @@ export function wireLogin(root: HTMLElement): void {
         submitBtn.disabled = false;
         submitBtn.textContent = "Sign in";
       });
-    // On success, app/auth.ts's notify() triggers main.ts's render() with
-    // "signed-in", which clears #root and replaces this form entirely -
-    // nothing to do here in that case.
+    // On success, app/auth.ts's notify() makes main.ts render "signed-in", which replaces this
+    // form, so there is nothing to do here.
   });
 
   // Clearing the hash drops #/login, which main.ts's hashchange listener

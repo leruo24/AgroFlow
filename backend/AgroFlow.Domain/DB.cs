@@ -4,12 +4,10 @@ using Npgsql;
 
 namespace AgroFlow.Data
 {
-    // Direct equivalent of the workshop's DB.cs base class: shared Connection,
-    // DataSet and DataAdapter, with FillDataSet/UpdateDataSource reused by every
-    // concrete XDB class. Swapped from SqlConnection/SqlDataAdapter (SQL Server) to
-    // NpgsqlConnection/NpgsqlDataAdapter because the real backend is Supabase
-    // (Postgres). Npgsql implements the same DbDataAdapter/DataSet model, so the
-    // taught pattern is unchanged - only the provider differs.
+    // Base class like the workshop's DB.cs: a shared connection, DataSet and
+    // DataAdapter, with FillDataSet/UpdateDataSource used by every XDB class.
+    // We use Npgsql instead of SqlClient because the database is Supabase (Postgres);
+    // the DataSet pattern stays the same.
     public class DB
     {
         public enum DBOperation
@@ -20,8 +18,7 @@ namespace AgroFlow.Data
         }
 
         #region Data Members
-        // The workshop read this from Settings.Default (app.config). Here it is
-        // passed into the constructor, so it comes from the API's configuration.
+        // The connection string comes from the API's configuration through the constructor.
         private string strConn;
         protected NpgsqlConnection cnMain;
         protected DataSet dsMain;

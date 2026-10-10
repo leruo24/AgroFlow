@@ -12,14 +12,9 @@ type Props = {
   screen: HelpScreen;
 };
 
-// A small circled "?" for a screen's header area. Tapping it opens a sheet with
-// a short explanation of the page.
-//
-// Renders nothing at all when "Show page help" is off, so the setting removes the
-// icons rather than just disabling them.
-//
-// The copy lives in constants/helpContent.ts, never here - one file to edit when
-// the wording needs changing.
+// A small circled "?" for a screen's header. Tapping it opens a sheet explaining the page.
+// Renders nothing when "Show page help" is off. The text lives in constants/helpContent.ts,
+// so there is one file to edit.
 export function HelpButton({ screen }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createHelpButtonStyles(colors), [colors]);

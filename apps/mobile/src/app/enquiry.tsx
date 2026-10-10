@@ -1,6 +1,5 @@
-// "Ask for a call" - reached from the login screen by someone who is not a
-// farmer on AgroFlow yet (item 6c). No login: it posts to the same public
-// endpoint as the website's form, which checks everything again.
+// "Ask for a call", reached from the login screen by someone not on AgroFlow yet. No login:
+// it posts to the same public endpoint as the website's form, which checks everything again.
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

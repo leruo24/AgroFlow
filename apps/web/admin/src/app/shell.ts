@@ -1,9 +1,6 @@
-/* The authenticated app shell's markup - sidebar, header, content
-   section. One of the three mutually exclusive states main.ts's
-   render() puts into #root (see main.ts's ViewState/renderState()) - a
-   plain HTML string, wired up by main.ts right after it's inserted.
-   Holds no mount/unmount state itself; #root's own innerHTML is the only
-   thing that determines whether this exists in the DOM at all. */
+/* The signed-in app shell's markup: sidebar, header and content section. One of the three
+ * states main.ts's render() puts into #root (see ViewState/renderState()), as a plain HTML
+ * string that main.ts wires up after inserting it. */
 
 import { Icon } from "@/lib/icons";
 

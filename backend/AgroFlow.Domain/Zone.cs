@@ -11,24 +11,19 @@ namespace AgroFlow.Business
         private float waterSaved;
         private string healthStatus;
 
-        // Per-zone auto-irrigation thresholds (Postgres: zone.moisture_threshold /
-        // desired_moisture - renamed from moisture_dry_threshold/moisture_wet_threshold
-        // by 0010_zone_schema_realignment.sql to match the app's zone-settings UI).
-        // Nullable to match the DB columns - a zone with no threshold configured
-        // should never auto-trigger, not fall back to a guessed default (see
-        // ShouldStartIrrigation/ShouldStopIrrigation below).
+        // Per-zone auto-irrigation thresholds (zone.moisture_threshold / desired_moisture,
+        // named in 0010 to match the app's zone settings). Nullable like the columns: a zone
+        // with no threshold never auto-triggers (see ShouldStartIrrigation/ShouldStopIrrigation).
         private float? moistureThreshold;
         private float? desiredMoisture;
 
-        // Running total (Postgres: zone.water_used_total). NOT the same column as
-        // waterSaved above - see AddWaterUsage.
+        // Running total (zone.water_used_total). Not the same as waterSaved above; see
+        // AddWaterUsage.
         private float waterUsedTotal;
         #endregion
 
         #region Health Status Thresholds
-        // Same values the removed Postgres trigger used (calculate_zone_health() in
-        // the now-dropped 0006_backend_irrigation_logic.sql) - named constants here
-        // instead of magic numbers, so this is the one place to tune them.
+        // Zone health thresholds as named constants, so this is the one place to tune them.
         public const float MoistureCriticalMax = 20f;
         public const float MoistureWarningMax = 40f;
         public const float TemperatureCriticalMin = 38f;
@@ -115,10 +110,8 @@ namespace AgroFlow.Business
         #endregion
 
         #region Methods
-        // Original single-factor instance calculation (moisture only, reads/writes
-        // this instance's own HealthStatus). Left as-is - CalculateHealthStatus below
-        // is the multi-factor replacement used by the sensor-readings API endpoint,
-        // added alongside rather than in place of this one.
+        // The simple moisture-only calculation on this instance. CalculateHealthStatus below
+        // is the multi-factor version the sensor-readings endpoint uses.
         public string CalculateHealth()
         {
             if (moisture < 20f) healthStatus = "Critical";
@@ -132,13 +125,10 @@ namespace AgroFlow.Business
             return moisture < 40f;
         }
 
-        // Multi-factor health calculation, matching the logic the removed Postgres
-        // trigger used (calculate_zone_health() in 0006_backend_irrigation_logic.sql,
-        // dropped by 0007). Static and parameterised rather than reading instance
-        // state, since the API endpoint calling this has readings for a zone_id, not
-        // necessarily a fully-hydrated Zone instance. Moisture is the primary signal;
-        // temperature/humidity only ever escalate severity, never override a healthy
-        // moisture reading into Critical on their own.
+        // Multi-factor health calculation. Static with parameters because the endpoint has
+        // readings for a zone_id, not a full Zone object. Moisture is the main signal;
+        // temperature and humidity can only raise the severity, never turn a healthy moisture
+        // reading into Critical on their own.
         public static string CalculateHealthStatus(float? moisture, float? temperature, float? humidity)
         {
             if (!moisture.HasValue)
@@ -162,9 +152,8 @@ namespace AgroFlow.Business
             return "Healthy";
         }
 
-        // True only when a dry threshold is actually configured for this zone - an
-        // unset threshold must never fall back to a guessed default and silently
-        // start irrigating.
+        // True only when a dry threshold is set for this zone: an unset threshold never
+        // falls back to a guessed default and starts irrigating.
         public bool ShouldStartIrrigation(float moisture)
         {
             return moistureThreshold.HasValue && moisture < moistureThreshold.Value;
@@ -175,12 +164,9 @@ namespace AgroFlow.Business
             return desiredMoisture.HasValue && moisture > desiredMoisture.Value;
         }
 
-        // Adds to the running water-usage total and returns the new total. The
-        // actual persisted increment in the API endpoint is still done as an atomic
-        // SQL UPDATE under a row lock (see IrrigationEventEndpoints) to avoid a
-        // lost-update race if two requests for the same zone overlap - this method
-        // is the domain-layer computation that decides the new value, not the
-        // concurrency control.
+        // Adds to the running water total and returns the new total. The saved increment
+        // still happens under a row lock in IrrigationEventEndpoints to avoid a lost-update
+        // race; this method only works out the value.
         public float AddWaterUsage(float estimatedLitres)
         {
             waterUsedTotal += estimatedLitres;

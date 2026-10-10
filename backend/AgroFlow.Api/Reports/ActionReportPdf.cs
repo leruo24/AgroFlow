@@ -6,13 +6,10 @@ using QuestPDF.Infrastructure;
 
 namespace AgroFlow.Api.Reports;
 
-// Item 3: lays out an ActionReportContent. All the words come from
-// ActionReport.Compose; this file decides only where they go.
-//
-// Farmer pages first (actions, how the farm did, the three questions,
-// weather at the plants, improve your advice), then the technical appendix on
-// its own page - the only place FAO-56 symbols and page numbers appear - and
-// the numbered "Why we said this" notes.
+// Lays out an ActionReportContent: the words come from ActionReport.Compose and
+// this file only places them. Farmer pages first, then the technical appendix on
+// its own page (the only place with FAO-56 symbols) and the numbered
+// "Why we said this" notes.
 internal static class ActionReportPdf
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -29,17 +26,16 @@ internal static class ActionReportPdf
         ActionReportContent content, IReadOnlyList<WaterUsageReportModel> zones,
         DateOnly from, DateOnly to, DateTimeOffset generatedAtSast)
     {
-        // Notes are registered before rendering, in reading order, so their
-        // numbers never depend on how often a page is composed (item 2c).
+        // Notes are registered before rendering, in reading order, so their numbers
+        // never change.
         var why = new ReportWhy();
         foreach (var a in content.Actions) why.Add(a.Why);
         foreach (var s in content.Summaries) why.Add(s.VerdictWhy);
 
         var generated = ReportShell.GeneratedLine(generatedAtSast);
 
-        // Item 4: a one-day report is the daily brief - one page of today's
-        // actions and the setup steps. No charts, no appendix; the "Why:"
-        // lines stand on their own, without note numbers.
+        // A one-day report is the daily brief: one page of today's actions and setup
+        // steps, with no charts, appendix or note numbers.
         if (ReportPeriod.Days(from, to) <= 1)
         {
             return Document.Create(doc => doc.Page(page =>
@@ -66,8 +62,7 @@ internal static class ActionReportPdf
                     HowItWent(col, content, why);
                     for (var i = 0; i < zones.Count; i++)
                     {
-                        // All zones: each zone's charts start on a fresh page,
-                        // so a farm report grows by about a page per zone.
+                        // All zones: each zone's charts start on a new page.
                         if (zones.Count > 1) col.Item().PageBreak();
                         Questions(col, zones[i], content.ZoneAnswers[i], from, to, zones.Count > 1);
                     }
@@ -110,8 +105,7 @@ internal static class ActionReportPdf
             return;
         }
 
-        // Decided before layout, so it cannot depend on how often a page
-        // is composed: a reason already given reads "the same reason as above".
+        // Decided before layout: a reason already given reads "the same reason as above".
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var plainWhy = content.Actions
             .Select(x => x.Why is { } w ? (seen.Add(w.Summary) ? w.Summary : "the same reason as above.") : null)
