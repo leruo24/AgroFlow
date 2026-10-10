@@ -402,6 +402,7 @@ files["c09-run"] = comp(9, """
   IN("#c09-exp", 13.4, 0.5);
   tl.fromTo("#c09-safe", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5, ease: E }, 13.8);
   tl.to("#c09-safe", { opacity: 0, duration: 0.3 }, 20.0);
+  OUT("#c09-exp", 23.3, 0.5);
 """)
 
 # ---------- 10. The weather changes (Leruo) ------------------------------------------------------

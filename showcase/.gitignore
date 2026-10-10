@@ -5,3 +5,7 @@ renders/work-*/
 renders/.*
 .hyperframes/
 renders/preview-draft-full.mp4
+# v4 videos are over 50 MB: kept out of git
+renders/AgroFlow_v4_*.mp4
+renders/INF3003W_Team02_ShowcaseDemo_v4.mp4
+v4/vo-team/*.wav
