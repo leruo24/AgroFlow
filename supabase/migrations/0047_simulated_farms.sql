@@ -20,6 +20,25 @@ comment on column sensor_reading.simulated is
 comment on column sensor_reading.simulation_day is
     'Africa/Johannesburg model day for a simulated row; null on real readings.';
 
+-- 0010 renamed zone.moisture_dry_threshold / moisture_wet_threshold, but renaming a
+-- table column does not rename a view column that selected it, so a database where
+-- the 0007 view was in place still names them the old way. CREATE OR REPLACE VIEW
+-- cannot rename columns (42P16), so rename them first. Does nothing on a database
+-- that already has the new names.
+do $$
+begin
+    if exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'zone_latest_reading'
+                 and column_name = 'moisture_dry_threshold') then
+        alter view zone_latest_reading rename column moisture_dry_threshold to moisture_threshold;
+    end if;
+    if exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'zone_latest_reading'
+                 and column_name = 'moisture_wet_threshold') then
+        alter view zone_latest_reading rename column moisture_wet_threshold to desired_moisture;
+    end if;
+end $$;
+
 -- Keep the latest-reading view honest about the provenance of each displayed value.
 create or replace view zone_latest_reading as
 select
