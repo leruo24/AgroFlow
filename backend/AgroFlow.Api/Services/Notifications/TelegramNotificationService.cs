@@ -157,6 +157,19 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
+    public async Task NotifyPossibleFaultAsync(
+        long farmId, long zoneId, string message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await BroadcastToFarmAsync(farmId, message, alertsOnly: true, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogSwallowed(ex, "possible-fault", zoneId.ToString());
+        }
+    }
+
     // A zone AgroFlow could not water itself
 
     public async Task NotifyZoneCriticalAsync(

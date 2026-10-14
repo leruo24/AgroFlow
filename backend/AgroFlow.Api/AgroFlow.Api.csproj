@@ -18,6 +18,20 @@
     <PackageReference Include="Npgsql" Version="10.0.3" />
     <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.3" />
     <PackageReference Include="QuestPDF" Version="2026.9.0" />
+    <!-- ML.NET for the soil moisture forecast and fault checks (Ml/). Free and
+         in-process: no cloud service, no Python. -->
+    <PackageReference Include="Microsoft.ML" Version="4.0.3" />
+    <PackageReference Include="Microsoft.ML.FastTree" Version="4.0.3" />
+    <PackageReference Include="Microsoft.ML.TimeSeries" Version="4.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The trained forecast model and its evaluation travel inside the assembly,
+         like the report logo, so a Railway deploy always has them. A retrained
+         model written to Ml:ModelPath takes precedence at runtime. -->
+    <EmbeddedResource Include="Ml/moisture-model.zip" LogicalName="AgroFlow.Api.Ml.moisture-model.zip" Condition="Exists('Ml/moisture-model.zip')" />
+    <EmbeddedResource Include="Ml/moisture-model-evaluation.json" LogicalName="AgroFlow.Api.Ml.moisture-model-evaluation.json" Condition="Exists('Ml/moisture-model-evaluation.json')" />
+    <None Remove="Ml/training-weather/**" />
   </ItemGroup>
 
   <ItemGroup>

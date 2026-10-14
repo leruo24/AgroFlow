@@ -23,6 +23,14 @@ QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 // as a blank box instead of failing the report.
 QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = false;
 
+// `dotnet run --project backend/AgroFlow.Api -- train-moisture-model` retrains the
+// forecast model and exits without starting the API (see Ml/MoistureModelTrainingCommand.cs).
+if (args.Length > 0 && args[0] == AgroFlow.Api.Ml.MoistureModelTrainingCommand.Name)
+{
+    Environment.ExitCode = AgroFlow.Api.Ml.MoistureModelTrainingCommand.Run(args[1..], builder.Configuration);
+    return;
+}
+
 
 // Set ConnectionStrings:Supabase (or ConnectionStrings__Supabase) to the Supabase
 // direct Postgres connection string: Project Settings -> Database -> Connection string.
@@ -220,6 +228,17 @@ builder.Services.AddSingleton(sp => new AgroFlow.Business.TankPhController(
 builder.Services.AddSingleton<TankLowMonitorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TankLowMonitorService>());
 
+// Machine learning (ML.NET, in-process). The forecast line reads the engine's result
+// and never changes it. Fault checks (Ml__FaultDetection__Enabled) and weekly
+// retraining (Ml__Retrain__Enabled, writes to Ml__ModelPath) are off by default.
+builder.Services.AddSingleton(sp => new AgroFlow.Business.MoistureMlController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for the moisture models.")));
+builder.Services.AddSingleton<AgroFlow.Api.Ml.MoistureForecaster>();
+builder.Services.AddSingleton<AgroFlow.Api.Ml.MoistureForecastService>();
+builder.Services.AddHostedService<MoistureFaultService>();
+builder.Services.AddHostedService<MoistureRetrainService>();
+
 // Turns `preparing` report_request rows (0034) into PDFs and sends them.
 // A background queue because rendering can time out a phone on rural data, and
 // automatic reports have no request to run in.
@@ -358,6 +377,7 @@ app.MapHandlingEndpoints();
 app.MapManualLogEndpoints();
 app.MapTodayEndpoints();
 app.MapTankPhEndpoints();
+app.MapMoistureForecastEndpoints();
 app.MapZoneSetupEndpoints();
 app.MapRecommendationEndpoints();
 app.MapFarmZoneEndpoints();

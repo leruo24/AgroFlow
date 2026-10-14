@@ -1,0 +1,35 @@
+{
+  "TrainedAtUtc": "2026-10-14T10:39:47.9057225Z",
+  "Trainer": "FastTree regression (ML.NET 4.0.3)",
+  "Seed": 20261014,
+  "ExamplesTotal": 22579,
+  "ExamplesSimulated": 22579,
+  "ExamplesReal": 0,
+  "TrainCount": 17831,
+  "TestCount": 4748,
+  "TestSimulated": 4748,
+  "TestReal": 0,
+  "TestFromDay": "2025-12-30",
+  "Sources": [
+    "Simulated: rustlers-valley (citrus), Open-Meteo archive weather 2023-01-01 to 2026-09-30, 11755 examples",
+    "Simulated: brits (tomato), Open-Meteo archive weather 2023-01-01 to 2026-09-30, 10824 examples"
+  ],
+  "Model": {
+    "Count": 4748,
+    "Mae": 0.6475811471593607,
+    "RSquared": 0.995444556988062
+  },
+  "Fao56Baseline": {
+    "Count": 4748,
+    "Mae": 0.04129736230510364,
+    "RSquared": 0.9999452310508338
+  },
+  "Persistence": {
+    "Count": 4748,
+    "Mae": 3.127613732097725,
+    "RSquared": 0.9121039361729771
+  },
+  "ModelOnRealOnly": null,
+  "Fao56BaselineOnRealOnly": null,
+  "TrainedOnSimulatedOnly": true
+}

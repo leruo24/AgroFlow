@@ -9,6 +9,7 @@ import { ZoneGrowthBar } from '@/components/ZoneGrowthBar';
 import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
 import { CalibrateSoilSheet } from '@/components/CalibrateSoilSheet';
 import { SoilPhPanel } from '@/components/SoilPhPanel';
+import { MoistureForecastLine } from '@/components/MoistureForecastLine';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 // Dynamic Expo route: one screen for every irrigation zone, by route ID.
 import {
@@ -1304,6 +1305,8 @@ export default function ZoneControlScreen() {
               selectedZone.id
             )}
           />
+
+          <MoistureForecastLine zoneId={Number(selectedZone.id)} />
 
           {/* Kit, soil and setup rows */}
           {/* Three navigation/action rows rather than three cards: each is

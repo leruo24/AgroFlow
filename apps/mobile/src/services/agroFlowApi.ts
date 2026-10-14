@@ -574,6 +574,24 @@ export function logSoilPh(
   );
 }
 
+export type MoistureForecast = {
+  available: boolean;
+  label: string;
+  text: string | null;
+  hoursUntilWater: number | null;
+  currentMoisturePct: number | null;
+  predictedMoisturePct24h: number | null;
+  simulatedData: boolean;
+  trainedOnSimulatedOnly: boolean;
+};
+
+// The machine learning model's 24-hour outlook. available=false means show nothing.
+export function fetchMoistureForecast(zoneId: string | number) {
+  return authorizedRequest<MoistureForecast>(
+    `/api/farmer/zones/${encodeURIComponent(String(zoneId))}/moisture-forecast`
+  );
+}
+
 // Writes go through authorizedRequest, so a double tap sends one entry.
 export function logManualWatering(zoneId: number, entry: { minutes?: number; litres?: number }) {
   return authorizedRequest<{ id: number; message: string }>(

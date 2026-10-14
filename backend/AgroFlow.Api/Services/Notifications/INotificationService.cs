@@ -82,6 +82,10 @@ public interface INotificationService
     // A plain work-queue notice to every admin with a linked chat ("New enquiry: ...").
     // The default body does nothing, so test doubles need no change; Telegram overrides it.
     Task NotifyAdminsAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    // A possible sensor or water supply fault (MoistureFaultService), to every farm member.
+    Task NotifyPossibleFaultAsync(long farmId, long zoneId, string message, CancellationToken cancellationToken)
+        => Task.CompletedTask;
 }
 
 // Why AgroFlow could not water a Critical zone itself. Each value means something
