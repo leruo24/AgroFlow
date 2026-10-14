@@ -95,6 +95,35 @@ public class SqlGuardTests
         Assert.DoesNotContain(" or true", body, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void Farm_alerts_reach_the_owner_and_every_farm_member_in_app_and_Telegram()
+    {
+        var farmerEndpoints = Api(Path.Combine("Endpoints", "FarmerEndpoints.cs"));
+        var dashboard = farmerEndpoints[farmerEndpoints.IndexOf(
+            "private static async Task<IResult> GetDashboardAsync", StringComparison.Ordinal)..];
+        dashboard = dashboard[..dashboard.IndexOf(
+            "private static async Task<IResult> UpdateZoneSettingsAsync", StringComparison.Ordinal)];
+
+        // Every member can select the farm, and the alert rows come from every zone in
+        // that selected farm. Alerts are shared farm data, not copied to one profile.
+        Assert.Contains("where f.owner_id = $1", dashboard);
+        Assert.Contains("fm.farm_id = f.farm_id and fm.profile_id = $1", dashboard);
+        Assert.Contains("from alert a join selected_zones z on z.id = a.zone_id", dashboard);
+
+        var telegram = Api(Path.Combine("Services", "Notifications", "TelegramNotificationService.cs"));
+        var broadcast = telegram[telegram.IndexOf(
+            "private async Task BroadcastToFarmAsync", StringComparison.Ordinal)..];
+        broadcast = broadcast[..broadcast.IndexOf("private sealed record ZoneContext", StringComparison.Ordinal)];
+
+        // DISTINCT prevents a farm owner who is also listed as a member from receiving
+        // the same message twice; the loop sends to every resolved chat, not just the first.
+        Assert.Contains("select distinct p.telegram_chat_id", broadcast);
+        Assert.Contains("f.owner_id = p.id", broadcast);
+        Assert.Contains("fm.farm_id = $1 and fm.profile_id = p.id", broadcast);
+        Assert.Contains("foreach (var chatId in chatIds)", broadcast);
+        Assert.Contains("SendMessageAsync(chatId", broadcast);
+    }
+
     // ---- concurrency --------------------------------------------------------
 
     [Fact]
