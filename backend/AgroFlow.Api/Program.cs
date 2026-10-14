@@ -203,6 +203,15 @@ builder.Services.AddSingleton(sp => new AgroFlow.Business.Fao56EngineController(
         ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for the FAO-56 engine.")));
 builder.Services.AddHostedService<Fao56EngineService>();
 
+// Tank and pH records use the same DB / XDB / Controller structure as the
+// irrigation engine. The monitor owns no estimate state: every pass derives it
+// from refill records and pump runtime, so restarts cannot change the answer.
+builder.Services.AddSingleton(sp => new AgroFlow.Business.TankPhController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for tank tracking.")));
+builder.Services.AddSingleton<TankLowMonitorService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TankLowMonitorService>());
+
 // Turns `preparing` report_request rows (0034) into PDFs and sends them.
 // A background queue because rendering can time out a phone on rural data, and
 // automatic reports have no request to run in.
@@ -340,6 +349,7 @@ app.MapAdminRequestEndpoints();
 app.MapHandlingEndpoints();
 app.MapManualLogEndpoints();
 app.MapTodayEndpoints();
+app.MapTankPhEndpoints();
 app.MapZoneSetupEndpoints();
 app.MapRecommendationEndpoints();
 app.MapFarmZoneEndpoints();

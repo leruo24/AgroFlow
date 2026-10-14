@@ -350,6 +350,7 @@ type WeatherRow = {
 type AlertRow = {
   id: DatabaseId;
   zone_id: DatabaseId | null;
+  farm_id?: DatabaseId | null;
   severity: string;
   message: string;
   status?: string;
@@ -631,16 +632,14 @@ async function fetchZonesForFarm(
   const zoneNames = new Map(
     rows.map((row) => [String(row.id), row.name ?? `Zone ${row.id}`])
   );
-  const mappedAlerts: AlertEntry[] = alertRows
-    .filter((alert) => alert.zone_id !== null)
-    .map((alert) => ({
+  const mappedAlerts: AlertEntry[] = alertRows.map((alert) => ({
       id: `database-${alert.id}`,
       farmId,
       type: alert.severity.toLowerCase(),
       title: `${alert.severity} Alert`,
       message: alert.message,
-      zone: zoneNames.get(String(alert.zone_id)) ?? null,
-      zoneId: String(alert.zone_id),
+      zone: alert.zone_id === null ? null : zoneNames.get(String(alert.zone_id)) ?? null,
+      zoneId: alert.zone_id === null ? null : String(alert.zone_id),
       timestamp: alert.created_at ?? '',
       read: false,
     }));

@@ -8,6 +8,7 @@ import { ZoneInsightsCard } from '@/components/ZoneInsightsCard';
 import { ZoneGrowthBar } from '@/components/ZoneGrowthBar';
 import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
 import { CalibrateSoilSheet } from '@/components/CalibrateSoilSheet';
+import { SoilPhPanel } from '@/components/SoilPhPanel';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 // Dynamic Expo route: one screen for every irrigation zone, by route ID.
 import {
@@ -1532,6 +1533,8 @@ export default function ZoneControlScreen() {
               strokeWidth={2}
             />
           </TouchableOpacity>
+
+          <SoilPhPanel zoneId={Number(selectedZone.id)} />
 
           <ResetRecommendedButton
             zoneId={Number(

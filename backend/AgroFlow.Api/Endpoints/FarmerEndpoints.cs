@@ -348,7 +348,10 @@ public static class FarmerEndpoints
                 'events', coalesce((select jsonb_agg(to_jsonb(e) order by e.started_at desc) from irrigation_event e join selected_zones z on z.id = e.zone_id), '[]'::jsonb),
                 'usage', coalesce((select jsonb_agg(to_jsonb(u)) from zone_daily_water_usage u join selected_zones z on z.id = u.zone_id), '[]'::jsonb),
                 'weather', coalesce((select jsonb_agg(to_jsonb(w) order by w.recorded_at desc) from weather w join selected_farm f on f.farm_id = w.farm_id), '[]'::jsonb),
-                'alerts', coalesce((select jsonb_agg(to_jsonb(a) order by a.created_at desc) from alert a join selected_zones z on z.id = a.zone_id), '[]'::jsonb)
+                'alerts', coalesce((select jsonb_agg(to_jsonb(a) order by a.created_at desc)
+                                      from alert a join selected_farm f
+                                        on a.farm_id = f.farm_id
+                                        or exists (select 1 from selected_zones z where z.id = a.zone_id)), '[]'::jsonb)
             )::text;
             """;
 

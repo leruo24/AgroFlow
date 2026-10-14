@@ -58,6 +58,9 @@ public class FarmRequestNotifierResilienceTests
             long farmId, SystemFailureNotification notification, CancellationToken cancellationToken)
             => throw new InvalidOperationException("Telegram is down.");
 
+        public Task NotifyTankLowAsync(long farmId, CancellationToken cancellationToken)
+            => throw new InvalidOperationException("Telegram is down.");
+
         public Task NotifyRequestStatusAsync(
             Guid profileId, RequestStatusNotification notification, CancellationToken cancellationToken)
             => throw new InvalidOperationException("Telegram is down.");

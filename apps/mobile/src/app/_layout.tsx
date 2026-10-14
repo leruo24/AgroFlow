@@ -146,6 +146,10 @@ function RootNavigator() {//decides which screens the user is permitted to acces
         <Stack.Screen
           name="zone/[id]"
         />
+
+        <Stack.Screen
+          name="tank"
+        />
       </Stack.Protected>
 
 {/* The recovery route stays registered while Supabase changes the temporary auth state. It comes after the protected routes so it is never the default screen. */}

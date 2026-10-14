@@ -53,6 +53,9 @@ public interface INotificationService
         SystemFailureNotification notification,
         CancellationToken cancellationToken);
 
+    // Farm-wide because every member shares the same source tank.
+    Task NotifyTankLowAsync(long farmId, CancellationToken cancellationToken);
+
     // Farmers raise requests in the app; this tells them when an admin moves one along.
     // See RequestStatusNotification for why it has no caller yet.
     Task NotifyRequestStatusAsync(
@@ -195,6 +198,9 @@ public sealed class NullNotificationService : INotificationService
     public Task NotifySystemFailureAsync(
         long farmId, SystemFailureNotification notification, CancellationToken cancellationToken)
         => LogDiscarded($"system-{notification.Kind}", $"farm {farmId}");
+
+    public Task NotifyTankLowAsync(long farmId, CancellationToken cancellationToken)
+        => LogDiscarded("tank-low", $"farm {farmId}");
 
     public Task NotifyRequestStatusAsync(
         Guid profileId, RequestStatusNotification notification, CancellationToken cancellationToken)

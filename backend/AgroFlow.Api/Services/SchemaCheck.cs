@@ -119,6 +119,10 @@ public sealed class SchemaCheck
             "select to_regclass('public.dismissal')",
             "Notifications cannot be dismissed or restored, and there is no notification history."),
 
+        new("0046", "table", "tank_refill",
+            "select to_regclass('public.tank_refill')",
+            "Tank estimates, refill logging and pH records are unavailable."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

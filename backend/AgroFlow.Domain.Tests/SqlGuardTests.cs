@@ -104,11 +104,13 @@ public class SqlGuardTests
         dashboard = dashboard[..dashboard.IndexOf(
             "private static async Task<IResult> UpdateZoneSettingsAsync", StringComparison.Ordinal)];
 
-        // Every member can select the farm, and the alert rows come from every zone in
-        // that selected farm. Alerts are shared farm data, not copied to one profile.
+        // Every member can select the farm. Both zone alerts and farm-wide alerts are
+        // shared farm data, not copied to one profile.
         Assert.Contains("where f.owner_id = $1", dashboard);
         Assert.Contains("fm.farm_id = f.farm_id and fm.profile_id = $1", dashboard);
-        Assert.Contains("from alert a join selected_zones z on z.id = a.zone_id", dashboard);
+        Assert.Contains("from alert a join selected_farm f", dashboard);
+        Assert.Contains("a.farm_id = f.farm_id", dashboard);
+        Assert.Contains("exists (select 1 from selected_zones z where z.id = a.zone_id)", dashboard);
 
         var telegram = Api(Path.Combine("Services", "Notifications", "TelegramNotificationService.cs"));
         var broadcast = telegram[telegram.IndexOf(
