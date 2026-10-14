@@ -1,6 +1,9 @@
 import { Platform, StyleSheet } from 'react-native';
 import { Radius, Type, type AppColors } from '@/constants/colors';
 
+export const FLOATING_TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 80 : 72;
+export const FLOATING_TAB_BAR_MARGIN_BOTTOM = Platform.OS === 'ios' ? 8 : 12;
+
 // The tab icon wrapper, the same for all five tabs. No theme dependency, so a plain
 // constant instead of a colors(...) factory.
 export const tabsLayoutStyles = StyleSheet.create({
@@ -19,9 +22,9 @@ export function createTabsLayoutStyles(colors: AppColors) {
     tabBar: {
       // Browsers draw the label taller than Android does, so web needs a little more room or the
       // descenders ("g", "y") are cut off.
-      height: Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 80 : 72,
+      height: FLOATING_TAB_BAR_HEIGHT,
       marginHorizontal: 16,
-      marginBottom: Platform.OS === 'ios' ? 8 : 12,
+      marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM,
       paddingTop: 8,
       paddingBottom: Platform.OS === 'ios' ? 15 : Platform.OS === 'web' ? 10 : 8,
       borderRadius: Radius.md,

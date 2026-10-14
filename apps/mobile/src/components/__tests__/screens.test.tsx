@@ -2,7 +2,7 @@
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
 /* The app's screens rendered with their real code, with only the network and context faked:
- * Finish setup (with the 500 mL bottle helper), the login screen's "Ask for a call",
+ * Finish setup (with the marked flow-rate test bottle helper), the login screen's "Ask for a call",
  * Reports, the forecast, alerts history and help. */
 
 import type { ReactNode } from 'react';
@@ -111,7 +111,7 @@ describe('Finish setup', () => {
     expect(screen.queryByText('Soil sensor wet/dry setup')).toBeNull();   // no kit, no calibration step
   });
 
-  it('works out litres a minute from the 500 mL bottle and saves it', async () => {
+  it('works out litres a minute from the marked flow-rate test bottle and saves it', async () => {
     await render(<ZoneSetupScreen />);
     await screen.findByText('Medium confidence');
     await fireEvent.changeText(screen.getByLabelText('Seconds to fill the bottle'), '15');

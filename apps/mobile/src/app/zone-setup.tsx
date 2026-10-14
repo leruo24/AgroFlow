@@ -142,7 +142,7 @@ export default function ZoneSetupScreen() {
             <View style={styles.item}>
               <View style={styles.itemHead}><Text style={styles.label}>Flow rate</Text><Status done={setup?.flowRate} /></View>
               <Text style={styles.help}>
-                Time how many seconds your tap or pump takes to fill a {BOTTLE_LITRES * 1000} mL bottle.
+                Time how many seconds your tap or pump takes to fill the marked flow-rate test bottle.
               </Text>
               <TextInput accessibilityLabel="Seconds to fill the bottle" keyboardType="decimal-pad" value={seconds}
                 onChangeText={setSeconds} placeholder="Seconds, e.g. 15" placeholderTextColor={colors.textMuted} style={styles.input} />

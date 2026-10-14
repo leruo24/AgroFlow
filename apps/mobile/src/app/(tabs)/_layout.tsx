@@ -18,7 +18,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
 import { useTheme } from '@/context/ThemeContext';//contains the colors
-import { createTabsLayoutStyles, tabsLayoutStyles as styles } from '@/styles/tabsLayoutStyles';
+import {
+  createTabsLayoutStyles,
+  FLOATING_TAB_BAR_MARGIN_BOTTOM,
+  tabsLayoutStyles as styles,
+} from '@/styles/tabsLayoutStyles';
 
 type TabIconProps = { size?: number; color?: ColorValue; strokeWidth?: number };
 
@@ -41,7 +45,7 @@ export default function TabsLayout() {//creates layout component
   // floating bar sits above the home indicator. The native apps already allow for it.
   const { bottom } = useSafeAreaInsets();
   const tabBarStyle = Platform.OS === 'web' && bottom > 0
-    ? [themedStyles.tabBar, { marginBottom: 12 + bottom }]
+    ? [themedStyles.tabBar, { marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM + bottom }]
     : themedStyles.tabBar;
 
   const unreadAlerts = alerts.filter(//gets unread alerts count

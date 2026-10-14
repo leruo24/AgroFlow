@@ -8,11 +8,17 @@ import {
   View,
 } from 'react-native';
 import { X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from '@/lib/router';
 
 import Drip, { MASCOT_NAME, type DripMood } from '@/components/mascot/Drip';
 import { useTheme } from '@/context/ThemeContext';
 import { createDripHelperStyles } from '@/styles/dripHelperStyles';
+import {
+  FLOATING_TAB_BAR_HEIGHT,
+  FLOATING_TAB_BAR_MARGIN_BOTTOM,
+} from '@/styles/tabsLayoutStyles';
+import { Spacing } from '@/constants/colors';
 import { useAppPreferences } from '@/hooks/useAppPreferences';
 import { WhyLink } from '@/components/WhySheet';
 import type { Explanation } from '@/services/agroFlowApi';
@@ -148,6 +154,12 @@ export function decideMessage(
 export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => createDripHelperStyles(colors), [colors]);
+  const { bottom: safeAreaBottom } = useSafeAreaInsets();
+  const bottomOffset =
+    FLOATING_TAB_BAR_HEIGHT +
+    FLOATING_TAB_BAR_MARGIN_BOTTOM +
+    safeAreaBottom +
+    Spacing.two;
   const { preferences, ready: preferencesReady } = useAppPreferences();
 
   const [visible, setVisible] = useState(false);
@@ -296,7 +308,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
   const label = `${MASCOT_NAME} says: ${decision.message}`;
 
   return (
-    <View style={[styles.container, { pointerEvents: 'box-none' }]}>
+    <View style={[styles.container, { bottom: bottomOffset, pointerEvents: 'box-none' }]}>
       <Animated.View
         style={{
           opacity,
