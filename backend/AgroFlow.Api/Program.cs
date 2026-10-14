@@ -220,6 +220,13 @@ builder.Services.AddSingleton(sp => new AgroFlow.Business.TankPhController(
 builder.Services.AddSingleton<TankLowMonitorService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TankLowMonitorService>());
 
+// Rule-based soil moisture fault checks (no machine learning). Off unless
+// FaultChecks__Enabled=true.
+builder.Services.AddSingleton(sp => new AgroFlow.Business.MoistureFaultController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for fault checks.")));
+builder.Services.AddHostedService<MoistureFaultService>();
+
 // Turns `preparing` report_request rows (0034) into PDFs and sends them.
 // A background queue because rendering can time out a phone on rural data, and
 // automatic reports have no request to run in.
