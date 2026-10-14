@@ -37,7 +37,7 @@ public static class HandlingEndpoints
         ["requests"] = new("service_request", "id", "service_request", "completed_by_profile_id", "completed_at",
             "select farm_id from service_request where id = $1"),
         ["alerts"] = new("alert", "id", "alert", "resolved_by_profile_id", "resolved_at",
-            "select z.farm_id from alert a join zone z on z.id = a.zone_id where a.id = $1"),
+            "select coalesce(a.farm_id, z.farm_id) from alert a left join zone z on z.id = a.zone_id where a.id = $1"),
         ["maintenance"] = new("maintenance", "maintenance_id", "maintenance", "completed_by_profile_id", "completed_at",
             "select farm_id from maintenance where maintenance_id = $1"),
     };

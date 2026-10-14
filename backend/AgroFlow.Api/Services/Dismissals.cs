@@ -216,9 +216,9 @@ public sealed class DbDismissalStore : IDismissalStore
             if (!long.TryParse(itemKey, NumberStyles.None, CultureInfo.InvariantCulture, out var alertId)) return null;
             cmd = new NpgsqlCommand(
                 """
-                select z.farm_id, coalesce(a.message, 'Alert'), a.created_at,
+                select coalesce(a.farm_id, z.farm_id), coalesce(a.message, 'Alert'), a.created_at,
                        coalesce(a.severity, '') in ('Critical', 'High', 'critical', 'high')
-                  from alert a join zone z on z.id = a.zone_id
+                  from alert a left join zone z on z.id = a.zone_id
                  where a.id = $1
                 """, c);
             cmd.Parameters.AddWithValue(alertId);

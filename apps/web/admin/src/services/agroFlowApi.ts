@@ -736,6 +736,34 @@ export function getFarmToday(farmId: number): Promise<{ farmId: number; day: str
   return authorizedJson(`/api/farmer/farms/${farmId}/today`, "GET");
 }
 
+export type AdminTankPh = {
+  tank: {
+    farmId: number;
+    farmName: string;
+    capacityLitres: number | null;
+    lastRefillLitres: number | null;
+    lastRefilledAt: string | null;
+    latestWaterPh: number | null;
+    estimatedUsedLitres: number;
+    estimatedRemainingLitres: number | null;
+    isLow: boolean;
+    waterPhWarning: string | null;
+  };
+  zones: Array<{
+    zoneId: number;
+    zoneName: string;
+    latest: { ph: number; measuredAt: string; note: string | null } | null;
+  }>;
+};
+
+export function getAdminTankPh(farmId: number): Promise<AdminTankPh> {
+  return authorizedJson(`/api/admin/farms/${farmId}/tank-ph`, "GET");
+}
+
+export function setFarmTankCapacity(farmId: number, litres: number): Promise<AdminTankPh["tank"]> {
+  return authorizedJson(`/api/farmer/farms/${farmId}/tank`, "PUT", { litres });
+}
+
 /* "Recommended for you". */
 export type RecommendedSettings = {
   available: boolean;

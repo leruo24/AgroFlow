@@ -12,12 +12,16 @@ export function mountExperience(): void {
   host.id = "experienceAgroFlowRoot";
   document.body.append(host);
   const close = () => {
+    window.removeEventListener("hashchange", close);
     reactRoot?.unmount();
     reactRoot = null;
     host?.remove();
     host = null;
     previouslyFocused?.focus();
   };
+  // The demo sits on <body>, outside the page the router swaps, so leaving the landing page
+  // (the back button, or a link to #/login) must close it too.
+  window.addEventListener("hashchange", close);
   reactRoot = createRoot(host);
   reactRoot.render(<ExperienceAgroFlow onClose={close} />);
   window.setTimeout(() => host?.querySelector<HTMLButtonElement>(".experience-close")?.focus(), 0);

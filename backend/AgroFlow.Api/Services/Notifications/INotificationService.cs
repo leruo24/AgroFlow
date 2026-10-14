@@ -53,6 +53,9 @@ public interface INotificationService
         SystemFailureNotification notification,
         CancellationToken cancellationToken);
 
+    // Farm-wide because every member shares the same source tank.
+    Task NotifyTankLowAsync(long farmId, CancellationToken cancellationToken);
+
     // Farmers raise requests in the app; this tells them when an admin moves one along.
     // See RequestStatusNotification for why it has no caller yet.
     Task NotifyRequestStatusAsync(
@@ -79,6 +82,10 @@ public interface INotificationService
     // A plain work-queue notice to every admin with a linked chat ("New enquiry: ...").
     // The default body does nothing, so test doubles need no change; Telegram overrides it.
     Task NotifyAdminsAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    // A possible sensor or water supply fault (MoistureFaultService), to every farm member.
+    Task NotifyPossibleFaultAsync(long farmId, long zoneId, string message, CancellationToken cancellationToken)
+        => Task.CompletedTask;
 }
 
 // Why AgroFlow could not water a Critical zone itself. Each value means something
@@ -195,6 +202,9 @@ public sealed class NullNotificationService : INotificationService
     public Task NotifySystemFailureAsync(
         long farmId, SystemFailureNotification notification, CancellationToken cancellationToken)
         => LogDiscarded($"system-{notification.Kind}", $"farm {farmId}");
+
+    public Task NotifyTankLowAsync(long farmId, CancellationToken cancellationToken)
+        => LogDiscarded("tank-low", $"farm {farmId}");
 
     public Task NotifyRequestStatusAsync(
         Guid profileId, RequestStatusNotification notification, CancellationToken cancellationToken)
