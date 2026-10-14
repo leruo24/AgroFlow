@@ -20,27 +20,14 @@ comment on column sensor_reading.simulated is
 comment on column sensor_reading.simulation_day is
     'Africa/Johannesburg model day for a simulated row; null on real readings.';
 
--- 0010 renamed zone.moisture_dry_threshold / moisture_wet_threshold, but renaming a
--- table column does not rename a view column that selected it, so a database where
--- the 0007 view was in place still names them the old way. CREATE OR REPLACE VIEW
--- cannot rename columns (42P16), so rename them first. Does nothing on a database
--- that already has the new names.
-do $$
-begin
-    if exists (select 1 from information_schema.columns
-               where table_schema = 'public' and table_name = 'zone_latest_reading'
-                 and column_name = 'moisture_dry_threshold') then
-        alter view zone_latest_reading rename column moisture_dry_threshold to moisture_threshold;
-    end if;
-    if exists (select 1 from information_schema.columns
-               where table_schema = 'public' and table_name = 'zone_latest_reading'
-                 and column_name = 'moisture_wet_threshold') then
-        alter view zone_latest_reading rename column moisture_wet_threshold to desired_moisture;
-    end if;
-end $$;
-
 -- Keep the latest-reading view honest about the provenance of each displayed value.
-create or replace view zone_latest_reading as
+-- Dropped and recreated rather than CREATE OR REPLACE: on the live database the old
+-- view's columns had other names (0007's) and other types (real, where zone now has
+-- numeric), and CREATE OR REPLACE can change neither. DROP has no CASCADE, so if
+-- anything depended on the view this fails and changes nothing. Its only grants were
+-- the owner's, so none need restoring.
+drop view if exists public.zone_latest_reading;
+create view public.zone_latest_reading as
 select
     z.id            as zone_id,
     z.farm_id,
@@ -76,7 +63,7 @@ left join lateral (
     limit 1
 ) humidity on true;
 
-alter view zone_latest_reading set (security_invoker = true);
+alter view public.zone_latest_reading set (security_invoker = true);
 
 -- Open-Meteo geocoding results captured 2026-10-14:
 -- Ficksburg (used for nearby Rustlers Valley): -28.872, 27.87506

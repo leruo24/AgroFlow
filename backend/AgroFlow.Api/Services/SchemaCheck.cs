@@ -123,7 +123,12 @@ public sealed class SchemaCheck
             "select to_regclass('public.tank_refill')",
             "Tank estimates, refill logging and pH records are unavailable."),
 
-        new("0047", "column", "sensor_reading.simulated",
+        new("0047", "constraint", "zone_irrigation_mode_check allows manual",
+            "select 1 where exists (select 1 from pg_constraint where conname = 'zone_irrigation_mode_check' " +
+            "and pg_get_constraintdef(oid) like '%manual%') and to_regprocedure('public.auto_irrigation_check()') is null",
+            "Zones cannot be set to manual watering, and an old Postgres trigger may still decide to water a zone."),
+
+        new("0048", "column", "sensor_reading.simulated",
             "select 1 from information_schema.columns where table_name = 'sensor_reading' and column_name = 'simulated'",
             "Generated demonstration readings cannot be labelled or kept separate from real readings."),
 
