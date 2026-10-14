@@ -22,6 +22,7 @@ export function FarmSelector() {
       <Text style={styles.triggerText}>
         {isFarmLoading ? 'Loading farm…' : farmError ? 'Farm unavailable · Retry' : farm?.name || 'No farm assigned'}
       </Text>
+      {farm?.isSimulated && <Text style={styles.simulatedBadge}>Simulated</Text>}
       {multiple && <ChevronDown size={21} color={colors.textSecondary} />}
     </Pressable>
     <BlurSheet visible={open} onClose={() => setOpen(false)} title="Select a farm">
@@ -31,6 +32,7 @@ export function FarmSelector() {
         <View style={styles.optionTextColumn}><Text style={[styles.optionName, item.id === farm?.id && styles.optionNameSelected]}>{item.name}</Text>
           {!!item.location && <Text style={styles.optionLocation}>{item.location}</Text>}
         </View>
+        {item.isSimulated && <Text style={styles.simulatedBadge}>Simulated</Text>}
         {item.id === farm?.id && <Check size={22} color={colors.primaryDark} />}
       </Pressable>)}
       <Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.cancel}><Text style={styles.cancelText}>Cancel</Text></Pressable>

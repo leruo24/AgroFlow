@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { router } from '@/lib/router';
 import { Bell, ChevronRight, Clock3, CloudSun, Droplets, FileText, Settings2 } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
@@ -15,7 +16,7 @@ import { WeatherSummary } from '@/components/WeatherSummary';
 import { DripHelper } from '@/components/DripHelper';
 import { averageSoilText } from '@/lib/moistureDisplay';
 import { TodayCard } from '@/components/TodayCard';
-import { fetchFarmToday, type TodayZone } from '@/services/agroFlowApi';
+import { fetchFarmToday, fetchTankStatus, type TankStatus, type TodayZone } from '@/services/agroFlowApi';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -36,6 +37,13 @@ export default function HomeScreen() {
       .catch(() => setTodayFailed(true));
   }, [farm]);
   useEffect(() => { setToday(null); loadToday(); }, [loadToday]);
+  const [tank, setTank] = useState<TankStatus | null>(null);
+  const [tankFailed, setTankFailed] = useState(false);
+  const loadTank = useCallback(() => {
+    if (!farm) return;
+    fetchTankStatus(farm.id).then(value => { setTank(value); setTankFailed(false); }).catch(() => setTankFailed(true));
+  }, [farm]);
+  useFocusEffect(loadTank);
   const pendingCommands = zones.filter(z => z.irrigation.override.active).length;
   // null usedTodayLitres means the zone has no zone_daily_water_usage row today,
   // so we only add up zones that have one instead of showing a false 0.
@@ -65,6 +73,17 @@ export default function HomeScreen() {
             : today === null ? <DataState kind="loading" title="Working out today's advice" />
             : today.length === 0 ? <DataState kind="empty" title="No zones set up yet" description="Each zone will get its own card here." />
             : today.map(z => <TodayCard key={z.zoneId} zone={z} onLogged={loadToday} />)}
+          <Text accessibilityRole="header" style={styles.sectionTitle}>Water tank</Text>
+          {tankFailed ? <DataState kind="error" title="Tank estimate unavailable" onRetry={loadTank} />
+            : <View style={styles.tankCard}>
+              <Text style={styles.tankEstimate}>{tank?.estimatedRemainingLitres != null
+                ? `About ${Math.round(tank.estimatedRemainingLitres)} L left — estimate`
+                : tank?.capacityLitres ? 'No refill logged yet' : 'Tank tracking is not set up yet'}</Text>
+              {tank?.waterPhWarning ? <Text style={styles.caption}>{tank.waterPhWarning}</Text> : null}
+              {/* Expo's generated route declaration is refreshed by the dev server; this new
+                  file is already bundled by export, but the checked local declaration is stale. */}
+              <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/tank' as never)}><Text style={styles.tankLink}>Tank details and refill</Text></TouchableOpacity>
+            </View>}
           <Text accessibilityRole="header" style={styles.sectionTitle}>Farm status</Text>
           {isZonesLoading ? <DataState kind="loading" title="Loading farm status" />
             : zonesError ? <DataState kind="error" title="Farm status unavailable" onRetry={refreshZones} />

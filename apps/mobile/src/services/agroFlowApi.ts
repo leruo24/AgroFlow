@@ -509,6 +509,71 @@ export function fetchFarmToday(farmId: string | number) {
   );
 }
 
+export type TankStatus = {
+  farmId: number;
+  farmName: string;
+  capacityLitres: number | null;
+  lastRefillId: number | null;
+  lastRefillLitres: number | null;
+  lastRefilledAt: string | null;
+  latestWaterPh: number | null;
+  estimatedUsedLitres: number;
+  estimatedRemainingLitres: number | null;
+  isLow: boolean;
+  waterPhWarning: string | null;
+};
+
+export type TankRefillResult = {
+  status: TankStatus;
+  estimatedUsedBeforeRefill: number | null;
+  observedUsed: number | null;
+  comparison: string | null;
+};
+
+export type SoilPhEntry = {
+  id: number;
+  zoneId: number;
+  ph: number;
+  measuredAt: string;
+  note: string | null;
+};
+
+export function fetchTankStatus(farmId: string | number) {
+  return authorizedRequest<TankStatus>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/tank`);
+}
+
+export function saveTankCapacity(farmId: string | number, litres: number) {
+  return authorizedRequest<TankStatus>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/tank`, {
+    method: 'PUT', body: JSON.stringify({ litres }),
+  });
+}
+
+export function logTankRefill(
+  farmId: string | number,
+  refill: { litresAdded: number; waterPh: number | null; refilledAt: string }
+) {
+  return authorizedRequest<TankRefillResult>(
+    `/api/farmer/farms/${encodeURIComponent(String(farmId))}/tank/refills`,
+    { method: 'POST', body: JSON.stringify(refill) }
+  );
+}
+
+export function fetchSoilPh(zoneId: string | number) {
+  return authorizedRequest<{ zoneId: number; entries: SoilPhEntry[] }>(
+    `/api/farmer/zones/${encodeURIComponent(String(zoneId))}/soil-ph`
+  );
+}
+
+export function logSoilPh(
+  zoneId: string | number,
+  entry: { ph: number; measuredAt: string; note: string | null }
+) {
+  return authorizedRequest<SoilPhEntry>(
+    `/api/farmer/zones/${encodeURIComponent(String(zoneId))}/soil-ph`,
+    { method: 'POST', body: JSON.stringify(entry) }
+  );
+}
+
 // Writes go through authorizedRequest, so a double tap sends one entry.
 export function logManualWatering(zoneId: number, entry: { minutes?: number; litres?: number }) {
   return authorizedRequest<{ id: number; message: string }>(
