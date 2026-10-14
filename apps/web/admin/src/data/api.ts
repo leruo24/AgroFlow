@@ -337,6 +337,7 @@ export const api = {
     updated_at: string | null;
     latitude: number | null;
     longitude: number | null;
+    is_simulated: boolean;
   };
 
   // The API leaves out archived farms unless asked. The toggle is module state, not a filter,
@@ -356,6 +357,7 @@ export const api = {
       location: f.location,
       latitude: Number.isFinite(f.latitude) ? f.latitude : null,
       longitude: Number.isFinite(f.longitude) ? f.longitude : null,
+      isSimulated: f.is_simulated === true,
       province,
       region,
       health: "Attention Required",

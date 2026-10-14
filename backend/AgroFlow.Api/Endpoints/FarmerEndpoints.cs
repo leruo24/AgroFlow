@@ -337,7 +337,7 @@ public static class FarmerEndpoints
                 order by case when f.owner_id = $1 then 0 else 1 end, f.farm_id
                 limit 1
             ), selected_zones as (
-                select z.* from zone z join selected_farm f on f.farm_id = z.farm_id
+                select z.*, f.is_simulated from zone z join selected_farm f on f.farm_id = z.farm_id
             )
             select jsonb_build_object(
                 'profile', (select to_jsonb(p) from profile p where p.id = $1),

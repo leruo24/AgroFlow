@@ -604,7 +604,7 @@ async function openFarmDetail(id: number): Promise<void> {
     // Not healthDot(f.health): openDrawer's title is HTML-escaped (see escapeText in
     // lib/drawer.ts), so it cannot carry the dot's markup. Health is shown in "Farm summary" below.
     title: f.name,
-    subtitle: `${f.owner} · ${f.province} · ${f.region}`,
+    subtitle: `${f.owner} · ${f.province} · ${f.region}${f.isSimulated ? " · Simulated" : ""}`,
     wide: true,
     bodyHtml: [
       section("Farm summary", `
@@ -682,7 +682,7 @@ async function openFarmDetail(id: number): Promise<void> {
                  const t = todayByZone.get(z.zoneId);
                  return `
                  <tr data-today-zone="${z.zoneId}">
-                   <td>${esc(z.name)}</td>
+                   <td>${esc(z.name)} ${f.isSimulated ? `<span class="badge warn">Simulated</span>` : ""}</td>
                    <td>${esc(z.cropType ?? "Not set")}</td>
                    <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
                    <td>${t?.confidence

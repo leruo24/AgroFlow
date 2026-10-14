@@ -412,7 +412,9 @@ export default function ZoneControlScreen() {
       value:
         soilReadingText(soil, 'Unavailable'),
       note:
-        soil.calibrated
+        soil.simulated
+          ? 'Simulated reading'
+          : soil.calibrated
           ? soil.moistureStatus
           : 'Do the wet/dry setup to read this as moisture',
     },
@@ -1164,6 +1166,12 @@ export default function ZoneControlScreen() {
               beside the header's trailing element. It disappears entirely
               when the farmer turns page help off in Settings. */}
           <HelpButton screen="zoneDetail" />
+
+          {selectedZone.isSimulated && (
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusBadgeText}>SIMULATED</Text>
+            </View>
+          )}
 
           <View
             style={

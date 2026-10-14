@@ -193,6 +193,14 @@ builder.Services.AddHostedService<WeatherAlertService>();
 // Open-Meteo needs no API key.
 builder.Services.AddHostedService<WeatherCollectionService>();
 
+// Demonstration farms only. Off unless Simulation__Enabled=true. The XDB layer
+// re-checks farm.is_simulated on every insert, so enabling this can never write
+// a generated row to a real farm or send a hardware command.
+builder.Services.AddSingleton(sp => new AgroFlow.Business.SimulationController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for simulated farms.")));
+builder.Services.AddHostedService<SimulationService>();
+
 // FAO-56 insight engine (migration 0027): a full pass just after midnight SAST,
 // and the act_now checks every 15 minutes.
 // The controller is a singleton holding only a connection string (DB/XDB/Controller
