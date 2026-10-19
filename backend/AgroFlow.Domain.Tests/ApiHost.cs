@@ -32,6 +32,7 @@ public sealed class ApiHost : WebApplicationFactory<Program>
 
     public static readonly Guid Admin = Guid.Parse("00000000-0000-4000-8000-0000000000ad");
     public static readonly Guid Farmer = Guid.Parse("00000000-0000-4000-8000-0000000000fa");
+    public static readonly Guid FieldOfficer = Guid.Parse("00000000-0000-4000-8000-0000000000f0");
 
     private static readonly Dictionary<string, string> Settings = new()
     {
@@ -77,11 +78,12 @@ public sealed class ApiHost : WebApplicationFactory<Program>
         });
     }
 
-    /// The admin is an admin; everyone else is a farmer.
+    /// The admin is an admin, the field officer a field officer; everyone else is a farmer.
     private sealed class FakeRoles : IProfileRoles
     {
         public Task<string?> RoleOfAsync(Guid profileId, CancellationToken ct) =>
-            Task.FromResult<string?>(profileId == Admin ? "admin" : "farm_user");
+            Task.FromResult<string?>(
+                profileId == Admin ? "admin" : profileId == FieldOfficer ? "field_officer" : "farm_user");
     }
 
     /// "X-Test-User: {guid}" signs in as that profile; no header, not signed in.

@@ -129,6 +129,8 @@ builder.Services.Configure<PasswordResetOptions>(
 
 builder.Services.AddSingleton<TelegramClient>();
 builder.Services.AddSingleton<TelegramOnboardingService>();
+builder.Services.AddSingleton<ITelegramLinkStore, DbTelegramLinkStore>();
+builder.Services.AddSingleton<TelegramUnlinkService>();
 builder.Services.AddSingleton<SupabaseAdminService>();
 
 // Stops the same event being messaged again and again. The forecast refreshes

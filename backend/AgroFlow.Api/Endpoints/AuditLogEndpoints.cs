@@ -320,6 +320,7 @@ public static class AuditLogEndpoints
             AuditActions.MqttPoolAdded => $"{actor} added MQTT logins to the pool",
             AuditActions.ReportScheduleChanged => $"{actor} changed automatic reports{where}",
             AuditActions.TelegramCodeIssued => $"{actor} issued a Telegram link code",
+            AuditActions.TelegramUnlinked => $"{actor} disconnected a farmer's Telegram",
 
             // Handling, and the actions that close an item.
             "handling.claimed" => $"{actor} took on {Thing(entityType)} {entityId}{where}",

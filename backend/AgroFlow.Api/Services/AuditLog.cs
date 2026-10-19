@@ -45,6 +45,7 @@ public static class AuditActions
     public const string MqttPoolAdded = "mqtt_pool.added";
     public const string ReportScheduleChanged = "report_schedule.changed";
     public const string TelegramCodeIssued = "telegram.code_issued";
+    public const string TelegramUnlinked = "telegram.unlinked";
 }
 
 /// Writes the append-only record of admin actions (migration 0037).

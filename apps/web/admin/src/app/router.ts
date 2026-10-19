@@ -11,7 +11,7 @@ import { hardwarePage, alertsPage, maintenancePage } from "@/pages/operations";
 import {
   irrigationPage, reportsPage, activityPage, settingsPage, settingsTabBody, SETTINGS_TABS,
 } from "@/pages/analytics";
-import { skeletonPage } from "@/ui/components";
+import { skeletonPage, watchSlowLoading } from "@/ui/components";
 import { errorState } from "@/ui/patterns";
 import { animateIn, swapContent } from "@/lib/animate";
 import { beginNavigation, isCurrentNavigation, endNavigation } from "@/lib/navigation";
@@ -116,6 +116,7 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
 
   content.setAttribute("aria-busy", "true");
   content.innerHTML = skeletonPage();
+  watchSlowLoading(content);
 
   /* A page that throws gets an error state with a Retry, never an endless skeleton or a
    * content area left busy (unclickable). Most pages catch their own failures through

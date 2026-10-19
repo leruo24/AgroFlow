@@ -123,14 +123,14 @@ test("Log out still ends the session on this computer when Supabase cannot be re
 
 /* ---------------------------- 5. Landing page ---------------------------- */
 
-test("the landing page has no 'Who made this' section and keeps the Admin console entry", async ({ page }) => {
+test("the landing page has no 'Who made this' section and keeps the Staff sign-in entry", async ({ page }) => {
   await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("Who made this")).toHaveCount(0);
   await expect(page.locator("#creditsHeading")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Admin console" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Staff sign-in" }).first()).toBeVisible();
 });
 
 /* ------------------------------ 6. Settings ------------------------------ */

@@ -449,6 +449,12 @@ export function disconnectMyTelegram(): Promise<void> {
   return authorizedJson<void>("/api/telegram/me", "DELETE");
 }
 
+/** Disconnects a farmer's Telegram (lost or changed phone) so they can link again with a new
+ *  code. The API also cancels their unused codes and records it in the activity log. */
+export function unlinkFarmerTelegram(profileId: string): Promise<{ message: string; wasLinked: boolean }> {
+  return authorizedJson(`/api/telegram/admin/link/${encodeURIComponent(profileId)}`, "DELETE");
+}
+
 /* Hardware
  * The dashboard reads most tables straight from Supabase under RLS, but these cannot:
  * - tokenStatus needs hardware.device_token_hash and token_revoked_at. Migration 0028
