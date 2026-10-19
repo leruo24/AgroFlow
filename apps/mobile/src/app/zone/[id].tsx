@@ -7,7 +7,6 @@ import { HelpButton } from '@/components/HelpButton';
 import { ZoneInsightsCard } from '@/components/ZoneInsightsCard';
 import { ZoneGrowthBar } from '@/components/ZoneGrowthBar';
 import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
-import { CalibrateSoilSheet } from '@/components/CalibrateSoilSheet';
 import { SoilPhPanel } from '@/components/SoilPhPanel';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 import { useConnectivity } from '@/lib/connectivity';
@@ -265,8 +264,6 @@ export default function ZoneControlScreen() {
   const [zoneGrowth, setZoneGrowth] =
     useState<ZoneGrowth | null>(null);
 
-  const [calibrateVisible, setCalibrateVisible] =
-    useState(false);
 
   const routeId =
     Array.isArray(
@@ -1448,10 +1445,8 @@ export default function ZoneControlScreen() {
           <TouchableOpacity
             style={styles.linkRow}
             onPress={() =>
-              router.push({
-                pathname: '/zone-setup',
-                params: { zoneId: String(selectedZone.id) },
-              })
+              // One setup flow for the whole farm (app/setup.tsx), resumed where it was left.
+              router.push('/setup' as never)
             }
             activeOpacity={0.7}
             accessibilityRole="button"
@@ -1516,9 +1511,8 @@ export default function ZoneControlScreen() {
               styles.linkRow
             }
             onPress={() =>
-              setCalibrateVisible(
-                true
-              )
+              // The wet/dry setup now lives in the setup wizard's soil step.
+              router.push('/setup?step=soil' as never)
             }
             activeOpacity={0.7}
             accessibilityRole="button"
@@ -2144,23 +2138,6 @@ export default function ZoneControlScreen() {
               </View>
       </BlurSheet>
 
-      {/* Teaching the sensor what wet and dry look like in THIS soil. Its own
-          sheet (not a BlurSheet row) because it is two independent saves made
-          on different days - soaked soil and properly dry soil are a day or
-          more apart - rather than one choice. */}
-      <CalibrateSoilSheet
-        zoneId={Number(
-          selectedZone.id
-        )}
-        visible={
-          calibrateVisible
-        }
-        onClose={() =>
-          setCalibrateVisible(
-            false
-          )
-        }
-      />
     </SafeAreaView>
   );
 }

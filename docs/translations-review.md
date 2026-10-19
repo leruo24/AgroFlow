@@ -25,7 +25,7 @@ Tests check that every key exists in all three languages and that the `{placehol
 
 ## Not translated yet
 
-- Screens other than Home, a zone's Irrigate panel, Alerts, Settings, the tank and soil pH
+- Screens other than Home, the setup wizard, a zone's Irrigate panel, Alerts, Settings, the tank and soil pH
   forms, the "I watered" / soil check sheet, the offline banner and the tab bar. They stay
   in English until their text is moved into the dictionaries.
 - Telegram: only the zone-needs-water, tank-low and weather (rain, frost, heat) messages
@@ -37,7 +37,7 @@ Tests check that every key exists in all three languages and that the `{placehol
   tank-refill comparison, and errors the server explains.
 - The raindrop helper’s greetings and the page help (the "?" button) are English.
 
-## App (205 strings)
+## App (301 strings)
 
 | Key | English | Afrikaans (draft) | Setswana (draft) |
 |---|---|---|---|
@@ -120,7 +120,7 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `zone.stopConfirmBody` | The pump stops and the zone goes back to {mode}. | Die pomp stop en die sone gaan terug na {mode}. | Pompo e a ema mme karolo e boela go {mode}. |
 | `zone.stop` | Stop | Stop | Emisa |
 | `zone.invalidDurationTitle` | Check the minutes | Kyk na die minute | Tlhola metsotso |
-| `zone.invalidDuration` | Enter between 1 and 60 minutes. | Tik tussen 1 en 60 minute in. | Tsenya magareng ga metsotso e le 1 le 60. |
+| `zone.invalidDuration` | Enter between 1 and {max} minutes. The kit stops every run at {max} minutes. | Tik tussen 1 en {max} minute in. Die toestel stop elke beurt na {max} minute. | Tsenya magareng ga metsotso e le 1 le {max}. Sedirisiwa se emisa go nosetsa morago ga metsotso e le {max}. |
 | `zone.startFailed` | Could not start watering | Kon nie begin water gee nie | Ga go a kgonega go simolola go nosetsa |
 | `zone.stopFailed` | Could not stop watering | Kon nie die water stop nie | Ga go a kgonega go emisa go nosetsa |
 | `zone.commandFailed` | The command could not be sent. Please try again. | Die bevel kon nie gestuur word nie. Probeer asseblief weer. | Taelo ga e a kgona go romelwa. Tswee-tswee leka gape. |
@@ -246,6 +246,102 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `farm.select` | Select a farm | Kies 'n plaas | Tlhopha polasi |
 | `farm.retryA11y` | Retry loading farms | Probeer weer om plase te laai | Leka gape go laola dipolasi |
 | `farm.selectA11y` | Select farm, current farm {name} | Kies plaas, huidige plaas {name} | Tlhopha polasi, polasi ya jaanong {name} |
+| `zone.manualNote` | Manual: AgroFlow will not water this zone by itself. Use Water now when it needs water. | Met die hand: AgroFlow gee hierdie sone nie self water nie. Gebruik Gee nou water wanneer dit water nodig het. | Ka seatla: AgroFlow ga e nosetse karolo eno ka boyona. Dirisa Nosetsa jaanong fa e tlhoka metsi. |
+| `setup.progress` | Step {n} of {of} | Stap {n} van {of} | Kgato {n} ya {of} |
+| `setup.back` | Back | Terug | Morago |
+| `setup.later` | Do this later | Doen dit later | Dira se moragonyana |
+| `setup.continue` | Continue | Gaan voort | Tswelela |
+| `setup.tip` | Drip's tip | Drip se wenk | Kgakololo ya Drip |
+| `setup.title` | Set up your farm | Stel jou plaas op | Baakanya polasi ya gago |
+| `setup.welcome.title` | Welcome to AgroFlow | Welkom by AgroFlow | O amogetswe mo AgroFlow |
+| `setup.welcome.body` | Let's get your farm ready. It takes about 10 minutes, and you can stop and carry on later. | Kom ons maak jou plaas gereed. Dit neem omtrent 10 minute, en jy kan stop en later voortgaan. | A re baakanye polasi ya gago. Go tsaya metsotso e ka nna 10, mme o ka emisa wa tswelela moragonyana. |
+| `setup.welcome.why` | Choose the language you read best. You can change it any time in Settings. | Kies die taal wat jy die beste lees. Jy kan dit enige tyd in Instellings verander. | Tlhopha puo e o e balang bobotlana. O ka e fetola nako nngwe le nngwe mo Dithulaganyong. |
+| `setup.welcome.tip` | Tap a language and the app changes straight away. | Tik op 'n taal en die toep verander dadelik. | Tobetsa puo mme appe e fetoga ka bonako. |
+| `setup.password.title` | Set your own password | Stel jou eie wagwoord | Baya lefoko la gago la sephiri |
+| `setup.password.why` | Only you should know it. The one you signed in with was a temporary password. | Net jy moet dit ken. Die een waarmee jy aangemeld het, was 'n tydelike wagwoord. | Ke wena fela yo o tshwanetseng go le itse. Le o tsenneng ka lone e ne e le la nakwana. |
+| `setup.password.new` | New password | Nuwe wagwoord | Lefoko le lesha la sephiri |
+| `setup.password.again` | Type it again | Tik dit weer | Le kwale gape |
+| `setup.password.rule` | At least 8 characters. | Ten minste 8 karakters. | Bonnye ditlhaka di le 8. |
+| `setup.password.save` | Save my password | Stoor my wagwoord | Boloka lefoko la me la sephiri |
+| `setup.password.saved` | Your password is saved. | Jou wagwoord is gestoor. | Lefoko la gago la sephiri le bolokilwe. |
+| `setup.password.already` | Your password is already set. You can change it later in Profile. | Jou wagwoord is reeds gestel. Jy kan dit later in Profiel verander. | Lefoko la gago la sephiri le setse le beilwe. O ka le fetola moragonyana mo Porofaeleng. |
+| `setup.password.tooShort` | Use at least 8 characters. | Gebruik ten minste 8 karakters. | Dirisa bonnye ditlhaka di le 8. |
+| `setup.password.mismatch` | The two passwords are not the same. | Die twee wagwoorde is nie dieselfde nie. | Mafoko a mabedi a sephiri ga a tshwane. |
+| `setup.password.failed` | The password could not be saved. Check your connection and try again. | Die wagwoord kon nie gestoor word nie. Kyk na jou verbinding en probeer weer. | Lefoko la sephiri ga le a kgona go bolokwa. Tlhola kgolagano mme o leke gape. |
+| `setup.password.tip` | Pick something only you know, with a number in it. | Kies iets wat net jy ken, met 'n syfer daarin. | Tlhopha sengwe se o se itseng o le esi, se se nang le nomoro. |
+| `setup.telegram.title` | Link Telegram | Koppel Telegram | Golaganya Telegram |
+| `setup.telegram.why` | Telegram is how AgroFlow sends you alerts, and how you get a new password if you forget yours. | Telegram is hoe AgroFlow vir jou waarskuwings stuur, en hoe jy 'n nuwe wagwoord kry as jy joune vergeet. | Telegram ke tsela e AgroFlow e go romelang ditemoso ka yone, le tsela e o bonang lefoko le lesha la sephiri fa o lebetse la gago. |
+| `setup.telegram.linked` | Telegram is linked. Alerts will reach you there. | Telegram is gekoppel. Waarskuwings sal jou daar bereik. | Telegram e golagane. Ditemoso di tla go fitlhela koo. |
+| `setup.telegram.check` | I've linked it — check again | Ek het dit gekoppel — kyk weer | Ke e golagantse — tlhola gape |
+| `setup.telegram.none` | I don't use Telegram | Ek gebruik nie Telegram nie | Ga ke dirise Telegram |
+| `setup.telegram.tip` | Keep Telegram notifications on, so a dry-zone alert wakes your phone. | Hou Telegram-kennisgewings aan, sodat 'n droë-sone-waarskuwing jou foon wakker maak. | Tlogela dikitsiso tsa Telegram di dirile, gore temoso ya karolo e e omileng e tsose founu ya gago. |
+| `setup.zones.title` | Your zones | Jou sones | Dikarolo tsa gago |
+| `setup.zones.why` | AgroFlow works out water for each crop and its age, so check what is growing and when it was planted. | AgroFlow bereken water vir elke gewas en sy ouderdom, so kyk wat groei en wanneer dit geplant is. | AgroFlow e bala metsi go ya ka sejalo sengwe le sengwe le bogolo jwa sone, ka jalo tlhola se se golang le gore se jadilwe leng. |
+| `setup.zones.kit` | Kit connected | Toestel gekoppel | Sedirisiwa se golagane |
+| `setup.zones.waiting` | Waiting for kit | Wag vir toestel | Go letetswe sedirisiwa |
+| `setup.zones.crop` | Crop | Gewas | Sejalo |
+| `setup.zones.plantedQ` | About how long ago did you plant? | Omtrent hoe lank gelede het jy geplant? | O jadile e ka nna leng? |
+| `setup.zones.planted` | Planted {date} | Geplant {date} | Go jadilwe {date} |
+| `setup.zones.weeks` | {n} wk | {n} wk | dib. {n} |
+| `setup.zones.thisWeek` | This week | Hierdie week | Beke eno |
+| `setup.zones.dayEarlier` | 1 day earlier | 1 dag vroeër | Letsatsi le le 1 pele |
+| `setup.zones.dayLater` | 1 day later | 1 dag later | Letsatsi le le 1 morago |
+| `setup.zones.confirm` | Confirm {zone} | Bevestig {zone} | Netefatsa {zone} |
+| `setup.zones.confirmed` | {zone} is saved. | {zone} is gestoor. | {zone} e bolokilwe. |
+| `setup.zones.needCrop` | Choose the crop first. | Kies eers die gewas. | Tlhopha sejalo pele. |
+| `setup.zones.none` | No zones yet. Your AgroFlow field officer adds them. | Nog geen sones nie. Jou AgroFlow-veldbeampte voeg hulle by. | Ga go ise go nne le dikarolo. Motlhokomedi wa tshimo wa AgroFlow o a di oketsa. |
+| `setup.zones.tip` | Not sure of the date? A rough guess is fine; you can fix it later. | Nie seker van die datum nie? 'n Rowwe skatting is goed; jy kan dit later regmaak. | Ga o tlhomamise letlha? Kakanyetso e siame; o ka e baakanya moragonyana. |
+| `setup.flow.title` | Measure your water flow | Meet jou watervloei | Lekanya go elela ga metsi a gago |
+| `setup.flow.why` | AgroFlow needs to know how fast water comes out, to tell you how many minutes to water. | AgroFlow moet weet hoe vinnig water uitkom, om vir jou te sê hoeveel minute om water te gee. | AgroFlow e tlhoka go itse gore metsi a tswa ka bonako bo kae, go go bolelela gore o nosetse metsotso e le kae. |
+| `setup.flow.how` | Hold a container under the tap or hose. Press Start as the water goes in, and Stop when it is full. | Hou 'n houer onder die kraan of pyp. Druk Begin wanneer die water ingaan, en Stop wanneer dit vol is. | Tshwara sejana ka fa tlase ga pompo kgotsa phaephe. Tobetsa Simolola fa metsi a tsena, le Emisa fa se tletse. |
+| `setup.flow.size` | How much does the container hold? | Hoeveel hou die houer? | Sejana se tshola bokae? |
+| `setup.flow.litres` | Litres | Liter | Dilitara |
+| `setup.flow.ml` | ml | ml | ml |
+| `setup.flow.start` | Start | Begin | Simolola |
+| `setup.flow.stop` | Stop | Stop | Emisa |
+| `setup.flow.again` | Measure again | Meet weer | Lekanya gape |
+| `setup.flow.seconds` | {s} seconds | {s} sekondes | metsotswana e le {s} |
+| `setup.flow.result` | {lpm} litres a minute | {lpm} liter per minuut | dilitara di le {lpm} ka motsotso |
+| `setup.flow.save` | Save for {zone} | Stoor vir {zone} | Boloka bakeng sa {zone} |
+| `setup.flow.saved` | Saved for {zone}: {lpm} L/min. | Gestoor vir {zone}: {lpm} L/min. | E bolokilwe bakeng sa {zone}: {lpm} L/mots. |
+| `setup.flow.sizeInvalid` | Enter how much the container holds (more than 0). | Tik in hoeveel die houer hou (meer as 0). | Tsenya gore sejana se tshola bokae (go feta 0). |
+| `setup.flow.timeInvalid` | Time it for more than 2 seconds. Use a bigger container if it fills too fast. | Meet langer as 2 sekondes. Gebruik 'n groter houer as dit te vinnig vol word. | Lekanya go feta metsotswana e le 2. Dirisa sejana se segolo fa se tlala ka bonako thata. |
+| `setup.flow.done` | Flow saved | Vloei gestoor | Go elela go bolokilwe |
+| `setup.flow.tip` | A bucket works well. Fill it to a line you know, like 5 litres. | 'n Emmer werk goed. Vul dit tot by 'n lyn wat jy ken, soos 5 liter. | Pakete e dira sentle. E tlatse go fitlha kwa mothalong o o o itseng, jaaka dilitara di le 5. |
+| `setup.soil.title` | Teach AgroFlow your soil | Leer AgroFlow jou grond ken | Ruta AgroFlow ka mmu wa gago |
+| `setup.soil.why` | Every soil holds water differently. Two readings show AgroFlow what dry and wet look like in yours. | Elke grond hou water anders. Twee lesings wys vir AgroFlow hoe droog en nat in joune lyk. | Mmu mongwe le mongwe o tshola metsi ka tsela e e farologaneng. Dipalo di le pedi di bontsha AgroFlow gore mmu wa gago o lebega jang fa o omile le fa o le metsi. |
+| `setup.soil.noKit` | {zone}: waiting for kit. This opens once the kit is connected. | {zone}: wag vir toestel. Dit maak oop sodra die toestel gekoppel is. | {zone}: go letetswe sedirisiwa. Se se tla bulega fa sedirisiwa se golagane. |
+| `setup.soil.noKits` | None of your zones has a kit yet, so there is nothing to do here for now. | Nog geen sone het 'n toestel nie, so daar is nou niks om hier te doen nie. | Ga go na karolo epe e e nang le sedirisiwa, ka jalo ga go na sepe sa go dira fano jaanong. |
+| `setup.soil.dryHow` | When the soil is dry, as it is before you water: | Wanneer die grond droog is, soos voor jy water gee: | Fa mmu o omile, jaaka pele o nosetsa: |
+| `setup.soil.dry` | Save dry reading now | Stoor droë lesing nou | Boloka palo ya mmu o omileng jaanong |
+| `setup.soil.wetHow` | Water well, wait until tomorrow, then: | Gee goed water, wag tot môre, dan: | Nosetsa sentle, leta go fitlha ka moso, morago: |
+| `setup.soil.wet` | Save wet reading | Stoor nat lesing | Boloka palo ya mmu o metsi |
+| `setup.soil.reminder` | We'll remind you on Home to save the wet reading. | Ons sal jou op Tuis herinner om die nat lesing te stoor. | Re tla go gakolola mo Gae go boloka palo ya mmu o metsi. |
+| `setup.soil.confidence` | How sure AgroFlow is: {level} | Hoe seker AgroFlow is: {level} | AgroFlow e tlhomamisa jang: {level} |
+| `setup.soil.low` | Low | Laag | Kwa tlase |
+| `setup.soil.medium` | Medium | Medium | Magareng |
+| `setup.soil.high` | High | Hoog | Kwa godimo |
+| `setup.soil.saved` | Saved. | Gestoor. | E bolokilwe. |
+| `setup.soil.kitOffline` | The kit did not answer. You can carry on and do this later. | Die toestel het nie geantwoord nie. Jy kan voortgaan en dit later doen. | Sedirisiwa ga se a araba. O ka tswelela mme o dire se moragonyana. |
+| `setup.soil.tip` | Do the dry reading before you water. | Doen die droë lesing voor jy water gee. | Dira palo ya mmu o omileng pele o nosetsa. |
+| `setup.done.title` | All set | Alles gereed | Go siame |
+| `setup.done.partTitle` | Nearly there | Amper klaar | Go setse go le gonnye |
+| `setup.done.why` | Here is what is done and what is still to do. | Hier is wat klaar is en wat nog gedoen moet word. | Se se dirilweng le se se santseng se tshwanetse go dirwa ke se. |
+| `setup.done.done` | Done | Klaar | Go dirilwe |
+| `setup.done.todo` | Still to do | Nog te doen | Go santse go tshwanetse go dirwa |
+| `setup.done.preview` | Today for {zone} | Vandag vir {zone} | Gompieno bakeng sa {zone} |
+| `setup.done.go` | Go to my farm | Gaan na my plaas | Ya kwa polasing ya me |
+| `setup.task.welcome` | Language | Taal | Puo |
+| `setup.task.password` | Your password | Jou wagwoord | Lefoko la gago la sephiri |
+| `setup.task.telegram` | Telegram | Telegram | Telegram |
+| `setup.task.zones` | Crops and planting dates | Gewasse en plantdatums | Dijalo le malatsi a go jala |
+| `setup.task.flow` | Water flow | Watervloei | Go elela ga metsi |
+| `setup.task.soil` | Soil readings | Grondlesings | Dipalo tsa mmu |
+| `setup.card.title` | Setup {done}/{total} done | Opstelling {done}/{total} klaar | Thulaganyo {done}/{total} e dirilwe |
+| `setup.card.continue` | Continue | Gaan voort | Tswelela |
+| `setup.card.next` | Next: {task} | Volgende: {task} | Se se latelang: {task} |
+| `setup.card.wet` | Soil: save the wet reading for {zone} | Grond: stoor die nat lesing vir {zone} | Mmu: boloka palo ya mmu o metsi bakeng sa {zone} |
+| `settings.redoSetup` | Redo setup | Doen opstelling weer | Dira thulaganyo gape |
 
 ## Telegram (25 strings)
 
