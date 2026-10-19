@@ -349,6 +349,7 @@ app.MapDeviceConfigEndpoints();
 app.MapZoneHardwareEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
+app.MapCommandStatusEndpoints();   // Irrigate: sent -> started -> finished
 app.MapReportEndpoints();
 app.MapFao56EngineEndpoints();
 app.MapForecastEndpoints();

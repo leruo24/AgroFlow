@@ -107,7 +107,10 @@ public static class IrrigationEventEndpoints
             return Results.Ok(new IrrigationEventResponse(unchanged, estimatedLitres, IsMeasured: false, litresBasis));
         }
 
-        await InsertIrrigationEventAsync(connection, transaction, request, estimatedLitres);
+        var eventId = await InsertIrrigationEventAsync(connection, transaction, request, estimatedLitres);
+
+        // The run's own report is what "finished" means for the command it came from.
+        await LinkRunToCommandAsync(connection, transaction, eventId, request, DateTimeOffset.UtcNow);
 
         // Row lock so a second request for the same zone cannot read the same starting
         // total and overwrite this update (lost-update race).
@@ -156,15 +159,15 @@ public static class IrrigationEventEndpoints
         return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 
-    private static async Task InsertIrrigationEventAsync(
+    private static async Task<object> InsertIrrigationEventAsync(
         NpgsqlConnection connection, NpgsqlTransaction transaction, IrrigationEventRequest request,
         float? estimatedLitres)
     {
         // started_at is left out (Postgres uses now()) when the board had no valid NTP
         // time at the start of the run.
         var sql = request.StartedAt.HasValue
-            ? "insert into irrigation_event (zone_id, runtime_seconds, estimated_litres, trigger_source, sync_status, started_at) values ($1, $2, $3, $4, $5, $6)"
-            : "insert into irrigation_event (zone_id, runtime_seconds, estimated_litres, trigger_source, sync_status) values ($1, $2, $3, $4, $5)";
+            ? "insert into irrigation_event (zone_id, runtime_seconds, estimated_litres, trigger_source, sync_status, started_at) values ($1, $2, $3, $4, $5, $6) returning id"
+            : "insert into irrigation_event (zone_id, runtime_seconds, estimated_litres, trigger_source, sync_status) values ($1, $2, $3, $4, $5) returning id";
 
         await using var cmd = new NpgsqlCommand(sql, connection, transaction);
         cmd.Parameters.AddWithValue(request.ZoneId);
@@ -176,7 +179,60 @@ public static class IrrigationEventEndpoints
         {
             cmd.Parameters.AddWithValue(request.StartedAt.Value);
         }
-        await cmd.ExecuteNonQueryAsync();
+        return (await cmd.ExecuteScalarAsync())!;
+    }
+
+    // Migration 0051: a reported run finishes the command it came from. The kit does not send
+    // the command id with a run, so the match is the zone's started (executed), unfinished
+    // start command with the same source whose start time is the run's (RunCompletion). Runs
+    // nobody asked for (offline fallback, the kit's local page) match nothing. Skipped before
+    // 0051 is applied, so logging a run never fails because of it.
+    private static async Task LinkRunToCommandAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, object eventId,
+        IrrigationEventRequest request, DateTimeOffset now)
+    {
+        await using (var has = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'irrigation_event' and column_name = 'command_id')",
+            connection, transaction))
+        {
+            if (await has.ExecuteScalarAsync() is not true) return;
+        }
+
+        Guid? match = null;
+        await using (var find = new NpgsqlCommand(
+            "select id, executed_at from irrigation_commands " +
+            "where zone_id = $1 and command = 'start' and source = $2 and status = 'executed' " +
+            "  and finished_at is null and executed_at is not null " +
+            "order by executed_at desc limit 5", connection, transaction))
+        {
+            find.Parameters.AddWithValue(request.ZoneId);
+            find.Parameters.AddWithValue(request.TriggerSource);
+            await using var reader = await find.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (RunCompletion.Matches(reader.GetFieldValue<DateTimeOffset>(1), request.StartedAt, request.RuntimeSeconds, now))
+                {
+                    match = reader.GetGuid(0);
+                    break;
+                }
+            }
+        }
+        if (match is null) return;
+
+        await using (var finish = new NpgsqlCommand(
+            "update irrigation_commands set finished_at = $2 where id = $1 and finished_at is null",
+            connection, transaction))
+        {
+            finish.Parameters.AddWithValue(match.Value);
+            finish.Parameters.AddWithValue(now);
+            await finish.ExecuteNonQueryAsync();
+        }
+
+        await using var link = new NpgsqlCommand(
+            "update irrigation_event set command_id = $1 where id = $2", connection, transaction);
+        link.Parameters.AddWithValue(match.Value);
+        link.Parameters.AddWithValue(eventId);
+        await link.ExecuteNonQueryAsync();
     }
 
     private static async Task<float> FetchZoneWaterUsedTotalForUpdateAsync(

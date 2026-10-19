@@ -34,6 +34,8 @@ describe('History lines (item 6)', () => {
 
   it('leaves kit events as they were', () => {
     const kit = describeEvent({ runtime_seconds: 300, estimated_litres: 7.5, trigger_source: 'automatic' });
-    expect(kit).toEqual({ action: 'Irrigation recorded', description: 'Irrigation ran for 5 minutes.', source: 'automatic' });
+    expect(kit).toEqual({ action: 'Watering finished', description: 'The kit watered for 5 minutes and stopped.', source: 'automatic' });
+    expect(describeEvent({ runtime_seconds: 60, trigger_source: 'manual' }).description).toBe('The kit watered for 1 minute and stopped.');
+    expect(describeEvent({ runtime_seconds: 45, trigger_source: 'manual' }).description).toBe('The kit watered for 45 seconds and stopped.');
   });
 });

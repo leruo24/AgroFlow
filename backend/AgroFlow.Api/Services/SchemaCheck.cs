@@ -140,6 +140,10 @@ public sealed class SchemaCheck
             "select to_regclass('public.password_reset_code')",
             "Forgot password over Telegram, the one-tap sign-in link and the 72-hour limit on temporary passwords do not work."),
 
+        new("0051", "column", "irrigation_commands.finished_at",
+            "select 1 from information_schema.columns where table_name = 'irrigation_commands' and column_name = 'finished_at'",
+            "After Irrigate the app can show that the kit started watering, but never that it finished."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",
