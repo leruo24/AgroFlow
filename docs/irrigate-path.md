@@ -37,23 +37,29 @@ with this branch): the command reached the kit with `durationSeconds: 60`, the A
 3. **The app allowed runs of up to 60 minutes; the kit stops every run at 5.** The box now
    takes 1–5 minutes and starts at 5.
 
-**Still there (not changed here)**
+**Fixed on release/oct-19**
 
-4. The API accepts a manual `durationSeconds` up to 3600, and schedules can be longer than
-   5 minutes; the kit cuts every run at 5 minutes without saying so. Either cap these at 300 s
-   on the server, or make the cap a setting the kit reports.
-5. The app cannot show whether the kit actually started: it does not read the command's
-   status back ("Live valve confirmation is unavailable"). The ACK (`executed`) is there to
-   read.
-6. A zone with **no active kit**: the command is accepted (202) and stays `pending` until it
-   is marked `failed` after 2 hours. The app should say "No kit on this zone" straight away.
-7. "Executed" means the kit started the run, not that it finished; the irrigation event is
-   the proof of a finished run.
+4. **Runs over 5 minutes.** The API now refuses a manual run over 300 s (400, "A run can be at
+   most 5 minutes (300 seconds). The kit stops every run at 5 minutes."). Schedules can still
+   be set longer than 5 minutes; the kit still cuts those at 5.
+5. **No confirmation in the app.** After Irrigate the zone screen polls
+   `GET /api/farmer/commands/{id}` and shows "Sending…" → "Kit started watering" (the ACK) →
+   "Finished" (the kit's run report), or "Kit didn't respond — check it's online" after 60 s.
+6. **A zone with no kit.** A start is refused at once (409 "No kit connected to this zone.",
+   reason `no_kit` or `kit_offline`: not heard from in 5 minutes), and the app turns Irrigate
+   off with the same words.
+7. **"Executed" vs "finished".** `status = 'executed'` still means the kit started (the
+   30-minute manual cooldown reads it). Migration **0051** adds `irrigation_commands.finished_at`
+   and `irrigation_event.command_id`: when the kit reports a run, the API links it to the
+   zone's started, unfinished start command with the same source and start time (2-minute
+   margin) and sets `finished_at`. The API's state words are sent / started / finished /
+   no_response / failed; History rows say "Watering finished".
 
 ## What a real Irrigate needs to be live
 
 - **Database:** migrations through **0047** applied (0047 makes the `irrigation_mode` check
-  allow `manual`; without it, saving Manual fails). `docs/ops/verify-migrations.sql`.
+  allow `manual`; without it, saving Manual fails), and **0051** for "Finished" (without it the
+  app shows at most "Kit started watering"). `docs/ops/verify-migrations.sql`.
 - **Railway, `ConnectionStrings__Supabase`:** a connection that supports `LISTEN` — the
   **direct** connection or the **session** pooler (port **5432**). Through the transaction
   pooler (port 6543) NOTIFY never arrives and commands only go out on the 120 s sweep.
