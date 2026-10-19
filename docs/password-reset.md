@@ -124,12 +124,11 @@ Every reset is audited (`user.password_reset`). The two older routes
 |---|---|---|
 | Sensor and watering alerts | always (Alerts) | if linked and alerts are on |
 | Reports | always (Reports) | if linked |
-| Weather warnings | the forecast is in the app, but the warning message is not saved | if linked and alerts are on |
+| Weather warnings (rain, frost, heat) | always (Alerts, as a farm-wide alert) | if linked and alerts are on |
 | Password codes and resets | — | if linked |
 
 Unlinking Telegram (Profile, or Users → profile → Unlink Telegram) stops Telegram messages
-only. Everything in the first column keeps working. Weather warnings are the one gap: today
-they only go by Telegram.
+only. Everything in the first column keeps working.
 
 ## 6. Settings and order
 
