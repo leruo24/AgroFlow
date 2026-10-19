@@ -6,6 +6,7 @@
 
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { postPublic } from "@/services/agroFlowApi";
 
 export interface AdminProfile {
   id: string;
@@ -153,21 +154,31 @@ export async function signIn(email: string, password: string): Promise<void> {
   notify();
 }
 
-/* Forgot password. Supabase emails a link back to this page with ?reset=1; supabase-js reads
- * the recovery tokens from the address when the page loads, and main.ts shows the new-password
- * form. The redirect URL must be in Supabase's allow list (Authentication -> URL Configuration
- * -> Redirect URLs), or Supabase sends people to the Site URL instead. */
+/* Forgot password (docs/password-reset.md). The API sends a 6-digit code to the Telegram chat
+ * linked to the account; the code and a new password then go to /api/auth/reset-password.
+ * Staff with no Telegram get Supabase's email instead: a link back to this page with ?reset=1,
+ * where supabase-js reads the recovery tokens and main.ts shows the new-password form. That
+ * redirect URL must be in Supabase's allow list (Authentication -> URL Configuration ->
+ * Redirect URLs), or Supabase sends people to the Site URL instead. */
 export const RESET_QUERY = "reset";
 
 export function passwordResetRedirectUrl(): string {
   return `${window.location.origin}${window.location.pathname}?${RESET_QUERY}=1`;
 }
 
-export async function requestPasswordReset(email: string): Promise<void> {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+/** The same reply whatever the email, so the form cannot find out who has an account. */
+export async function requestPasswordReset(email: string): Promise<string> {
+  const res = await postPublic<{ message: string }>("/api/auth/forgot-password", {
+    email,
     redirectTo: passwordResetRedirectUrl(),
   });
-  if (error) throw new Error(error.message);
+  return res.message;
+}
+
+/** The code from Telegram and the new password. Other sessions are signed out. */
+export async function resetPasswordWithCode(email: string, code: string, newPassword: string): Promise<string> {
+  const res = await postPublic<{ message: string }>("/api/auth/reset-password", { email, code, newPassword });
+  return res.message;
 }
 
 /** True while the session came from a recovery link, so a new password can be set. */

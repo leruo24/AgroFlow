@@ -186,6 +186,25 @@ public sealed class TelegramOnboardingService
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
+        // A temporary password works for 72 hours (EasyPassword.Lifetime); setting the flag
+        // starts that clock and clearing it stops it. Before migration 0050 there is no clock.
+        await using (var has = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'profile' and column_name = 'temp_password_expires_at')",
+            connection))
+        {
+            if (await has.ExecuteScalarAsync(cancellationToken) is true)
+            {
+                await using var timed = new NpgsqlCommand(
+                    "update profile set must_change_password = $1, " +
+                    "temp_password_expires_at = case when $1 then now() + interval '72 hours' else null end where id = $2",
+                    connection);
+                timed.Parameters.AddWithValue(mustChange);
+                timed.Parameters.AddWithValue(profileId);
+                await timed.ExecuteNonQueryAsync(cancellationToken);
+                return;
+            }
+        }
+
         await using var command = new NpgsqlCommand(
             "update profile set must_change_password = $1 where id = $2",
             connection);

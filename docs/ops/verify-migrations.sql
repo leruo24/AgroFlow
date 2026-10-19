@@ -92,6 +92,7 @@ select num, name, applied, detail from (values
  ('0047','repair_live_drift', not exists(select 1 from fn where proname='auto_irrigation_check') and (select mode_allows_manual from m0010) and exists(select 1 from fn where proname='handle_new_auth_user' and pg_get_functiondef(oid) like '%''phone''%'), 'auto_irrigation_check() gone, irrigation_mode allows manual, handle_new_auth_user() copies phone'),
  ('0048','simulated_farms', exists(select 1 from c where t='farm' and col='is_simulated') and exists(select 1 from c where t='sensor_reading' and col='simulated') and exists(select 1 from c where t='zone_latest_reading' and col='moisture_simulated') and (select count(*) from farm where name like '%(Simulated)') = 2, 'farm.is_simulated, sensor_reading.simulated, view.moisture_simulated, 2 simulated farms'),
  ('0049','profile_language', exists(select 1 from c where t='profile' and col='language') and exists(select 1 from pg_constraint where conname='profile_language_check'), 'profile.language + profile_language_check'),
+ ('0050','password_reset_and_sign_in', exists(select 1 from rel where relname='password_reset_code') and exists(select 1 from rel where relname='sign_in_link') and exists(select 1 from c where t='profile' and col='temp_password_expires_at'), 'password_reset_code, sign_in_link, profile.temp_password_expires_at'),
  ('storage','reports bucket (not a migration)', exists(select 1 from storage.buckets where id = 'reports'), 'storage.buckets id = reports')
 ) as v(num, name, applied, detail)
 order by num;

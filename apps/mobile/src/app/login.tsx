@@ -31,8 +31,17 @@ import {
   createLoginStyles,
 } from '@/styles/loginStyles';
 
+import {
+  t,
+} from '@/i18n';
+
+import {
+  looksTemporary,
+} from '@/lib/signInHelp';
+
 function getLoginErrorMessage(
-  error: unknown
+  error: unknown,
+  typedPassword = ''
 ) {
   if (
     !(error instanceof Error)
@@ -48,7 +57,10 @@ function getLoginErrorMessage(
       'invalid login credentials'
     )
   ) {
-    return 'Incorrect email address or password.';
+    // Looks like one of our temporary passwords: say how they are typed and that they expire.
+    return looksTemporary(typedPassword)
+      ? `Incorrect email address or password. ${t('signin.tempHint')}`
+      : 'Incorrect email address or password.';
   }
 
   if (
@@ -180,7 +192,8 @@ export default function LoginScreen() {
     ) {
       setError(
         getLoginErrorMessage(
-          caughtError
+          caughtError,
+          password
         )
       );
     } finally {

@@ -11,6 +11,10 @@ export type ConfirmOptions = {
   confirmLabel: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** A value to read out, shown large (a temporary password). */
+  code?: string;
+  /** Only the confirm button: for a notice, not a question. */
+  noCancel?: boolean;
 };
 
 let closeOpen: ((answer: boolean) => void) | null = null;
@@ -30,9 +34,10 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
       <div class="confirm-dialog-backdrop" data-confirm-cancel></div>
       <div class="confirm-dialog-panel">
         <h2 id="confirmDialogTitle">${esc(opts.title)}</h2>
+        ${opts.code ? `<p class="confirm-dialog-code mono" id="confirmDialogCode">${esc(opts.code)}</p>` : ""}
         <p id="confirmDialogBody">${esc(opts.body)}</p>
         <div class="confirm-dialog-actions">
-          <button type="button" class="btn ghost" data-confirm-cancel>${esc(opts.cancelLabel ?? "Cancel")}</button>
+          ${opts.noCancel ? "" : `<button type="button" class="btn ghost" data-confirm-cancel>${esc(opts.cancelLabel ?? "Cancel")}</button>`}
           <button type="button" class="btn${opts.danger ? " danger" : ""}" data-confirm-ok>${esc(opts.confirmLabel)}</button>
         </div>
       </div>`;
@@ -58,6 +63,7 @@ export function confirmDialog(opts: ConfirmOptions): Promise<boolean> {
     document.addEventListener("keydown", onKey, true);
     document.body.appendChild(host);
     // Cancel has focus first, so Enter on a stray key press does not remove an account.
-    host.querySelector<HTMLButtonElement>("[data-confirm-cancel].btn")?.focus();
+    (host.querySelector<HTMLButtonElement>("[data-confirm-cancel].btn")
+      ?? host.querySelector<HTMLButtonElement>("[data-confirm-ok]"))?.focus();
   });
 }

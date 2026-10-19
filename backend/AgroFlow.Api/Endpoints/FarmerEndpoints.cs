@@ -343,6 +343,21 @@ public static class FarmerEndpoints
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        // The farmer's own password now: the temporary one's 72-hour clock (0050) stops too.
+        await using (var has = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'profile' and column_name = 'temp_password_expires_at')",
+            connection))
+        {
+            if (await has.ExecuteScalarAsync(cancellationToken) is true)
+            {
+                await using var clear = new NpgsqlCommand(
+                    "update profile set must_change_password = false, temp_password_expires_at = null where id = $1", connection);
+                clear.Parameters.AddWithValue(userId);
+                await clear.ExecuteNonQueryAsync(cancellationToken);
+                return Results.NoContent();
+            }
+        }
+
         await using var command = new NpgsqlCommand(
             "update profile set must_change_password = false where id = $1", connection);
         command.Parameters.AddWithValue(userId);

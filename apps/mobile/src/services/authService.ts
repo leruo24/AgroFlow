@@ -10,6 +10,10 @@ import {
   supabase,
 } from '@/lib/supabase';
 
+import {
+  passwordsToTry,
+} from '@/lib/signInHelp';
+
 export type AuthUser = {
   id: string;
   firstName: string;
@@ -129,7 +133,8 @@ export function mapSupabaseUser(
   };
 }
 
-// Sends the farmer's login details to Supabase, which checks them.
+// Sends the farmer's login details to Supabase, which checks them. A temporary password typed
+// as "kx7p 4mrt" is tried as typed, then as "KX7P4MRT" (lib/signInHelp.ts).
 export async function loginUser(
   email: string,
   password: string
@@ -139,17 +144,32 @@ export async function loginUser(
       .trim()
       .toLowerCase();
 
+  let result: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>> | null = null;
+
+  for (const candidate of passwordsToTry(password)) {
+    result =
+      await supabase.auth
+        .signInWithPassword({
+          email:
+            normalisedEmail,
+
+          password:
+            candidate,
+        });
+
+    // Only a wrong password is worth a second try; a network failure is not.
+    if (
+      !result.error ||
+      !result.error.message.toLowerCase().includes('invalid login credentials')
+    ) {
+      break;
+    }
+  }
+
   const {
     data,
     error,
-  } =
-    await supabase.auth
-      .signInWithPassword({
-        email:
-          normalisedEmail,
-
-        password,
-      });
+  } = result!;
 
   if (
     error
