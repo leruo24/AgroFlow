@@ -32,6 +32,8 @@ public static class AuditActions
     public const string UserPasswordReset = "user.password_reset";
     // The farmer reset their own password with a code from the Telegram bot.
     public const string UserPasswordResetSelf = "user.password_reset_self";
+    // A staff account had Telegram linked and was unlinked: Telegram is for farmers only.
+    public const string TelegramStaffUnlinked = "telegram.staff_unlinked";
 
     public const string ZoneUpdated = "zone.updated";
     // Staff changed a zone's maximum run time (migration 0052).

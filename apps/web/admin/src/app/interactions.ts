@@ -72,6 +72,8 @@ import { formatDecimal, formatDms, validCoordinates } from "@/lib/coordinates";
 import { telegramState } from "@/pages/users";
 import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
+import { initBell } from "@/app/bell";
+import { isStaffRole } from "@/lib/staff";
 import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
@@ -534,7 +536,9 @@ async function openUserProfile(id: string): Promise<void> {
           <div class="detail-row"><span>Last active</span><b>${esc(u.lastActive)}</b></div>
         </div>`),
       section("Assigned farm", `<p><b>${esc(u.farm)}</b></p>`),
-      section("Telegram", u.telegramLinked
+      section("Telegram", isStaffRole(u.role)
+        ? `<p class="muted">Staff do not use Telegram. Their notices are on Home and under the bell.</p>`
+        : u.telegramLinked
         ? `<p>${esc(telegramState(u))}. Lost or changed phone? Disconnect it, then send a new code.</p>
            <p><button type="button" class="btn ghost" data-act="unlink-telegram" data-id="${esc(u.id)}">Unlink Telegram</button></p>`
         : `<p>Not connected. This farmer gets no alerts until they connect.</p>
@@ -2754,6 +2758,17 @@ async function handleAction(el: HTMLElement): Promise<void> {
       return;
     }
 
+    case "open-change-password": {
+      // From the account menu: Settings, My account, with the new-password box focused.
+      document.getElementById("avatarMenu")?.classList.remove("open");
+      navigate("settings");
+      window.setTimeout(() => {
+        const box = document.querySelector<HTMLInputElement>('[data-field="newPassword"]');
+        box?.scrollIntoView({ block: "center" });
+        box?.focus();
+      }, 400);
+      return;
+    }
     case "change-my-password": {
       const v = collectFields();
       const password = v["newPassword"] ?? "";
@@ -2907,6 +2922,14 @@ async function runComparison(): Promise<void> {
  * here, because a tab body is a plain string and both need the network. Each handles its
  * own failure, so a Telegram status that cannot load does not break the page. */
 export async function refreshMyTelegramStatus(): Promise<void> {
+  const host = document.getElementById("myTelegramStatus");
+  if (!host) return;
+  // Telegram is for farmers only (docs/telegram-farmers-only.md): staff have nothing to link.
+  host.innerHTML = `<p class="muted">Telegram is for farmers only. You get every notice on Home and under the bell at the top of the page.</p>`;
+}
+
+/* The old staff Telegram panel, kept for reference only; never called. */
+export async function refreshMyTelegramStatusOld(): Promise<void> {
   const host = document.getElementById("myTelegramStatus");
   if (!host) return;
 
@@ -4003,6 +4026,7 @@ export function wirePageInteractions(): void {
 let outsideClickBound = false;
 
 export function initHeader(): void {
+  initBell();
   const btn = document.getElementById("avatarBtn");
   const menu = document.getElementById("avatarMenu");
   if (!btn || !menu) return;

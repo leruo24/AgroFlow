@@ -69,11 +69,8 @@ export async function changeMyPassword(password: string): Promise<void> {
 /* Who may use the console. "field_officer" is here so the role needs no code change, but the
  * database only allows 'admin' and 'farm_user' today (0001) and RLS grants console reads to
  * 'admin' only, so in practice staff means admin. Keep in step with StaffRoles.cs. */
-export const STAFF_ROLES: readonly string[] = ["admin", "field_officer"];
-
-export function isStaffRole(role: string | null | undefined): boolean {
-  return role != null && STAFF_ROLES.includes(role);
-}
+import { isStaffRole } from "@/lib/staff";
+export { STAFF_ROLES, isStaffRole } from "@/lib/staff";
 
 export const STAFF_ONLY_MESSAGE =
   "This console is for AgroFlow staff. Farmers, please use the AgroFlow app.";

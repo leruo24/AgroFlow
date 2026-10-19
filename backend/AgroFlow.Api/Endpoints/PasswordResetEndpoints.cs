@@ -22,6 +22,9 @@ public record AdminPasswordResetResponse(bool SentByTelegram, string? TemporaryP
 //   - one-tap needs a 256-bit token that works once, for 24 hours.
 public static class PasswordResetEndpoints
 {
+    public const string StaffPasswordResetMessage =
+        "Staff reset their own password with Forgot password on the admin site sign-in page. AgroFlow emails a link (check the spam folder too).";
+
     public static void MapPasswordResetEndpoints(this WebApplication app)
     {
         app.MapPost("/api/auth/forgot-password", ForgotPasswordAsync).AllowAnonymous();
@@ -76,6 +79,10 @@ public static class PasswordResetEndpoints
                 statusCode: StatusCodes.Status502BadGateway);
         }
         if (!result.Found) return Results.NotFound(new { error = "No such farmer." });
+        // Staff reset their own password by email (Forgot password on the admin site), never
+        // with a temporary password read out or sent on Telegram.
+        if (result.StaffRefused)
+            return Results.Json(new { error = StaffPasswordResetMessage }, statusCode: StatusCodes.Status409Conflict);
         return Results.Ok(result.SentByTelegram
             ? new AdminPasswordResetResponse(true, null,
                 "A new temporary password was sent to the farmer's Telegram. It works for 72 hours.")

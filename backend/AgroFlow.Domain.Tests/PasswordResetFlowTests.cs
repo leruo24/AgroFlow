@@ -30,6 +30,7 @@ public class PasswordResetFlowTests : IClassFixture<ApiHost>
     private static readonly Guid FarmerNoTelegram = Guid.Parse("00000000-0000-4000-8000-0000000000a2");
     private static readonly Guid StaffNoTelegram = Guid.Parse("00000000-0000-4000-8000-0000000000a3");
     private static readonly Guid FarmerAfrikaans = Guid.Parse("00000000-0000-4000-8000-0000000000a4");
+    private static readonly Guid StaffLinked = Guid.Parse("00000000-0000-4000-8000-0000000000a5");
 
     // Fakes
 
@@ -41,6 +42,8 @@ public class PasswordResetFlowTests : IClassFixture<ApiHost>
             [FarmerNoTelegram] = new(FarmerNoTelegram, "farm_user", "sipho@example.org", null, "en", "Sipho"),
             [StaffNoTelegram] = new(StaffNoTelegram, "admin", "staff@agroflow.test", null, "en", "Staff"),
             [FarmerAfrikaans] = new(FarmerAfrikaans, "farm_user", "anna@example.org", 444, "af", "Anna"),
+            // An old chat still on a staff account (before StaffTelegramCleanupService ran).
+            [StaffLinked] = new(StaffLinked, "field_officer", "officer@agroflow.test", 555, "en", "Officer"),
         };
         public readonly List<(long Id, Guid Profile, string Hash, string Salt, DateTimeOffset Created, DateTimeOffset Expires, DateTimeOffset? Used, int Attempts)> Codes = new();
         public readonly Dictionary<Guid, (bool MustChange, DateTimeOffset? Expires)> Temp = new();
@@ -481,5 +484,29 @@ public class PasswordResetFlowTests : IClassFixture<ApiHost>
         var res = await client.PostAsync("/api/auth/one-tap", Json(new { token = "not-a-real-token" }));
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         Assert.Contains("Sign in with your temporary password instead.", await res.Content.ReadAsStringAsync());
+    }
+
+    // Telegram is for farmers only: staff always reset by email.
+
+    [Fact]
+    public async Task Staff_get_the_email_reset_even_with_an_old_Telegram_chat_and_never_a_code()
+    {
+        var w = new World();
+        await w.Flow.RequestAsync("officer@agroflow.test", "https://admin.agroflow.test/?reset=1", CancellationToken.None);
+        Assert.Equal(new[] { "officer@agroflow.test" }, w.Auth.RecoveryEmails);
+        Assert.Empty(w.Bot.Sent);
+        Assert.Empty(w.Store.Codes);
+    }
+
+    [Fact]
+    public async Task An_admin_cannot_give_a_staff_account_a_temporary_password()
+    {
+        var w = new World();
+        var r = await w.Flow.AdminResetAsync(Admin(), StaffLinked, CancellationToken.None);
+        Assert.True(r.StaffRefused);
+        Assert.Null(r.ShownOnce);
+        Assert.Empty(w.Auth.Passwords);
+        Assert.Empty(w.Bot.Sent);
+        Assert.Empty(w.Audit.Rows);
     }
 }

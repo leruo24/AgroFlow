@@ -304,6 +304,7 @@ public static class AuditLogEndpoints
             AuditActions.UserInvited => $"{actor} invited a farmer",
             AuditActions.UserDeleted => $"{actor} deleted a farmer account",
             AuditActions.UserPasswordReset => $"{actor} reset a farmer's password",
+            AuditActions.TelegramStaffUnlinked => $"Telegram was unlinked from staff account {entityId}: Telegram is for farmers only",
             AuditActions.UserPasswordResetSelf => $"{actor} reset their own password with a Telegram code",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",

@@ -242,7 +242,17 @@ public sealed class TelegramPollingService : BackgroundService
             return;
         }
 
-        var redemption = await _onboarding.RedeemCodeAsync(code, chatId, cancellationToken);
+        TelegramRedemption? redemption;
+        try
+        {
+            redemption = await _onboarding.RedeemCodeAsync(code, chatId, cancellationToken);
+        }
+        catch (StaffTelegramRefusedException)
+        {
+            // Telegram is for farmers only.
+            await _client.SendMessageAsync(chatId, StaffTelegram.RefusedMessage, cancellationToken);
+            return;
+        }
 
         if (redemption is null)
         {

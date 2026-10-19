@@ -110,6 +110,15 @@ public sealed class TelegramOnboardingService
             await reader.CloseAsync();
         }
 
+        // Telegram is for farmers only. A code for a staff account links nothing, and the code
+        // is not spent either (rolled back).
+        if (await StaffTelegram.IsStaffAsync(connection, profileId, cancellationToken, transaction))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogWarning("Refused to link Telegram to staff profile {ProfileId}: Telegram is for farmers only.", profileId);
+            throw new StaffTelegramRefusedException();
+        }
+
         // profile.telegram_chat_id is unique, so re-linking the same Telegram account (or a
         // phone passed to someone else) would collide. We detach the chat from its old
         // owner first, then attach it here.

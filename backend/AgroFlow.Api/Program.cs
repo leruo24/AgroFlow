@@ -140,6 +140,9 @@ builder.Services.AddSingleton(sp => new PasswordResetFlow(
     sp.GetRequiredService<IResetMessenger>(), sp.GetRequiredService<IAuditWriter>(),
     sp.GetRequiredService<IConfiguration>()));
 builder.Services.AddHostedService<TemporaryPasswordExpiryService>();
+// Telegram is for farmers only: unlink any staff account that still has a chat (audited).
+builder.Services.AddSingleton<StaffTelegramCleanupService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<StaffTelegramCleanupService>());
 builder.Services.AddSingleton<SupabaseAdminService>();
 
 // Stops the same event being messaged again and again. The forecast refreshes

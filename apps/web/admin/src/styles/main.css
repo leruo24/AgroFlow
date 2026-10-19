@@ -295,6 +295,19 @@ a{color:inherit}
 }
 .menu a:hover,.menu button:hover{background:var(--surface-2);padding-left:17px}
 
+/* The notification bell (app/bell.ts): staff notices, in place of Telegram. */
+.bell{position:relative;width:33px;height:33px;border-radius:50%;border:1px solid var(--border);background:#fff;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text)}
+.bell svg{width:17px;height:17px}
+.bell:hover{background:var(--surface-2)}
+.bell-count{position:absolute;top:-5px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;
+  background:var(--danger, #c0392b);color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center}
+.bell-count[hidden]{display:none}
+.bell-menu{right:44px;min-width:260px;max-width:calc(100vw - 32px)}
+.bell-menu .bell-item b{display:inline-block;min-width:24px}
+.bell-menu .bell-empty{padding:11px 13px;margin:0}
+.bell-menu .bell-all{border-top:1px solid var(--border);color:var(--brand-2, var(--text));font-weight:600}
+
 /* content */
 .content{padding:22px;display:flex;flex-direction:column;gap:16px;max-width:1680px;width:100%}
 

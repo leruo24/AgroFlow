@@ -62,7 +62,8 @@ public enum ConfirmResult
     WeakPassword,
 }
 
-public sealed record AdminResetResult(bool Found, bool SentByTelegram, string? ShownOnce);
+// StaffRefused: the account is staff, who reset by email only (nothing was changed).
+public sealed record AdminResetResult(bool Found, bool SentByTelegram, string? ShownOnce, bool StaffRefused = false);
 
 public sealed class PasswordResetFlow
 {
@@ -96,13 +97,16 @@ public sealed class PasswordResetFlow
         var account = await _store.FindByEmailAsync(normalised, ct);
         if (account is null) return;
 
-        if (account.ChatId is null)
+        // Staff never use Telegram: their reset is always Supabase's email (to the admin site's
+        // ?reset=1 page), even if an old chat is still on the account.
+        if (AgroFlow.Api.Auth.StaffRoles.IsStaff(account.Role))
         {
-            // Staff without Telegram keep Supabase's email reset. Farmers get no email.
-            if (AgroFlow.Api.Auth.StaffRoles.IsStaff(account.Role))
-                await _auth.SendRecoveryEmailAsync(account.Email, staffRedirectTo, ct);
+            await _auth.SendRecoveryEmailAsync(account.Email, staffRedirectTo, ct);
             return;
         }
+
+        // A farmer with no Telegram gets nothing sent: the field officer resets it.
+        if (account.ChatId is null) return;
 
         var now = _clock();
         if (!ResetCode.CanRequest(await _store.CodesSinceAsync(account.ProfileId, now.AddHours(-1), ct))) return;
@@ -153,6 +157,9 @@ public sealed class PasswordResetFlow
     {
         var account = await _store.FindByIdAsync(profileId, ct);
         if (account is null) return new AdminResetResult(false, false, null);
+
+        // Staff reset their own password by email, never with a temporary one.
+        if (AgroFlow.Api.Auth.StaffRoles.IsStaff(account.Role)) return new AdminResetResult(true, false, null, StaffRefused: true);
 
         var password = await IssueTemporaryAsync(account.ProfileId, ct);
         if (password is null) throw new InvalidOperationException("Supabase refused the new password.");

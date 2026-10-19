@@ -4,7 +4,7 @@
 
 import {
   signIn, StaffOnlyError, STAFF_ONLY_MESSAGE, hasNonStaffSession, requestPasswordReset,
-  hasRecoverySession, setNewPassword, resetPasswordWithCode,
+  hasRecoverySession, setNewPassword,
 } from "@/app/auth";
 import { appLinksHtml } from "@/lib/downloads";
 import { plainError } from "@/lib/plainError";
@@ -45,7 +45,6 @@ export const LOGIN_HTML = `
       </label>
 
       <p class="auth-error" id="loginError" hidden></p>
-      <p class="auth-ok" id="loginNotice" role="status" hidden></p>
 
       <button type="submit" class="btn auth-submit" id="loginSubmit">Sign in</button>
 
@@ -64,7 +63,7 @@ export const LOGIN_HTML = `
     <form class="auth-card" id="forgotForm" novalidate hidden>
       ${BRAND}
       <h2 class="auth-title">Reset your password</h2>
-      <p class="muted">Enter the email you sign in with. We send a code to your AgroFlow Telegram.</p>
+      <p class="muted">Enter the email you sign in with. We email you a link to choose a new password.</p>
 
       <label class="drawer-field">
         <span>Email</span>
@@ -74,20 +73,7 @@ export const LOGIN_HTML = `
       <p class="auth-error" id="forgotError" hidden></p>
       <p class="auth-ok" id="forgotSent" role="status" hidden></p>
 
-      <button type="submit" class="btn auth-submit" id="forgotSubmit">Send code</button>
-
-      <div id="forgotCodeStep" hidden>
-        <label class="drawer-field">
-          <span>6-digit code from Telegram</span>
-          <input type="text" id="forgotCode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" />
-        </label>
-        <label class="drawer-field">
-          <span>New password</span>
-          <input type="password" id="forgotNewPassword" autocomplete="new-password" minlength="8" />
-        </label>
-        <p class="auth-error" id="forgotCodeError" hidden></p>
-        <button type="button" class="btn auth-submit" id="forgotChange">Change password</button>
-      </div>
+      <button type="submit" class="btn auth-submit" id="forgotSubmit">Send reset link</button>
 
       <p class="auth-back">
         <button type="button" id="forgotBack">Back to sign in</button>
@@ -163,21 +149,17 @@ export function wireLogin(root: HTMLElement): void {
   emailInput.focus();
 }
 
-/* Forgot password: same card, swapped. The answer is the same whether or not the email has an
- * account, so the form cannot be used to find out who has one. Then the code from Telegram and
- * a new password; staff with no Telegram get an email link instead (the ?reset=1 page). */
+/* Forgot password: same card, swapped. This console is for staff, and staff never use
+ * Telegram (docs/telegram-farmers-only.md), so it is always Supabase's email: a link back to
+ * this site's ?reset=1 page. The answer is the same whether or not the email has an account,
+ * so the form cannot be used to find out who has one. */
 function wireForgot(root: HTMLElement, loginForm: HTMLFormElement, loginEmail: HTMLInputElement): void {
   const form = root.querySelector<HTMLFormElement>("#forgotForm");
   const email = root.querySelector<HTMLInputElement>("#forgotEmail");
   const errorEl = root.querySelector<HTMLElement>("#forgotError");
   const sent = root.querySelector<HTMLElement>("#forgotSent");
   const submit = root.querySelector<HTMLButtonElement>("#forgotSubmit");
-  const codeStep = root.querySelector<HTMLElement>("#forgotCodeStep");
-  const code = root.querySelector<HTMLInputElement>("#forgotCode");
-  const newPassword = root.querySelector<HTMLInputElement>("#forgotNewPassword");
-  const codeError = root.querySelector<HTMLElement>("#forgotCodeError");
-  const change = root.querySelector<HTMLButtonElement>("#forgotChange");
-  if (!form || !email || !errorEl || !sent || !submit || !codeStep || !code || !newPassword || !codeError || !change) return;
+  if (!form || !email || !errorEl || !sent || !submit) return;
 
   root.querySelector<HTMLButtonElement>("#loginForgot")?.addEventListener("click", () => {
     loginForm.hidden = true;
@@ -185,7 +167,6 @@ function wireForgot(root: HTMLElement, loginForm: HTMLFormElement, loginEmail: H
     email.value = loginEmail.value.trim();
     errorEl.hidden = true;
     sent.hidden = true;
-    codeStep.hidden = true;
     email.focus();
   });
 
@@ -210,57 +191,18 @@ function wireForgot(root: HTMLElement, loginForm: HTMLFormElement, loginEmail: H
     submit.disabled = true;
     submit.textContent = "Sending…";
     void requestPasswordReset(value)
-      .then((message) => {
-        sent.textContent = `${message} Staff with no Telegram: we email you a reset link instead.`;
+      .then(() => {
+        sent.textContent = `If ${value} is an AgroFlow staff account, a reset link is on its way. ` +
+          "Check your inbox and your spam folder. The link works once.";
         sent.hidden = false;
-        codeStep.hidden = false;
-        submit.textContent = "Send a new code";
-        code.focus();
       })
       .catch((err: unknown) => {
-        errorEl.textContent = plainError(err, "The code could not be sent. Try again in a minute.");
+        errorEl.textContent = plainError(err, "The reset email could not be sent. Try again in a minute.");
         errorEl.hidden = false;
-        submit.textContent = "Send code";
       })
       .finally(() => {
         submit.disabled = false;
-      });
-  });
-
-  change.addEventListener("click", () => {
-    codeError.hidden = true;
-    const digits = code.value.replace(/\s/g, "");
-    if (!/^\d{6}$/.test(digits)) {
-      codeError.textContent = "Enter the 6-digit code from Telegram.";
-      codeError.hidden = false;
-      return;
-    }
-    if (newPassword.value.length < 8) {
-      codeError.textContent = "Use at least 8 characters for your new password.";
-      codeError.hidden = false;
-      return;
-    }
-    change.disabled = true;
-    change.textContent = "Changing…";
-    void resetPasswordWithCode(email.value.trim(), digits, newPassword.value)
-      .then((message) => {
-        form.hidden = true;
-        loginForm.hidden = false;
-        loginEmail.value = email.value.trim();
-        const notice = root.querySelector<HTMLElement>("#loginNotice");
-        if (notice) {
-          notice.textContent = message;
-          notice.hidden = false;
-        }
-        root.querySelector<HTMLInputElement>("#loginPassword")?.focus();
-      })
-      .catch((err: unknown) => {
-        codeError.textContent = plainError(err, "The password could not be changed. Try again.");
-        codeError.hidden = false;
-      })
-      .finally(() => {
-        change.disabled = false;
-        change.textContent = "Change password";
+        submit.textContent = "Send reset link";
       });
   });
 }
@@ -274,7 +216,7 @@ export function resetPasswordHtml(): string {
     <div class="auth-card" id="resetExpired">
       ${BRAND}
       <h2 class="auth-title">This reset link has expired</h2>
-      <p class="muted">Reset links work once and only for a short time. Ask for a new one from the sign-in page.</p>
+      <p class="muted">Reset links work once and only for a short time. Ask for a new one from the sign-in page, and check your spam folder for it.</p>
       <button type="button" class="btn auth-submit" id="resetToLogin">Go to sign in</button>
     </div>
   </div>`;

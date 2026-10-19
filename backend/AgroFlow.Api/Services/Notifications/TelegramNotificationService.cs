@@ -464,9 +464,17 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    // The same recipients as a farm request (every admin with a linked chat), for any
-    // work-queue notice. Never throws.
-    public async Task NotifyAdminsAsync(string message, CancellationToken cancellationToken)
+    // Work-queue notices for staff (a new enquiry, a call-back). Staff never use Telegram
+    // (StaffTelegram): these are on the admin site's Home "needs attention" list and its bell,
+    // which read the same rows, so nothing is sent here. Kept so callers need not change.
+    public Task NotifyAdminsAsync(string message, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Staff notice shown in the admin site (needs attention, bell), not sent on Telegram: {Message}", message);
+        return Task.CompletedTask;
+    }
+
+    // The old Telegram version, kept for reference only; never called.
+    private async Task NotifyAdminsOnTelegramAsync(string message, CancellationToken cancellationToken)
     {
         try
         {
@@ -491,7 +499,19 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
-    public async Task NotifyAdminsOfFarmRequestAsync(
+    // A new farm / zone request. Shown to staff in the admin site (Requests, Home "needs
+    // attention" and the bell); staff never use Telegram, so nothing is sent here.
+    public Task NotifyAdminsOfFarmRequestAsync(
+        FarmRequestAdminNotification notification,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "Farm request {RequestId} is shown to staff in the admin site, not on Telegram.", notification.RequestId);
+        return Task.CompletedTask;
+    }
+
+    // The old Telegram version, kept for reference only; never called.
+    private async Task NotifyAdminsOfFarmRequestOnTelegramAsync(
         FarmRequestAdminNotification notification,
         CancellationToken cancellationToken)
     {
@@ -622,6 +642,7 @@ public sealed class TelegramNotificationService : INotificationService
               from profile p
              where p.telegram_chat_id is not null
                and (not $2 or p.telegram_alerts_enabled)
+               and {notStaff}
                and (
                      exists (select 1 from farm f where f.farm_id = $1 and f.owner_id = p.id)
                   or exists (select 1 from farm_member fm where fm.farm_id = $1 and fm.profile_id = p.id)
@@ -635,7 +656,9 @@ public sealed class TelegramNotificationService : INotificationService
             var language = await HasLanguageColumnAsync(connection, cancellationToken)
                 ? "coalesce(p.language, 'en')"
                 : "'en'";
-            await using var command = new NpgsqlCommand(sqlTemplate.Replace("{language}", language), connection);
+            // Farmers only: a staff member on the farm (a field officer as a member) is never messaged.
+            await using var command = new NpgsqlCommand(
+                sqlTemplate.Replace("{language}", language).Replace("{notStaff}", StaffTelegram.NotStaffSql), connection);
             command.Parameters.AddWithValue(farmId);
             command.Parameters.AddWithValue(alertsOnly);
 

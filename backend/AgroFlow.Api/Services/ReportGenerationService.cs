@@ -289,9 +289,9 @@ public sealed class ReportGenerationService : BackgroundService
             // An automatic report may also go to the admin who set up the schedule and to the
             // admin group chat.
             var automatic = request.RequestedVia == "auto";
-            var (toHandler, toAdminChat, handler) = automatic
-                ? await LoadScheduleRecipientsAsync(request.FarmId, ct)
-                : (false, false, (Guid?)null);
+            // Staff never get Telegram (StaffTelegram): the copy to the staff member who set up
+            // the schedule and to the admin group chat stopped. Staff see reports in the admin site.
+            var (toHandler, toAdminChat, handler) = (false, false, (Guid?)null);
             var handlerChat = toHandler && handler is { } h ? await GetChatIdAsync(h, ct) : null;
             var options = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TelegramOptions>>().Value;
 
@@ -403,7 +403,7 @@ public sealed class ReportGenerationService : BackgroundService
         await using var connection = await _dataSource.OpenConnectionAsync(ct);
 
         await using var cmd = new NpgsqlCommand(
-            "select telegram_chat_id from profile where id = $1 and telegram_chat_id is not null",
+            $"select p.telegram_chat_id from profile p where p.id = $1 and p.telegram_chat_id is not null and {StaffTelegram.NotStaffSql}",
             connection);
         cmd.Parameters.AddWithValue(profileId);
 

@@ -70,6 +70,13 @@ public static class TelegramEndpoints
             return Results.NotFound(new { error = "No such farmer." });
         }
 
+        // Telegram is for farmers only: no code for a staff account.
+        await using (var roleConnection = await dataSource.OpenConnectionAsync(cancellationToken))
+        {
+            if (await StaffTelegram.IsStaffAsync(roleConnection, profileId, cancellationToken))
+                return Results.Json(new { error = StaffTelegram.RefusedMessage }, statusCode: StatusCodes.Status409Conflict);
+        }
+
         // Admin-issued, so redeeming it creates a new temporary password and forces a
         // change: the farmer has no password of their own yet.
         var issued = await onboarding.IssueCodeAsync(
@@ -91,6 +98,13 @@ public static class TelegramEndpoints
         if (!await ProfileExistsAsync(dataSource, profileId, cancellationToken))
         {
             return Results.NotFound(new { error = "No such farmer." });
+        }
+
+        // Telegram is for farmers only: no code for a staff account.
+        await using (var roleConnection = await dataSource.OpenConnectionAsync(cancellationToken))
+        {
+            if (await StaffTelegram.IsStaffAsync(roleConnection, profileId, cancellationToken))
+                return Results.Json(new { error = StaffTelegram.RefusedMessage }, statusCode: StatusCodes.Status409Conflict);
         }
 
         var issued = await onboarding.IssueCodeAsync(
@@ -156,9 +170,17 @@ public static class TelegramEndpoints
     private static async Task<IResult> IssueMyCodeAsync(
         ClaimsPrincipal user,
         TelegramOnboardingService onboarding,
+        NpgsqlDataSource dataSource,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+
+        // Telegram is for farmers only: a staff member signed in to the app cannot link it.
+        await using (var roleConnection = await dataSource.OpenConnectionAsync(cancellationToken))
+        {
+            if (await StaffTelegram.IsStaffAsync(roleConnection, userId, cancellationToken))
+                return Results.Json(new { error = StaffTelegram.RefusedMessage }, statusCode: StatusCodes.Status409Conflict);
+        }
 
         // Farmer-issued: they already have a password, so redeeming only links the chat.
         var issued = await onboarding.IssueCodeAsync(
