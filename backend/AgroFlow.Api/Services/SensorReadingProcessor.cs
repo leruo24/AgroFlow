@@ -82,28 +82,21 @@ public static class SensorReadingProcessor
                 return new SensorReadingResult(healthStatus, null);
             }
 
-            var zone = new Zone
-            {
-                MoistureThreshold = moistureThreshold,
-                DesiredMoisture = desiredMoisture,
-            };
+            // The rule is AutoIrrigationDecision (pure, unit-tested): Automatic zones only,
+            // thresholds, a manual run takes priority, and only a change of instruction (every
+            // ~30 s reading while still dry must not queue another 'start'). It checks the mode
+            // again, so a Manual zone gets no command even if the check above were removed.
+            // Uses the value just received rather than re-reading zone_latest_reading, so it
+            // does not depend on read-your-writes ordering.
+            var desired = AutoIrrigationDecision.Decide(
+                irrigationMode, value, moistureThreshold, desiredMoisture,
+                manualRunActive: await HasActiveManualOverrideAsync(connection, zoneId),
+                lastCommand: await FetchLastCommandAsync(connection, zoneId));
 
-            // Use the value we just received for the decision instead of re-reading
-            // zone_latest_reading, so we do not depend on read-your-writes ordering.
-            string? desired = null;
-            if (zone.ShouldStartIrrigation(value)) desired = "start";
-            else if (zone.ShouldStopIrrigation(value)) desired = "stop";
-
-            if (desired is not null && !await HasActiveManualOverrideAsync(connection, zoneId))
+            if (desired is not null)
             {
-                // Only insert if this changes the last instruction; otherwise every ~30 s reading
-                // while still dry would queue another 'start'.
-                var lastCommand = await FetchLastCommandAsync(connection, zoneId);
-                if (lastCommand != desired)
-                {
-                    await InsertAutoCommandAsync(connection, zoneId, desired);
-                    commandIssued = desired;
-                }
+                await InsertAutoCommandAsync(connection, zoneId, desired);
+                commandIssued = desired;
             }
         }
 

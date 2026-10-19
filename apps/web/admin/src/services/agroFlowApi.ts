@@ -344,7 +344,14 @@ async function reportFetch(path: string): Promise<Response> {
 }
 
 export type ReportFarm = { farm_id: number; name: string; owner_name: string | null };
-export type ReportZone = { zoneId: number; name: string; cropType: string | null };
+// irrigationMode: automatic | scheduled | manual (the API's IrrigationMode.Canonical).
+export type ReportZone = { zoneId: number; name: string; cropType: string | null; irrigationMode?: "automatic" | "scheduled" | "manual" };
+
+export const IRRIGATION_MODE_LABEL: Record<string, string> = {
+  automatic: "Automatic",
+  scheduled: "Scheduled",
+  manual: "Manual (never by itself)",
+};
 
 export async function getReportFarms(): Promise<ReportFarm[]> {
   return (await reportFetch("/api/farms")).json() as Promise<ReportFarm[]>;

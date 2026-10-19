@@ -84,7 +84,7 @@
     "zone.stopConfirmBody": "Die pomp stop en die sone gaan terug na {mode}.",
     "zone.stop": "Stop",
     "zone.invalidDurationTitle": "Kyk na die minute",
-    "zone.invalidDuration": "Tik tussen 1 en 60 minute in.",
+    "zone.invalidDuration": "Tik tussen 1 en {max} minute in. Die toestel stop elke beurt na {max} minute.",
     "zone.startFailed": "Kon nie begin water gee nie",
     "zone.stopFailed": "Kon nie die water stop nie",
     "zone.commandFailed": "Die bevel kon nie gestuur word nie. Probeer asseblief weer.",
@@ -209,6 +209,7 @@
     "farm.simulated": "Gesimuleer",
     "farm.select": "Kies 'n plaas",
     "farm.retryA11y": "Probeer weer om plase te laai",
-    "farm.selectA11y": "Kies plaas, huidige plaas {name}"
+    "farm.selectA11y": "Kies plaas, huidige plaas {name}",
+    "zone.manualNote": "Met die hand: AgroFlow gee hierdie sone nie self water nie. Gebruik Gee nou water wanneer dit water nodig het."
   }
 }

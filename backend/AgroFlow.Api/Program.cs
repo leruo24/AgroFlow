@@ -296,6 +296,7 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/devices/claim") ||
         path.StartsWithSegments("/api/devices/mqtt-credentials") ||
         path.StartsWithSegments("/api/devices/firmware-check") ||
+        path.StartsWithSegments("/api/devices/config") ||
         path.StartsWithSegments("/api/devices/commands") ||
         path.StartsWithSegments("/api/irrigation-events");
 
@@ -336,6 +337,7 @@ app.MapSensorReadingEndpoints();
 app.MapIrrigationEventEndpoints();
 app.MapDeviceEnrollmentEndpoints();
 app.MapDeviceCommandEndpoints();
+app.MapDeviceConfigEndpoints();
 app.MapZoneHardwareEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();

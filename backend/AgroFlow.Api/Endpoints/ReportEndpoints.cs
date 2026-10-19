@@ -937,7 +937,7 @@ public static class ReportEndpoints
         if (farmId is null) return Results.BadRequest(new { error = "farmId is required." });
 
         const string sql = """
-            select z.id, z.name, z.crop_type
+            select z.id, z.name, z.crop_type, z.irrigation_mode
             from zone z
             where z.farm_id = $1
               and (exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $2)
@@ -961,6 +961,8 @@ public static class ReportEndpoints
                 zoneId = id,
                 name = r.IsDBNull(1) ? $"Zone {id}" : r.GetString(1),
                 cropType = r.IsDBNull(2) ? null : r.GetString(2),
+                // automatic | scheduled | manual, the same three names the app shows.
+                irrigationMode = AgroFlow.Business.IrrigationMode.Canonical(r.IsDBNull(3) ? null : r.GetString(3)),
             });
         }
         return Results.Ok(zones);

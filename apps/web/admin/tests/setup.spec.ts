@@ -137,3 +137,21 @@ test("the wizard blocks Next until a step is valid, and Back keeps what was type
   await expect(wiz.locator('[data-field="farmName"]')).toHaveValue("Back And Forth Farm");
   await expect(wiz.locator('[data-field="farmSize"]')).toHaveValue("2");
 });
+
+// Part 0: each zone's watering mode, as saved, including Manual (it used to read as Automatic
+// in the app; the console did not show it at all).
+test("the farm drawer shows each zone's watering mode, Manual included", async ({ page }) => {
+  const errors = captureErrors(page);
+  await open(page, (method, path) => method === "GET" && path === "/api/farmer/reports/zones"
+    ? [
+        { zoneId: 11, name: "Tub 1", cropType: "tomato", irrigationMode: "manual" },
+        { zoneId: 12, name: "Tub 2", cropType: "spinach", irrigationMode: "automatic" },
+        { zoneId: 13, name: "Tub 3", cropType: "onion", irrigationMode: "scheduled" },
+      ]
+    : undefined);
+  await page.locator('[data-act="view-farm"][data-id="1"]').click();
+  await expect(page.locator('[data-today-zone="11"] [data-zone-mode]')).toHaveText("Manual (never by itself)", { timeout: 15000 });
+  await expect(page.locator('[data-today-zone="12"] [data-zone-mode]')).toHaveText("Automatic");
+  await expect(page.locator('[data-today-zone="13"] [data-zone-mode]')).toHaveText("Scheduled");
+  expect(errors).toEqual([]);
+});
