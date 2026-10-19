@@ -96,6 +96,17 @@ public static class IrrigationEventEndpoints
             }
         }
 
+        // A kit uploading its kept runs (firmware v1.5.0) may send one twice if the power
+        // goes before it removes it. Same zone, start, runtime and source is the same run:
+        // stored and counted once.
+        if (request.StartedAt.HasValue &&
+            await RunAlreadyLoggedAsync(connection, transaction, request))
+        {
+            var unchanged = await FetchZoneWaterUsedTotalForUpdateAsync(connection, transaction, request.ZoneId);
+            await transaction.CommitAsync();
+            return Results.Ok(new IrrigationEventResponse(unchanged, estimatedLitres, IsMeasured: false, litresBasis));
+        }
+
         await InsertIrrigationEventAsync(connection, transaction, request, estimatedLitres);
 
         // Row lock so a second request for the same zone cannot read the same starting
@@ -130,6 +141,19 @@ public static class IrrigationEventEndpoints
 
         var result = await cmd.ExecuteScalarAsync();
         return result is float f ? f : result is double d ? d : (double?)null;
+    }
+
+    private static async Task<bool> RunAlreadyLoggedAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, IrrigationEventRequest request)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select exists (select 1 from irrigation_event where zone_id = $1 and started_at = $2 " +
+            "and runtime_seconds = $3 and trigger_source = $4)", connection, transaction);
+        cmd.Parameters.AddWithValue(request.ZoneId);
+        cmd.Parameters.AddWithValue(request.StartedAt!.Value);
+        cmd.Parameters.AddWithValue(request.RuntimeSeconds);
+        cmd.Parameters.AddWithValue(request.TriggerSource);
+        return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 
     private static async Task InsertIrrigationEventAsync(
