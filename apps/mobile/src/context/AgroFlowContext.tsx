@@ -38,6 +38,7 @@ import {
 } from '@/lib/moistureDisplay';
 
 import { isOnline, onReconnect } from '@/lib/connectivity';
+import { zoneMaxRunMinutes } from '@/lib/runLimit';
 import { t } from '@/i18n';
 
 import {
@@ -108,6 +109,8 @@ export type Zone = {
   plantingDate: string | null;
   healthStatus: string;
   isSimulated?: boolean;
+  // The longest single run (zone.max_run_minutes, 0052; staff set it). lib/runLimit.ts.
+  maxRunMinutes?: number;
   // null means the zone's water_saved column was never set, which is different from a real 0.
   waterSavedLitres: number | null;
 
@@ -229,6 +232,7 @@ type FarmRow = {
 type ZoneRow = {
   id: DatabaseId;
   farm_id: DatabaseId;
+  max_run_minutes?: number | null;
   name?: string | null;
   location?: string | null;
   crop_type?: string | null;
@@ -524,6 +528,7 @@ export function mapZoneRow(
         status: temperatureValue == null || humidityValue == null ? 'Offline' : sensorStatus,
       },
     },
+    maxRunMinutes: zoneMaxRunMinutes(row.max_run_minutes),
     irrigation: {
       status:
         irrigationModeFromDb(row.irrigation_mode) ===

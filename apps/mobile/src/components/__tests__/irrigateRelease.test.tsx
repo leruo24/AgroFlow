@@ -65,15 +65,16 @@ import { act, render, screen, waitFor, fireEvent } from '@testing-library/react-
 import * as api from '@/services/agroFlowApi';
 import { mapZoneRow } from '@/context/AgroFlowContext';
 import { kitStateFrom } from '@/hooks/useZoneKit';
+import { adviceOverLimit, defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
 import { ACK_WAIT_MS, RUN_POLL_MS, runStateFrom } from '@/hooks/useRunStatus';
 import ZoneControlScreen from '@/app/zone/[id]';
 
 const hardware = api.fetchZoneHardware as jest.Mock;
 const row = { id: 7, farm_id: 1, name: 'Bed 1', crop_type: 'spinach', irrigation_mode: 'automatic', moisture_threshold: 30, desired_moisture: 60, schedule_enabled: false, schedule_days: [], schedule_start_time: '05:30', schedule_duration_minutes: 10 };
 const startManualIrrigation = jest.fn(() => Promise.resolve());
-const agro = () => ({
+const agro = (maxRun?: number) => ({
   farm: { id: '1', name: 'Nkosi Farm' },
-  zones: [mapZoneRow(row as never, 0, undefined, undefined, null, null, [])],
+  zones: [mapZoneRow({ ...row, max_run_minutes: maxRun } as never, 0, undefined, undefined, null, null, [])],
   isZonesLoading: false, zonesError: null, isFarmLoading: false, farmError: null,
   refreshZones: jest.fn(), refreshFarms: jest.fn(),
   startManualIrrigation, stopManualIrrigation: jest.fn(), updateIrrigationMode: jest.fn(),
@@ -191,5 +192,43 @@ describe('after Irrigate', () => {
       await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
     }
     await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe("Kit didn't respond — check it's online"));
+  });
+});
+
+describe("the zone's maximum run time", () => {
+  it('reads the stored maximum, and 5 when it is missing or out of range', () => {
+    expect(zoneMaxRunMinutes(30)).toBe(30);
+    expect(zoneMaxRunMinutes(null)).toBe(5);
+    expect(zoneMaxRunMinutes(0)).toBe(5);
+    expect(zoneMaxRunMinutes(500)).toBe(5);
+    expect(defaultRunMinutes(3)).toBe(3);
+    expect(defaultRunMinutes(60)).toBe(5);
+    expect(adviceOverLimit(66, 5)).toBe(true);
+    expect(adviceOverLimit(5, 5)).toBe(false);
+    expect(adviceOverLimit(null, 5)).toBe(false);
+  });
+
+  it('the duration box starts at the maximum when it is under 5 minutes, and refuses more', async () => {
+    hardware.mockResolvedValue(kit({}));
+    mockAgro = agro(3);
+    await render(<ZoneControlScreen />);
+    await waitFor(() => expect(screen.getByDisplayValue('3')).toBeTruthy());
+    await fireEvent.changeText(screen.getByDisplayValue('3'), '4');
+    await fireEvent.press(screen.getByTestId('irrigate-button'));
+    expect(mockAlert).toHaveBeenLastCalledWith('Check the minutes', "Enter between 1 and 3 minutes. This zone's pump is limited to 3 min per run.");
+    expect(startManualIrrigation).not.toHaveBeenCalled();
+  });
+
+  it('a zone allowed 60 minutes takes a 45-minute run', async () => {
+    hardware.mockResolvedValue(kit({}));
+    mockAgro = agro(60);
+    await render(<ZoneControlScreen />);
+    await waitFor(() => expect(hardware).toHaveBeenCalled());
+    await fireEvent.changeText(screen.getByDisplayValue('5'), '45');
+    await fireEvent.press(screen.getByTestId('irrigate-button'));
+    const confirm = mockAlert.mock.calls.at(-1)!;
+    const start = (confirm[2] as { onPress?: () => Promise<void> }[]).find(b => b.onPress)!;
+    await act(async () => { await start.onPress!(); });
+    expect(startManualIrrigation).toHaveBeenCalledWith('7', 45);
   });
 });

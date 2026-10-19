@@ -34,6 +34,8 @@ public static class AuditActions
     public const string UserPasswordResetSelf = "user.password_reset_self";
 
     public const string ZoneUpdated = "zone.updated";
+    // Staff changed a zone's maximum run time (migration 0052).
+    public const string ZoneMaxRunChanged = "zone.max_run_changed";
     public const string ZoneAdviceRun = "zone.advice_run";
 
     // A farmer (or admin) changed a zone's crop or planting date.

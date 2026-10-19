@@ -79,7 +79,7 @@ so they survive reboots.
 | Direction | Topic | Payload |
 |---|---|---|
 | Device → backend | `agroflow/farm/{farmId}/device/{deviceId}/sensors` | `{"sensorType":"SoilMoisture","value":42.5}` |
-| Backend → device | `agroflow/farm/{farmId}/device/{deviceId}/commands` | `{"id":"<uuid>","command":"start","durationSeconds":300,"source":"auto"}` |
+| Backend → device | `agroflow/farm/{farmId}/device/{deviceId}/commands` | `{"id":"<uuid>","command":"start","durationSeconds":300,"source":"auto","maxRunSeconds":300}` |
 
 ### Sensor payloads
 
@@ -134,7 +134,7 @@ the queue, so the server receives them in the order they were taken.
 
 | `command` | Meaning |
 |---|---|
-| `start` | run the pump, for `durationSeconds` if present |
+| `start` | run the pump for min(`durationSeconds`, `maxRunSeconds`), never over 120 minutes; `maxRunSeconds` is the zone's maximum run time (5 minutes when missing, from an older server). Firmware 1.6.0 also stops a run after 3 minutes with no MQTT contact. |
 | `stop` | stop the pump |
 | `open_setup` | open the board's setup page, **keeping** the saved WiFi |
 | `change_wifi` | forget the saved WiFi and open the setup page, keeping farm/zone/token |

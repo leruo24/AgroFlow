@@ -39,9 +39,16 @@ with this branch): the command reached the kit with `durationSeconds: 60`, the A
 
 **Fixed on release/oct-19**
 
-4. **Runs over 5 minutes.** The API now refuses a manual run over 300 s (400, "A run can be at
-   most 5 minutes (300 seconds). The kit stops every run at 5 minutes."). Schedules can still
-   be set longer than 5 minutes; the kit still cuts those at 5.
+4. **Run length.** Each zone has a **maximum run time** (`zone.max_run_minutes`, migration
+   **0052**: default 5, staff set 1-120 on the farm's page in the admin site, audited). The API
+   refuses a manual run over it (400, "This zone's pump is limited to 5 min per run. Choose 5
+   minutes or less, and run it again after it finishes."), the app's duration box uses the same
+   limit, every command carries `maxRunSeconds`, and firmware **1.6.0** runs min(asked,
+   maximum) with a 120-minute ceiling and stops a server-started run after **3 minutes without
+   MQTT**. When the FAO-56 advice is longer than one run, Home says "Recommended 66 min — your
+   pump is limited to 5 min per run; run it again after it finishes" (the engine is unchanged;
+   Today only adds `recommendedMinutes` and `maxRunMinutes`). Schedules longer than the
+   maximum are cut there by the kit.
 5. **No confirmation in the app.** After Irrigate the zone screen polls
    `GET /api/farmer/commands/{id}` and shows "Sending…" → "Kit started watering" (the ACK) →
    "Finished" (the kit's run report), or "Kit didn't respond — check it's online" after 60 s.
@@ -59,7 +66,8 @@ with this branch): the command reached the kit with `durationSeconds: 60`, the A
 
 - **Database:** migrations through **0047** applied (0047 makes the `irrigation_mode` check
   allow `manual`; without it, saving Manual fails), and **0051** for "Finished" (without it the
-  app shows at most "Kit started watering"). `docs/ops/verify-migrations.sql`.
+  app shows at most "Kit started watering") and **0052** for per-zone maximum run times
+  (without it every zone stays at 5 minutes). `docs/ops/verify-migrations.sql`.
 - **Railway, `ConnectionStrings__Supabase`:** a connection that supports `LISTEN` — the
   **direct** connection or the **session** pooler (port **5432**). Through the transaction
   pooler (port 6543) NOTIFY never arrives and commands only go out on the 120 s sweep.
@@ -71,8 +79,8 @@ with this branch): the command reached the kit with `durationSeconds: 60`, the A
   Leave `Mqtt__UseTls` and `Mqtt__ProtocolVersion` unset in production (they exist only on
   `feat/kit-offline`, for the simulation).
 - **The kit:** registered in the console, claimed with its one-time code
-  (`hardware.enrollment_status = 'active'`, `device_id` set), online. Firmware **1.4.1** (or
-  1.5.1 once merged with kit-offline) for the mode-aware offline fallback.
+  (`hardware.enrollment_status = 'active'`, `device_id` set), online. Firmware **1.6.0** (the mode-aware offline fallback, the zone maximum and the 3-minute
+  lost-connection stop).
 
 ## Merging with `feat/kit-offline`
 

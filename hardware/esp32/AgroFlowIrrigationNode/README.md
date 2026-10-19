@@ -35,11 +35,22 @@ Not Adafruit's "DHT sensor library": it has `DHT.h`, not `DHTesp.h`, and the
 sketch will not compile with it alone. `WiFi.h`, `WiFiClientSecure.h`,
 `HTTPClient.h`, `HTTPUpdate.h`, `WebServer.h` and `Preferences.h` come with the core.
 
-v1.5.1 uses about 92% of the default "Default 4MB with spiffs" app partition
+v1.6.0 uses about 92% (1,216,292 bytes) of the default "Default 4MB with spiffs" app partition
 (1,214,736 of 1,310,720 bytes). If a later change does not fit, pick
 **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)**; OTA keeps working.
 
-## What the board does when the internet is down (v1.5.1)
+## How long a run lasts (v1.6.0)
+
+- **Each zone has a maximum run time**, 1 to 120 minutes (5 by default), set by staff on
+  the farm's page in the admin site. Every command carries it as `maxRunSeconds`, and the
+  board runs **min(asked, maximum)**, never more than `ABSOLUTE_MAX_RUN_MS` (120 minutes).
+  A command with no maximum (an older server) runs at most 5 minutes.
+- **Lost-connection stop.** A run the server started stops when the board has had no MQTT
+  contact for 3 minutes (`LOST_CONTACT_STOP_MS`), so a lost "stop" can never leave the pump
+  on. The run is kept and uploaded when it is back, like any offline run.
+- The rule lives in `RunLimits.h` and is unit-tested natively (`hardware/esp32/tests`).
+
+## What the board does when the internet is down (v1.6.0)
 
 - **Readings are kept.** While MQTT is down it keeps one soil + temperature +
   humidity sample every 10 minutes in flash: 180 readings, about 10 hours. When
@@ -97,10 +108,13 @@ MQTT login from `GET /api/devices/mqtt-credentials` on every boot (RAM only).
 | `RELAY_PIN` | 25 | `RELAY_ACTIVE_LOW = true` |
 | `DHT_PIN` | 27 | DHT11 data |
 | `ADC_DRY` / `ADC_WET` | 4095 / 1550 | raw → % for the report; the app's wet/dry setup is the real calibration |
-| `SAFETY_MAX_RUN_MS` | 5 minutes | every run, every source |
+| `ABSOLUTE_MAX_RUN_MS` | 120 minutes | the ceiling for every run, whatever a command says |
+| `DEFAULT_MAX_RUN_MS` | 5 minutes | a command with no `maxRunSeconds` |
+| `LOST_CONTACT_STOP_MS` | 3 minutes | a server-started run stops after this long without MQTT |
+| `LOCAL_MAX_RUN_MS` | 5 minutes | the local page's own limit |
 | `SENSOR_REPORT_INTERVAL_MS` | 30 s | live readings |
 | `OFFLINE_SAMPLE_INTERVAL_MS` | 10 minutes | kept readings while offline |
-| `FIRMWARE_VERSION` | 1.5.1 | match `Firmware:LatestVersion` on the API when the `.bin` is hosted |
+| `FIRMWARE_VERSION` | 1.6.0 | match `Firmware:LatestVersion` on the API when the `.bin` is hosted |
 
 `ZONE_ID` and `FARM_ID` are not settings: they come back from the claim and are
 kept in flash.

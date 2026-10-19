@@ -1,4 +1,4 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.5.1).
+// AgroFlow irrigation node - ESP32 firmware (v1.6.0).
 //
 // WiFiManager setup portal + one-time enrollment code -> /api/devices/claim.
 // MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors as
@@ -41,6 +41,13 @@
 //      10 minutes while online says whether the zone is Automatic. The offline fallback only waters
 //      when the last answer said so, kept in flash; a Manual or Scheduled zone, or a kit
 //      that has never had an answer, is never watered by the kit on its own.
+//  10. Run limits (v1.6.0): each zone has a maximum run time (1 to 120 minutes, set by staff),
+//      sent with every command as "maxRunSeconds". A run lasts min(requested, that maximum),
+//      never more than ABSOLUTE_MAX_RUN_MS, and 5 minutes when a command has no maximum
+//      (an older server). RunLimits.h holds the rule (unit-tested natively).
+//  11. Lost-connection failsafe (v1.6.0): a run the server started stops when the kit has had
+//      no MQTT contact with the server for LOST_CONTACT_STOP_MS (3 minutes). The offline
+//      fallback and the local page are meant to run offline and keep their own limits.
 //
 // Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
 // DHT sensor library for ESPx (beegee_tokyo).
@@ -57,6 +64,7 @@
 #include <string.h>
 #include "DHTesp.h"
 #include "OfflineBuffer.h"
+#include "RunLimits.h"
 #include "secrets.h"
 
 // Config
@@ -73,7 +81,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Update this and Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json each release.
-const char *FIRMWARE_VERSION = "1.5.1";
+const char *FIRMWARE_VERSION = "1.6.0";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -110,9 +118,12 @@ const size_t REPLAY_BATCH = 5;            // per loop pass, so sensors and the s
 const char *LOCAL_PAGE_USER = "agroflow";
 
 
-// Safety cap and offline fallback.
-const unsigned long SAFETY_MAX_RUN_MS        = 5UL * 60UL * 1000UL;   // no run longer than 5 min, ever
-const unsigned long LOCAL_MAX_RUN_MINUTES    = SAFETY_MAX_RUN_MS / 60000UL; // the local page offers 1..5
+// Run limits (see 10. and 11. above) and offline fallback.
+const unsigned long ABSOLUTE_MAX_RUN_MS      = 120UL * 60UL * 1000UL; // no run longer than 120 min, ever
+const unsigned long DEFAULT_MAX_RUN_MS       = 5UL * 60UL * 1000UL;   // a command with no maxRunSeconds
+const unsigned long LOST_CONTACT_STOP_MS     = 3UL * 60UL * 1000UL;   // server run, no MQTT this long -> stop
+const unsigned long LOCAL_MAX_RUN_MS         = 5UL * 60UL * 1000UL;   // the local page's own limit
+const unsigned long LOCAL_MAX_RUN_MINUTES    = LOCAL_MAX_RUN_MS / 60000UL; // the local page offers 1..5
 const unsigned long OFFLINE_FALLBACK_AFTER_MS = 10UL * 60UL * 1000UL; // MQTT down this long -> water locally
 const int FALLBACK_START_RAW = 2600;     // raw at/above = dry enough to water (previously tested values)
 const int FALLBACK_STOP_RAW  = 2300;     // raw at/below = wet enough to stop
@@ -158,6 +169,9 @@ unsigned long pumpStopMillis = 0;
 time_t cycleStartEpoch = 0;
 String currentCycleSource = "";
 bool fallbackCycle = false;   // true when the current run was started by the offline fallback
+bool serverRun = false;       // true when the current run came from a server command (failsafe applies)
+unsigned long runLimitMs = DEFAULT_MAX_RUN_MS;   // this run's own cap (checkSafetyCap)
+unsigned long lastServerContactMillis = 0;       // last loop pass with MQTT connected
 
 // Whether the zone is Automatic, from GET /api/devices/config (kept in flash as "autoOk").
 // False until the server has said yes: a Manual zone must never be watered by the kit itself.
@@ -236,6 +250,8 @@ void stopPumpCycle() {
   pumpRunning = false;
   hasDurationDeadline = false;
   fallbackCycle = false;
+  serverRun = false;
+  runLimitMs = DEFAULT_MAX_RUN_MS;
   pumpStopMillis = millis();
 
   unsigned long runtimeSeconds = (millis() - pumpStartMillis) / 1000;
@@ -254,11 +270,25 @@ void checkDurationDeadline() {
   }
 }
 
-// Safety: applies to every pump run, so a lost "stop" command can't flood the zone.
+// Safety: applies to every pump run, so a lost "stop" command can't flood the zone. Each
+// run's cap is its own (the zone maximum, the local page's 5 minutes), and never more than
+// ABSOLUTE_MAX_RUN_MS.
 void checkSafetyCap() {
-  if (pumpRunning && millis() - pumpStartMillis >= SAFETY_MAX_RUN_MS) {
+  unsigned long cap = runLimitMs < ABSOLUTE_MAX_RUN_MS ? runLimitMs : ABSOLUTE_MAX_RUN_MS;
+  if (pumpRunning && millis() - pumpStartMillis >= cap) {
     Serial.println("SAFETY: max run time reached, stopping pump");
     stopPumpCycle();
+  }
+}
+
+// Lost-connection failsafe (11. above): a run the server started stops after 3 minutes with
+// no MQTT contact, so a kit that lost the server mid-run never keeps watering unattended.
+void checkLostContact() {
+  unsigned long nowMs = millis();
+  if (mqttClient.connected()) { lastServerContactMillis = nowMs; return; }
+  if (agroflow::lostContactShouldStop(serverRun, pumpRunning, nowMs, lastServerContactMillis, LOST_CONTACT_STOP_MS)) {
+    Serial.println("SAFETY: no contact with the server for 3 minutes during a run, stopping pump");
+    stopPumpCycle();   // the run is kept and uploaded on reconnect, like any offline run
   }
 }
 
@@ -640,13 +670,25 @@ void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
   if (!commandId || !command) return;
 
   if (strcmp(command, "start") == 0) {
-    hasDurationDeadline = !doc["durationSeconds"].isNull();
-    if (hasDurationDeadline) {
-      long durationSeconds = doc["durationSeconds"].as<long>();
-      cycleDeadlineMillis = millis() + (unsigned long)durationSeconds * 1000UL;
+    // One run at a time: a second start while watering changes nothing (it is still ACKed).
+    if (!pumpRunning) {
+      JsonVariantConst cmd = doc.as<JsonVariantConst>();
+      long durationSeconds = cmd["durationSeconds"].isNull() ? 0 : cmd["durationSeconds"].as<long>();
+      long maxRunSeconds = cmd["maxRunSeconds"].isNull() ? 0 : cmd["maxRunSeconds"].as<long>();
+      if (durationSeconds < 0) durationSeconds = 0;
+      if (maxRunSeconds < 0) maxRunSeconds = 0;
+      // min(requested, zone maximum), never more than ABSOLUTE_MAX_RUN_MS (RunLimits.h).
+      runLimitMs = agroflow::effectiveRunMs((unsigned long)durationSeconds * 1000UL,
+                                            (unsigned long)maxRunSeconds * 1000UL,
+                                            DEFAULT_MAX_RUN_MS, ABSOLUTE_MAX_RUN_MS);
+      hasDurationDeadline = true;
+      cycleDeadlineMillis = millis() + runLimitMs;
+      const char *source = doc["source"] | "unknown";
+      startPumpCycle(String(source), false);
+      serverRun = true;
+      lastServerContactMillis = millis();   // the command just came over MQTT
+      Serial.printf("Run limit %lu s (asked %ld s, zone maximum %ld s)\n", runLimitMs / 1000UL, durationSeconds, maxRunSeconds);
     }
-    const char *source = doc["source"] | "unknown";
-    startPumpCycle(String(source), false);
   } else if (strcmp(command, "stop") == 0) {
     stopPumpCycle();
   } else if (strcmp(command, "open_setup") == 0) {
@@ -875,7 +917,7 @@ void handleLocalStatus() {
   unsigned long ranMs = pumpRunning ? millis() - pumpStartMillis : 0;
   unsigned long leftMs = 0;
   if (pumpRunning) {
-    leftMs = ranMs < SAFETY_MAX_RUN_MS ? SAFETY_MAX_RUN_MS - ranMs : 0;
+    leftMs = ranMs < runLimitMs ? runLimitMs - ranMs : 0;
     if (hasDurationDeadline) {
       long toDeadline = (long)(cycleDeadlineMillis - millis());
       if (toDeadline < 0) toDeadline = 0;
@@ -893,7 +935,7 @@ void handleLocalStatus() {
 }
 
 // Start/Stop from the local page. The same rules as a command from the server: one
-// run at a time, a duration, and the 5-minute safety cap (checkSafetyCap) on top.
+// run at a time, a duration, and the local page's 5-minute cap (checkSafetyCap) on top.
 void handleLocalPump() {
   if (!localRequestAllowed()) return;
   WebServer &server = *wm.server;
@@ -917,6 +959,7 @@ void handleLocalPump() {
   hasDurationDeadline = true;
   cycleDeadlineMillis = millis() + (unsigned long)minutes * 60000UL;
   startPumpCycle("manual", false);
+  runLimitMs = LOCAL_MAX_RUN_MS;   // not a server run: no lost-contact stop on the kit's own network
   Serial.printf("Local page: pump started for %ld min\n", minutes);
   server.send(200, "text/plain", "Pump started for " + String(minutes) + (minutes == 1 ? " minute." : " minutes."));
 }
@@ -1162,5 +1205,6 @@ void loop() {
 
   checkDurationDeadline();
   checkSafetyCap();
+  checkLostContact();
   runOfflineFallback();
 }

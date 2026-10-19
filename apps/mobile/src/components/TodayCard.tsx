@@ -6,6 +6,7 @@ import { WhyLink } from '@/components/WhySheet';
 import { ManualLogSheet } from '@/components/ManualLogSheet';
 import type { TodayZone } from '@/services/agroFlowApi';
 import { useI18n, type TranslationKey } from '@/i18n';
+import { adviceOverLimit, zoneMaxRunMinutes } from '@/lib/runLimit';
 
 const LEVEL_LABEL: Record<'high' | 'medium' | 'low', TranslationKey> = {
   high: 'today.confHigh', medium: 'today.confMedium', low: 'today.confLow',
@@ -31,6 +32,12 @@ export function TodayCard({ zone, onLogged }: Props) {
     <View style={styles.card} testID={`today-${zone.zoneId}`}>
       <Text style={styles.zoneName}>{zone.name}</Text>
       <Text style={[styles.action, actionStyle]}>{zone.action.text}</Text>
+      {/* Longer than one run can be: say so instead of cutting the advice short. */}
+      {adviceOverLimit(zone.recommendedMinutes, zone.maxRunMinutes) ? (
+        <Text style={styles.overLimit} testID={`today-over-limit-${zone.zoneId}`}>
+          {t('today.overLimit', { recommended: zone.recommendedMinutes ?? 0, max: zoneMaxRunMinutes(zone.maxRunMinutes) })}
+        </Text>
+      ) : null}
       <WhyLink explanation={zone.why} compact />
 
       {zone.confidence && (

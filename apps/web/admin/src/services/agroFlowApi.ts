@@ -346,7 +346,8 @@ async function reportFetch(path: string): Promise<Response> {
 
 export type ReportFarm = { farm_id: number; name: string; owner_name: string | null };
 // irrigationMode: automatic | scheduled | manual (the API's IrrigationMode.Canonical).
-export type ReportZone = { zoneId: number; name: string; cropType: string | null; irrigationMode?: "automatic" | "scheduled" | "manual" };
+// maxRunMinutes: the longest single pump run (migration 0052), 1-120, 5 by default.
+export type ReportZone = { zoneId: number; name: string; cropType: string | null; irrigationMode?: "automatic" | "scheduled" | "manual"; maxRunMinutes?: number };
 
 export const IRRIGATION_MODE_LABEL: Record<string, string> = {
   automatic: "Automatic",
@@ -362,6 +363,22 @@ export async function getReportFarms(): Promise<ReportFarm[]> {
    the PDF button downloads, so the two cannot differ. */
 export async function fetchReportPdfBlob(path: string): Promise<Blob> {
   return (await reportFetch(`/api/farmer/reports/${path}`)).blob();
+}
+
+/* A zone's maximum run time, staff only (PUT /api/admin/zones/{id}/max-run). The API refuses
+ * a Water now longer than this and sends it to the kit, which stops every run there. */
+export async function setZoneMaxRun(zoneId: number, maxRunMinutes: number): Promise<{ message: string; maxRunMinutes: number }> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const response = await navigationAwareFetch(`${API_BASE}/api/admin/zones/${zoneId}/max-run`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ maxRunMinutes }),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(errorMessage(text, response.status));
+  return JSON.parse(text) as { message: string; maxRunMinutes: number };
 }
 
 export async function getReportZones(farmId: number): Promise<ReportZone[]> {

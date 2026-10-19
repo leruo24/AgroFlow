@@ -936,8 +936,10 @@ public static class ReportEndpoints
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         if (farmId is null) return Results.BadRequest(new { error = "farmId is required." });
 
-        const string sql = """
-            select z.id, z.name, z.crop_type, z.irrigation_mode
+        await using var connection = await dataSource.OpenConnectionAsync();
+        var maxExpr = await AgroFlow.Api.Services.ZoneRunLimit.ExpressionAsync(connection);
+        var sql = $"""
+            select z.id, z.name, z.crop_type, z.irrigation_mode, {maxExpr}
             from zone z
             where z.farm_id = $1
               and (exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $2)
@@ -946,7 +948,6 @@ public static class ReportEndpoints
             order by z.id;
             """;
 
-        await using var connection = await dataSource.OpenConnectionAsync();
         await using var cmd = new NpgsqlCommand(sql, connection);
         cmd.Parameters.AddWithValue(farmId.Value);
         cmd.Parameters.AddWithValue(userId);
@@ -963,6 +964,8 @@ public static class ReportEndpoints
                 cropType = r.IsDBNull(2) ? null : r.GetString(2),
                 // automatic | scheduled | manual, the same three names the app shows.
                 irrigationMode = AgroFlow.Business.IrrigationMode.Canonical(r.IsDBNull(3) ? null : r.GetString(3)),
+                // The longest single run (0052); staff change it from the farm drawer.
+                maxRunMinutes = AgroFlow.Business.IrrigationRunRules.ZoneMaxOrDefault(r.IsDBNull(4) ? null : r.GetInt32(4)),
             });
         }
         return Results.Ok(zones);

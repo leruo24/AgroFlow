@@ -11,6 +11,7 @@ import { SoilPhPanel } from '@/components/SoilPhPanel';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 import { useConnectivity } from '@/lib/connectivity';
 import { useZoneKit } from '@/hooks/useZoneKit';
+import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
 import { useRunStatus, type RunState } from '@/hooks/useRunStatus';
 import { ApiHttpError } from '@/services/agroFlowApi';
 import { t, useI18n, type TranslationKey } from '@/i18n';
@@ -70,8 +71,6 @@ const SCHEDULE_DAY_OPTIONS = [
   'Sun',
 ];
 
-// The kit's safety cap (firmware SAFETY_MAX_RUN_MS): no run is ever longer.
-const MAX_MANUAL_RUN_MINUTES = 5;
 
 type IrrigationModeSelection =
   | 'automatic'
@@ -173,7 +172,8 @@ export default function ZoneControlScreen() {
     useState(false);
 
   // The kit stops every run at 5 minutes (SAFETY_MAX_RUN_MS in the firmware), so a manual
-  // run is 1 to 5 minutes and starts at 5.
+  // run is 1 to the zone's maximum run time (5 by default; staff set it) and starts at 5, or
+  // at the maximum when that is lower.
   const [
     manualDuration,
     setManualDuration,
@@ -299,6 +299,12 @@ export default function ZoneControlScreen() {
 
   // Water now needs a kit that is listening (the server refuses otherwise, 409).
   const kit = useZoneKit(zone?.id);
+
+  // The duration box never starts above this zone's maximum run time.
+  const zoneMaxRun = zoneMaxRunMinutes(zone?.maxRunMinutes);
+  useEffect(() => {
+    setManualDuration(current => (Number(current) > zoneMaxRun ? String(defaultRunMinutes(zoneMaxRun)) : current));
+  }, [zoneMaxRun]);
   const kitBlocked = kit === 'none' || kit === 'offline';
 
   // The last Water now from this screen, followed until the kit reports it finished.
@@ -645,11 +651,11 @@ export default function ZoneControlScreen() {
       duration <
         1 ||
       duration >
-        MAX_MANUAL_RUN_MINUTES
+        zoneMaxRunMinutes(selectedZone.maxRunMinutes)
     ) {
       Alert.alert(
         t('zone.invalidDurationTitle'),
-        t('zone.invalidDuration', { max: MAX_MANUAL_RUN_MINUTES })
+        t('zone.invalidDuration', { max: zoneMaxRunMinutes(selectedZone.maxRunMinutes) })
       );
 
       return;

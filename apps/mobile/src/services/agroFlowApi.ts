@@ -632,6 +632,10 @@ export type TodayZone = {
   zoneId: number;
   name: string;
   action: { kind: TodayActionKind; text: string };
+  // The engine's runtime for a "water" card, in whole minutes (null otherwise), and the
+  // zone's maximum run time, so the card can say when the advice needs more than one run.
+  recommendedMinutes?: number | null;
+  maxRunMinutes?: number;
   why: Explanation | null;
   confidence: { level: 'high' | 'medium' | 'low'; reason: string } | null;
   confidenceExplanation: Explanation | null;

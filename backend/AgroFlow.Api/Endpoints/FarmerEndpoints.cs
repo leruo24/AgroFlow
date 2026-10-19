@@ -456,7 +456,7 @@ public static class FarmerEndpoints
         long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
-        // At most 300 s, the kit's own cap (IrrigationRunRules).
+        // Never over the kit's 120-minute ceiling; the zone's own maximum is checked below.
         if (IrrigationRunRules.CheckRequest(request.Command, request.DurationSeconds) is { } problem)
             return Results.BadRequest(new { error = problem });
 
@@ -465,11 +465,14 @@ public static class FarmerEndpoints
         // A start needs a kit that is listening. Refused now (409) instead of accepted and
         // marked failed 2 hours later. "Heard from" is the same rule as the Kit screen: the
         // newer of hardware.last_seen and the zone's newest reading. A stop is always let through.
+        // A start longer than the zone's maximum run time (0052) is refused first (400).
         if (request.Command == "start")
         {
+            var maxExpr = await AgroFlow.Api.Services.ZoneRunLimit.ExpressionAsync(connection);
             var kitSql = $"""
                 select k.device_id is not null,
-                       greatest(k.last_seen, coalesce(r.recorded_at, k.last_seen))
+                       greatest(k.last_seen, coalesce(r.recorded_at, k.last_seen)),
+                       {maxExpr}
                   from zone z
                   left join lateral (
                     select h.device_id, h.last_seen from hardware h
@@ -485,6 +488,9 @@ public static class FarmerEndpoints
             await using (var reader = await kitCommand.ExecuteReaderAsync())
             {
                 if (!await reader.ReadAsync()) return Results.NotFound();
+                var zoneMax = IrrigationRunRules.ZoneMaxOrDefault(reader.IsDBNull(2) ? null : reader.GetInt32(2));
+                if (IrrigationRunRules.CheckAgainstZone(request.DurationSeconds!.Value, zoneMax) is { } tooLong)
+                    return Results.BadRequest(new { error = tooLong, maxRunMinutes = zoneMax });
                 var hasKit = reader.GetBoolean(0);
                 var lastContact = reader.IsDBNull(1) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(1);
                 var kit = IrrigationRunRules.Kit(hasKit, lastContact, DateTimeOffset.UtcNow);

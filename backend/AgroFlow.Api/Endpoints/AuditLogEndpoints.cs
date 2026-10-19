@@ -307,6 +307,7 @@ public static class AuditLogEndpoints
             AuditActions.UserPasswordResetSelf => $"{actor} reset their own password with a Telegram code",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",
+            AuditActions.ZoneMaxRunChanged => $"{actor} changed the maximum run time of zone {entityId}{where}",
             // Public enquiries.
             "enquiry.claimed" => $"{actor} took on enquiry {entityId}",
             "enquiry.taken_over" => $"{actor} took over enquiry {entityId}",

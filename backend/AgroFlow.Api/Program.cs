@@ -349,7 +349,8 @@ app.MapDeviceConfigEndpoints();
 app.MapZoneHardwareEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
-app.MapCommandStatusEndpoints();   // Irrigate: sent -> started -> finished
+app.MapCommandStatusEndpoints();   // Irrigate: sent -> started -> finished
+app.MapZoneRunLimitEndpoints();     // staff: a zone's maximum run time
 app.MapReportEndpoints();
 app.MapFao56EngineEndpoints();
 app.MapForecastEndpoints();

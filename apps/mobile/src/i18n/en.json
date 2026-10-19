@@ -84,7 +84,7 @@
     "zone.stopConfirmBody": "The pump stops and the zone goes back to {mode}.",
     "zone.stop": "Stop",
     "zone.invalidDurationTitle": "Check the minutes",
-    "zone.invalidDuration": "Enter between 1 and {max} minutes. The kit stops every run at {max} minutes.",
+    "zone.invalidDuration": "Enter between 1 and {max} minutes. This zone's pump is limited to {max} min per run.",
     "zone.startFailed": "Could not start watering",
     "zone.stopFailed": "Could not stop watering",
     "zone.commandFailed": "The command could not be sent. Please try again.",
@@ -335,6 +335,7 @@
     "run.started": "Kit started watering",
     "run.finished": "Finished",
     "run.noResponse": "Kit didn't respond — check it's online",
-    "run.failed": "Could not reach the kit"
+    "run.failed": "Could not reach the kit",
+    "today.overLimit": "Recommended {recommended} min — your pump is limited to {max} min per run; run it again after it finishes"
   }
 }

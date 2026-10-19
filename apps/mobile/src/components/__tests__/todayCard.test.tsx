@@ -82,4 +82,15 @@ describe('TodayCard', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'The soil feels dry' }));
     await waitFor(() => expect(api.logSoilFeel).toHaveBeenCalledWith(7, 'dry'));
   });
+
+  it('says when the advice is longer than one run of this pump, instead of cutting it short', async () => {
+    await render(<TodayCard zone={{ ...zone, action: { kind: 'water', text: 'Water about 66 min this morning (about 99 L)' }, recommendedMinutes: 66, maxRunMinutes: 5 }} onLogged={jest.fn()} />);
+    expect(screen.getByTestId('today-over-limit-7').props.children)
+      .toBe('Recommended 66 min — your pump is limited to 5 min per run; run it again after it finishes');
+  });
+
+  it('says nothing extra when one run is enough', async () => {
+    await render(<TodayCard zone={{ ...zone, recommendedMinutes: 12, maxRunMinutes: 30 }} onLogged={jest.fn()} />);
+    expect(screen.queryByTestId('today-over-limit-7')).toBeNull();
+  });
 });

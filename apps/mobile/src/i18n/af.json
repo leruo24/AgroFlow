@@ -84,7 +84,7 @@
     "zone.stopConfirmBody": "Die pomp stop en die sone gaan terug na {mode}.",
     "zone.stop": "Stop",
     "zone.invalidDurationTitle": "Kyk na die minute",
-    "zone.invalidDuration": "Tik tussen 1 en {max} minute in. Die toestel stop elke beurt na {max} minute.",
+    "zone.invalidDuration": "Tik tussen 1 en {max} minute in. Hierdie sone se pomp is beperk tot {max} min per keer.",
     "zone.startFailed": "Kon nie begin water gee nie",
     "zone.stopFailed": "Kon nie die water stop nie",
     "zone.commandFailed": "Die bevel kon nie gestuur word nie. Probeer asseblief weer.",
@@ -335,6 +335,7 @@
     "run.started": "Kit het begin water gee",
     "run.finished": "Klaar",
     "run.noResponse": "Kit het nie geantwoord nie — kyk of dit aanlyn is",
-    "run.failed": "Kon nie die kit bereik nie"
+    "run.failed": "Kon nie die kit bereik nie",
+    "today.overLimit": "Aanbeveel {recommended} min — jou pomp is beperk tot {max} min per keer; laat dit weer loop wanneer dit klaar is"
   }
 }

@@ -118,8 +118,10 @@ public class LateReadingTests
         var sketch = Sketch();
         Assert.Contains("server.client().localIP() != WiFi.softAPIP()", sketch);
         Assert.Contains("server.authenticate(LOCAL_PAGE_USER, apPassword().c_str())", sketch);
-        Assert.Contains("const unsigned long SAFETY_MAX_RUN_MS        = 5UL * 60UL * 1000UL;", sketch);
-        Assert.Contains("LOCAL_MAX_RUN_MINUTES    = SAFETY_MAX_RUN_MS / 60000UL", sketch);
+        // Its own 5 minutes (firmware 1.6.0 lets server runs go up to the zone's maximum).
+        Assert.Contains("const unsigned long LOCAL_MAX_RUN_MS         = 5UL * 60UL * 1000UL;", sketch);
+        Assert.Contains("LOCAL_MAX_RUN_MINUTES    = LOCAL_MAX_RUN_MS / 60000UL", sketch);
+        Assert.Contains("runLimitMs = LOCAL_MAX_RUN_MS;", sketch);
         Assert.Contains("startPumpCycle(\"manual\", false);", sketch);   // logged as a manual irrigation event
         // Every handler checks first.
         foreach (var handler in new[] { "handleLocalPage", "handleLocalStatus", "handleLocalPump" })

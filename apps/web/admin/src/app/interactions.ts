@@ -72,7 +72,7 @@ import { formatDecimal, formatDms, validCoordinates } from "@/lib/coordinates";
 import { telegramState } from "@/pages/users";
 import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -688,7 +688,7 @@ async function openFarmDetail(id: number): Promise<void> {
       section(`Zones (${farmZones.length})`,
         farmZones.length
           ? `<div class="table-wrap"><table>
-               <thead><tr><th>Zone</th><th>Crop</th><th>Watering</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
+               <thead><tr><th>Zone</th><th>Crop</th><th>Watering</th><th>Max run</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
                <tbody>${farmZones.map((z) => {
                  const t = todayByZone.get(z.zoneId);
                  return `
@@ -696,6 +696,8 @@ async function openFarmDetail(id: number): Promise<void> {
                    <td>${esc(z.name)} ${f.isSimulated ? `<span class="badge warn">Simulated</span>` : ""}</td>
                    <td>${esc(z.cropType ?? "Not set")}</td>
                    <td data-zone-mode="${esc(z.irrigationMode ?? "")}">${esc(z.irrigationMode ? IRRIGATION_MODE_LABEL[z.irrigationMode] ?? z.irrigationMode : "—")}</td>
+                   <td data-zone-max-run="${z.maxRunMinutes ?? 5}">${z.maxRunMinutes ?? 5} min
+                     <a href="#" class="row-act" data-act="zone-max-run" data-id="${z.zoneId}" data-max="${z.maxRunMinutes ?? 5}" data-name="${esc(z.name)}">Change</a></td>
                    <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
                    <td>${t?.confidence
                      ? `<b>${levelLabel[t.confidence.level]}</b> ${whyLink(asExplanation(t.confidenceExplanation))}`
@@ -1871,6 +1873,30 @@ async function handleAction(el: HTMLElement): Promise<void> {
      * name when it cannot answer. */
     /* The zone's "Recommended for you", with Use these settings (Reset to recommended) or
      * Keep my own. */
+    case "zone-max-run": {
+      /* The longest single pump run on this zone (1-120 min). Water now is refused above it and
+       * the kit stops there, so it must match the pump and the zone, not a wish. */
+      const zoneId = Number(idAttr);
+      const link = el;
+      const current = link?.dataset["max"] ?? "5";
+      const name = link?.dataset["name"] ?? `Zone ${zoneId}`;
+      return openDrawer({
+        title: `Maximum run time: ${name}`,
+        subtitle: "The longest the pump may run in one go. Water now longer than this is refused, and the kit stops every run here.",
+        fields: [{ label: "Minutes (1 to 120)", value: current, editable: true, name: "minutes" }],
+        confirmLabel: "Save",
+        onConfirm: (v) => {
+          const minutes = Number(v["minutes"]);
+          if (!Number.isInteger(minutes) || minutes < 1 || minutes > 120) {
+            toast("Enter a whole number of minutes from 1 to 120.", "warn");
+            return false;   // keep the drawer open to fix it
+          }
+          void setZoneMaxRun(zoneId, minutes)
+            .then((r) => { toast(r.message, "success", 6000); void refresh(); })
+            .catch((e: unknown) => showErrorModal(e instanceof Error ? e.message : "The maximum run time could not be saved.", "Could not save"));
+        },
+      });
+    }
     case "zone-recommend": {
       const zoneId = Number(idAttr);
       if (!zoneId) return void toast("No zone selected.", "warn");

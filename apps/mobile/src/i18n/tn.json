@@ -84,7 +84,7 @@
     "zone.stopConfirmBody": "Pompo e a ema mme karolo e boela go {mode}.",
     "zone.stop": "Emisa",
     "zone.invalidDurationTitle": "Tlhola metsotso",
-    "zone.invalidDuration": "Tsenya magareng ga metsotso e le 1 le {max}. Sedirisiwa se emisa go nosetsa morago ga metsotso e le {max}.",
+    "zone.invalidDuration": "Kwala magareng ga 1 le metsotso e le {max}. Pompo ya karolo e e lekanyeditswe go metsotso e le {max} ka nako.",
     "zone.startFailed": "Ga go a kgonega go simolola go nosetsa",
     "zone.stopFailed": "Ga go a kgonega go emisa go nosetsa",
     "zone.commandFailed": "Taelo ga e a kgona go romelwa. Tswee-tswee leka gape.",
@@ -335,6 +335,7 @@
     "run.started": "Kite e simolotse go nosetsa",
     "run.finished": "Go fedile",
     "run.noResponse": "Kite ga e a araba — tlhola gore e mo inthaneteng",
-    "run.failed": "Ga re a kgona go fitlhelela kite"
+    "run.failed": "Ga re a kgona go fitlhelela kite",
+    "today.overLimit": "Go atlenegisiwa metsotso e le {recommended} — pompo ya gago e lekanyeditswe go metsotso e le {max} ka nako; e tsamaise gape fa e fetsa"
   }
 }

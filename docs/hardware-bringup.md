@@ -71,7 +71,7 @@ from enrollment instead, and are kept in the board's flash (or RAM):
 | Flash Frequency | 80 MHz |
 | Flash Mode | QIO |
 | Flash Size | 4MB (32Mb) |
-| Partition Scheme | **Default 4MB with spiffs (1.2MB APP/1.5MB SPIFFS)**. v1.5.1 uses 92% of it; if a later change does not fit, use **Minimal SPIFFS (1.9MB APP with OTA)** |
+| Partition Scheme | **Default 4MB with spiffs (1.2MB APP/1.5MB SPIFFS)**. v1.6.0 uses 92% of it; if a later change does not fit, use **Minimal SPIFFS (1.9MB APP with OTA)** |
 | Core Debug Level | None |
 | PSRAM | Disabled |
 | Erase All Flash Before Sketch Upload | Disabled (Enabled only to wipe a kit completely) |
@@ -119,7 +119,7 @@ Sign in at the admin site (**Staff sign-in**).
 
 1. Power the kit (USB is fine). Open the Serial Monitor at 115200. You should see:
    ```
-   AgroFlow node v1.5.1 - device 0123456789AB
+   AgroFlow node v1.6.0 - device 0123456789AB
    Not set up yet: join WiFi "AgroFlow-Setup-89AB" to enter farm WiFi + enrollment code
    ```
 2. On the phone, join the WiFi **`AgroFlow-Setup-XXXX`** (XXXX = the last 4 characters of
