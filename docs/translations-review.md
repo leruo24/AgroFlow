@@ -25,7 +25,7 @@ Tests check that every key exists in all three languages and that the `{placehol
 
 ## Not translated yet
 
-- Screens other than Home, the setup wizard, a zone's Irrigate panel, Alerts, Settings, the tank and soil pH
+- Screens other than Home, a zone's Irrigate panel, Alerts, Settings, the tank and soil pH
   forms, the "I watered" / soil check sheet, the offline banner and the tab bar. They stay
   in English until their text is moved into the dictionaries.
 - Telegram: only the zone-needs-water, tank-low and weather (rain, frost, heat) messages
@@ -37,7 +37,7 @@ Tests check that every key exists in all three languages and that the `{placehol
   tank-refill comparison, and errors the server explains.
 - The raindrop helper’s greetings and the page help (the "?" button) are English.
 
-## App (301 strings)
+## App (324 strings)
 
 | Key | English | Afrikaans (draft) | Setswana (draft) |
 |---|---|---|---|
@@ -342,11 +342,46 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `setup.card.next` | Next: {task} | Volgende: {task} | Se se latelang: {task} |
 | `setup.card.wet` | Soil: save the wet reading for {zone} | Grond: stoor die nat lesing vir {zone} | Mmu: boloka palo ya mmu o metsi bakeng sa {zone} |
 | `settings.redoSetup` | Redo setup | Doen opstelling weer | Dira thulaganyo gape |
+| `forgot.title` | Forgot password | Wagwoord vergeet | O lebetse lefoko la sephiri |
+| `forgot.intro` | Enter the email you sign in with. We send a 6-digit code to your AgroFlow Telegram. | Tik die e-pos in waarmee jy aanmeld. Ons stuur 'n 6-syfer-kode na jou AgroFlow-Telegram. | Kwala imeile e o tsenang ka yone. Re romela khoutu ya dinomoro di le 6 kwa Telegram ya gago ya AgroFlow. |
+| `forgot.email` | Email address | E-posadres | Aterese ya imeile |
+| `forgot.send` | Send code | Stuur kode | Romela khoutu |
+| `forgot.sending` | Sending… | Stuur tans… | E a romelwa… |
+| `forgot.resend` | Send a new code | Stuur 'n nuwe kode | Romela khoutu e ntšha |
+| `forgot.badEmail` | Enter the email address you sign in with. | Tik die e-posadres in waarmee jy aanmeld. | Kwala aterese ya imeile e o tsenang ka yone. |
+| `forgot.sent` | If this account has Telegram linked, we've sent a code. It works for 10 minutes. | As hierdie rekening aan Telegram gekoppel is, het ons 'n kode gestuur. Dit werk vir 10 minute. | Fa akhaonto e e golaganngwe le Telegram, re rometse khoutu. E dira metsotso e le 10. |
+| `forgot.noTelegram` | No Telegram? Ask your AgroFlow field officer to reset it. | Geen Telegram nie? Vra jou AgroFlow-veldbeampte om dit terug te stel. | Ga o na Telegram? Kopa motlhankedi wa gago wa AgroFlow go le baakanya. |
+| `forgot.code` | 6-digit code from Telegram | 6-syfer-kode van Telegram | Khoutu ya dinomoro di le 6 go tswa kwa Telegram |
+| `forgot.badCode` | Enter the 6-digit code from Telegram. | Tik die 6-syfer-kode van Telegram in. | Kwala khoutu ya dinomoro di le 6 go tswa kwa Telegram. |
+| `forgot.newPassword` | New password | Nuwe wagwoord | Lefoko le lesha la sephiri |
+| `forgot.again` | Type it again | Tik dit weer | Le kwale gape |
+| `forgot.tooShort` | Use at least 8 characters. | Gebruik ten minste 8 karakters. | Dirisa ditlhaka di le 8 kgotsa go feta. |
+| `forgot.mismatch` | The two passwords are not the same. | Die twee wagwoorde is nie dieselfde nie. | Mafoko a mabedi a sephiri ga a tshwane. |
+| `forgot.change` | Change password | Verander wagwoord | Fetola lefoko la sephiri |
+| `forgot.changing` | Changing… | Verander tans… | E a fetolwa… |
+| `forgot.done` | Your password was changed. Sign in with your new password. | Jou wagwoord is verander. Meld aan met jou nuwe wagwoord. | Lefoko la gago la sephiri le fetotswe. Tsena ka lefoko le lesha. |
+| `forgot.back` | Back to sign in | Terug na aanmeld | Boela kwa go tsena |
+| `signin.tempHint` | Temporary passwords are 8 letters and numbers, like KX7P 4MRT. Spaces and small letters are fine. After 72 hours one stops working: use Forgot password, or ask your field officer. | Tydelike wagwoorde is 8 letters en syfers, soos KX7P 4MRT. Spasies en klein letters is reg. Na 72 uur werk een nie meer nie: gebruik Wagwoord vergeet, of vra jou veldbeampte. | Mafoko a sephiri a nakwana ke ditlhaka le dinomoro di le 8, jaaka KX7P 4MRT. Dikgala le ditlhaka tse dinnye di siame. Morago ga diura di le 72 ga le sa dire: dirisa O lebetse lefoko la sephiri, kgotsa kopa motlhankedi wa gago. |
+| `onetap.signingIn` | Signing you in… | Meld jou aan… | Re a go tsenya… |
+| `onetap.failed` | This sign-in link has expired or was already used. Sign in with your temporary password instead. | Hierdie aanmeldskakel het verval of is reeds gebruik. Meld eerder aan met jou tydelike wagwoord. | Kgolagano e ya go tsena e fetile kgotsa e setse e dirisitswe. Tsena ka lefoko la sephiri la nakwana. |
+| `onetap.toLogin` | Go to sign in | Gaan na aanmeld | Ya kwa go tsena |
 
-## Telegram (25 strings)
+## Telegram (37 strings)
 
 | Key | English | Afrikaans (draft) | Setswana (draft) |
 |---|---|---|---|
+| `reset.code` | Your AgroFlow code is {code}. It works for 10 minutes.\n\nIf this wasn't you, ignore this and tell AgroFlow. | Jou AgroFlow-kode is {code}. Dit werk vir 10 minute.\n\nAs dit nie jy was nie, ignoreer dit en laat weet AgroFlow. | Khoutu ya gago ya AgroFlow ke {code}. E dira metsotso e le 10.\n\nFa e se wena, e tlogele mme o itsise AgroFlow. |
+| `reset.done` | Your password was changed. If this wasn't you, tell AgroFlow straight away. | Jou wagwoord is verander. As dit nie jy was nie, laat weet AgroFlow dadelik. | Lefoko la gago la sephiri le fetotswe. Fa e se wena, itsise AgroFlow ka bonako. |
+| `reset.admin` | AgroFlow has given you a new temporary password: {password}\n\nSign in with {email} and this password within 72 hours, then choose your own. | AgroFlow het vir jou 'n nuwe tydelike wagwoord gegee: {password}\n\nMeld binne 72 uur aan met {email} en hierdie wagwoord, en kies dan jou eie. | AgroFlow e go neile lefoko le lesha la sephiri la nakwana: {password}\n\nTsena ka {email} le lefoko le mo diureng di le 72, morago o itlhophele la gago. |
+| `welcome.title` | Welcome to AgroFlow, {name}. Your account is ready. | Welkom by AgroFlow, {name}. Jou rekening is gereed. | O amogetswe mo AgroFlow, {name}. Akhaonto ya gago e siametse. |
+| `welcome.location` | Location: {location} | Ligging: {location} | Lefelo: {location} |
+| `welcome.signin` | Sign in with: | Meld aan met: | Tsena ka: |
+| `welcome.email` | Email: {email} | E-pos: {email} | Imeile: {email} |
+| `welcome.password` | Temporary password: {password} | Tydelike wagwoord: {password} | Lefoko la sephiri la nakwana: {password} |
+| `welcome.change` | It works for 72 hours. You will choose your own password the first time you sign in. | Dit werk vir 72 uur. Jy kies jou eie wagwoord die eerste keer dat jy aanmeld. | Le dira diura di le 72. O tla itlhophela lefoko la gago la sephiri la ntlha fa o tsena. |
+| `welcome.app` | The AgroFlow app: {link} | Die AgroFlow-toep: {link} | Appe ya AgroFlow: {link} |
+| `welcome.button.hint` | Or tap the button to sign in straight away (it works once, for 24 hours). | Of tik op die knoppie om dadelik aan te meld (dit werk een keer, vir 24 uur). | Kgotsa tobetsa konopo go tsena ka bonako (e dira gangwe fela, mo diureng di le 24). |
+| `welcome.button` | Sign in to AgroFlow | Meld aan by AgroFlow | Tsena mo AgroFlow |
 | `why` | Why: {summary} | Hoekom: {summary} | Ka ntlha ya eng: {summary} |
 | `farm` | Farm: {name} | Plaas: {name} | Polasi: {name} |
 | `zone` | Zone: {name} | Sone: {name} | Karolo: {name} |

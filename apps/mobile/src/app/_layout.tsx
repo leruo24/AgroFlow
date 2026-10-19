@@ -181,6 +181,12 @@ function RootNavigator() {//decides which screens the user is permitted to acces
       <Stack.Screen
         name="update-password"
       />
+
+      {/* One-tap sign-in from the Telegram welcome (/signin?token=...). Outside the guards like
+          update-password: it is signed out when it opens and signed in a moment later. */}
+      <Stack.Screen
+        name="signin"
+      />
     </Stack>
   );
 }

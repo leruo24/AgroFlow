@@ -30,6 +30,8 @@ public static class AuditActions
     public const string UserInvited = "user.invited";
     public const string UserDeleted = "user.deleted";
     public const string UserPasswordReset = "user.password_reset";
+    // The farmer reset their own password with a code from the Telegram bot.
+    public const string UserPasswordResetSelf = "user.password_reset_self";
 
     public const string ZoneUpdated = "zone.updated";
     public const string ZoneAdviceRun = "zone.advice_run";

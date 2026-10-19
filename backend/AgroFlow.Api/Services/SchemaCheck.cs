@@ -136,6 +136,10 @@ public sealed class SchemaCheck
             "select 1 from information_schema.columns where table_name = 'profile' and column_name = 'language'",
             "The app's language choice is not saved, so every Telegram message is sent in English."),
 
+        new("0050", "table", "password_reset_code",
+            "select to_regclass('public.password_reset_code')",
+            "Forgot password over Telegram, the one-tap sign-in link and the 72-hour limit on temporary passwords do not work."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

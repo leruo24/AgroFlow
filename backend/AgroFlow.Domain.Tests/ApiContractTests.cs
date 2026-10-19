@@ -96,6 +96,8 @@ public class ApiContractTests : IClassFixture<ApiHost>
         "GET /api/devices/mqtt-credentials",
         "GET /api/public/ping",
         "POST /api/auth/forgot-password",
+        "POST /api/auth/one-tap",
+        "POST /api/auth/reset-password",
         "POST /api/devices/claim",
         "POST /api/devices/commands/{id}/executed",
         "POST /api/irrigation-events",

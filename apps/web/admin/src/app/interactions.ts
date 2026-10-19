@@ -15,8 +15,7 @@ import {
   regenerateTelegramCode,
   registerFarm,
   updateFarmLocation,
-  sendTemporaryPasswordViaTelegram,
-  resetTemporaryPassword,
+  resetFarmerPassword,
   deviceChangeWifi,
   deviceOpenSetup,
   deviceRevoke,
@@ -540,7 +539,9 @@ async function openUserProfile(id: string): Promise<void> {
            <p><button type="button" class="btn ghost" data-act="unlink-telegram" data-id="${esc(u.id)}">Unlink Telegram</button></p>`
         : `<p>Not connected. This farmer gets no alerts until they connect.</p>
            <p><button type="button" class="btn ghost" data-act="send-link-code" data-id="${esc(u.id)}">Send a link code</button></p>`),
-      section("Account", `<p class="muted">Removing the account stops sign-in. Their farms, zones and history are kept.</p>
+      section("Account", `<p class="muted">Forgot their password? Reset password gives them a new temporary one: by Telegram if connected, otherwise you read it out.</p>
+        <p><button type="button" class="btn ghost" data-act="reset-password" data-id="${esc(u.id)}">Reset password</button></p>
+        <p class="muted">Removing the account stops sign-in. Their farms, zones and history are kept.</p>
         <p><button type="button" class="btn danger" data-act="delete-user" data-id="${esc(u.id)}">Remove account</button></p>`),
       section("Registered hardware", list(u.hardware.map((h) => `<span class="mono">${esc(h)}</span>`))),
       section("Irrigation schedules", list(userSchedules.map((s) =>
@@ -924,12 +925,30 @@ async function handleAction(el: HTMLElement): Promise<void> {
       }
     }
     case "reset-password": {
-      /* The bot sends a new temporary password to the farmer's own Telegram, and the app forces a
-       * change at their next sign-in. */
+      /* A new easy temporary password. By Telegram if linked (the admin never sees it), otherwise
+       * shown once here to read out. Either way it works for 72 hours and must be changed at first
+       * sign-in, and the old password stops working now, so this asks first. */
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "this farmer";
+      const ok = await confirmDialog({
+        title: `Reset ${name}'s password?`,
+        body: u?.telegramLinked
+          ? `Their current password stops working. A new temporary password goes to their Telegram.`
+          : `Their current password stops working. You will see a new temporary password once, to read out to them.`,
+        confirmLabel: "Reset password",
+      });
+      if (!ok) return;
       try {
-        const result = await sendTemporaryPasswordViaTelegram(idAttr);
-
-        return toast(result.message, "success");
+        const result = await resetFarmerPassword(idAttr);
+        if (result.sentByTelegram || !result.temporaryPassword) return toast(result.message, "success", 6000);
+        await confirmDialog({
+          title: `New temporary password for ${name}`,
+          code: result.temporaryPassword,
+          body: result.message,
+          confirmLabel: "Done",
+          noCancel: true,
+        });
+        return;
       } catch (e) {
         showErrorModal(
           e instanceof Error
@@ -1448,13 +1467,15 @@ async function handleAction(el: HTMLElement): Promise<void> {
       if (!handoverProfileId) return;
 
       try {
-        const reset = await resetTemporaryPassword(handoverProfileId);
+        const reset = await resetFarmerPassword(handoverProfileId);
 
         const field = document.getElementById("handoverPassword");
-        if (field) field.textContent = reset.temporaryPassword;
+        if (field && reset.temporaryPassword) field.textContent = reset.temporaryPassword;
 
         showHandoverNotice(
-          "A new temporary password was issued. The previous one no longer works.",
+          reset.sentByTelegram
+            ? "A new temporary password was sent to the farmer's Telegram. The previous one no longer works."
+            : "A new temporary password was issued. The previous one no longer works.",
         );
       } catch (e) {
         showHandoverNotice(

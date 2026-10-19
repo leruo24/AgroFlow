@@ -185,17 +185,29 @@ test("/admin/ forwards to staff sign-in", async ({ page }) => {
 
 /* ------------------------------ 5. Forgot password ------------------------------ */
 
-test("Forgot password sends a reset link back to this site", async ({ page }) => {
+test("Forgot password sends a Telegram code, then the code and a new password change it", async ({ page }) => {
   const errors = captureErrors(page);
-  const recover: { body: unknown; search: string }[] = [];
-  await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
-  await page.route(`${FAKE_SUPABASE}/**`, (route) => {
+  const posts: { path: string; body: Record<string, string> }[] = [];
+  await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: "{}" }));
+  await page.route(`${FAKE_API}/**`, (route) => {
     const req = route.request();
-    const url = new URL(req.url());
-    if (req.method() === "POST" && url.pathname === "/auth/v1/recover") {
-      recover.push({ body: req.postDataJSON(), search: url.search });
+    const path = new URL(req.url()).pathname;
+    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*" };
+    if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    if (req.method() === "POST" && path.startsWith("/api/auth/")) {
+      const body = req.postDataJSON() as Record<string, string>;
+      posts.push({ path, body });
+      if (path === "/api/auth/forgot-password") {
+        return route.fulfill({ status: 200, contentType: "application/json", headers: cors,
+          body: JSON.stringify({ message: "If this account has Telegram linked, we've sent a code. No Telegram? Ask your AgroFlow field officer to reset it." }) });
+      }
+      if (path === "/api/auth/reset-password") {
+        return body["code"] === "482913"
+          ? route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: JSON.stringify({ message: "Your password was changed. Sign in with your new password." }) })
+          : route.fulfill({ status: 400, contentType: "application/json", headers: cors, body: JSON.stringify({ error: "That code is not right, or it has expired. Check it, or ask for a new one." }) });
+      }
     }
-    return route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: "{}" });
+    return route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: "[]" });
   });
 
   await page.goto("/#/admin");
@@ -204,19 +216,109 @@ test("Forgot password sends a reset link back to this site", async ({ page }) =>
 
   // A bad address is caught before anything is sent.
   await page.locator("#forgotEmail").fill("not-an-email");
-  await page.getByRole("button", { name: "Send reset link" }).click();
+  await page.getByRole("button", { name: "Send code" }).click();
   await expect(page.locator("#forgotError")).toHaveText("Enter the email address you sign in with.");
-  expect(recover).toEqual([]);
+  expect(posts).toEqual([]);
 
   await page.locator("#forgotEmail").fill("admin@agroflow.test");
-  await page.getByRole("button", { name: "Send reset link" }).click();
-  await expect(page.locator("#forgotSent")).toContainText("If admin@agroflow.test has an AgroFlow staff account, a reset link is on its way.");
-  expect(recover).toHaveLength(1);
-  expect((recover[0]!.body as { email: string }).email).toBe("admin@agroflow.test");
-  expect(decodeURIComponent(recover[0]!.search)).toContain("redirect_to=http://localhost:5179/?reset=1");
+  await page.getByRole("button", { name: "Send code" }).click();
+  await expect(page.locator("#forgotSent")).toContainText("If this account has Telegram linked, we've sent a code.");
+  await expect(page.locator("#forgotSent")).toContainText("Staff with no Telegram: we email you a reset link instead.");
+  expect(posts[0]!.path).toBe("/api/auth/forgot-password");
+  expect(posts[0]!.body["email"]).toBe("admin@agroflow.test");
+  expect(posts[0]!.body["redirectTo"]).toBe("http://localhost:5179/?reset=1");
 
-  await page.getByRole("button", { name: "Back to sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  // Checked before sending: 6 digits, 8+ characters.
+  await page.locator("#forgotCode").fill("12");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.locator("#forgotCodeError")).toHaveText("Enter the 6-digit code from Telegram.");
+  await page.locator("#forgotCode").fill("111 111");
+  await page.locator("#forgotNewPassword").fill("short");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.locator("#forgotCodeError")).toHaveText("Use at least 8 characters for your new password.");
+
+  // A wrong code: the server's plain words.
+  await page.locator("#forgotNewPassword").fill("a-long-new-password");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.locator("#forgotCodeError")).toHaveText("That code is not right, or it has expired. Check it, or ask for a new one.");
+
+  // The right one, typed with a space: back to sign in with the email filled in.
+  await page.locator("#forgotCode").fill("482 913");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.locator("#loginNotice")).toHaveText("Your password was changed. Sign in with your new password.");
+  await expect(page.locator("#loginEmail")).toHaveValue("admin@agroflow.test");
+  expect(posts[posts.length - 1]).toEqual({ path: "/api/auth/reset-password", body: { email: "admin@agroflow.test", code: "482913", newPassword: "a-long-new-password" } });
+  // The wrong-code 400 above is on purpose; the browser logs it.
+  expect(errors.filter((e) => !e.includes("status of 400"))).toEqual([]);
+});
+
+/* --------------------------- 5b. Admin resets a farmer's password --------------------------- */
+
+const NO_TELEGRAM_ID = "00000000-0000-4000-8000-0000000000fb";
+
+async function resetPage(page: Page, calls: Calls): Promise<void> {
+  await mockBackend(page, {
+    minDelayMs: 5, maxDelayMs: 20,
+    respond: (method, path) => {
+      if (path.includes("reset-password")) calls.push({ method, path });
+      if (method === "GET" && path === "/api/users") {
+        return [...USERS, { id: NO_TELEGRAM_ID, name: "Sipho Dlamini", email: "sipho@example.org", phone: null, role: "farm_user",
+          created_at: "2026-09-12T08:00:00Z", farm_id: 2, farm_name: "Dlamini Farm", telegram_linked: false, telegram_alerts_enabled: false }];
+      }
+      if (method === "POST" && path === `/api/admin/farmers/${FARMER_ID}/reset-password`) {
+        return { sentByTelegram: true, temporaryPassword: null, message: "A new temporary password was sent to the farmer's Telegram. It works for 72 hours." };
+      }
+      if (method === "POST" && path === `/api/admin/farmers/${NO_TELEGRAM_ID}/reset-password`) {
+        return { sentByTelegram: false, temporaryPassword: "KX7P 4MRT",
+          message: "Shown once, not stored. Read it to the farmer: it works for 72 hours and must be changed at first sign-in." };
+      }
+      return undefined;
+    },
+  });
+  await page.goto("/#users");
+  await expect(page.locator("#content")).toHaveAttribute("data-page", "users", { timeout: 15000 });
+}
+
+test("Reset password asks first; a linked farmer gets it by Telegram and the admin never sees it", async ({ page }) => {
+  const errors = captureErrors(page);
+  const calls: Calls = [];
+  await resetPage(page, calls);
+
+  await page.locator(`[data-act="reset-password"][data-id="${FARMER_ID}"]`).first().click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Reset Thandi Nkosi's password?");
+  await expect(dialog).toContainText("A new temporary password goes to their Telegram.");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  expect(calls).toEqual([]);
+
+  await page.locator(`[data-act="reset-password"][data-id="${FARMER_ID}"]`).first().click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Reset password" }).click();
+  await expect(page.locator(".toast.toast-success")).toContainText("sent to the farmer's Telegram");
+  await expect(page.locator("#confirmDialogCode")).toHaveCount(0);
+  expect(calls).toEqual([{ method: "POST", path: `/api/admin/farmers/${FARMER_ID}/reset-password` }]);
+  expect(errors).toEqual([]);
+});
+
+test("Reset password for a farmer with no Telegram shows the new one once, in groups of four", async ({ page }) => {
+  const errors = captureErrors(page);
+  const calls: Calls = [];
+  await resetPage(page, calls);
+
+  // From the farmer's profile drawer this time.
+  await page.locator(`[data-act="view-user"][data-id="${NO_TELEGRAM_ID}"]`).first().click();
+  await page.locator(`button[data-act="reset-password"][data-id="${NO_TELEGRAM_ID}"]`).click();
+  const ask = page.getByRole("alertdialog");
+  await expect(ask).toContainText("You will see a new temporary password once, to read out to them.");
+  await ask.getByRole("button", { name: "Reset password" }).click();
+
+  await expect(page.locator("#confirmDialogCode")).toHaveText("KX7P 4MRT");
+  const shown = page.getByRole("alertdialog");
+  await expect(shown).toContainText("New temporary password for Sipho Dlamini");
+  await expect(shown).toContainText("works for 72 hours and must be changed at first sign-in");
+  await expect(shown.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+  await shown.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator("#confirmDialogCode")).toHaveCount(0);
+  expect(calls).toHaveLength(1);
   expect(errors).toEqual([]);
 });
 

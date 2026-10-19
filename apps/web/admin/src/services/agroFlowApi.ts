@@ -56,6 +56,18 @@ async function postAuthorized<T = void>(path: string, body: unknown): Promise<T>
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/* For the signed-out routes (Forgot password): no token, same error handling. */
+export async function postPublic<T>(path: string, body: unknown): Promise<T> {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(errorMessage(text, response.status));
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 async function getAuthorized<T>(path: string): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -179,28 +191,17 @@ export async function issueLinkCodeForFarmer(
   );
 }
 
-/* Sends a new temporary password to the farmer's own Telegram chat, like "Forgot password?"
- * in the app, started by an admin for a farmer who phones in. Unlike resetTemporaryPassword
- * below, the admin never sees the password. It fails if the farmer has no Telegram; then the
- * read-it-out version below is the right one. */
-export async function sendTemporaryPasswordViaTelegram(
-  profileId: string,
-): Promise<{ message: string }> {
-  return postAuthorized<{ message: string }>(
-    `/api/telegram/admin/password/${profileId}/send`,
-    {},
-  );
-}
+/* "Reset password" for a farmer: a new easy temporary password ("KX7P 4MRT", 72 hours,
+ * changed at first sign-in). Sent to the farmer's Telegram if linked, and then the admin
+ * never sees it; otherwise returned once to read out. AgroFlow never stores it. Audited. */
+export type FarmerPasswordReset = {
+  sentByTelegram: boolean;
+  temporaryPassword: string | null;
+  message: string;
+};
 
-/* The fallback for a farmer with no Telegram, and the only answer to "what was their
- * password again?": AgroFlow never stored it, so this makes a new one and returns it once. */
-export async function resetTemporaryPassword(
-  profileId: string,
-): Promise<{ temporaryPassword: string; notice: string }> {
-  return postAuthorized<{ temporaryPassword: string; notice: string }>(
-    `/api/telegram/admin/password/${profileId}`,
-    {},
-  );
+export async function resetFarmerPassword(profileId: string): Promise<FarmerPasswordReset> {
+  return postAuthorized<FarmerPasswordReset>(`/api/admin/farmers/${profileId}/reset-password`, {});
 }
 export async function registerFarm(input: {
   ownerId: string;

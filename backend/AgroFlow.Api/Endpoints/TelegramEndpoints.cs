@@ -107,70 +107,16 @@ public static class TelegramEndpoints
         return Results.Ok(new TelegramCodeResponse(issued.Code, issued.DeepLink, issued.ExpiresAt));
     }
 
-    // For a farmer with no Telegram, or one who forgot the password (we never store
-    // it). Creates a new one and returns it once.
-    private static async Task<IResult> ResetTemporaryPasswordAsync(
-        Guid profileId,
-        SupabaseAdminService supabaseAdmin,
-        TelegramOnboardingService onboarding,
-        NpgsqlDataSource dataSource,
-        CancellationToken cancellationToken)
-    {
-        if (!await ProfileExistsAsync(dataSource, profileId, cancellationToken))
-        {
-            return Results.NotFound(new { error = "No such farmer." });
-        }
+    // The two older admin routes, kept so old links work. Both now do the same as
+    // POST /api/admin/farmers/{id}/reset-password: a new easy temporary password (72 hours,
+    // changed at first sign-in), sent by Telegram if linked, otherwise shown once. Audited.
+    private static Task<IResult> ResetTemporaryPasswordAsync(
+        Guid profileId, ClaimsPrincipal user, PasswordResetFlow flow, CancellationToken cancellationToken) =>
+        PasswordResetEndpoints.AdminResetAsync(profileId, user, flow, cancellationToken);
 
-        var password = await supabaseAdmin.ResetTemporaryPasswordAsync(profileId, cancellationToken);
-
-        if (password is null)
-        {
-            return Results.Problem(
-                title: "Could not reset the temporary password.",
-                detail: "Supabase refused the password change. The farmer's existing password still works.",
-                statusCode: StatusCodes.Status502BadGateway);
-        }
-
-        // Security: every temporary password must be changed at first sign-in.
-        await onboarding.SetMustChangePasswordAsync(profileId, true, cancellationToken);
-
-        return Results.Ok(new TemporaryPasswordResponse(
-            password,
-            "This password is shown once and is not stored. The farmer must change it when they sign in."));
-    }
-
-    // Same as "Forgot password?" in the app, but started by an admin, e.g. for a
-    // farmer who phones in.
-    // Security: unlike ResetTemporaryPasswordAsync, this sends the password to the
-    // farmer's own chat and never shows it to the admin.
-    private static async Task<IResult> SendTemporaryPasswordAsync(
-        Guid profileId,
-        PasswordResetService passwordReset,
-        NpgsqlDataSource dataSource,
-        CancellationToken cancellationToken)
-    {
-        if (!await ProfileExistsAsync(dataSource, profileId, cancellationToken))
-        {
-            return Results.NotFound(new { error = "No such farmer." });
-        }
-
-        var sent = await passwordReset.ResetForProfileAsync(profileId, cancellationToken);
-
-        if (!sent)
-        {
-            return Results.BadRequest(new
-            {
-                error =
-                    "This farmer has no Telegram connected, so a password cannot be sent to them. " +
-                    "Use Reset password instead and read the new one out to them.",
-            });
-        }
-
-        return Results.Ok(new
-        {
-            message = "A new temporary password has been sent to the farmer's Telegram.",
-        });
-    }
+    private static Task<IResult> SendTemporaryPasswordAsync(
+        Guid profileId, ClaimsPrincipal user, PasswordResetFlow flow, CancellationToken cancellationToken) =>
+        PasswordResetEndpoints.AdminResetAsync(profileId, user, flow, cancellationToken);
 
     // "Unlink Telegram" on a farmer's profile: lost or changed phone. Clears the chat and
     // any unused codes, so they re-link with a new code. Audited.

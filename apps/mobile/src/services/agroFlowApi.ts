@@ -471,6 +471,55 @@ async function sendPasswordReset(
   }
 }
 
+// The other two signed-out calls (docs/password-reset.md). A refusal carries the server's own
+// plain sentence ("That code is not right, or it has expired."), shown as written.
+async function postSignedOut<T>(path: string, body: unknown): Promise<T> {
+  const apiBase = resolveApiBase();
+  if (!apiBase) {
+    throw new Error('AgroFlow.Api could not be located. Set EXPO_PUBLIC_AGROFLOW_API_BASE.');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  try {
+    let response: Response;
+    try {
+      response = await fetch(`${apiBase}${path}`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error('We could not reach AgroFlow. Please check your connection and try again.');
+    }
+    const parsed = await response.json().catch(() => ({})) as T & { error?: string };
+    if (!response.ok) {
+      throw new Error(parsed.error ?? 'We could not reach AgroFlow. Please check your connection and try again.');
+    }
+    return parsed;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** The 6-digit code from Telegram and a new password. Other sessions are signed out. */
+export function resetPasswordWithCode(email: string, code: string, newPassword: string): Promise<{ message: string }> {
+  return singleFlight(
+    writeKey('POST', '/api/auth/reset-password', `${email.trim().toLowerCase()}:${code}`),
+    () => postSignedOut<{ message: string }>('/api/auth/reset-password', {
+      email: email.trim().toLowerCase(), code, newPassword,
+    })
+  );
+}
+
+/** Swaps a one-tap link's token (works once, 24 hours) for a Supabase sign-in token hash. */
+export function redeemOneTap(token: string): Promise<{ email: string; tokenHash: string }> {
+  return singleFlight(
+    writeKey('POST', '/api/auth/one-tap', token),
+    () => postSignedOut<{ email: string; tokenHash: string }>('/api/auth/one-tap', { token })
+  );
+}
+
 export type FarmerServiceRequestInput = {
   requestType: 'new_farm' | 'new_zone';
   farmId?: number;
