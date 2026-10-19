@@ -68,6 +68,9 @@ const SCHEDULE_DAY_OPTIONS = [
   'Sun',
 ];
 
+// The kit's safety cap (firmware SAFETY_MAX_RUN_MS): no run is ever longer.
+const MAX_MANUAL_RUN_MINUTES = 5;
+
 type IrrigationModeSelection =
   | 'automatic'
   | 'scheduled'
@@ -159,6 +162,8 @@ export default function ZoneControlScreen() {
   ] =
     useState(false);
 
+  // The kit stops every run at 5 minutes (SAFETY_MAX_RUN_MS in the firmware), so a manual
+  // run is 1 to 5 minutes and starts at 5.
   const [
     manualDuration,
     setManualDuration,
@@ -470,12 +475,9 @@ export default function ZoneControlScreen() {
     },
   ];
 
-  // Manual is temporary, so it never replaces the saved Automatic/Scheduled mode.
+  // The saved mode (Manual included); a one-off Water now run does not change it.
   const displayedBaseMode =
-    selectedMode ===
-    'manual'
-      ? selectedZone.irrigation.mode
-      : selectedMode;
+    selectedMode;
 
   const zoneSummaryRows = [
     [
@@ -570,18 +572,9 @@ export default function ZoneControlScreen() {
       return;
     }
 
-    if (
-      mode ===
-      'manual'
-    ) {
-      setSelectedMode(
-        'manual'
-      );
-
-      return;
-    }
-
-    // Leaving the Manual preview for the saved mode is only a local UI change.
+    // Manual is a saved mode like the other two (AgroFlow then never waters this zone by
+    // itself). It used to be a preview that was never saved, and a zone saved as manual
+    // elsewhere read back as Automatic.
     if (
       mode ===
       selectedZone.irrigation.mode
@@ -636,11 +629,11 @@ export default function ZoneControlScreen() {
       duration <
         1 ||
       duration >
-        60
+        MAX_MANUAL_RUN_MINUTES
     ) {
       Alert.alert(
         t('zone.invalidDurationTitle'),
-        t('zone.invalidDuration')
+        t('zone.invalidDuration', { max: MAX_MANUAL_RUN_MINUTES })
       );
 
       return;
@@ -1703,11 +1696,8 @@ export default function ZoneControlScreen() {
                     option
                   ) => {
                     const isSelected =
-                      isOverrideActive
-                        ? option.value ===
-                          'manual'
-                        : selectedMode ===
-                          option.value;
+                      selectedMode ===
+                      option.value;
 
                     return (
                       <TouchableOpacity
@@ -1750,10 +1740,9 @@ export default function ZoneControlScreen() {
                 )}
               </View>
 
-              {selectedMode ===
-                'manual' ||
-              isOverrideActive ? (
-                <>
+              {/* A one-off run is possible in every mode; it does not change the mode, and
+                  the server holds automatic commands back for 30 minutes after it. */}
+              <>
                   {!isOverrideActive && (
                     <>
                       <Text style={styles.inputLabel}>
@@ -1763,7 +1752,7 @@ export default function ZoneControlScreen() {
                       <TextInput
                         value={manualDuration}
                         onChangeText={setManualDuration}
-                        placeholder="20"
+                        placeholder="5"
                         placeholderTextColor={colors.text}
                         keyboardType="number-pad"
                         maxLength={4}
@@ -1801,7 +1790,12 @@ export default function ZoneControlScreen() {
                       {t('offline.needsConnection')}
                     </Text>
                   ) : null}
-                </>
+              </>
+
+              {selectedMode === 'manual' ? (
+                <Text style={styles.inputLabel}>
+                  {t('zone.manualNote')}
+                </Text>
               ) : selectedMode ===
                 'scheduled' ? (
                 <TouchableOpacity

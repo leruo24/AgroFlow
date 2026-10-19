@@ -46,6 +46,7 @@ import {
   type AuditRow,
   getAdminTankPh,
   setFarmTankCapacity,
+  IRRIGATION_MODE_LABEL,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
@@ -686,13 +687,14 @@ async function openFarmDetail(id: number): Promise<void> {
       section(`Zones (${farmZones.length})`,
         farmZones.length
           ? `<div class="table-wrap"><table>
-               <thead><tr><th>Zone</th><th>Crop</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
+               <thead><tr><th>Zone</th><th>Crop</th><th>Watering</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
                <tbody>${farmZones.map((z) => {
                  const t = todayByZone.get(z.zoneId);
                  return `
                  <tr data-today-zone="${z.zoneId}">
                    <td>${esc(z.name)} ${f.isSimulated ? `<span class="badge warn">Simulated</span>` : ""}</td>
                    <td>${esc(z.cropType ?? "Not set")}</td>
+                   <td data-zone-mode="${esc(z.irrigationMode ?? "")}">${esc(z.irrigationMode ? IRRIGATION_MODE_LABEL[z.irrigationMode] ?? z.irrigationMode : "—")}</td>
                    <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
                    <td>${t?.confidence
                      ? `<b>${levelLabel[t.confidence.level]}</b> ${whyLink(asExplanation(t.confidenceExplanation))}`

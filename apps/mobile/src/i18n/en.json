@@ -84,7 +84,7 @@
     "zone.stopConfirmBody": "The pump stops and the zone goes back to {mode}.",
     "zone.stop": "Stop",
     "zone.invalidDurationTitle": "Check the minutes",
-    "zone.invalidDuration": "Enter between 1 and 60 minutes.",
+    "zone.invalidDuration": "Enter between 1 and {max} minutes. The kit stops every run at {max} minutes.",
     "zone.startFailed": "Could not start watering",
     "zone.stopFailed": "Could not stop watering",
     "zone.commandFailed": "The command could not be sent. Please try again.",
@@ -209,6 +209,7 @@
     "farm.simulated": "Simulated",
     "farm.select": "Select a farm",
     "farm.retryA11y": "Retry loading farms",
-    "farm.selectA11y": "Select farm, current farm {name}"
+    "farm.selectA11y": "Select farm, current farm {name}",
+    "zone.manualNote": "Manual: AgroFlow will not water this zone by itself. Use Water now when it needs water."
   }
 }

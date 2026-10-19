@@ -1,4 +1,4 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.4.0).
+// AgroFlow irrigation node - ESP32 firmware (v1.4.1).
 //
 // WiFiManager setup portal + one-time enrollment code -> /api/devices/claim.
 // MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors as
@@ -25,6 +25,10 @@
 //   6. The broker address can come from the server: if mqtt-credentials returns
 //      mqttHost/mqttPort the board uses them, otherwise the compiled-in
 //      MQTT_HOST/MQTT_PORT. Moving brokers is a Railway setting, not a reflash.
+//   7. The zone's mode (v1.4.1): GET /api/devices/config on boot and every 10 minutes
+//      while online says whether the zone is Automatic. The offline fallback only waters
+//      when the last answer said so, kept in flash; a Manual or Scheduled zone, or a kit
+//      that has never had an answer, is never watered by the kit on its own.
 //
 // Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
 // DHT sensor library for ESPx (beegee_tokyo).
@@ -56,7 +60,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Update this and Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json each release.
-const char *FIRMWARE_VERSION = "1.4.0";
+const char *FIRMWARE_VERSION = "1.4.1";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -88,6 +92,7 @@ const int FALLBACK_START_RAW = 2600;     // raw at/above = dry enough to water (
 const int FALLBACK_STOP_RAW  = 2300;     // raw at/below = wet enough to stop
 const unsigned long FALLBACK_MAX_RUN_MS  = 60000UL;           // ~1.5 L at 1.5 L/min
 const unsigned long FALLBACK_MIN_REST_MS = 5UL * 60UL * 1000UL; // let water soak down to the probe
+const unsigned long ZONE_CONFIG_INTERVAL_MS = 10UL * 60UL * 1000UL; // re-ask the zone's mode while online
 
 // State
 
@@ -127,6 +132,12 @@ unsigned long pumpStopMillis = 0;
 time_t cycleStartEpoch = 0;
 String currentCycleSource = "";
 bool fallbackCycle = false;   // true when the current run was started by the offline fallback
+
+// Whether the zone is Automatic, from GET /api/devices/config (kept in flash as "autoOk").
+// False until the server has said yes: a Manual zone must never be watered by the kit itself.
+bool autoWateringAllowed = false;
+unsigned long lastZoneConfigMillis = 0;
+bool zoneConfigFetched = false;
 
 bool hasDurationDeadline = false;
 unsigned long cycleDeadlineMillis = 0;
@@ -377,6 +388,31 @@ bool fetchMqttCredentials() {
   return true;
 }
 
+// Zone config: may this kit water by itself while offline?
+
+void fetchZoneConfig() {
+  if (WiFi.status() != WL_CONNECTED || deviceToken.length() == 0) return;
+  lastZoneConfigMillis = millis();
+  zoneConfigFetched = true;
+  WiFiClientSecure client;
+  HTTPClient http;
+  if (!beginApiRequest(client, http, String(API_BASE_URL) + "/api/devices/config")) return;
+  int httpCode = http.GET();
+  noteAuthResult(httpCode);
+  if (httpCode != 200) { http.end(); Serial.printf("WARN: zone config fetch failed, http=%d\n", httpCode); return; }
+  String payload = http.getString();
+  http.end();
+  JsonDocument r;
+  if (deserializeJson(r, payload)) return;
+  bool allowed = r["autoWateringAllowed"] | false;
+  const char *mode = r["irrigationMode"] | "unknown";
+  if (allowed != autoWateringAllowed) {
+    autoWateringAllowed = allowed;
+    preferences.putBool("autoOk", allowed);
+  }
+  Serial.printf("Zone mode: %s (offline watering %s)\n", mode, allowed ? "allowed" : "off");
+}
+
 // OTA
 
 void checkFirmwareUpdate() {
@@ -523,6 +559,11 @@ void reconnectMqtt() {
 
 void runOfflineFallback() {
   if (mqttClient.connected()) return;
+  // Only an Automatic zone (last answer from /api/devices/config). Manual means never by itself.
+  if (!autoWateringAllowed) {
+    if (pumpRunning && fallbackCycle) stopPumpCycle();
+    return;
+  }
   unsigned long nowMs = millis();
   if (nowMs - lastMqttConnectedMillis < OFFLINE_FALLBACK_AFTER_MS) return;
   if (nowMs - lastFallbackCheckMillis < 1000) return;
@@ -731,6 +772,7 @@ void setup() {
   if (boots >= BOOTS_FOR_FACTORY_RESET) factoryReset("5 quick power cycles");
 
   deviceToken = preferences.getString("token", "");
+  autoWateringAllowed = preferences.getBool("autoOk", false);
   preferences.remove("mqttUser");             // v1.2.0 stored these; v1.3.0 keeps them in RAM only
   preferences.remove("mqttPass");
   wifiForgotten = preferences.getBool("wifiForgot", false);
@@ -791,6 +833,7 @@ void setup() {
 
   pumpStopMillis = millis() - FALLBACK_MIN_REST_MS;
   lastMqttConnectedMillis = millis();   // offline-fallback timer starts from boot
+  fetchZoneConfig();
   reconnectMqtt();
   checkFirmwareUpdate();
 }
@@ -812,6 +855,11 @@ void loop() {
   if (nowMs - lastSensorReportMillis >= SENSOR_REPORT_INTERVAL_MS) {
     lastSensorReportMillis = nowMs;
     reportSensorReadings();
+  }
+
+  if (WiFi.status() == WL_CONNECTED &&
+      (!zoneConfigFetched || nowMs - lastZoneConfigMillis >= ZONE_CONFIG_INTERVAL_MS)) {
+    fetchZoneConfig();
   }
 
   if (nowMs - lastFirmwareCheckMillis >= FIRMWARE_CHECK_INTERVAL_MS) {
