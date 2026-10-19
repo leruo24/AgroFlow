@@ -1,21 +1,17 @@
-/* The public landing page: what anyone who opens the AgroFlow link sees.
- * The console link is shared with people who are not admins (a lecturer, an examiner, a
- * partner at the Cisco Edge Centre, a curious farmer), so the page explains the product and
- * keeps "Admin login" as one button.
+/* The public product page: what anyone who opens the AgroFlow link sees.
+ * The link is shared with people who are not staff (a farmer, a sponsor, a lecturer, a partner
+ * at the Cisco Edge Centre), so the page is for customers: what AgroFlow does, how it works,
+ * request a call and get the app. Nothing from the console is on it; staff get one quiet
+ * "Staff sign-in" link (#/admin, or /admin/ which forwards there).
  * It is one of the states in main.ts's render() and not a PageId in the router (see
  * app/router.ts), because like the login screen it is outside the signed-in shell. It does
- * not change signing in: "Admin login" only asks main.ts to show the login screen, and a
+ * not change signing in: "Staff sign-in" only asks main.ts to show the login screen, and a
  * visitor with a valid admin session goes straight to the dashboard. */
 
 import { Icon } from "@/lib/icons";
 import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
 import { initHardwareShowcase } from "@/features/hardware3d";
-
-/* Download links come from configuration, so the page can ship before the files exist. A
- * button is hidden when its variable is unset, because a Download button that 404s is worse
- * than none. Vite inlines these at build time. */
-const ANDROID_APK_URL = (import.meta.env["VITE_DOWNLOADS_ANDROID_APK_URL"] ?? "").trim();
-const WEB_APP_URL = (import.meta.env["VITE_DOWNLOADS_WEB_APP_URL"] ?? "").trim();
+import { WEB_APP_URL, appLinksHtml } from "@/lib/downloads";
 
 const STEPS: { title: string; body: string }[] = [
   {
@@ -76,9 +72,10 @@ export const WELCOME_HTML = `
         <a href="#how-it-works">How it works</a>
         <a href="#technology">Technology</a>
         <a href="#about">About</a>
+        <a href="#get-app">Get the app</a>
         <a href="#enquire">Contact</a>
       </nav>
-      <button type="button" class="btn landing-login-top" id="welcomeLogin">Admin console</button>
+      <a class="landing-staff-link" href="#/admin" id="welcomeLogin">Staff sign-in</a>
     </header>
 
     <main class="landing-main">
@@ -92,7 +89,8 @@ export const WELCOME_HTML = `
           clear experience for South African farmers.
         </p>
         <div class="landing-hero-actions">
-          <a class="btn" href="#enquire">Talk to AgroFlow</a>
+          <a class="btn" href="#enquire">Request a call</a>
+          <a class="btn ghost landing-hero-app" href="#get-app">Get the app</a>
           <a class="landing-text-link" href="#how-it-works">See how it works <span aria-hidden="true">→</span></a>
         </div>
         <ul class="landing-proof" aria-label="AgroFlow system overview">
@@ -262,40 +260,37 @@ export const WELCOME_HTML = `
         <p>AgroFlow is a connected smart-irrigation project that helps a farmer understand conditions in each crop zone, make informed watering decisions and keep a clear record of what happened. The current system combines field hardware, a farmer application, an administration console and backend services—without claiming sensors or gateways the prototype does not use.</p>
       </section>
 
-      ${ANDROID_APK_URL || WEB_APP_URL ? `
-      <section class="landing-section" aria-labelledby="getHeading">
+      <section class="landing-section" id="get-app" aria-labelledby="getHeading">
+        <p class="landing-eyebrow">For farmers</p>
         <h2 id="getHeading" class="landing-h2">Get the app</h2>
-        <div class="landing-downloads">
-          ${ANDROID_APK_URL ? `
-            <a class="btn landing-download" href="${escapeHtml(ANDROID_APK_URL)}" download>
-              Download for Android
-            </a>` : ""}
-          ${WEB_APP_URL ? `
-            <a class="btn ghost landing-download" href="${escapeHtml(WEB_APP_URL)}">
-              iPhone: open the web app
-            </a>` : ""}
-        </div>
+        <p class="landing-step-body">Already an AgroFlow farmer? Sign in on your phone with the
+          email and password your AgroFlow representative gave you.</p>
+        ${appLinksHtml()}
         ${WEB_APP_URL ? `
           <p class="landing-note">
             On an iPhone, open the web app in Safari and tap Share then "Add to Home Screen"
             to keep it with your other apps.
           </p>` : ""}
-      </section>` : ""}
+      </section>
 
       ${ENQUIRY_SECTION_HTML}
 
-      <div class="landing-cta">
-        <button type="button" class="btn landing-login" id="welcomeLoginBottom">Open admin console</button>
-      </div>
     </main>
-    <footer class="landing-footer"><span>AgroFlow</span><span>Smart irrigation for real growing areas.</span></footer>
+    <footer class="landing-footer">
+      <span>AgroFlow</span><span>Smart irrigation for real growing areas.</span>
+      <a class="landing-staff-link" href="#/admin" id="welcomeLoginBottom">Staff sign-in</a>
+    </footer>
   </div>`;
 
-/* onLogin is called by both login buttons, in the header and at the end of the page, so a
- * visitor does not have to scroll back up. */
+/* onLogin is called by both Staff sign-in links, in the header and the footer. They are real
+ * links to #/admin, so they also work opened in a new tab; the click handler only avoids a
+ * second render. */
 export function wireWelcome(root: HTMLElement, onLogin: () => void): void {
-  root.querySelectorAll<HTMLButtonElement>("#welcomeLogin, #welcomeLoginBottom")
-    .forEach((button) => button.addEventListener("click", onLogin));
+  root.querySelectorAll<HTMLAnchorElement>("#welcomeLogin, #welcomeLoginBottom")
+    .forEach((link) => link.addEventListener("click", (e) => {
+      e.preventDefault();
+      onLogin();
+    }));
   wireEnquiry(root);
   initHardwareShowcase(root);
   root.querySelector<HTMLButtonElement>("[data-experience-launch]")?.addEventListener("click", async (event) => {

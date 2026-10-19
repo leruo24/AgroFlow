@@ -99,6 +99,7 @@ export type Zone = {
   crop: string;
   plantingDate: string | null;
   healthStatus: string;
+  isSimulated?: boolean;
   // null means the zone's water_saved column was never set, which is different from a real 0.
   waterSavedLitres: number | null;
 
@@ -116,6 +117,7 @@ export type Zone = {
       // True once the wet/dry setup is done. Until then `value` is the sensor's own number and
       // must never be shown with a %.
       calibrated: boolean;
+      simulated?: boolean;
     };
 
     temperatureHumidity: {
@@ -182,6 +184,7 @@ export type Farm = {
   status: string;
   latitude: number | null;
   longitude: number | null;
+  isSimulated?: boolean;
 };
 
 type DatabaseId =
@@ -209,6 +212,7 @@ type FarmRow = {
     | number
     | string
     | null;
+  is_simulated?: boolean | null;
 };
 
 type ZoneRow = {
@@ -254,6 +258,7 @@ type ZoneRow = {
     | number
     | string
     | null;
+  is_simulated?: boolean | null;
 };
 
 // Security: the API checks ownership and farm membership and only returns the farmer's own farms.
@@ -296,6 +301,7 @@ async function fetchAssignedFarms(): Promise<Farm[]> {
         : Number(
             farmRow.longitude
           ),
+    isSimulated: farmRow.is_simulated === true,
   }));
 }
 
@@ -322,6 +328,7 @@ export type UpdateZoneScheduleInput = {
 type ZoneLatestReadingRow = {
   zone_id: DatabaseId;
   moisture: number | string | null;
+  moisture_simulated?: boolean | null;
   temperature: number | string | null;
   humidity: number | string | null;
   last_reading_at: string | null;
@@ -350,6 +357,7 @@ type WeatherRow = {
 type AlertRow = {
   id: DatabaseId;
   zone_id: DatabaseId | null;
+  farm_id?: DatabaseId | null;
   severity: string;
   message: string;
   status?: string;
@@ -470,6 +478,7 @@ function mapZoneRow(
     healthStatus:
       row.health_status ??
       'Unknown',
+    isSimulated: row.is_simulated === true,
     waterSavedLitres:
       row.water_saved == null
         ? null
@@ -491,6 +500,7 @@ function mapZoneRow(
           calibrated ? moistureValue : null, moistureThreshold, desiredMoisture
         ),
         calibrated,
+        simulated: reading?.moisture_simulated === true,
       },
       temperatureHumidity: {
         temperature: temperatureValue ?? 0,
@@ -631,16 +641,14 @@ async function fetchZonesForFarm(
   const zoneNames = new Map(
     rows.map((row) => [String(row.id), row.name ?? `Zone ${row.id}`])
   );
-  const mappedAlerts: AlertEntry[] = alertRows
-    .filter((alert) => alert.zone_id !== null)
-    .map((alert) => ({
+  const mappedAlerts: AlertEntry[] = alertRows.map((alert) => ({
       id: `database-${alert.id}`,
       farmId,
       type: alert.severity.toLowerCase(),
       title: `${alert.severity} Alert`,
       message: alert.message,
-      zone: zoneNames.get(String(alert.zone_id)) ?? null,
-      zoneId: String(alert.zone_id),
+      zone: alert.zone_id === null ? null : zoneNames.get(String(alert.zone_id)) ?? null,
+      zoneId: alert.zone_id === null ? null : String(alert.zone_id),
       timestamp: alert.created_at ?? '',
       read: false,
     }));

@@ -42,10 +42,14 @@ import {
   getMyTelegramStatus,
   requestMyTelegramCode,
   disconnectMyTelegram,
+  unlinkFarmerTelegram,
   type AuditRow,
+  getAdminTankPh,
+  setFarmTankCapacity,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
+import { confirmDialog } from "@/lib/confirmDialog";
 import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
@@ -530,6 +534,13 @@ async function openUserProfile(id: string): Promise<void> {
           <div class="detail-row"><span>Last active</span><b>${esc(u.lastActive)}</b></div>
         </div>`),
       section("Assigned farm", `<p><b>${esc(u.farm)}</b></p>`),
+      section("Telegram", u.telegramLinked
+        ? `<p>${esc(telegramState(u))}. Lost or changed phone? Disconnect it, then send a new code.</p>
+           <p><button type="button" class="btn ghost" data-act="unlink-telegram" data-id="${esc(u.id)}">Unlink Telegram</button></p>`
+        : `<p>Not connected. This farmer gets no alerts until they connect.</p>
+           <p><button type="button" class="btn ghost" data-act="send-link-code" data-id="${esc(u.id)}">Send a link code</button></p>`),
+      section("Account", `<p class="muted">Removing the account stops sign-in. Their farms, zones and history are kept.</p>
+        <p><button type="button" class="btn danger" data-act="delete-user" data-id="${esc(u.id)}">Remove account</button></p>`),
       section("Registered hardware", list(u.hardware.map((h) => `<span class="mono">${esc(h)}</span>`))),
       section("Irrigation schedules", list(userSchedules.map((s) =>
         `${esc(s.zone)} — ${esc(s.cadence)} <span class="muted">(${fmtPct(s.compliancePct)} compliance)</span>`))),
@@ -548,7 +559,7 @@ async function openFarmDetail(id: number): Promise<void> {
   const intent = currentPanelIntent();
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones, today] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones, today, tankPh] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
     // Read-only and allowed to fail: the drawer must still open if 0033 is not applied or the
     // query is refused.
@@ -571,6 +582,10 @@ async function openFarmDetail(id: number): Promise<void> {
     // What the farmer is told today, per zone. Allowed to fail too.
     getFarmToday(id).catch((e: unknown) => {
       console.warn("Could not load today's advice for farm", id, e);
+      return null;
+    }),
+    getAdminTankPh(id).catch((e: unknown) => {
+      console.warn("Could not load tank and pH for farm", id, e);
       return null;
     }),
   ]);
@@ -598,7 +613,7 @@ async function openFarmDetail(id: number): Promise<void> {
     // Not healthDot(f.health): openDrawer's title is HTML-escaped (see escapeText in
     // lib/drawer.ts), so it cannot carry the dot's markup. Health is shown in "Farm summary" below.
     title: f.name,
-    subtitle: `${f.owner} · ${f.province} · ${f.region}`,
+    subtitle: `${f.owner} · ${f.province} · ${f.region}${f.isSimulated ? " · Simulated" : ""}`,
     wide: true,
     bodyHtml: [
       section("Farm summary", `
@@ -615,6 +630,16 @@ async function openFarmDetail(id: number): Promise<void> {
           <div class="detail-row"><span>Sensor availability</span><b>${fmtPct(f.healthFactors.sensorsAvailable)}</b></div>
         </div>
         <button class="btn ghost sm" data-act="edit-farm-location" data-id="${f.id}">View / adjust on map</button>`),
+      section("Tank and pH", tankPh ? `
+        <div class="detail-list">
+          <div class="detail-row"><span>Tank size</span><b>${tankPh.tank.capacityLitres == null ? "Not set" : `${fmtInt(tankPh.tank.capacityLitres)} L`}</b></div>
+          <div class="detail-row"><span>Tank level</span><b>${tankPh.tank.estimatedRemainingLitres == null ? "No refill logged" : `About ${fmtInt(tankPh.tank.estimatedRemainingLitres)} L — estimate`}</b></div>
+          <div class="detail-row"><span>Latest water pH</span><b>${tankPh.tank.latestWaterPh == null ? "Not logged" : Number(tankPh.tank.latestWaterPh).toFixed(1)}</b></div>
+          ${tankPh.zones.map((z) => `<div class="detail-row"><span>${esc(z.zoneName)} soil pH</span><b>${z.latest ? `${Number(z.latest.ph).toFixed(1)} · ${esc(fmtDate(z.latest.measuredAt))}` : "Not logged"}</b></div>`).join("")}
+        </div>
+        ${tankPh.tank.waterPhWarning ? `<p class="muted">${esc(tankPh.tank.waterPhWarning)}</p>` : ""}
+        <button class="btn ghost sm" data-act="edit-tank-capacity" data-id="${f.id}">Set tank size</button>`
+        : `<p class="muted">Tank and pH details are unavailable.</p>`),
       section(`Users (${farmUsers.length})`, list(farmUsers.map((u) =>
         `${esc(u.name)} <span class="muted">${esc(u.email)}</span> — <b>${esc(u.status)}</b>`))),
       section(`Installed hardware (${farmHw.length})`, list(farmHw.map((h) =>
@@ -666,7 +691,7 @@ async function openFarmDetail(id: number): Promise<void> {
                  const t = todayByZone.get(z.zoneId);
                  return `
                  <tr data-today-zone="${z.zoneId}">
-                   <td>${esc(z.name)}</td>
+                   <td>${esc(z.name)} ${f.isSimulated ? `<span class="badge warn">Simulated</span>` : ""}</td>
                    <td>${esc(z.cropType ?? "Not set")}</td>
                    <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
                    <td>${t?.confidence
@@ -771,6 +796,28 @@ function openFarmLocationEditor(id: number): void {
         "Could not update the farm location",
         plainError(error, "The farm location was not changed."),
       ));
+    },
+  });
+}
+
+function openTankCapacityEditor(id: number): void {
+  const farm = api.findFarm(id);
+  if (!farm) return;
+  openDrawer({
+    title: `Tank size · ${farm.name}`,
+    subtitle: "This is the maximum refill amount and the basis for the low-tank threshold.",
+    fields: [{ label: "Capacity (litres)", value: "", editable: true, name: "tankCapacity" }],
+    confirmLabel: "Save tank size",
+    onConfirm: (values) => {
+      const litres = Number((values["tankCapacity"] ?? "").replace(",", "."));
+      if (!Number.isFinite(litres) || litres <= 0) {
+        toast("Tank size must be greater than 0 litres.", "warn");
+        return false;
+      }
+      void setFarmTankCapacity(id, Math.round(litres * 10) / 10)
+        .then(() => { toast("Tank size saved.", "success"); void openFarmDetail(id); })
+        .catch((error: unknown) => showErrorModal(
+          "Could not save the tank size", plainError(error, "The tank size was not changed.")));
     },
   });
 }
@@ -892,30 +939,57 @@ async function handleAction(el: HTMLElement): Promise<void> {
         return;
       }
     }
-    
-case "delete-user": {
-  const u = api.findUser(idAttr);
+    case "delete-user": {
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "This farmer";
+      // Says before and after exactly what is kept, because "delete" reads as "lose the farm".
+      const ok = await confirmDialog({
+        title: `Remove ${name}'s account?`,
+        body: `${name} will no longer be able to sign in. Their farms, zones and history will be kept.`,
+        confirmLabel: "Remove account",
+        danger: true,
+      });
+      if (!ok) return;
 
-  try {
-    await deleteFarmerUser(idAttr);
+      try {
+        await deleteFarmerUser(idAttr);
+        closeDrawer();
+        toast(`${name}'s account was removed. Their farms, zones and history were kept.`, "success", 6000);
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error ? e.message : "The account could not be removed.",
+          "The account could not be removed",
+        );
+        return;
+      }
+    }
 
-    toast(
-      `Deleted ${u?.name ?? "user"}. Farm data was retained.`,
-      "warn",
-    );
+    case "unlink-telegram": {
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "this farmer";
+      const ok = await confirmDialog({
+        title: `Disconnect ${name}'s Telegram?`,
+        body: `AgroFlow will stop sending messages to the Telegram chat ${name} has now. ` +
+          "They can connect again with a new code, from the app or from here.",
+        confirmLabel: "Disconnect Telegram",
+        danger: true,
+      });
+      if (!ok) return;
 
-    return void refresh();
-  } catch (e) {
-    showErrorModal(
-      e instanceof Error
-        ? e.message
-        : "Unable to delete farmer.",
-      "Unable to delete farmer",
-    );
-
-    return;
-  }
-}
+      try {
+        const result = await unlinkFarmerTelegram(idAttr);
+        closeDrawer();
+        toast(result.message, "success", 6000);
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error ? e.message : "Telegram could not be disconnected.",
+          "Telegram could not be disconnected",
+        );
+        return;
+      }
+    }
 
     case "delete-farm": {
       const farm = api.findFarm(numId);
@@ -1055,6 +1129,7 @@ case "delete-user": {
     /* Farms */
     case "view-farm": return openFarmDetail(numId);
     case "edit-farm-location": return openFarmLocationEditor(numId);
+    case "edit-tank-capacity": return openTankCapacityEditor(numId);
     /* Register a kit in five steps instead of typing a zone id from memory. The claim attaches
      * the kit to this zone, so a wrong zone would put a farmer's readings against someone
      * else's crop.

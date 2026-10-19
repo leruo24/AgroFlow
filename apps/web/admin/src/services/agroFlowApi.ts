@@ -449,6 +449,12 @@ export function disconnectMyTelegram(): Promise<void> {
   return authorizedJson<void>("/api/telegram/me", "DELETE");
 }
 
+/** Disconnects a farmer's Telegram (lost or changed phone) so they can link again with a new
+ *  code. The API also cancels their unused codes and records it in the activity log. */
+export function unlinkFarmerTelegram(profileId: string): Promise<{ message: string; wasLinked: boolean }> {
+  return authorizedJson(`/api/telegram/admin/link/${encodeURIComponent(profileId)}`, "DELETE");
+}
+
 /* Hardware
  * The dashboard reads most tables straight from Supabase under RLS, but these cannot:
  * - tokenStatus needs hardware.device_token_hash and token_revoked_at. Migration 0028
@@ -734,6 +740,34 @@ export type FarmTodayZone = {
 
 export function getFarmToday(farmId: number): Promise<{ farmId: number; day: string; zones: FarmTodayZone[] }> {
   return authorizedJson(`/api/farmer/farms/${farmId}/today`, "GET");
+}
+
+export type AdminTankPh = {
+  tank: {
+    farmId: number;
+    farmName: string;
+    capacityLitres: number | null;
+    lastRefillLitres: number | null;
+    lastRefilledAt: string | null;
+    latestWaterPh: number | null;
+    estimatedUsedLitres: number;
+    estimatedRemainingLitres: number | null;
+    isLow: boolean;
+    waterPhWarning: string | null;
+  };
+  zones: Array<{
+    zoneId: number;
+    zoneName: string;
+    latest: { ph: number; measuredAt: string; note: string | null } | null;
+  }>;
+};
+
+export function getAdminTankPh(farmId: number): Promise<AdminTankPh> {
+  return authorizedJson(`/api/admin/farms/${farmId}/tank-ph`, "GET");
+}
+
+export function setFarmTankCapacity(farmId: number, litres: number): Promise<AdminTankPh["tank"]> {
+  return authorizedJson(`/api/farmer/farms/${farmId}/tank`, "PUT", { litres });
 }
 
 /* "Recommended for you". */

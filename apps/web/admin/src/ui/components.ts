@@ -314,8 +314,36 @@ export function filterBar(opts: FilterBarOptions): string {
 
 /* skeleton */
 
+/* Grey blocks alone look the same whether a page is a second away or never coming, so every
+ * skeleton also says Loading… with a spinner, and after SLOW_LOADING_MS says why it might be
+ * slow (watchSlowLoading). */
+export const SLOW_LOADING_MS = 8000;
+export const LOADING_TEXT = "Loading…";
+export const SLOW_LOADING_TEXT = "Still loading — check your connection";
+
+export function loadingIndicator(): string {
+  return `<div class="loading-indicator" role="status" aria-live="polite" data-loading-indicator>
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="loading-text">${LOADING_TEXT}</span>
+    </div>`;
+}
+
+/** Changes the indicator's words once loading has gone on too long. Does nothing if the
+ *  skeleton has already been replaced by the page. */
+export function watchSlowLoading(scope: HTMLElement, ms = SLOW_LOADING_MS): void {
+  const indicator = scope.querySelector<HTMLElement>("[data-loading-indicator]");
+  if (!indicator) return;
+  window.setTimeout(() => {
+    if (!indicator.isConnected) return;
+    indicator.classList.add("slow");
+    const text = indicator.querySelector<HTMLElement>(".loading-text");
+    if (text) text.textContent = SLOW_LOADING_TEXT;
+  }, ms);
+}
+
 export function skeletonPage(): string {
   return `<div class="skeleton-wrap">
+    ${loadingIndicator()}
     <div class="sk sk-head"></div>
     <div class="sk-grid">
       ${Array.from({ length: 6 }, () => `<div class="sk sk-card"></div>`).join("")}

@@ -129,6 +129,8 @@ builder.Services.Configure<PasswordResetOptions>(
 
 builder.Services.AddSingleton<TelegramClient>();
 builder.Services.AddSingleton<TelegramOnboardingService>();
+builder.Services.AddSingleton<ITelegramLinkStore, DbTelegramLinkStore>();
+builder.Services.AddSingleton<TelegramUnlinkService>();
 builder.Services.AddSingleton<SupabaseAdminService>();
 
 // Stops the same event being messaged again and again. The forecast refreshes
@@ -193,6 +195,14 @@ builder.Services.AddHostedService<WeatherAlertService>();
 // Open-Meteo needs no API key.
 builder.Services.AddHostedService<WeatherCollectionService>();
 
+// Demonstration farms only. Off unless Simulation__Enabled=true. The XDB layer
+// re-checks farm.is_simulated on every insert, so enabling this can never write
+// a generated row to a real farm or send a hardware command.
+builder.Services.AddSingleton(sp => new AgroFlow.Business.SimulationController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for simulated farms.")));
+builder.Services.AddHostedService<SimulationService>();
+
 // FAO-56 insight engine (migration 0027): a full pass just after midnight SAST,
 // and the act_now checks every 15 minutes.
 // The controller is a singleton holding only a connection string (DB/XDB/Controller
@@ -202,6 +212,22 @@ builder.Services.AddSingleton(sp => new AgroFlow.Business.Fao56EngineController(
     sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
         ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for the FAO-56 engine.")));
 builder.Services.AddHostedService<Fao56EngineService>();
+
+// Tank and pH records use the same DB / XDB / Controller structure as the
+// irrigation engine. The monitor owns no estimate state: every pass derives it
+// from refill records and pump runtime, so restarts cannot change the answer.
+builder.Services.AddSingleton(sp => new AgroFlow.Business.TankPhController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for tank tracking.")));
+builder.Services.AddSingleton<TankLowMonitorService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TankLowMonitorService>());
+
+// Rule-based soil moisture fault checks (no machine learning). Off unless
+// FaultChecks__Enabled=true.
+builder.Services.AddSingleton(sp => new AgroFlow.Business.MoistureFaultController(
+    sp.GetRequiredService<IConfiguration>().GetConnectionString("Supabase")
+        ?? throw new InvalidOperationException("Missing ConnectionStrings:Supabase for fault checks.")));
+builder.Services.AddHostedService<MoistureFaultService>();
 
 // Turns `preparing` report_request rows (0034) into PDFs and sends them.
 // A background queue because rendering can time out a phone on rural data, and
@@ -340,6 +366,7 @@ app.MapAdminRequestEndpoints();
 app.MapHandlingEndpoints();
 app.MapManualLogEndpoints();
 app.MapTodayEndpoints();
+app.MapTankPhEndpoints();
 app.MapZoneSetupEndpoints();
 app.MapRecommendationEndpoints();
 app.MapFarmZoneEndpoints();

@@ -19,9 +19,11 @@ public class AdminOnlyFilter : IEndpointFilter
         var roles = services.GetService<IProfileRoles>() ?? new DbProfileRoles(services.GetRequiredService<NpgsqlDataSource>());
         var role = await roles.RoleOfAsync(userGuid, context.HttpContext.RequestAborted);
 
-        if (role != "admin")
+        // Staff only (see StaffRoles). A farmer's valid login is refused here as well as in
+        // the console, so calling the API directly gets them nothing.
+        if (!StaffRoles.IsStaff(role))
         {
-            return Results.Json(new { error = "Admin role required." }, statusCode: StatusCodes.Status403Forbidden);
+            return Results.Json(new { error = StaffRoles.StaffOnlyMessage }, statusCode: StatusCodes.Status403Forbidden);
         }
 
         return await next(context);

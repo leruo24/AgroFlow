@@ -74,8 +74,8 @@ test("public hardware story is usable and does not block the rest of the landing
   );
   expect(hasHorizontalOverflow).toBe(false);
 
-  await page.getByRole("button", { name: "Admin console" }).first().click();
-  await expect(page).toHaveURL(/#\/login$/);
+  await page.getByRole("link", { name: "Staff sign-in" }).first().click();
+  await expect(page).toHaveURL(/#\/admin$/);
   await expect(page.getByRole("heading", { name: "AgroFlow" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   expect(errors).toEqual([]);
