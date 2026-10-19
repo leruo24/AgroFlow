@@ -3,7 +3,7 @@ import { describeEvent } from '../eventText';
 import { flowRateFromBottle, plantedWeeksAgo } from '../setupHelpers';
 
 describe('Finish setup arithmetic (item 6)', () => {
-  it('turns seconds to fill a 500 mL bottle into litres a minute', () => {
+  it('turns seconds to fill the marked flow-rate test bottle into litres a minute', () => {
     expect(flowRateFromBottle(15)).toBe(2);   // 0.5 / 15 x 60
     expect(flowRateFromBottle(30)).toBe(1);
     expect(flowRateFromBottle(7)).toBe(4.29);

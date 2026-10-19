@@ -1,6 +1,9 @@
 import { Platform, StyleSheet } from 'react-native';
 import { Radius, Type, type AppColors } from '@/constants/colors';
 
+export const FLOATING_TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 80 : 72;
+export const FLOATING_TAB_BAR_MARGIN_BOTTOM = Platform.OS === 'ios' ? 8 : 12;
+
 // The tab icon wrapper, the same for all five tabs. No theme dependency, so a plain
 // constant instead of a colors(...) factory.
 export const tabsLayoutStyles = StyleSheet.create({
@@ -17,21 +20,29 @@ export function createTabsLayoutStyles(colors: AppColors) {
     // by the corners and looks unfinished. No `overflow: 'hidden'`, which would clip the
     // shadow on iOS.
     tabBar: {
-      height: Platform.OS === 'ios' ? 82 : 72,
+      // Browsers draw the label taller than Android does, so web needs a little more room or the
+      // descenders ("g", "y") are cut off.
+      height: FLOATING_TAB_BAR_HEIGHT,
       marginHorizontal: 16,
-      marginBottom: Platform.OS === 'ios' ? 8 : 12,
+      marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM,
       paddingTop: 8,
-      paddingBottom: Platform.OS === 'ios' ? 15 : 8,
+      paddingBottom: Platform.OS === 'ios' ? 15 : Platform.OS === 'web' ? 10 : 8,
       borderRadius: Radius.md,
       position: 'absolute',
       backgroundColor: colors.tabBarSurface,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.divider,
-      shadowColor: colors.black,
-      shadowOpacity: 0.12,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 8,
+      // react-native-web only supports boxShadow; the phones keep shadow* and elevation.
+      ...Platform.select({
+        web: { boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.12)' },
+        default: {
+          shadowColor: colors.black,
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 8,
+        },
+      }),
     },
     badge: {
       fontSize: Type.label,

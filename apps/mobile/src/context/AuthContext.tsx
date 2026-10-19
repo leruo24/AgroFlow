@@ -18,9 +18,17 @@ import {
   supabase,
 } from '@/lib/supabase';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import { isNetworkError } from '@/lib/connectivity';
+import { clearCacheFor, setCacheUser } from '@/lib/offlineCache';
+import { flushQueue, setQueueUser } from '@/lib/offlineQueue';
+
 import {
   confirmPasswordChanged,
+  saveLanguagePreference,
 } from '@/services/agroFlowApi';
+import { getLanguage } from '@/i18n';
 
 import {
   AuthUser,
@@ -61,6 +69,25 @@ type AuthContextType = {
   clearMustChangePassword:
     () => Promise<void>;
 };
+
+/* The session supabase-js saved on this phone, read directly. Used only when the login could not
+ * be refreshed for lack of a connection: supabase-js keeps the session in storage then but
+ * getSession() answers null, which would send an offline farmer to the sign-in screen. With it,
+ * they stay signed in and see the copies saved on the phone (read-only until they are back). */
+async function readStoredSession(): Promise<Session | null> {
+  try {
+    const key = (supabase.auth as unknown as { storageKey?: string }).storageKey;
+    if (!key) return null;
+    const raw = Platform.OS === 'web'
+      ? (typeof window !== 'undefined' ? window.localStorage.getItem(key) : null)
+      : await AsyncStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Session;
+    return parsed?.user?.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const AuthContext =
   createContext<
@@ -198,15 +225,21 @@ export function AuthProvider({
           error
         );
 
+        // No connection is not the same as signed out: keep the farmer on the stored session.
+        const stored =
+          isNetworkError(error) ? await readStoredSession() : null;
+
         if (
           isMounted
         ) {
           setSession(
-            null
+            stored
           );
 
           setUser(
-            null
+            stored
+              ? mapSupabaseUser(stored.user)
+              : null
           );
         }
       } finally {
@@ -323,6 +356,11 @@ export function AuthProvider({
   }
 
   async function signOut() {
+    // This farmer's saved copies leave the phone with them. Their unsent refills and soil
+    // checks stay, under their own name, for their next sign-in.
+    if (user?.id) await clearCacheFor(user.id);
+    await setQueueUser(null);
+
     await logoutUser();
 
     // The raindrop helper greets once per login; clearing the flag here means the next farmer
@@ -341,6 +379,16 @@ export function AuthProvider({
       false
     );
   }
+
+  // Whose offline copies and queue to use. Sends anything waiting once the farmer is known.
+  const userId = user?.id ?? null;
+  useEffect(() => {
+    setCacheUser(userId);
+    if (!userId) return;
+    void setQueueUser(userId).then(() => flushQueue()).catch(() => undefined);
+    // The language chosen on this phone, for this farmer's Telegram messages.
+    void saveLanguagePreference(getLanguage()).catch(() => undefined);
+  }, [userId]);
 
   const accessToken =
     session

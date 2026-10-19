@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <!-- The HTML shell for the web build only (web.output "single" in app.json). It never runs
+         on Android or iOS. Expo fills in the language and title placeholders and adds the
+         theme-color and description tags from app.json's web section. Expo replaces only the
+         first copy of each placeholder, so they must not appear anywhere else in this file. -->
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- viewport-fit=cover lets the app reach under the iPhone's notch and home indicator when
+         it runs from the Home Screen. maximum-scale stops iOS zooming the page when a text
+         input is focused. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+    <title>%WEB_TITLE%</title>
+
+    <!-- Installable on a Home Screen. iOS ignores the manifest's display mode and reads the
+         apple-* tags instead; without them the icon opens Safari with its address bar. -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="AgroFlow" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#182018" />
+
+    <!-- The react-native-web style reset, the same as Expo's default template: full-height
+         body and root, and no body scrolling, so the native ScrollViews scroll the way they do
+         on a phone. -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        overflow: hidden;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+
+    <!-- Touch screens: every control is at least 44 px (Apple HIG / WCAG 2.5.5). On Android the
+         same controls use hitSlop, which a browser ignores. "html" in front outranks
+         react-native-web's own reset (min-height: 0). -->
+    <style>
+      @media (pointer: coarse) {
+        html [role="button"], html [role="link"], html [role="tab"], html [role="switch"],
+        html [role="checkbox"], html [role="radio"], html a[href], html button,
+        html input[type="checkbox"] {
+          min-width: 44px;
+          min-height: 44px;
+        }
+      }
+    </style>
+
+    <!-- The page colour before React paints and in the overscroll area. Light: the loading
+         video's own background (#F9FBF8), so the first paint, the poster and the video match;
+         dark: the app's dark background (constants/colors.ts). -->
+    <style>
+      body {
+        background-color: #f9fbf8;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: #182018;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>You need to enable JavaScript to run AgroFlow.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

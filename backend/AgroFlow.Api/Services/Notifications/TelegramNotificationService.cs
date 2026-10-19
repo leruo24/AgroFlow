@@ -148,8 +148,10 @@ public sealed class TelegramNotificationService : INotificationService
     {
         try
         {
+            // In each member's own language (BotText); TankPhRules.LowTankMessage stays the
+            // English alert text in the app.
             await BroadcastToFarmAsync(
-                farmId, TankPhRules.LowTankMessage, alertsOnly: true, cancellationToken);
+                farmId, lang => BotText.Get(lang, "tank.low"), alertsOnly: true, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -185,37 +187,32 @@ public sealed class TelegramNotificationService : INotificationService
 
             // Each reason means something different for the farmer to do, so the message
             // says why nothing happened.
-            var (cause, action) = reason switch
+            var reasonKey = reason switch
             {
-                ZoneCriticalReason.ManualMode => (
-                    "This zone is set to manual, so AgroFlow has not watered it.",
-                    "Start it from the app, or switch the zone back to automatic."),
-
-                ZoneCriticalReason.NoDevice => (
-                    "There is no working device on this zone, so AgroFlow cannot water it.",
-                    "Please water it yourself and tell us the device needs attention."),
-
-                _ => (
-                    "AgroFlow asked the pump to water this zone and it did not respond.",
-                    "Please check the pump, and water the zone yourself if you can."),
+                ZoneCriticalReason.ManualMode => "zone.manual",
+                ZoneCriticalReason.NoDevice => "zone.nodevice",
+                _ => "zone.pump",
             };
 
-            var message = Compose(
-                "This zone needs water",
+            var explanation = AlertExplanations.ZoneCritical(zone.ZoneName, moisture, reason);
+            var whyId = await _explanations.SaveAsync(zone.FarmId, zoneId, "zone_critical", explanation, cancellationToken);
+
+            // Written in each recipient's language (BotText); the Why summary is English for now.
+            string MessageFor(string lang) => Compose(
+                BotText.Get(lang, "zone.title"),
                 "",
-                $"Farm: {zone.FarmName}",
-                $"Zone: {zone.ZoneName}",
+                BotText.Get(lang, "farm", ("name", zone.FarmName)),
+                BotText.Get(lang, "zone", ("name", zone.ZoneName)),
                 // Never a %: the sensor's wet/dry setup may not be done.
-                $"Soil sensor reading: {moisture:0.#}",
+                BotText.Get(lang, "zone.reading", ("value", moisture.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))),
                 "",
-                cause,
+                BotText.Get(lang, reasonKey + ".cause"),
                 "",
-                action);
+                BotText.Get(lang, reasonKey + ".action"),
+                "",
+                BotText.Get(lang, "why", ("summary", explanation.Summary)));
 
-            var (withWhy, whyId) = await WithWhyAsync(message, zone.FarmId, zoneId, "zone_critical",
-                AlertExplanations.ZoneCritical(zone.ZoneName, moisture, reason), cancellationToken);
-
-            await BroadcastToFarmAsync(zone.FarmId, withWhy, alertsOnly: true, cancellationToken, whyId);
+            await BroadcastToFarmAsync(zone.FarmId, MessageFor, alertsOnly: true, cancellationToken, whyId);
         }
         catch (Exception ex)
         {
@@ -233,58 +230,34 @@ public sealed class TelegramNotificationService : INotificationService
         try
         {
             var when = DescribeDay(notification.Date);
-
-            var lines = notification.Kind switch
+            var prefix = notification.Kind switch
             {
-                WeatherAlertKind.HeavyRain => new[]
-                {
-                    "Heavy rain expected",
-                    "",
-                    $"Farm: {notification.FarmName}",
-                    $"When: {when}",
-                    $"Expected rainfall: {notification.Value:0.#} mm",
-                    "",
-                    "AgroFlow does not pause automatic watering for rain yet, so zones on",
-                    "automatic will still water on their own soil moisture readings.",
-                    "",
-                    "If you do not want that, switch those zones to manual in the app",
-                    "before then. Check your drainage and anything that could wash away.",
-                },
-
-                WeatherAlertKind.Frost => new[]
-                {
-                    "Frost expected",
-                    "",
-                    $"Farm: {notification.FarmName}",
-                    $"When: {when}",
-                    $"Expected low: {notification.Value:0.#} C",
-                    "",
-                    "Frost can damage or kill young plants overnight.",
-                    "",
-                    "Cover what you can, and avoid watering late in the day before it -",
-                    "wet soil overnight makes frost damage worse.",
-                },
-
-                _ => new[]
-                {
-                    "Heat expected",
-                    "",
-                    $"Farm: {notification.FarmName}",
-                    $"When: {when}",
-                    $"Expected high: {notification.Value:0.#} C",
-                    "",
-                    "Crops lose a lot of water on days like this and can scorch.",
-                    "",
-                    "Water early in the morning rather than in the heat of the day, and",
-                    "check on young or shallow-rooted zones.",
-                },
+                WeatherAlertKind.HeavyRain => "rain",
+                WeatherAlertKind.Frost => "frost",
+                _ => "heat",
             };
+            var value = notification.Value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 
-            var (withWhy, whyId) = await WithWhyAsync(Compose(lines), farmId, null,
-                "weather_" + notification.Kind.ToString().ToLowerInvariant(),
-                AlertExplanations.Weather(notification, _weatherOptions), cancellationToken);
+            var explanation = AlertExplanations.Weather(notification, _weatherOptions);
+            var whyId = await _explanations.SaveAsync(farmId, null,
+                "weather_" + notification.Kind.ToString().ToLowerInvariant(), explanation, cancellationToken);
 
-            await BroadcastToFarmAsync(farmId, withWhy, alertsOnly: true, cancellationToken, whyId);
+            // In each recipient's language (BotText). The day ("tomorrow", "Monday") and the Why
+            // summary are still English.
+            string MessageFor(string lang) => Compose(
+                BotText.Get(lang, prefix + ".title"),
+                "",
+                BotText.Get(lang, "farm", ("name", notification.FarmName)),
+                BotText.Get(lang, "when", ("when", when)),
+                BotText.Get(lang, prefix + ".value", ("value", value)),
+                "",
+                BotText.Get(lang, prefix + ".body"),
+                "",
+                BotText.Get(lang, prefix + ".action"),
+                "",
+                BotText.Get(lang, "why", ("summary", explanation.Summary)));
+
+            await BroadcastToFarmAsync(farmId, MessageFor, alertsOnly: true, cancellationToken, whyId);
         }
         catch (Exception ex)
         {
@@ -613,16 +586,39 @@ public sealed class TelegramNotificationService : INotificationService
 
     // Everyone on the farm (the owner and every farm_member) who has linked a chat and
     // has alerts on: equipment failing concerns all of them.
-    private async Task BroadcastToFarmAsync(
+    private Task BroadcastToFarmAsync(
         long farmId,
         string message,
         bool alertsOnly,
         CancellationToken cancellationToken,
+        long? whyExplanationId = null) =>
+        BroadcastToFarmAsync(farmId, _ => message, alertsOnly, cancellationToken, whyExplanationId);
+
+    // True once profile.language exists (0049). Until then everyone gets English. Only a yes is
+    // remembered, so applying the migration takes effect without a restart.
+    private static bool _languageColumnSeen;
+
+    private static async Task<bool> HasLanguageColumnAsync(NpgsqlConnection connection, CancellationToken ct)
+    {
+        if (_languageColumnSeen) return true;
+        await using var check = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'profile' and column_name = 'language')",
+            connection);
+        _languageColumnSeen = await check.ExecuteScalarAsync(ct) is true;
+        return _languageColumnSeen;
+    }
+
+    // The same, with the message written in each recipient's language.
+    private async Task BroadcastToFarmAsync(
+        long farmId,
+        Func<string, string> messageFor,
+        bool alertsOnly,
+        CancellationToken cancellationToken,
         long? whyExplanationId = null)
     {
-        const string sql =
+        const string sqlTemplate =
             """
-            select distinct p.telegram_chat_id
+            select distinct p.telegram_chat_id, {language}
               from profile p
              where p.telegram_chat_id is not null
                and (not $2 or p.telegram_alerts_enabled)
@@ -632,11 +628,14 @@ public sealed class TelegramNotificationService : INotificationService
                )
             """;
 
-        var chatIds = new List<long>();
+        var chatIds = new List<(long ChatId, string Language)>();
 
         await using (var connection = await _dataSource.OpenConnectionAsync(cancellationToken))
         {
-            await using var command = new NpgsqlCommand(sql, connection);
+            var language = await HasLanguageColumnAsync(connection, cancellationToken)
+                ? "coalesce(p.language, 'en')"
+                : "'en'";
+            await using var command = new NpgsqlCommand(sqlTemplate.Replace("{language}", language), connection);
             command.Parameters.AddWithValue(farmId);
             command.Parameters.AddWithValue(alertsOnly);
 
@@ -644,7 +643,7 @@ public sealed class TelegramNotificationService : INotificationService
 
             while (await reader.ReadAsync(cancellationToken))
             {
-                chatIds.Add(reader.GetInt64(0));
+                chatIds.Add((reader.GetInt64(0), reader.GetString(1)));
             }
         }
 
@@ -656,9 +655,9 @@ public sealed class TelegramNotificationService : INotificationService
 
         // One by one on purpose: Telegram allows about 30 bot messages a second, and a farm
         // has only a few members, so sending in parallel gains nothing and risks 429s.
-        foreach (var chatId in chatIds)
+        foreach (var (chatId, lang) in chatIds)
         {
-            await _client.SendMessageAsync(chatId, message, whyExplanationId, cancellationToken);
+            await _client.SendMessageAsync(chatId, messageFor(BotText.Normalise(lang)), whyExplanationId, cancellationToken);
         }
     }
 

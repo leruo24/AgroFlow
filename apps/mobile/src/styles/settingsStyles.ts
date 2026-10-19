@@ -113,6 +113,12 @@ export function createSettingsStyles(colors: AppColors) {
       fontWeight: '600',
       color: colors.text,
     },
+    // Unlink Telegram stops every message until the farmer connects again, so it reads as a warning.
+    dangerText: {
+      fontSize: Type.body,
+      fontWeight: '600',
+      color: colors.error,
+    },
     arrow: {
       fontSize: Type.title,
       color: colors.text,

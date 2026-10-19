@@ -107,9 +107,9 @@ describe('explanations read from Supabase', () => {
 describe('Drip', () => {
   it("carries the explanation of the insight it chose", () => {
     const decision = decideMessage(
-      [{ zoneId: '7', insightType: 'water_now', severity: 'act_now', message: 'Water Tub 1 now.', explanation }],
+      [{ zoneId: '7', insightType: 'water_now', severity: 'act_now', message: 'Water Zone 1 now.', explanation }],
       0,
-      [{ id: '7', name: 'Tub 1' } as never]
+      [{ id: '7', name: 'Zone 1' } as never]
     );
     expect(decision.explanation).toBe(explanation);
   });
@@ -126,7 +126,7 @@ describe('ZoneInsightsCard', () => {
       day: '2026-10-06',
       growth: null,
       insights: [
-        { insightType: 'water_now', severity: 'act_now', message: 'Water Tub 1 now.', explanation },
+        { insightType: 'water_now', severity: 'act_now', message: 'Water Zone 1 now.', explanation },
         { insightType: 'hot_days', severity: 'heads_up', message: 'Hot days ahead.', explanation },
         { insightType: 'old_row', severity: 'info', message: 'Written before explanations.' },
       ],
@@ -137,7 +137,7 @@ describe('ZoneInsightsCard', () => {
 
     await render(<ZoneInsightsCard zoneId={7} />);
 
-    await waitFor(() => expect(screen.getByText('Water Tub 1 now.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Water Zone 1 now.')).toBeTruthy());
 
     // Two insights with explanations + the confidence badge = three links; the older row
     // without one gets none.

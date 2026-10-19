@@ -21,6 +21,7 @@ public record ZoneSettingsRequest(
 
 public record ManualIrrigationRequest(string Command, int? DurationSeconds);
 public record ProfileUpdateRequest(string Name, string? Phone);
+public record LanguageRequest(string? Language);
 
 public record FarmerServiceRequest(
     string RequestType,
@@ -43,6 +44,7 @@ public static class FarmerEndpoints
         group.MapGet("/dashboard", GetDashboardAsync);
         group.MapGet("/weather/current", GetCurrentWeatherAsync);
         group.MapPut("/profile", UpdateProfileAsync);
+        group.MapPut("/language", UpdateLanguageAsync);
         group.MapPost("/password-changed", ClearMustChangePasswordAsync);
 
         group.MapPost("/requests", CreateFarmerServiceRequestAsync);
@@ -299,6 +301,36 @@ public static class FarmerEndpoints
         command.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)request.Phone?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue(userId);
         return await command.ExecuteScalarAsync() is null ? Results.NotFound() : Results.NoContent();
+    }
+
+    // Settings -> Language. Only the caller's own row; the Telegram messages they get then use
+    // it (BotText). Needs migration 0049; before that it says so instead of failing.
+    private static async Task<IResult> UpdateLanguageAsync(
+        LanguageRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+        var language = request.Language?.Trim().ToLowerInvariant();
+        if (language is null || !AgroFlow.Api.Services.Notifications.BotText.Languages.Contains(language))
+        {
+            return Results.BadRequest(new { error = "Choose English (en), Afrikaans (af) or Setswana (tn)." });
+        }
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using (var check = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'profile' and column_name = 'language')",
+            connection))
+        {
+            if (await check.ExecuteScalarAsync(cancellationToken) is not true)
+            {
+                return Results.Conflict(new { error = "Saving the language needs database migration 0049, which has not been applied yet." });
+            }
+        }
+
+        await using var command = new NpgsqlCommand(
+            "update profile set language = $1 where id = $2 returning id", connection);
+        command.Parameters.AddWithValue(language);
+        command.Parameters.AddWithValue(userId);
+        return await command.ExecuteScalarAsync(cancellationToken) is null ? Results.NotFound() : Results.NoContent();
     }
 
     // The app calls this right after a farmer sets their own password, which takes

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View, Platform } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { BlurSheet } from '@/components/BlurSheet';
 import { createTodayStyles } from '@/styles/todayStyles';
@@ -26,7 +26,7 @@ export function ViewSwitch({ value, onChange }: { value: DismissView; onChange: 
     <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel="Show">
       {options.map(([v, label]) => (
         <Pressable key={v} accessibilityRole="radio" accessibilityState={{ selected: value === v }}
-          onPress={() => onChange(v)} style={[styles.choice, { minHeight: 36, minWidth: 0 }, value === v && styles.choiceSelected]}>
+          onPress={() => onChange(v)} style={[styles.choice, { minHeight: Platform.OS === 'web' ? 44 : 36, minWidth: 0 }, value === v && styles.choiceSelected]}>
           <Text style={styles.choiceText}>{label}</Text>
         </Pressable>
       ))}

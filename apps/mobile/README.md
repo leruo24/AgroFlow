@@ -41,6 +41,21 @@ This command will move the starter code to the **app-example** directory and cre
 - If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
 - Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
 
+## Web app (for iPhone users)
+
+The same code builds a web app that farmers on an iPhone add to their Home Screen (Share,
+then "Add to Home Screen"). It uses the same Supabase project, accounts and API as the APK.
+
+- Build: `npx expo export --platform web` (output in `dist/`). `web.output` is `single`, so
+  every path loads `index.html` and the router shows the right screen; `vercel.json` rewrites
+  every path to it.
+- The HTML shell is `public/index.html`; the Home Screen name, colours and icons are in
+  `public/manifest.json` and `public/icons/` (the 180x180 `apple-touch-icon.png` is for iOS).
+- Variables: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+  `EXPO_PUBLIC_AGROFLOW_API_BASE`. They are built into the public bundle, so they must never
+  hold a secret.
+- The API must allow the web app's origin (Railway `Cors__AllowedOrigins__N`).
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

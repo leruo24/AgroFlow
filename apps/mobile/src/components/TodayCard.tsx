@@ -6,8 +6,11 @@ import { createTodayStyles } from '@/styles/todayStyles';
 import { WhyLink } from '@/components/WhySheet';
 import { ManualLogSheet } from '@/components/ManualLogSheet';
 import type { TodayZone } from '@/services/agroFlowApi';
+import { useI18n, type TranslationKey } from '@/i18n';
 
-const LEVEL_LABEL = { high: 'High', medium: 'Medium', low: 'Low' } as const;
+const LEVEL_LABEL: Record<'high' | 'medium' | 'low', TranslationKey> = {
+  high: 'today.confHigh', medium: 'today.confMedium', low: 'today.confLow',
+};
 
 type Props = {
   zone: TodayZone;
@@ -18,6 +21,7 @@ type Props = {
 // The wording comes from the server; nothing is calculated on the phone.
 export function TodayCard({ zone, onLogged }: Props) {
   const { colors } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
   const [sheet, setSheet] = useState<'water' | 'feel' | null>(null);
 
@@ -33,28 +37,28 @@ export function TodayCard({ zone, onLogged }: Props) {
       {zone.confidence && (
         <View
           style={styles.badgeRow}
-          accessibilityLabel={`Advice confidence: ${LEVEL_LABEL[zone.confidence.level]}. ${zone.confidence.reason}`}
+          accessibilityLabel={t('today.confidenceA11y', { level: t(LEVEL_LABEL[zone.confidence.level]), reason: zone.confidence.reason })}
         >
-          <Text style={styles.badge}>{LEVEL_LABEL[zone.confidence.level]} confidence</Text>
+          <Text style={styles.badge}>{t(LEVEL_LABEL[zone.confidence.level])}</Text>
           <WhyLink explanation={zone.confidenceExplanation} compact />
         </View>
       )}
 
       <View style={styles.buttons}>
         <Pressable accessibilityRole="button" onPress={() => setSheet('water')} style={styles.button}>
-          <Text style={styles.buttonText}>I watered</Text>
+          <Text style={styles.buttonText}>{t('today.iWatered')}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={() => setSheet('feel')} style={styles.ghost}>
-          <Text style={styles.ghostText}>How does the soil feel?</Text>
+          <Text style={styles.ghostText}>{t('today.soilFeel')}</Text>
         </Pressable>
         {zone.nextStep && (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Finish setup for ${zone.name}`}
+            accessibilityLabel={t('today.finishSetupFor', { zone: zone.name })}
             onPress={() => router.push({ pathname: '/zone-setup', params: { zoneId: String(zone.zoneId) } })}
             style={styles.ghost}
           >
-            <Text style={styles.ghostText}>Finish setup</Text>
+            <Text style={styles.ghostText}>{t('today.finishSetup')}</Text>
           </Pressable>
         )}
       </View>

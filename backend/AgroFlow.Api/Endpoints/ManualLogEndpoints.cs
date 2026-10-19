@@ -109,8 +109,21 @@ public static class ManualLogEndpoints
             return Results.Conflict(new { error = "Soil checks need database migration 0042, which has not been applied yet." });
         }
 
+        // The phone keeps a check made offline and sends it later with its own time (`at`); the
+        // same zone, feel, time and person is the same check, so a resend is stored once.
         await using var cmd = new NpgsqlCommand(
-            "insert into soil_feel_check (zone_id, feel, checked_at, profile_id) values ($1, $2, $3, $4) returning id", connection);
+            """
+            with existing as (
+                select id from soil_feel_check
+                 where zone_id = $1 and feel = $2 and checked_at = $3 and profile_id = $4
+                 limit 1
+            ), inserted as (
+                insert into soil_feel_check (zone_id, feel, checked_at, profile_id)
+                select $1, $2, $3, $4 where not exists (select 1 from existing)
+                returning id
+            )
+            select id from inserted union all select id from existing limit 1
+            """, connection);
         cmd.Parameters.AddWithValue(zoneId);
         cmd.Parameters.AddWithValue(body.Feel!.Trim().ToLowerInvariant());
         cmd.Parameters.AddWithValue(NpgsqlDbType.TimestampTz, (body.At ?? now).ToUniversalTime());

@@ -20,6 +20,7 @@ import {
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { WebLoadingVideo } from '@/components/WebLoadingVideo';
 
 // The video's own background colour (see the note above).
 export const LOADING_BACKGROUND = '#FFFFFF';
@@ -73,8 +74,9 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
 
   const player = useVideoPlayer(
     // Not created at all under reduced motion. null until the preference is known, so nothing
-    // plays before we know whether it should.
-    reduceMotion === false ? require('../../assets/media/agroflow-loading.mp4') : null,
+    // plays before we know whether it should. Not used on web, which plays the video through
+    // WebLoadingVideo instead (see that file for why).
+    reduceMotion === false && Platform.OS !== 'web' ? require('../../assets/media/agroflow-loading.mp4') : null,
     (p) => {
       p.loop = false;
       p.muted = true;
@@ -97,6 +99,12 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
       hideNativeSplash();
       const timer = setTimeout(() => setVideoDone(true), REDUCED_MOTION_HOLD_MS);
       return () => clearTimeout(timer);
+    }
+
+    if (Platform.OS === 'web') {
+      // WebLoadingVideo says when the video has ended or will not play.
+      hideNativeSplash();
+      return;
     }
 
     if (!player) {
@@ -139,6 +147,8 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
     };
   }, [player, reduceMotion, hideNativeSplash]);
 
+  const markVideoDone = useCallback(() => setVideoDone(true), []);
+
   const dismiss = useCallback(() => {
     if (dismissed.current) return;
     dismissed.current = true;
@@ -180,8 +190,8 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
         // Web only: `fixed` keeps the overlay over the viewport so it cannot scroll away. It is not
         // in React Native's ViewStyle type, which is why it is cast here.
         Platform.OS === 'web' ? ({ position: 'fixed' } as object) : null,
+        { pointerEvents: 'auto' },
       ]}
-      pointerEvents="auto"
       accessibilityRole="progressbar"
       accessibilityLabel="AgroFlow is starting"
     >
@@ -194,7 +204,12 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
         }}
         accessibilityLabel="Skip the opening animation"
       >
-        {reduceMotion === false && player ? (
+        {Platform.OS === 'web' ? (
+          <WebLoadingVideo
+            mode={reduceMotion === null ? 'pending' : reduceMotion ? 'still' : 'video'}
+            onDone={markVideoDone}
+          />
+        ) : reduceMotion === false && player ? (
           <VideoView
             style={StyleSheet.absoluteFill}
             player={player}

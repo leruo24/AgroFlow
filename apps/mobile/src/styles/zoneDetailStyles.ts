@@ -271,6 +271,18 @@ content: {
     stopButton: {
       backgroundColor: colors.error,
     },
+    // Offline: watering needs the kit to hear the command now, so the button is greyed out
+    // and the reason is written under it (never a silent dead button).
+    primaryButtonDisabled: {
+      backgroundColor: colors.textMuted,
+    },
+    offlineNote: {
+      marginTop: Spacing.two,
+      fontSize: Type.body,
+      lineHeight: 22,
+      fontWeight: '600',
+      color: colors.warning,
+    },
     buttonRow: {
       marginTop: 8,
       flexDirection: 'row',

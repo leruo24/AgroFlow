@@ -6,6 +6,7 @@ import { AccountAvatar } from './AccountAvatar';
 import { HelpButton } from './HelpButton';
 import type { HelpScreen } from '@/constants/helpContent';
 import { sharedLayout } from '@/styles/shared';
+import { OfflineBanner } from './OfflineBanner';
 
 // `help` is optional, so adding page help to a screen is a one-word change. The button sits
 // left of the account avatar and disappears when page help is turned off in Settings.
@@ -20,13 +21,17 @@ export function ScreenHeader({
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => createScreenHeaderStyles(colors), [colors]);
-  return <View style={styles.container}>
-    <View style={styles.titleColumn}><Text accessibilityRole="header" style={styles.title}>{title}</Text>
-      {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+  // The offline banner sits under every screen's title, so it is on every screen with a header.
+  return <>
+    <View style={styles.container}>
+      <View style={styles.titleColumn}><Text accessibilityRole="header" style={styles.title}>{title}</Text>
+        {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+      </View>
+      <View style={sharedLayout.inlineRow}>
+        {help && <HelpButton screen={help} />}
+        <AccountAvatar />
+      </View>
     </View>
-    <View style={sharedLayout.inlineRow}>
-      {help && <HelpButton screen={help} />}
-      <AccountAvatar />
-    </View>
-  </View>;
+    <OfflineBanner />
+  </>;
 }

@@ -8,6 +8,7 @@ import { DataState } from '@/components/DataState';
 import { useAgroFlow } from '@/context/AgroFlowContext';
 import { useTheme } from '@/context/ThemeContext';
 import { createScreenStyles } from '@/styles/screenStyles';
+import { useI18n } from '@/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { WhyLink } from '@/components/WhySheet';
 import { fetchAlertExplanations } from '@/services/insightsService';
@@ -22,6 +23,7 @@ import { activeDismissal, alertKey, dismissedLine, type DismissView } from '@/li
 import { DismissButton, DismissNoteSheet, UndoBar, ViewSwitch } from '@/components/DismissControls';
 
 export default function AlertsScreen() {
+  const { t } = useI18n();
   const { farm, alerts, markAlertAsRead, isZonesLoading, zonesError, refreshZones, isFarmLoading, farmError, refreshFarms } = useAgroFlow();
   const { colors } = useTheme();
   const styles = createScreenStyles(colors);
@@ -69,29 +71,35 @@ export default function AlertsScreen() {
   const history = dismissals.filter(d => d.kind === 'alert');
 
   return <SafeAreaView style={styles.page} edges={['top']}><ScrollView contentContainerStyle={styles.content}>
-    <ScreenHeader title="Alerts" subtitle={farm ? farm.name : 'Stay informed about your farm.'} help="alerts" />
+    <ScreenHeader title={t('alerts.title')} subtitle={farm ? farm.name : t('alerts.subtitle')} help="alerts" />
     <View style={styles.summary}>{[['Total', alerts.length], ['Unread', alerts.filter(a => !a.read).length]].map(([label, value]) => <View key={label} style={styles.stat}><Text style={styles.statValue}>{loading || error ? '—' : value}</Text><Text style={styles.caption}>{label}</Text></View>)}</View>
     <ViewSwitch value={view} onChange={setView} />
     <UndoBar message={undo?.message ?? null} onUndo={() => undo && restore(undo.id)} onDone={() => setUndo(null)} />
     {problem ? <Text style={[styles.caption, { color: colors.error }]} accessibilityLiveRegion="polite">{problem}</Text> : null}
-    {view !== 'dismissed' && (loading ? <DataState kind="loading" title="Loading alerts" />
-      : error ? <DataState kind="error" title="Unable to load alerts" onRetry={farmError ? refreshFarms : refreshZones} />
-      : visible.length === 0 ? <DataState kind="empty" title="No alerts right now" description="New alerts for this farm will appear here." />
+    {view !== 'dismissed' && (loading ? <DataState kind="loading" title={t('alerts.loading')} />
+      : error ? <DataState kind="error" title={t('alerts.unavailable')} onRetry={farmError ? refreshFarms : refreshZones} />
+      : visible.length === 0 ? <DataState kind="empty" title={t('alerts.none')} description={t('alerts.noneBody')} />
       : visible.map(alert => {
         const severe = /critical|error|danger/i.test(alert.type);
         const Icon = severe ? AlertCircle : Bell;
         const key = alertKey(alert.id);
-        return <TouchableOpacity key={alert.id} accessibilityRole="button" accessibilityLabel={alert.title + (alert.read ? ', read' : ', unread') + (alert.zoneId ? ', open zone' : ', mark read')} style={styles.row} onPress={() => {
+        const open = () => {
           if (!alert.read) markAlertAsRead(alert.id);
           if (alert.zoneId) router.push({ pathname: '/zone/[id]', params: { id: alert.zoneId } });
-        }}>
-          <View style={styles.rowTop}><Icon size={21} color={severe ? colors.error : colors.textSecondary} strokeWidth={1.7} /><Text style={styles.title}>{alert.title}</Text>{!alert.read && <Text style={styles.buttonText}>Unread</Text>}{alert.zoneId && <ChevronRight size={19} color={colors.textSecondary} />}
+        };
+        // The Dismiss and Why buttons sit beside the tap areas, not inside them: a button inside
+        // a button is invalid on web and cannot be reached by a screen reader on a phone.
+        return <View key={alert.id} style={styles.row}>
+          <View style={styles.rowTop}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={alert.title + (alert.read ? ', read' : ', unread') + (alert.zoneId ? ', open zone' : ', mark read')} style={[styles.rowTop, { flex: 1 }]} onPress={open}>
+              <Icon size={21} color={severe ? colors.error : colors.textSecondary} strokeWidth={1.7} /><Text style={styles.title}>{alert.title}</Text>{!alert.read && <Text style={styles.buttonText}>Unread</Text>}{alert.zoneId && <ChevronRight size={19} color={colors.textSecondary} />}
+            </TouchableOpacity>
             {key && <DismissButton label={alert.title} onPress={() => severe ? setAsking({ key, title: alert.title }) : dismiss(key, null)} />}
           </View>
-          <Text style={styles.body}>{alert.message}</Text>
+          <TouchableOpacity accessible={false} onPress={open}><Text style={styles.body}>{alert.message}</Text></TouchableOpacity>
           <WhyLink explanation={why[alert.id]} compact />
-          <Text style={styles.caption}>{[alert.zone, formatSast(alert.timestamp) ?? 'Time unavailable'].filter(Boolean).join(' · ')}</Text>
-        </TouchableOpacity>;
+          <TouchableOpacity accessible={false} onPress={open}><Text style={styles.caption}>{[alert.zone, formatSast(alert.timestamp) ?? 'Time unavailable'].filter(Boolean).join(' · ')}</Text></TouchableOpacity>
+        </View>;
       }))}
     {view !== 'active' && <>
       <Text accessibilityRole="header" style={styles.sectionTitle}>Dismissed</Text>

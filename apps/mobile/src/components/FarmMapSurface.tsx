@@ -24,7 +24,7 @@ export default function FarmMapSurface({ latitude, longitude, zoom, onFailure }:
     }
   }
   return <View onLayout={e => setWidth(e.nativeEvent.layout.width)} style={styles.webContainer} accessibilityLabel="Farm location map. Use the zoom buttons to change scale.">
-    {tiles}<View pointerEvents="none" style={styles.pinWrapper}><MapPin size={30} color={MapChrome.pinColor} fill={MapChrome.attributionBackground} /></View>
+    {tiles}<View style={[styles.pinWrapper, { pointerEvents: 'none' }]}><MapPin size={30} color={MapChrome.pinColor} fill={MapChrome.attributionBackground} /></View>
     <Pressable accessibilityRole="link" onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }} style={styles.attribution}><Text style={styles.attributionText}>© OpenStreetMap contributors</Text></Pressable>
   </View>;
 }
