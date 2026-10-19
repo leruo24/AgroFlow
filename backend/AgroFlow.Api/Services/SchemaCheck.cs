@@ -132,6 +132,10 @@ public sealed class SchemaCheck
             "select 1 from information_schema.columns where table_name = 'sensor_reading' and column_name = 'simulated'",
             "Generated demonstration readings cannot be labelled or kept separate from real readings."),
 
+        new("0049", "column", "profile.language",
+            "select 1 from information_schema.columns where table_name = 'profile' and column_name = 'language'",
+            "The app's language choice is not saved, so every Telegram message is sent in English."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

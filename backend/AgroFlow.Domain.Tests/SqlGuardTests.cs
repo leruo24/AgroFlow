@@ -122,7 +122,8 @@ public class SqlGuardTests
         Assert.Contains("select distinct p.telegram_chat_id", broadcast);
         Assert.Contains("f.owner_id = p.id", broadcast);
         Assert.Contains("fm.farm_id = $1 and fm.profile_id = p.id", broadcast);
-        Assert.Contains("foreach (var chatId in chatIds)", broadcast);
+        // Each chat also carries its farmer's language (Part B), but every one is still sent to.
+        Assert.Contains("foreach (var (chatId, lang) in chatIds)", broadcast);
         Assert.Contains("SendMessageAsync(chatId", broadcast);
     }
 

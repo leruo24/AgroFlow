@@ -40,6 +40,13 @@ namespace AgroFlow.Business
             var error = TankPhRules.ValidateRefill(litres, waterPh, capacity);
             if (error is not null) return (null, error);
 
+            // The phone keeps a refill logged offline and sends it later with its own time. The
+            // same farm, time and litres is the same refill, so a resend is not counted twice.
+            if (db.RefillAlreadyLogged(farmId, at, litres))
+            {
+                return (new TankRefillResult { Status = db.GetTankStatus(farmId, DateTimeOffset.UtcNow)! }, null);
+            }
+
             decimal? estimated = before.LastRefillId.HasValue ? before.EstimatedUsedLitres : null;
             decimal? observed = before.LastRefillId.HasValue ? litres : null;
             db.InsertRefill(farmId, litres, waterPh, at, profileId, estimated, observed);
@@ -67,9 +74,9 @@ namespace AgroFlow.Business
             if (at > DateTimeOffset.UtcNow.AddMinutes(5)) return (null, "The measurement date cannot be in the future.");
             note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
             var error = TankPhRules.ValidateSoilPh(ph, note);
-            return error is null
-                ? (db.InsertSoilPh(zoneId, ph, at, note, profileId), null)
-                : (null, error);
+            if (error is not null) return (null, error);
+            // Same zone, time and pH as one already stored: a resend from the phone's offline queue.
+            return (db.FindSoilPh(zoneId, at, ph) ?? db.InsertSoilPh(zoneId, ph, at, note, profileId), null);
         }
 
         public IReadOnlyList<long> GetConfiguredFarmIds() => db.GetConfiguredFarmIds();

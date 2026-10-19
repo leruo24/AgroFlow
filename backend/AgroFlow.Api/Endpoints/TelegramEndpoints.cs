@@ -243,23 +243,17 @@ public static class TelegramEndpoints
     }
 
     // Unlinking clears the chat id only, so re-linking later keeps the farmer's
-    // alerts preference.
+    // alerts preference. The same service as the admin's Unlink Telegram: it also expires
+    // the farmer's unused codes and records it in the activity log.
     private static async Task<IResult> UnlinkMeAsync(
         ClaimsPrincipal user,
-        NpgsqlDataSource dataSource,
+        TelegramUnlinkService unlink,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-
-        await using var command = new NpgsqlCommand(
-            "update profile set telegram_chat_id = null where id = $1", connection);
-
-        command.Parameters.AddWithValue(userId);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-
-        return Results.NoContent();
+        var outcome = await unlink.UnlinkAsync(user, userId, cancellationToken);
+        return outcome.Status == StatusCodes.Status200OK ? Results.NoContent() : outcome.ToResult();
     }
 
     // ------------------------------------------------------------------

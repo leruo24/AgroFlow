@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
+import { useI18n } from '@/i18n';
 import { useTheme } from '@/context/ThemeContext';//contains the colors
 import {
   createTabsLayoutStyles,
@@ -38,6 +39,7 @@ function TabIcon(Icon: ComponentType<TabIconProps>) {
 }
 
 export default function TabsLayout() {//creates layout component
+  const { t } = useI18n();
   const { colors } = useTheme();
   const { alerts } = useAgroFlow();
   const themedStyles = useMemo(() => createTabsLayoutStyles(colors), [colors]);
@@ -75,7 +77,7 @@ export default function TabsLayout() {//creates layout component
       <Tabs.Screen
         name="index"//home tab connects to index.tsx
         options={{
-          title: 'Home',
+          title: t('tabs.home'),
           tabBarIcon: TabIcon(House),
         }}
       />
@@ -83,7 +85,7 @@ export default function TabsLayout() {//creates layout component
       <Tabs.Screen
         name="irrigation"
         options={{
-          title: 'Irrigation',
+          title: t('tabs.irrigation'),
           tabBarIcon: TabIcon(Droplets),
         }}
       />
@@ -91,7 +93,7 @@ export default function TabsLayout() {//creates layout component
       <Tabs.Screen
         name="alerts"
         options={{
-          title: 'Alerts',
+          title: t('tabs.alerts'),
           tabBarBadge://display unread alerts
             unreadAlerts > 0
               ? unreadAlerts
@@ -104,7 +106,7 @@ export default function TabsLayout() {//creates layout component
       <Tabs.Screen
         name="history"
         options={{
-          title: 'History',
+          title: t('tabs.history'),
           tabBarIcon: TabIcon(History),
         }}
       />
@@ -112,7 +114,7 @@ export default function TabsLayout() {//creates layout component
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: t('tabs.settings'),
           tabBarIcon: TabIcon(Settings),
         }}
       />

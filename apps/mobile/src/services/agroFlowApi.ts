@@ -5,6 +5,33 @@ import {
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import {
+  NetworkError,
+  isNetworkError,
+  noteCachedDataShown,
+  reportNetworkFailure,
+  reportNetworkSuccess,
+  setConnectivityProbe,
+} from '@/lib/connectivity';
+import { getCacheUser, readCached, saveCached } from '@/lib/offlineCache';
+import { enqueue, setQueueSender, type QueueKind } from '@/lib/offlineQueue';
+import { onLanguageChange, type Language } from '@/i18n';
+
+/* The server answered and said no (as opposed to no answer at all: NetworkError). */
+export class ApiHttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiHttpError';
+  }
+}
+
+/* Offline with nothing saved on this phone for that screen yet. */
+export class OfflineNoDataError extends NetworkError {
+  constructor() {
+    super('You’re offline, and this hasn’t been loaded on this phone yet. It will show once you’re back online.');
+    this.name = 'OfflineNoDataError';
+  }
+}
 
 /* The sentence to show for a refused or failed call. The API sends it as `error` or
  * `message` in JSON, so we pull it out instead of showing raw JSON. */
@@ -90,19 +117,38 @@ export type CurrentWeatherResponse = {
   };
 };
 
-/* Every authorised call. Reads go straight through; an identical write already in flight is
- * shared instead of sent twice (see lib/singleFlight.ts). */
+/* Every authorised call. Reads fall back to the copy saved on this phone when there is no
+ * connection (lib/offlineCache.ts); an identical write already in flight is shared instead of
+ * sent twice (see lib/singleFlight.ts). */
 function authorizedRequest<T>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase();
 
-  if (method === 'GET') return sendAuthorizedRequest<T>(path, init);
+  if (method === 'GET') return cachedGet<T>(path, init);
 
   return singleFlight(writeKey(method, path, init?.body), () =>
     sendAuthorizedRequest<T>(path, init)
   );
+}
+
+// A GET that saves its answer for offline use, and answers from that copy when the network
+// is gone. The banner then says how old the copy is (lib/connectivity.ts).
+async function cachedGet<T>(path: string, init?: RequestInit): Promise<T> {
+  try {
+    const fresh = await sendAuthorizedRequest<T>(path, init);
+    const userId = await getCacheUser();
+    if (userId) void saveCached(userId, path, fresh);
+    return fresh;
+  } catch (error) {
+    if (!isNetworkError(error)) throw error;
+    const userId = await getCacheUser();
+    const cached = userId ? await readCached<T>(userId, path) : null;
+    if (!cached) throw new OfflineNoDataError();
+    noteCachedDataShown(cached.savedAt);
+    return cached.data;
+  }
 }
 
 async function sendAuthorizedRequest<T>(
@@ -122,6 +168,7 @@ async function sendAuthorizedRequest<T>(
 
   const {
     data,
+    error: sessionError,
   } = await supabase.auth
     .getSession();
 
@@ -131,6 +178,12 @@ async function sendAuthorizedRequest<T>(
   if (
     !token
   ) {
+    // An expired login that could not be refreshed for lack of a connection is "offline",
+    // not "signed out": the screens show their saved copy.
+    if (sessionError && isNetworkError(sessionError)) {
+      reportNetworkFailure();
+      throw new NetworkError();
+    }
     throw new Error(
       'You must be signed in.'
     );
@@ -139,7 +192,9 @@ async function sendAuthorizedRequest<T>(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-  const response =
+  let response: Response;
+  try {
+  response =
     await fetch(
       `${apiBase}${path}`,
       {
@@ -156,12 +211,25 @@ async function sendAuthorizedRequest<T>(
         },
       }
     );
+  } catch (fetchError) {
+    // No answer at all: the phone is offline (or the server is unreachable).
+    reportNetworkFailure();
+    throw new NetworkError(
+      fetchError instanceof Error && fetchError.name === 'AbortError'
+        ? 'AgroFlow took too long to answer. Check your connection and try again.'
+        : undefined
+    );
+  }
+
+  // Any answer, even a refusal, means the connection works.
+  reportNetworkSuccess();
 
   if (
     !response.ok
   ) {
-    throw new Error(
-      errorMessage(await response.text(), `AgroFlow API request failed (${response.status}).`)
+    throw new ApiHttpError(
+      errorMessage(await response.text(), `AgroFlow API request failed (${response.status}).`),
+      response.status
     );
   }
 
@@ -548,13 +616,29 @@ export function saveTankCapacity(farmId: string | number, litres: number) {
   });
 }
 
+/* Sent now, or kept on this phone and sent when the connection is back (lib/offlineQueue.ts).
+ * Only these three writes do this. */
+export type SentOrQueued<T> = { queued: false; result: T } | { queued: true };
+
+async function sendOrQueue<T>(kind: QueueKind, path: string, body: Record<string, unknown>): Promise<SentOrQueued<T>> {
+  try {
+    const result = await authorizedRequest<T>(path, { method: 'POST', body: JSON.stringify(body) });
+    return { queued: false, result };
+  } catch (error) {
+    if (!isNetworkError(error)) throw error;
+    await enqueue(kind, path, body);
+    return { queued: true };
+  }
+}
+
 export function logTankRefill(
   farmId: string | number,
   refill: { litresAdded: number; waterPh: number | null; refilledAt: string }
 ) {
-  return authorizedRequest<TankRefillResult>(
+  return sendOrQueue<TankRefillResult>(
+    'tank_refill',
     `/api/farmer/farms/${encodeURIComponent(String(farmId))}/tank/refills`,
-    { method: 'POST', body: JSON.stringify(refill) }
+    refill
   );
 }
 
@@ -568,9 +652,10 @@ export function logSoilPh(
   zoneId: string | number,
   entry: { ph: number; measuredAt: string; note: string | null }
 ) {
-  return authorizedRequest<SoilPhEntry>(
+  return sendOrQueue<SoilPhEntry>(
+    'soil_ph',
     `/api/farmer/zones/${encodeURIComponent(String(zoneId))}/soil-ph`,
-    { method: 'POST', body: JSON.stringify(entry) }
+    entry
   );
 }
 
@@ -584,10 +669,12 @@ export function logManualWatering(zoneId: number, entry: { minutes?: number; lit
 
 export type SoilFeel = 'dry' | 'moist' | 'wet';
 
-export function logSoilFeel(zoneId: number, feel: SoilFeel) {
-  return authorizedRequest<{ id: number; message: string }>(
+// `at` is when the farmer felt the soil, so a check sent later still counts for that moment.
+export function logSoilFeel(zoneId: number, feel: SoilFeel, at = new Date()) {
+  return sendOrQueue<{ id: number; message: string }>(
+    'soil_check',
     `/api/farmer/zones/${zoneId}/soil-feel`,
-    { method: 'POST', body: JSON.stringify({ feel }) }
+    { feel, at: at.toISOString() }
   );
 }
 
@@ -990,3 +1077,39 @@ export function stopAutoReports() {
     body: JSON.stringify({}),
   });
 }
+
+/* The offline queue sends through the same authorised request (and single-flight) as the app;
+ * "network" keeps an entry for later, anything else the server said drops it with its reason. */
+setQueueSender(
+  async entry => {
+    await authorizedRequest<unknown>(entry.path, { method: 'POST', body: JSON.stringify(entry.body) });
+  },
+  error => (isNetworkError(error) || (error instanceof ApiHttpError && error.status >= 500) ? 'network' : 'refused')
+);
+
+/* While offline, lib/connectivity.ts asks the API's open ping route whether it answers. */
+setConnectivityProbe(async () => {
+  const apiBase = resolveApiBase();
+  if (!apiBase) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(`${apiBase}/api/public/ping`, { signal: controller.signal });
+    return response.status < 500;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
+/* The farmer's language, so Telegram messages use it too. Sent when they change it in Settings
+ * and after sign-in; a failure is ignored (the app itself already changed). */
+export function saveLanguagePreference(language: Language) {
+  return authorizedRequest<void>('/api/farmer/language', {
+    method: 'PUT',
+    body: JSON.stringify({ language }),
+  });
+}
+
+onLanguageChange(lang => { void saveLanguagePreference(lang).catch(() => undefined); });

@@ -18,6 +18,9 @@ import {
 } from 'react-native';
 
 import * as SplashScreen from 'expo-splash-screen';
+import { loadLanguage } from '@/i18n';
+import { onReconnect } from '@/lib/connectivity';
+import { flushQueue } from '@/lib/offlineQueue';
 
 import {
   AgroFlowProvider,
@@ -199,6 +202,11 @@ function RootShell() {
     </>
   );
 }
+
+// Once per app start: the saved language, and when the connection comes back, send the
+// refills, pH readings and soil checks saved on the phone (lib/offlineQueue.ts).
+void loadLanguage();
+onReconnect(() => { void flushQueue(); });
 
 export default function RootLayout() {/*wraps the application with ThemeProvider, AuthProvider, and AgroFlowProvider to provide theme, authentication, and farm state contexts throughout the app. It renders the RootNavigator component, which defines the main navigation structure of the app using Expo Router's Stack navigator.*/
   return (

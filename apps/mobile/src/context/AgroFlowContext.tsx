@@ -36,6 +36,9 @@ import {
 import {
   relativeMoisturePercent,
 } from '@/lib/moistureDisplay';
+
+import { isOnline, onReconnect } from '@/lib/connectivity';
+import { t } from '@/i18n';
 // Irrigation statuses the app allows
 export type IrrigationStatus =
   | 'Active'
@@ -1133,6 +1136,9 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     ]
   );
 
+  // Back online: reload the farm, so the saved copies on screen are replaced by live data.
+  useEffect(() => onReconnect(() => { loadZones(); }), [loadZones]);
+
   useEffect(() => {//loads history and alerts from AsyncStorage. Zone configuration is no longer restored locally because Supabase is now its source of truth.
     if (isAuthLoading) return;
     setHistory([]);
@@ -1383,6 +1389,12 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       return;
     }
 
+    // Safety: never queued. A start sent hours late could water a zone nobody wants watered,
+    // so with no connection the command is refused here, not kept for later.
+    if (!isOnline()) {
+      throw new Error(t('offline.needsConnection'));
+    }
+
     await sendManualIrrigationCommand(
       zoneId,
       'start',
@@ -1473,6 +1485,12 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         .override.active
     ) {
       return;
+    }
+
+    // Never queued either. Offline, the kit still stops by itself: every start carries its
+    // duration and the kit has a 5-minute safety cap.
+    if (!isOnline()) {
+      throw new Error(t('offline.needsConnection'));
     }
 
     // A timed start already has its own deadline on the device. We still send an explicit

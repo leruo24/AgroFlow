@@ -8,6 +8,7 @@ import { DataState } from '@/components/DataState';
 import { useAgroFlow } from '@/context/AgroFlowContext';
 import { useTheme } from '@/context/ThemeContext';
 import { createScreenStyles } from '@/styles/screenStyles';
+import { useI18n } from '@/i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { WhyLink } from '@/components/WhySheet';
 import { fetchAlertExplanations } from '@/services/insightsService';
@@ -22,6 +23,7 @@ import { activeDismissal, alertKey, dismissedLine, type DismissView } from '@/li
 import { DismissButton, DismissNoteSheet, UndoBar, ViewSwitch } from '@/components/DismissControls';
 
 export default function AlertsScreen() {
+  const { t } = useI18n();
   const { farm, alerts, markAlertAsRead, isZonesLoading, zonesError, refreshZones, isFarmLoading, farmError, refreshFarms } = useAgroFlow();
   const { colors } = useTheme();
   const styles = createScreenStyles(colors);
@@ -69,14 +71,14 @@ export default function AlertsScreen() {
   const history = dismissals.filter(d => d.kind === 'alert');
 
   return <SafeAreaView style={styles.page} edges={['top']}><ScrollView contentContainerStyle={styles.content}>
-    <ScreenHeader title="Alerts" subtitle={farm ? farm.name : 'Stay informed about your farm.'} help="alerts" />
+    <ScreenHeader title={t('alerts.title')} subtitle={farm ? farm.name : t('alerts.subtitle')} help="alerts" />
     <View style={styles.summary}>{[['Total', alerts.length], ['Unread', alerts.filter(a => !a.read).length]].map(([label, value]) => <View key={label} style={styles.stat}><Text style={styles.statValue}>{loading || error ? '—' : value}</Text><Text style={styles.caption}>{label}</Text></View>)}</View>
     <ViewSwitch value={view} onChange={setView} />
     <UndoBar message={undo?.message ?? null} onUndo={() => undo && restore(undo.id)} onDone={() => setUndo(null)} />
     {problem ? <Text style={[styles.caption, { color: colors.error }]} accessibilityLiveRegion="polite">{problem}</Text> : null}
-    {view !== 'dismissed' && (loading ? <DataState kind="loading" title="Loading alerts" />
-      : error ? <DataState kind="error" title="Unable to load alerts" onRetry={farmError ? refreshFarms : refreshZones} />
-      : visible.length === 0 ? <DataState kind="empty" title="No alerts right now" description="New alerts for this farm will appear here." />
+    {view !== 'dismissed' && (loading ? <DataState kind="loading" title={t('alerts.loading')} />
+      : error ? <DataState kind="error" title={t('alerts.unavailable')} onRetry={farmError ? refreshFarms : refreshZones} />
+      : visible.length === 0 ? <DataState kind="empty" title={t('alerts.none')} description={t('alerts.noneBody')} />
       : visible.map(alert => {
         const severe = /critical|error|danger/i.test(alert.type);
         const Icon = severe ? AlertCircle : Bell;
