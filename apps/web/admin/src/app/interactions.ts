@@ -42,12 +42,14 @@ import {
   getMyTelegramStatus,
   requestMyTelegramCode,
   disconnectMyTelegram,
+  unlinkFarmerTelegram,
   type AuditRow,
   getAdminTankPh,
   setFarmTankCapacity,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
+import { confirmDialog } from "@/lib/confirmDialog";
 import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
@@ -532,6 +534,13 @@ async function openUserProfile(id: string): Promise<void> {
           <div class="detail-row"><span>Last active</span><b>${esc(u.lastActive)}</b></div>
         </div>`),
       section("Assigned farm", `<p><b>${esc(u.farm)}</b></p>`),
+      section("Telegram", u.telegramLinked
+        ? `<p>${esc(telegramState(u))}. Lost or changed phone? Disconnect it, then send a new code.</p>
+           <p><button type="button" class="btn ghost" data-act="unlink-telegram" data-id="${esc(u.id)}">Unlink Telegram</button></p>`
+        : `<p>Not connected. This farmer gets no alerts until they connect.</p>
+           <p><button type="button" class="btn ghost" data-act="send-link-code" data-id="${esc(u.id)}">Send a link code</button></p>`),
+      section("Account", `<p class="muted">Removing the account stops sign-in. Their farms, zones and history are kept.</p>
+        <p><button type="button" class="btn danger" data-act="delete-user" data-id="${esc(u.id)}">Remove account</button></p>`),
       section("Registered hardware", list(u.hardware.map((h) => `<span class="mono">${esc(h)}</span>`))),
       section("Irrigation schedules", list(userSchedules.map((s) =>
         `${esc(s.zone)} — ${esc(s.cadence)} <span class="muted">(${fmtPct(s.compliancePct)} compliance)</span>`))),
@@ -930,30 +939,57 @@ async function handleAction(el: HTMLElement): Promise<void> {
         return;
       }
     }
-    
-case "delete-user": {
-  const u = api.findUser(idAttr);
+    case "delete-user": {
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "This farmer";
+      // Says before and after exactly what is kept, because "delete" reads as "lose the farm".
+      const ok = await confirmDialog({
+        title: `Remove ${name}'s account?`,
+        body: `${name} will no longer be able to sign in. Their farms, zones and history will be kept.`,
+        confirmLabel: "Remove account",
+        danger: true,
+      });
+      if (!ok) return;
 
-  try {
-    await deleteFarmerUser(idAttr);
+      try {
+        await deleteFarmerUser(idAttr);
+        closeDrawer();
+        toast(`${name}'s account was removed. Their farms, zones and history were kept.`, "success", 6000);
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error ? e.message : "The account could not be removed.",
+          "The account could not be removed",
+        );
+        return;
+      }
+    }
 
-    toast(
-      `Deleted ${u?.name ?? "user"}. Farm data was retained.`,
-      "warn",
-    );
+    case "unlink-telegram": {
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "this farmer";
+      const ok = await confirmDialog({
+        title: `Disconnect ${name}'s Telegram?`,
+        body: `AgroFlow will stop sending messages to the Telegram chat ${name} has now. ` +
+          "They can connect again with a new code, from the app or from here.",
+        confirmLabel: "Disconnect Telegram",
+        danger: true,
+      });
+      if (!ok) return;
 
-    return void refresh();
-  } catch (e) {
-    showErrorModal(
-      e instanceof Error
-        ? e.message
-        : "Unable to delete farmer.",
-      "Unable to delete farmer",
-    );
-
-    return;
-  }
-}
+      try {
+        const result = await unlinkFarmerTelegram(idAttr);
+        closeDrawer();
+        toast(result.message, "success", 6000);
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error ? e.message : "Telegram could not be disconnected.",
+          "Telegram could not be disconnected",
+        );
+        return;
+      }
+    }
 
     case "delete-farm": {
       const farm = api.findFarm(numId);

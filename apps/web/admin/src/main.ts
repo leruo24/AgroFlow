@@ -7,8 +7,9 @@ import "@/styles/main.css";
 import { SHELL_HTML } from "@/app/shell";
 import { initNav, bootRouter, setAfterRender } from "@/app/router";
 import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/interactions";
-import { initAuth, onAuthChange, isAdminAuthenticated, signOut } from "@/app/auth";
-import { LOGIN_HTML, wireLogin } from "@/pages/login";
+import { initAuth, onAuthChange, isAdminAuthenticated, signOut, RESET_QUERY } from "@/app/auth";
+import { LOGIN_HTML, wireLogin, resetPasswordHtml, wireResetPassword } from "@/pages/login";
+import { toast } from "@/lib/toast";
 import { WELCOME_HTML, wireWelcome } from "@/pages/welcome";
 import { startHealthPolling, stopHealthPolling } from "@/app/health";
 
@@ -24,7 +25,7 @@ declare global {
 // swapContent -> this). Separate from the state machine below; only fires while signed in.
 setAfterRender(wirePageInteractions);
 
-type ViewState = "loading" | "welcome" | "signed-out" | "signed-in";
+type ViewState = "loading" | "welcome" | "signed-out" | "signed-in" | "reset-password";
 
 /* Whether the visitor has asked to see the login form yet.
  * A visitor with no session starts on the landing page and gets the login form only by
@@ -35,9 +36,26 @@ type ViewState = "loading" | "welcome" | "signed-out" | "signed-in";
  * A visitor with a valid admin session never reaches this; currentState() returns
  * "signed-in" first. */
 const LOGIN_HASH = "#/login";
+/* The address the public page's "Staff sign-in" uses, and what /admin/ forwards to
+ * (public/admin/index.html). Same screen as #/login, which old links and bookmarks still use. */
+const STAFF_HASH = "#/admin";
 
 function loginRequestedFromHash(): boolean {
-  return window.location.hash === LOGIN_HASH;
+  return window.location.hash === LOGIN_HASH || window.location.hash === STAFF_HASH;
+}
+
+/* A password reset link lands on ?reset=1 (see app/auth.ts). A query, not a hash: Supabase puts
+ * the recovery tokens in the hash, and supabase-js clears it once it has read them. */
+function resetRequested(): boolean {
+  return new URLSearchParams(window.location.search).has(RESET_QUERY);
+}
+
+function leaveReset(): void {
+  const params = new URLSearchParams(window.location.search);
+  params.delete(RESET_QUERY);
+  const query = params.toString();
+  history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : "") +
+    (isAdminAuthenticated() ? "" : LOGIN_HASH));
 }
 
 function getRoot(): HTMLElement {
@@ -47,6 +65,7 @@ function getRoot(): HTMLElement {
 }
 
 function currentState(): ViewState {
+  if (resetRequested()) return "reset-password";
   if (isAdminAuthenticated()) return "signed-in";
   return loginRequestedFromHash() ? "signed-out" : "welcome";
 }
@@ -74,7 +93,7 @@ function render(state: ViewState): void {
       // Changing the hash is what triggers the re-render, through the
       // hashchange listener in boot(). Setting it here AND rendering would
       // render twice.
-      window.location.hash = LOGIN_HASH;
+      window.location.hash = STAFF_HASH;
     });
     return;
   }
@@ -82,6 +101,17 @@ function render(state: ViewState): void {
   if (state === "signed-out") {
     root.innerHTML = LOGIN_HTML;
     wireLogin(root);
+    return;
+  }
+
+  if (state === "reset-password") {
+    root.innerHTML = resetPasswordHtml();
+    wireResetPassword(root, () => {
+      const changed = root.querySelector("#resetForm") !== null;
+      leaveReset();
+      render(currentState());
+      if (changed) toast("Your password was changed.", "success");
+    });
     return;
   }
 
@@ -125,6 +155,8 @@ async function boot(): Promise<void> {
   // (#dashboard, #farms, ...) belong to bootRouter; this listener only matters while signed
   // out, so it re-renders only when the state would change.
   window.addEventListener("hashchange", () => {
+    // supabase-js clearing a reset link's tokens from the hash must not leave the reset page.
+    if (shownState === "reset-password" && resetRequested()) return;
     if (isAdminAuthenticated()) return;
     const next = currentState();
     if (next !== shownState) render(next);
@@ -136,13 +168,26 @@ async function boot(): Promise<void> {
   });
 
   onAuthChange(() => {
-    // Signing out goes to the landing page, not a login form, the same as a new visitor sees.
-    // Clearing the hash does it; the listener above renders.
-    if (!isAdminAuthenticated() && window.location.hash === LOGIN_HASH) {
+    // Signing out of the console goes to the landing page, not a login form, the same as a
+    // new visitor sees. Clearing the hash does it; the listener above renders. Only from the
+    // console: a rejected farmer sign-in also signs out, and must stay on the login screen so
+    // they can read where the app is.
+    if (!isAdminAuthenticated() && shownState === "signed-in" && loginRequestedFromHash() && !resetRequested()) {
       window.location.hash = "";
     }
 
     const next = currentState();
+
+    // Auth events while signed out (a rejected sign-in's SIGNED_IN then SIGNED_OUT) do not
+    // rebuild the login screen, which would wipe the message it is showing.
+    if ((next === "signed-out" || next === "welcome") && next === shownState) return;
+
+    // The reset page re-renders only to swap "link expired" for the form once the recovery
+    // session arrives; a token refresh while typing must not wipe the fields.
+    if (next === "reset-password" && shownState === "reset-password") {
+      if (document.getElementById("resetExpired")) render(next);
+      return;
+    }
 
     /* Still signed in: refresh the name in the header and rebuild nothing. supabase-js sends
      * many auth events while signed in (TOKEN_REFRESHED on a timer, SIGNED_IN when the tab gets

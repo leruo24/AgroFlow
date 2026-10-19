@@ -44,6 +44,7 @@ public static class TelegramEndpoints
         admin.MapPost("/codes/{profileId:guid}/link", IssueLinkCodeForFarmerAsync);
         admin.MapPost("/password/{profileId:guid}", ResetTemporaryPasswordAsync);
         admin.MapPost("/password/{profileId:guid}/send", SendTemporaryPasswordAsync);
+        admin.MapDelete("/link/{profileId:guid}", UnlinkFarmerAsync);
 
         var me = app.MapGroup("/api/telegram/me")
             .RequireAuthorization();
@@ -170,6 +171,15 @@ public static class TelegramEndpoints
             message = "A new temporary password has been sent to the farmer's Telegram.",
         });
     }
+
+    // "Unlink Telegram" on a farmer's profile: lost or changed phone. Clears the chat and
+    // any unused codes, so they re-link with a new code. Audited.
+    private static async Task<IResult> UnlinkFarmerAsync(
+        Guid profileId,
+        ClaimsPrincipal user,
+        TelegramUnlinkService unlink,
+        CancellationToken cancellationToken) =>
+        (await unlink.UnlinkAsync(user, profileId, cancellationToken)).ToResult();
 
     // Farmer, acting on themselves
 
