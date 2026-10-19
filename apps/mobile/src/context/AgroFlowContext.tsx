@@ -125,6 +125,9 @@ export type Zone = {
       // True once the wet/dry setup is done. Until then `value` is the sensor's own number and
       // must never be shown with a %.
       calibrated: boolean;
+      // Each half of the wet/dry setup on its own, for the setup wizard's confidence meter.
+      wetSaved?: boolean;
+      drySaved?: boolean;
       simulated?: boolean;
     };
 
@@ -509,6 +512,8 @@ export function mapZoneRow(
           calibrated ? moistureValue : null, moistureThreshold, desiredMoisture
         ),
         calibrated,
+        wetSaved: calibrationWet != null,
+        drySaved: calibrationDry != null,
         simulated: reading?.moisture_simulated === true,
       },
       temperatureHumidity: {

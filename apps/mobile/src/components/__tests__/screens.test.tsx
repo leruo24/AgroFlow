@@ -2,7 +2,7 @@
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
 /* The app's screens rendered with their real code, with only the network and context faked:
- * Finish setup (with the marked flow-rate test bottle helper), the login screen's "Ask for a call",
+ * the login screen's "Ask for a call",
  * Reports, the forecast, alerts history and help. */
 
 import type { ReactNode } from 'react';
@@ -66,7 +66,6 @@ jest.mock('@/services/agroFlowApi', () => ({
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as api from '@/services/agroFlowApi';
-import ZoneSetupScreen from '@/app/zone-setup';
 import LoginScreen from '@/app/login';
 import ReportsScreen from '@/app/reports';
 import ForecastScreen from '@/app/forecast';
@@ -89,7 +88,7 @@ beforeAll(async () => {
   (api.fetchFarmToday as jest.Mock).mockResolvedValue({ farmId: 1, day: '2026-10-06', zones: [today] });
   mockAgro = { farm: { id: '1', name: 'Alpha' } };
   mockParams = { zoneId: '7' };
-  await render(<ZoneSetupScreen />);
+  await render(<LoginScreen />);
 }, 60000);
 
 beforeEach(() => {
@@ -97,40 +96,7 @@ beforeEach(() => {
   (api.fetchFarmToday as jest.Mock).mockResolvedValue({ farmId: 1, day: '2026-10-06', zones: [today] });
 });
 
-describe('Finish setup', () => {
-  beforeEach(() => {
-    mockAgro = { farm: { id: '1', name: 'Alpha' } };
-    mockParams = { zoneId: '7' };
-  });
-
-  it('shows what is done and what is not, with the confidence', async () => {
-    await render(<ZoneSetupScreen />);
-    expect(await screen.findByText('Medium confidence')).toBeTruthy();
-    expect(screen.getAllByText('To do').length).toBe(2);   // planting date, flow rate
-    expect(screen.getAllByText('Done').length).toBe(2);    // soil, size
-    expect(screen.queryByText('Soil sensor wet/dry setup')).toBeNull();   // no kit, no calibration step
-  });
-
-  it('works out litres a minute from the marked flow-rate test bottle and saves it', async () => {
-    await render(<ZoneSetupScreen />);
-    await screen.findByText('Medium confidence');
-    await fireEvent.changeText(screen.getByLabelText('Seconds to fill the bottle'), '15');
-    expect(screen.getByText('That is about 2 litres a minute.')).toBeTruthy();
-    await fireEvent.press(screen.getByRole('button', { name: 'Save flow rate' }));
-    await waitFor(() => expect(api.saveZoneSetup).toHaveBeenCalledWith(7, { flowRateLpm: 2 }));
-    expect(await screen.findByText("Saved. Today's advice now uses it.")).toBeTruthy();
-    // The confidence is read again after a save.
-    expect((api.fetchFarmToday as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('saves the planting date from "about how many weeks ago"', async () => {
-    await render(<ZoneSetupScreen />);
-    await screen.findByText('Medium confidence');
-    await fireEvent.changeText(screen.getByLabelText('Weeks since planting'), '3');
-    await fireEvent.press(screen.getByRole('button', { name: 'Save planting date' }));
-    await waitFor(() => expect(api.saveZoneSetup).toHaveBeenCalledWith(7, { plantingDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }));
-  });
-});
+// Finish setup moved into the setup wizard: see setupWizard.test.tsx.
 
 describe('Login', () => {
   it('offers "Ask for a call" to someone not on AgroFlow yet', async () => {

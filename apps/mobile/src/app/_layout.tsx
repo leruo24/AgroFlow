@@ -3,6 +3,7 @@
 import {//creates stack navigation
   router,
   Stack,
+  useSegments,
 } from 'expo-router';
 
 import {
@@ -60,15 +61,22 @@ function RootNavigator() {//decides which screens the user is permitted to acces
   // screen. That password was read off an admin's screen or sent over Telegram, so it must
   // not keep guarding the account. The guard on the tab routes below enforces this; this
   // effect only does the navigation.
+  // Already in the wizard (any step, e.g. a link to /setup?step=password): stay there.
+  // (A string compare: Expo's generated route types only learn of /setup when the dev server runs.)
+  const inSetup = (useSegments()[0] as string | undefined) === 'setup';
+
   useEffect(
     () => {
       if (
         !isLoading &&
         isAuthenticated &&
-        mustChangePassword
+        mustChangePassword &&
+        !inSetup
       ) {
+        // The forced change is step 2 of the setup wizard (app/setup.tsx), which cannot be
+        // stepped past until the farmer has set their own password.
         router.replace(
-          '/update-password?source=first-login'
+          '/setup' as never
         );
       }
     },
@@ -76,6 +84,7 @@ function RootNavigator() {//decides which screens the user is permitted to acces
       isLoading,
       isAuthenticated,
       mustChangePassword,
+      inSetup,
     ]
   );
 
@@ -153,6 +162,18 @@ function RootNavigator() {//decides which screens the user is permitted to acces
 
         <Stack.Screen
           name="tank"
+        />
+      </Stack.Protected>
+
+      {/* The setup wizard. Open to any signed-in farmer, including one who must still change
+          the temporary password: that is the wizard's second step. */}
+      <Stack.Protected
+        guard={
+          isAuthenticated
+        }
+      >
+        <Stack.Screen
+          name="setup"
         />
       </Stack.Protected>
 

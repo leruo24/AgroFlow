@@ -51,18 +51,16 @@ beforeAll(async () => {
 beforeEach(() => jest.clearAllMocks());
 
 describe('TodayCard', () => {
-  it('shows the one action, the confidence badge and Finish setup', async () => {
+  it('shows the one action and the confidence badge', async () => {
     await render(<TodayCard zone={zone} onLogged={jest.fn()} />);
     expect(screen.getByText('Water about 12 min this morning (about 24 L)')).toBeTruthy();
     expect(screen.getByText('Medium confidence')).toBeTruthy();
-
-    await fireEvent.press(screen.getByRole('button', { name: 'Finish setup for Bed 1' }));
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/zone-setup', params: { zoneId: '7' } });
   });
 
-  it('has no Finish setup when nothing is missing', async () => {
-    await render(<TodayCard zone={{ ...zone, nextStep: null }} onLogged={jest.fn()} />);
+  it('no longer has its own Finish setup: Home has one setup card instead', async () => {
+    await render(<TodayCard zone={zone} onLogged={jest.fn()} />);
     expect(screen.queryByRole('button', { name: 'Finish setup for Bed 1' })).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('logs a watering by hand and refreshes the card', async () => {

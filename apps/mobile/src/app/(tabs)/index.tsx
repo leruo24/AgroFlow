@@ -16,6 +16,7 @@ import { WeatherSummary } from '@/components/WeatherSummary';
 import { DripHelper } from '@/components/DripHelper';
 import { averageSoilText } from '@/lib/moistureDisplay';
 import { TodayCard } from '@/components/TodayCard';
+import { SetupCard } from '@/components/SetupCard';
 import { fetchFarmToday, fetchTankStatus, type TankStatus, type TodayZone } from '@/services/agroFlowApi';
 import { useI18n } from '@/i18n';
 import { onReconnect } from '@/lib/connectivity';
@@ -71,7 +72,9 @@ export default function HomeScreen() {
         : farmError ? <DataState kind="error" title={t('home.farmUnavailable')} description={t('home.farmUnavailableBody')} onRetry={refreshFarms} />
         : !farm ? <DataState kind="empty" title={t('home.noFarm')} description={t('home.noFarmBody')} />
         : <>
-          {/* Today first: it is what a farmer opens the app to find out. */}
+          {/* Setup still to finish comes first; it is gone once setup is complete. */}
+          <SetupCard />
+          {/* Today next: it is what a farmer opens the app to find out. */}
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('home.today')}</Text>
           {todayFailed ? <DataState kind="error" title={t('home.todayUnavailable')} onRetry={loadToday} />
             : today === null ? <DataState kind="loading" title={t('home.todayLoading')} />

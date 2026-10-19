@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import { router } from '@/lib/router';
 import { createTodayStyles } from '@/styles/todayStyles';
 import { WhyLink } from '@/components/WhySheet';
 import { ManualLogSheet } from '@/components/ManualLogSheet';
@@ -51,16 +50,8 @@ export function TodayCard({ zone, onLogged }: Props) {
         <Pressable accessibilityRole="button" onPress={() => setSheet('feel')} style={styles.ghost}>
           <Text style={styles.ghostText}>{t('today.soilFeel')}</Text>
         </Pressable>
-        {zone.nextStep && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('today.finishSetupFor', { zone: zone.name })}
-            onPress={() => router.push({ pathname: '/zone-setup', params: { zoneId: String(zone.zoneId) } })}
-            style={styles.ghost}
-          >
-            <Text style={styles.ghostText}>{t('today.finishSetup')}</Text>
-          </Pressable>
-        )}
+        {/* What a zone's advice still lacks is now the setup wizard's job: Home shows one
+            "Setup 4/6 done — Continue" card instead of a Finish setup button on each zone. */}
       </View>
 
       <ManualLogSheet

@@ -464,6 +464,18 @@ export default function SettingsScreen() {
             <Text style={styles.note} accessibilityLiveRegion="polite">{telegramMessage}</Text>
           ) : null}
 
+          {/* Every step of the setup wizard again, from the start (app/setup.tsx). */}
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push('/setup?redo=1' as never)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            testID="redo-setup"
+          >
+            <Text style={styles.profileText}>{t('settings.redoSetup')}</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => router.push('/profile')}
