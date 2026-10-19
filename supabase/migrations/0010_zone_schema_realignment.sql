@@ -9,7 +9,7 @@
 -- directly on zone instead of a separate schedule table.
 --
 -- Run this against the live database in the Supabase SQL editor. Safe to
--- run whether or not 0006 was ever applied (IF EXISTS / IF NOT EXISTS
+-- run again (every step is guarded), and whether or not 0006 was ever applied (IF EXISTS / IF NOT EXISTS
 -- throughout) - if 0006 was never applied, the "add column" branches below
 -- create moisture_threshold/desired_moisture fresh instead of renaming.
 
@@ -60,38 +60,49 @@ alter table zone
 --    of the old names (this view is what AgroFlow.Api's
 --    SensorReadingProcessor reads to make auto-irrigation decisions).
 -- ---------------------------------------------------------------------------
-create or replace view zone_latest_reading as
-select
-    z.id            as zone_id,
-    z.farm_id,
-    z.crop_type,
-    z.water_saved,
-    z.health_status,
-    z.moisture_threshold,
-    z.desired_moisture,
-    moisture.value      as moisture,
-    temperature.value   as temperature,
-    humidity.value       as humidity,
-    greatest(moisture.recorded_at, temperature.recorded_at, humidity.recorded_at) as last_reading_at
-from zone z
-left join lateral (
-    select value, recorded_at from sensor_reading
-    where zone_id = z.id and sensor_type = 'SoilMoisture'
-    order by recorded_at desc
-    limit 1
-) moisture on true
-left join lateral (
-    select value, recorded_at from sensor_reading
-    where zone_id = z.id and sensor_type = 'Temperature'
-    order by recorded_at desc
-    limit 1
-) temperature on true
-left join lateral (
-    select value, recorded_at from sensor_reading
-    where zone_id = z.id and sensor_type = 'Humidity'
-    order by recorded_at desc
-    limit 1
-) humidity on true;
+-- Guarded: only while the view is missing or is still 0007's version (no moisture_threshold
+-- column). The live view (0048) has it, so this does nothing there or on a second run.
+-- Dropped first because the column names change, which CREATE OR REPLACE VIEW cannot do.
+do $guard$
+begin
+    if not exists (select 1 from information_schema.columns
+                   where table_schema = 'public' and table_name = 'zone_latest_reading'
+                     and column_name = 'moisture_threshold') then
+        drop view if exists zone_latest_reading;
+        create view zone_latest_reading as
+        select
+            z.id            as zone_id,
+            z.farm_id,
+            z.crop_type,
+            z.water_saved,
+            z.health_status,
+            z.moisture_threshold,
+            z.desired_moisture,
+            moisture.value      as moisture,
+            temperature.value   as temperature,
+            humidity.value       as humidity,
+            greatest(moisture.recorded_at, temperature.recorded_at, humidity.recorded_at) as last_reading_at
+        from zone z
+        left join lateral (
+            select value, recorded_at from sensor_reading
+            where zone_id = z.id and sensor_type = 'SoilMoisture'
+            order by recorded_at desc
+            limit 1
+        ) moisture on true
+        left join lateral (
+            select value, recorded_at from sensor_reading
+            where zone_id = z.id and sensor_type = 'Temperature'
+            order by recorded_at desc
+            limit 1
+        ) temperature on true
+        left join lateral (
+            select value, recorded_at from sensor_reading
+            where zone_id = z.id and sensor_type = 'Humidity'
+            order by recorded_at desc
+            limit 1
+        ) humidity on true;
+    end if;
+end $guard$;
 
 -- ---------------------------------------------------------------------------
 -- 4. fire_due_irrigation_schedules(): read scheduling directly off zone
@@ -100,82 +111,103 @@ left join lateral (
 --    from zone.irrigation_mode/schedule_* columns. day_names is a hardcoded
 --    array (not to_char(now(), 'Dy')) so this isn't locale-dependent.
 -- ---------------------------------------------------------------------------
-create or replace function fire_due_irrigation_schedules()
-returns void
-language plpgsql
-as $$
-declare
-    manual_cooldown       constant interval := interval '30 minutes';
-    check_window_minutes  constant int := 5;
-    day_names             constant text[] := array['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    today_name            text := day_names[extract(dow from now())::int + 1];
-
-    now_minutes int := (extract(hour from now()) * 60 + extract(minute from now()))::int;
-    sched record;
-    schedule_minutes int;
-    elapsed_minutes int;
-    v_manual_active boolean;
+-- Guarded: only when the function is missing or is still 0006's version (which reads the
+-- irrigation_schedule table). Nothing later redefines it, so on the live database this
+-- is already the current version and the block does nothing.
+do $guard$
 begin
-    for sched in
-        select z.id as zone_id, z.schedule_start_time, z.schedule_duration_minutes
-          from zone z
-         where z.irrigation_mode = 'scheduled'
-           and z.schedule_enabled
-           and z.schedule_days is not null
-           and today_name = any (z.schedule_days)
-           and z.schedule_start_time is not null
-           and z.schedule_duration_minutes is not null
-    loop
-        schedule_minutes := (extract(hour from sched.schedule_start_time::time) * 60
-                              + extract(minute from sched.schedule_start_time::time))::int;
+    if not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                   where n.nspname = 'public' and p.proname = 'fire_due_irrigation_schedules'
+                     and p.prosrc !~ '\mirrigation_schedule\M') then
+        create or replace function fire_due_irrigation_schedules()
+        returns void
+        language plpgsql
+        as $$
+        declare
+            manual_cooldown       constant interval := interval '30 minutes';
+            check_window_minutes  constant int := 5;
+            day_names             constant text[] := array['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+            today_name            text := day_names[extract(dow from now())::int + 1];
 
-        -- mod() with a positive modulus is always non-negative in Postgres,
-        -- so this wraps correctly across midnight (see 0006's comment on
-        -- why a naive `now()::time between start and start + window` fails).
-        elapsed_minutes := mod(now_minutes - schedule_minutes + 1440, 1440);
+            now_minutes int := (extract(hour from now()) * 60 + extract(minute from now()))::int;
+            sched record;
+            schedule_minutes int;
+            elapsed_minutes int;
+            v_manual_active boolean;
+        begin
+            for sched in
+                select z.id as zone_id, z.schedule_start_time, z.schedule_duration_minutes
+                  from zone z
+                 where z.irrigation_mode = 'scheduled'
+                   and z.schedule_enabled
+                   and z.schedule_days is not null
+                   and today_name = any (z.schedule_days)
+                   and z.schedule_start_time is not null
+                   and z.schedule_duration_minutes is not null
+            loop
+                schedule_minutes := (extract(hour from sched.schedule_start_time::time) * 60
+                                      + extract(minute from sched.schedule_start_time::time))::int;
 
-        if elapsed_minutes >= check_window_minutes then
-            continue; -- not due right now
-        end if;
+                -- mod() with a positive modulus is always non-negative in Postgres,
+                -- so this wraps correctly across midnight (see 0006's comment on
+                -- why a naive `now()::time between start and start + window` fails).
+                elapsed_minutes := mod(now_minutes - schedule_minutes + 1440, 1440);
 
-        select exists (
-            select 1 from irrigation_commands
-             where zone_id = sched.zone_id
-               and source = 'manual'
-               and (
-                    status = 'pending'
-                    or (status = 'executed' and executed_at > now() - manual_cooldown)
-               )
-        ) into v_manual_active;
+                if elapsed_minutes >= check_window_minutes then
+                    continue; -- not due right now
+                end if;
 
-        if v_manual_active then
-            continue; -- don't fight a farmer's manual override
-        end if;
+                select exists (
+                    select 1 from irrigation_commands
+                     where zone_id = sched.zone_id
+                       and source = 'manual'
+                       and (
+                            status = 'pending'
+                            or (status = 'executed' and executed_at > now() - manual_cooldown)
+                       )
+                ) into v_manual_active;
 
-        if exists (
-            select 1 from irrigation_commands
-             where zone_id = sched.zone_id
-               and source = 'scheduled'
-               and command = 'start'
-               and created_at > now() - make_interval(mins => check_window_minutes)
-        ) then
-            continue; -- already fired this slot
-        end if;
+                if v_manual_active then
+                    continue; -- don't fight a farmer's manual override
+                end if;
 
-        insert into irrigation_commands (zone_id, command, source, duration_seconds)
-        values (sched.zone_id, 'start', 'scheduled', sched.schedule_duration_minutes * 60);
-    end loop;
-end;
-$$;
+                if exists (
+                    select 1 from irrigation_commands
+                     where zone_id = sched.zone_id
+                       and source = 'scheduled'
+                       and command = 'start'
+                       and created_at > now() - make_interval(mins => check_window_minutes)
+                ) then
+                    continue; -- already fired this slot
+                end if;
+
+                insert into irrigation_commands (zone_id, command, source, duration_seconds)
+                values (sched.zone_id, 'start', 'scheduled', sched.schedule_duration_minutes * 60);
+            end loop;
+        end;
+        $$;
+    end if;
+end $guard$;
 
 -- cron.schedule() upserts by job name (pg_cron 1.4+), so this just re-points
 -- the existing 'fire-irrigation-schedules' job at the function above - no
 -- new job is created, and the every-5-minutes cadence is unchanged.
-select cron.schedule(
-    'fire-irrigation-schedules',
-    '*/5 * * * *',
-    $$select fire_due_irrigation_schedules();$$
-);
+-- Skipped when the job is already there with this exact schedule and command (the live
+-- database). cron.job is read with EXECUTE so a database without pg_cron's table still runs.
+do $guard$
+declare
+    already boolean := false;
+begin
+    if to_regclass('cron.job') is not null then
+        execute $q$select exists (select 1 from cron.job where jobname = 'fire-irrigation-schedules'
+                   and schedule = '*/5 * * * *' and command = 'select fire_due_irrigation_schedules();')$q$
+            into already;
+    end if;
+    if not already then
+        perform cron.schedule('fire-irrigation-schedules', '*/5 * * * *',
+                              'select fire_due_irrigation_schedules();');
+    end if;
+end $guard$;
 
 -- ---------------------------------------------------------------------------
 -- 5. irrigation_schedule table: dropped. Nothing reads or writes it any

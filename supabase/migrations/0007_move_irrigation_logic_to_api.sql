@@ -5,7 +5,7 @@
 -- functions that duplicated that logic.
 --
 -- Uses IF EXISTS throughout so this is safe to run whether or not 0006 was
--- ever actually applied to this database.
+-- ever actually applied to this database, and safe to run again.
 --
 -- NOT dropped, and still needed:
 --   - zone.moisture_dry_threshold / moisture_wet_threshold / water_used_total
@@ -31,35 +31,53 @@ drop function if exists auto_irrigation_check();
 -- Widened so the API's single "everything current about a zone" query
 -- (zone_latest_reading) also carries the per-zone auto-irrigation
 -- thresholds, instead of needing a second round-trip to the zone table.
-create or replace view zone_latest_reading as
-select
-    z.id            as zone_id,
-    z.farm_id,
-    z.crop_type,
-    z.water_saved,
-    z.health_status,
-    z.moisture_dry_threshold,
-    z.moisture_wet_threshold,
-    moisture.value      as moisture,
-    temperature.value   as temperature,
-    humidity.value       as humidity,
-    greatest(moisture.recorded_at, temperature.recorded_at, humidity.recorded_at) as last_reading_at
-from zone z
-left join lateral (
-    select value, recorded_at from sensor_reading
-    where zone_id = z.id and sensor_type = 'SoilMoisture'
-    order by recorded_at desc
-    limit 1
-) moisture on true
-left join lateral (
-    select value, recorded_at from sensor_reading
-    where zone_id = z.id and sensor_type = 'Temperature'
-    order by recorded_at desc
-    limit 1
-) temperature on true
-left join lateral (
-    select value, recorded_at from sensor_reading
-    where zone_id = z.id and sensor_type = 'Humidity'
-    order by recorded_at desc
-    limit 1
-) humidity on true;
+-- Guarded so the whole chain replays on an empty database and this file is a no-op on
+-- the live one. It only runs while zone still has 0006's column names, which is true only
+-- on a database being built from empty: once 0010 has renamed them (the live database, or a
+-- second run) it does nothing. It also never touches a view that already has 0010's
+-- moisture_threshold column (the live view, from 0048), even if a half-applied 0010 left the
+-- old zone column behind. Dropped first because this definition adds columns in the middle,
+-- which CREATE OR REPLACE VIEW cannot do. Nothing depends on the view at this point.
+do $guard$
+begin
+    if exists (select 1 from information_schema.columns
+               where table_schema = 'public' and table_name = 'zone'
+                 and column_name = 'moisture_dry_threshold')
+       and not exists (select 1 from information_schema.columns
+                       where table_schema = 'public' and table_name = 'zone_latest_reading'
+                         and column_name = 'moisture_threshold') then
+        drop view if exists zone_latest_reading;
+        create view zone_latest_reading as
+        select
+            z.id            as zone_id,
+            z.farm_id,
+            z.crop_type,
+            z.water_saved,
+            z.health_status,
+            z.moisture_dry_threshold,
+            z.moisture_wet_threshold,
+            moisture.value      as moisture,
+            temperature.value   as temperature,
+            humidity.value       as humidity,
+            greatest(moisture.recorded_at, temperature.recorded_at, humidity.recorded_at) as last_reading_at
+        from zone z
+        left join lateral (
+            select value, recorded_at from sensor_reading
+            where zone_id = z.id and sensor_type = 'SoilMoisture'
+            order by recorded_at desc
+            limit 1
+        ) moisture on true
+        left join lateral (
+            select value, recorded_at from sensor_reading
+            where zone_id = z.id and sensor_type = 'Temperature'
+            order by recorded_at desc
+            limit 1
+        ) temperature on true
+        left join lateral (
+            select value, recorded_at from sensor_reading
+            where zone_id = z.id and sensor_type = 'Humidity'
+            order by recorded_at desc
+            limit 1
+        ) humidity on true;
+    end if;
+end $guard$;
