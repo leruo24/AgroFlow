@@ -4,17 +4,23 @@
 //   cd hardware/sim && npm install && node run-e2e.mjs
 //
 // It checks: the kit enrols with a one-time code and shows online; its readings are stored;
-// a manual 1-minute command reaches it, is acknowledged and logged as an irrigation event;
 // readings it kept while offline are accepted with their own time, once, without starting
 // automatic watering (and a live reading of the same value does start it, so the rule is
-// what stops it); a kept pump run uploaded twice is counted once.
+// what stops it); a Manual zone is never watered automatically and its kit is told not to
+// water offline; a manual 1-minute command reaches it with the zone's maximum run time, is
+// acknowledged, and its run report marks it finished in the history; a zone limited to
+// 3 minutes sends a 3-minute limit; the lost-connection failsafe stops a run when MQTT goes
+// (3 s here, 3 min on the board); a kept pump run uploaded twice is counted once. Then the
+// API-side database tests run against the same Postgres (SimDatabaseTests: no kit / kit
+// offline / over the maximum refused, sent -> started -> finished, staff and Telegram,
+// weather in the app).
 // Exit code 0 = every check passed. Needs Node 20+ and the .NET 8 SDK.
 import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import Aedes from 'aedes';
 import { startDatabase, applyMigrations, repoRoot } from './db.mjs';
-import { FakeKit } from './fake-kit.mjs';
+import { FakeKit, runLimitSeconds } from './fake-kit.mjs';
 
 const API_PORT = 5099;
 const MQTT_PORT = 18830;
@@ -166,12 +172,30 @@ try {
   const autoStop = await kit.waitForCommand(c => c.command === 'stop' && c.source === 'auto').catch(() => null);
   if (autoStop) await kit.ack(autoStop.id);
 
+  // 7b. A Manual zone is never watered automatically, and its kit is told so for offline.
+  await q("update zone set irrigation_mode = 'manual' where id = $1", [zoneId]);
+  const beforeManual = (await q('select count(*)::int n from irrigation_commands where zone_id = $1', [zoneId])).rows[0].n;
+  await kit.publish('SoilMoisture', 10);   // bone dry, live
+  await sleep(3000);
+  const afterManual = (await q('select count(*)::int n from irrigation_commands where zone_id = $1', [zoneId])).rows[0].n;
+  check('a Manual zone gets no automatic command from a bone-dry live reading', afterManual === beforeManual,
+    `${afterManual - beforeManual} new command(s)`);
+  const cfgManual = await kit.http('GET', '/api/devices/config');
+  check("a Manual zone's kit is told not to water by itself offline",
+    cfgManual.status === 200 && cfgManual.body?.autoWateringAllowed === false, JSON.stringify(cfgManual.body));
+  await q("update zone set irrigation_mode = 'automatic' where id = $1", [zoneId]);
+  const cfgAuto = await kit.http('GET', '/api/devices/config');
+  check('...and an Automatic one is allowed', cfgAuto.body?.autoWateringAllowed === true, JSON.stringify(cfgAuto.body));
+  await kit.publish('SoilMoisture', 65);   // wet again before the manual runs
+
   // 8. A manual 1-minute run, as the farmer's Water now creates it.
   const manualId = (await q(
     "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'manual', 60) returning id", [zoneId])).rows[0].id;
   const manual = await kit.waitForCommand(c => String(c.id) === String(manualId)).catch(() => null);
   check('the manual 1-minute command reaches the kit', manual?.command === 'start' && manual?.durationSeconds === 60,
     manual ? `${manual.command} ${manual.durationSeconds}s` : 'not delivered');
+  check("the command carries the zone's maximum run time (default 5 min)", manual?.maxRunSeconds === 300,
+    `maxRunSeconds ${manual?.maxRunSeconds}`);
   const ack = manual ? await kit.ack(manual.id) : { status: 0 };
   const executed = (await q('select status from irrigation_commands where id = $1', [manualId])).rows[0]?.status;
   check('the kit acknowledges it', ack.status === 200 && executed === 'executed', `ACK ${ack.status}, status ${executed}`);
@@ -181,6 +205,45 @@ try {
   const event = (await q("select runtime_seconds, trigger_source, sync_status, estimated_litres from irrigation_event where zone_id = $1 and trigger_source = 'manual'", [zoneId])).rows;
   check('the run is logged as an irrigation event', run.status === 200 && event.length === 1 && event[0].runtime_seconds === 60,
     JSON.stringify(event[0] ?? run.body));
+  const finished = (await q('select status, finished_at is not null as finished from irrigation_commands where id = $1', [manualId])).rows[0];
+  const linked = (await q('select count(*)::int n from irrigation_event where command_id = $1', [manualId])).rows[0].n;
+  check('the run report marks the command finished, and the history links the two',
+    finished?.status === 'executed' && finished?.finished === true && linked === 1, JSON.stringify({ ...finished, linked }));
+
+  // 8b. A zone limited to 3 minutes: a longer command row (the API refuses it from the app;
+  //     a schedule could still ask) reaches the kit with a 3-minute limit, which the kit keeps.
+  await q('update zone set max_run_minutes = 3 where id = $1', [zoneId]);
+  const longId = (await q(
+    "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'scheduled', 600) returning id", [zoneId])).rows[0].id;
+  const long = await kit.waitForCommand(c => String(c.id) === String(longId)).catch(() => null);
+  check("a zone limited to 3 min sends maxRunSeconds 180, and the kit runs min(asked, maximum)",
+    long?.maxRunSeconds === 180 && runLimitSeconds(long) === 180, long ? `asked ${long.durationSeconds}s, max ${long.maxRunSeconds}s` : 'not delivered');
+  if (long) {
+    await kit.ack(long.id);
+    await kit.reportRun({ runtimeSeconds: 180, triggerSource: 'scheduled', startedAt: (() => { const d = new Date(); d.setMilliseconds(0); return d; })() });
+  }
+  await q('update zone set max_run_minutes = 5 where id = $1', [zoneId]);
+
+  // 8c. Lost-connection failsafe: MQTT goes during a server run; the kit stops by itself and
+  //     reports the run when it is back (3 s here; LOST_CONTACT_STOP_MS is 3 min on the board).
+  const failId = (await q(
+    "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'manual', 120) returning id", [zoneId])).rows[0].id;
+  const failCmd = await kit.waitForCommand(c => String(c.id) === String(failId)).catch(() => null);
+  if (failCmd) {
+    await kit.ack(failCmd.id);
+    const running = kit.startRun(failCmd, { lostContactMs: 3000 });
+    await sleep(500);
+    await kit.disconnectMqtt();
+    const stopped = await running;
+    await kit.connectMqtt();
+    const failRun = await kit.reportRun({ runtimeSeconds: stopped.runtimeSeconds, triggerSource: 'manual', startedAt: stopped.startedAt });
+    const failRow = (await q('select finished_at is not null as finished from irrigation_commands where id = $1', [failId])).rows[0];
+    check('the lost-connection failsafe stops a 2-minute run once MQTT has been gone 3 s, and the run is still reported',
+      stopped.reason === 'lost contact' && stopped.runtimeSeconds >= 3 && stopped.runtimeSeconds < 10 && failRun.status === 200 && failRow?.finished === true,
+      `${stopped.reason} after ${stopped.runtimeSeconds}s; finished ${failRow?.finished}`);
+  } else {
+    check('the lost-connection failsafe stops a run', false, 'command not delivered');
+  }
 
   // 9. A pump run kept while offline (local page), uploaded twice.
   const keptStart = new Date(Date.now() - 2 * 3600 * 1000);
@@ -189,6 +252,29 @@ try {
   const r2 = await kit.reportRun({ runtimeSeconds: 120, triggerSource: 'manual', startedAt: keptStart, syncStatus: 'offline_queued' });
   const kept = (await q("select count(*)::int n from irrigation_event where zone_id = $1 and sync_status = 'offline_queued'", [zoneId])).rows[0].n;
   check('a kept pump run uploaded twice is counted once', r1.status === 200 && r2.status === 200 && kept === 1, `${kept} row(s)`);
+
+  // 10. The API's own routes against this database (farmer and admin routes need a login the
+  //     simulation cannot make, so they run in-process with the test sign-in):
+  //     backend/AgroFlow.Domain.Tests/SimDatabaseTests.cs.
+  console.log('Running the API database tests against this Postgres...');
+  const tests = await new Promise(resolve => {
+    const p = spawn('dotnet', ['test', path.join(repoRoot, 'backend', 'AgroFlow.Domain.Tests'),
+      '--filter', 'FullyQualifiedName~SimDatabaseTests', '--logger', 'console;verbosity=normal'], {
+      env: { ...process.env, AGROFLOW_SIM_DB: db.connectionString }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    p.stdout.on('data', d => { out += d; });
+    p.stderr.on('data', d => { out += d; });
+    p.on('close', code => resolve({ code, out }));
+  });
+  // "Total tests: 8 / Passed: 8 [/ Failed: n] [/ Skipped: n]" (console logger, normal verbosity).
+  const count = re => Number((tests.out.match(re) ?? [])[1] ?? 0);
+  const total = count(/Total tests:\s+(\d+)/), passed = count(/^\s*Passed:\s+(\d+)/m);
+  const failedN = count(/^\s*Failed:\s+(\d+)/m), skippedN = count(/^\s*Skipped:\s+(\d+)/m);
+  check('the API database tests pass (no kit, kit offline, over the maximum, sent/started/finished, staff + Telegram, weather in the app)',
+    tests.code === 0 && total >= 8 && passed === total && failedN === 0 && skippedN === 0,
+    `${passed} of ${total} passed, ${failedN} failed, ${skippedN} skipped`);
+  if (tests.code !== 0) console.log(tests.out.split('\n').filter(l => /Failed |Assert|Error Message|expected|actual/i.test(l)).slice(0, 30).join('\n'));
 } catch (error) {
   check('simulation ran to the end', false, error.message);
 } finally {

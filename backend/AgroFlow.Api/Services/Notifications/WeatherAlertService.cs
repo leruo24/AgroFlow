@@ -79,7 +79,8 @@ public sealed class WeatherAlertService : BackgroundService
         }
     }
 
-    private async Task SweepAsync(CancellationToken cancellationToken)
+    // internal: the sim database tests run one sweep (SimDatabaseTests).
+    internal async Task SweepAsync(CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
         var horizon = today.AddDays(Math.Max(1, _options.ForecastDays));

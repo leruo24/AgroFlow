@@ -35,26 +35,18 @@ export async function applyMigrations(client, log = console.log) {
   await client.query(fs.readFileSync(path.join(here, 'supabase-shim.sql'), 'utf8'));
   const dir = path.join(repoRoot, 'supabase', 'migrations');
   const files = fs.readdirSync(dir).filter(f => /^\d{4}_.*\.sql$/.test(f)).sort();
-  const viewRedefinitions = [];
   for (const file of files) {
-    let sql = fs.readFileSync(path.join(dir, file), 'utf8')
+    // No other workaround: 0007 and 0010 replay on an empty database themselves
+    // (fix/migration-replay).
+    const sql = fs.readFileSync(path.join(dir, file), 'utf8')
       .replace(/create extension if not exists pg_cron\s*;/gi, '-- pg_cron skipped in the simulation');
-    // On an empty database, CREATE OR REPLACE VIEW zone_latest_reading fails where a
-    // migration renames the view's columns (0007 does). The live database never replayed the
-    // chain from empty, so this is a simulation-only step: drop the view just before any
-    // migration that redefines it. Nothing in the files changes.
-    if (/create\s+or\s+replace\s+view\s+(public\.)?zone_latest_reading/i.test(sql)) {
-      sql = 'drop view if exists public.zone_latest_reading;\n' + sql;
-      viewRedefinitions.push(file);
-    }
     try {
       await client.query(sql);
     } catch (error) {
       throw new Error(`${file}: ${error.message}`);
     }
   }
-  log(`applied ${files.length} migrations (${files[0]} .. ${files[files.length - 1]}); ` +
-    `zone_latest_reading dropped before: ${viewRedefinitions.join(', ') || 'none'}`);
+  log(`applied ${files.length} migrations (${files[0]} .. ${files[files.length - 1]}), as written`);
   return files;
 }
 

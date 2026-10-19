@@ -2,7 +2,7 @@
 
 Runs the **real** `AgroFlow.Api` against a throwaway local Postgres with **every migration
 applied** and a local MQTT broker, and drives it with a pretend kit that follows firmware
-1.5.0's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
+1.6.0's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
 
 ```bash
 cd hardware/sim
@@ -27,13 +27,19 @@ prints the API's log and the broker's connections.
 | A manual 1-minute command reaches the kit and is acknowledged | an `irrigation_commands` row (what Water now creates) → MQTT → `POST .../executed` → `executed` |
 | The run is logged | `POST /api/irrigation-events`: a `manual` event of 60 s |
 | A pump run kept offline and uploaded twice is counted once | two identical `offline_queued` events: one row |
+| A Manual zone is never watered automatically | a bone-dry live reading on a Manual zone: no command; `GET /api/devices/config` says `autoWateringAllowed: false` (true once Automatic) |
+| Every command carries the zone's maximum run time | `maxRunSeconds` 300 by default; a zone limited to 3 min sends 180 for a 600 s request, and the kit runs 180 |
+| A finished run marks its command finished | the run report sets `irrigation_commands.finished_at` and `irrigation_event.command_id` (migration 0051) |
+| Lost-connection failsafe | MQTT dropped during a 2-minute run: the kit stops after 3 s here (3 min on the board) and the run is still reported |
+| The API's farmer and admin routes on this database | `SimDatabaseTests` (8): no kit and kit offline refused (409), over the zone maximum refused (400), sent -> started -> finished through the real device routes, staff set the maximum (farmers cannot, the database checks 1-120), staff Telegram refused and unlinked with an audit row, staff cannot get a temporary password, a frost warning saved in the app once. `node run-db-tests.mjs` runs only these. |
 
 ## What it does not cover
 
 - **The admin and farmer endpoints** need a Supabase login (JWT), which this has no way to
   issue. Their database effect is written directly: the farmer, farm, zone and the kit's
   enrollment row (what **Register a kit** creates), and the command row (what **Water now**
-  creates). The device side — claim, credentials, MQTT both ways, ACK, events — is the real
+  creates). The routes themselves run in `SimDatabaseTests` against the same database, with
+  the test sign-in. The device side — claim, credentials, MQTT both ways, ACK, events — is the real
   API code.
 - **Supabase itself.** `supabase-shim.sql` adds the few Supabase objects the migrations
   expect (`auth.users`, `auth.uid()`, the `anon` / `authenticated` / `service_role` roles, a
@@ -44,10 +50,9 @@ prints the API's log and the broker's connections.
   sketch is compile-checked with arduino-cli and its buffer is unit-tested natively
   (`hardware/esp32/tests`).
 
-## A finding from building it
+## Migrations replay as written
 
-The migrations do not replay on an **empty** database as they are: `0007` (and later `0010`)
-redefine `zone_latest_reading` with `create or replace view` while renaming its columns,
-which Postgres refuses. The live database never replayed from empty (0047 repairs its
-drift), so this only matters for a fresh install. The simulation drops that view just before
-each of those two migrations; the migration files are unchanged.
+Every migration is applied to the empty database exactly as written (only pg_cron's
+`create extension` is skipped). The simulation used to drop `zone_latest_reading` before 0007
+and 0010, which failed on an empty database; fix/migration-replay guarded those two files,
+so the workaround is gone.
