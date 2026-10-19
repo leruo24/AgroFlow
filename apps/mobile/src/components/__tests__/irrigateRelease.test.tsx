@@ -2,7 +2,8 @@
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
 /* Release fixes on Water now (docs/irrigate-path.md): Irrigate is off when the zone has no
- * kit that can hear it, and the server's refusals read as plain words. */
+ * kit that can hear it, the server's refusals read as plain words, and after Irrigate the
+ * screen shows what the kit really did: Sending… -> Kit started watering -> Finished. */
 
 import type { ReactNode } from 'react';
 
@@ -38,6 +39,7 @@ jest.mock('@/components/AppAlert', () => ({ AppAlert: { alert: (...a: unknown[])
 jest.mock('@/services/agroFlowApi', () => ({
   ApiHttpError: class ApiHttpError extends Error { status: number; constructor(m: string, s: number) { super(m); this.status = s; } },
   fetchZoneHardware: jest.fn(),
+  fetchCommandStatus: jest.fn(),
   fetchFarmerDashboard: jest.fn(),
   sendManualIrrigationCommand: jest.fn(),
   updateZoneThroughApi: jest.fn(() => Promise.resolve()),
@@ -59,10 +61,11 @@ jest.mock('@/context/AgroFlowContext', () => {
   return { ...actual, useAgroFlow: () => mockAgro };
 });
 
-import { render, screen, waitFor, fireEvent } from '@testing-library/react-native';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react-native';
 import * as api from '@/services/agroFlowApi';
 import { mapZoneRow } from '@/context/AgroFlowContext';
 import { kitStateFrom } from '@/hooks/useZoneKit';
+import { ACK_WAIT_MS, RUN_POLL_MS, runStateFrom } from '@/hooks/useRunStatus';
 import ZoneControlScreen from '@/app/zone/[id]';
 
 const hardware = api.fetchZoneHardware as jest.Mock;
@@ -125,5 +128,68 @@ describe('no kit connected', () => {
     const startButton = (confirm[2] as { text: string; onPress?: () => Promise<void> }[]).find(b => b.onPress)!;
     await startButton.onPress!();
     await waitFor(() => expect(mockAlert).toHaveBeenLastCalledWith('Could not start watering', 'No kit connected to this zone'));
+  });
+});
+
+describe('after Irrigate', () => {
+  const status = api.fetchCommandStatus as jest.Mock;
+  const answer = (state: string) => ({ id: 'cmd-1', zoneId: 7, command: 'start', source: 'manual', state, label: state, durationSeconds: 60, createdAt: '', startedAt: null, finishedAt: null });
+
+  it('reads the server state, and no answer for 60 s as no response', () => {
+    expect(runStateFrom(answer('started') as never, 0, 1000)).toBe('started');
+    expect(runStateFrom(answer('finished') as never, 0, 1000)).toBe('finished');
+    expect(runStateFrom(null, 0, ACK_WAIT_MS - 1)).toBe('sent');
+    expect(runStateFrom(null, 0, ACK_WAIT_MS + 1)).toBe('no_response');
+  });
+
+  async function pressStart() {
+    await render(<ZoneControlScreen />);
+    await waitFor(() => expect(hardware).toHaveBeenCalled());
+    await fireEvent.press(screen.getByTestId('irrigate-button'));
+    const confirm = mockAlert.mock.calls.at(-1)!;
+    const start = (confirm[2] as { onPress?: () => Promise<void> }[]).find(b => b.onPress)!;
+    await act(async () => { await start.onPress!(); });
+  }
+
+  afterEach(() => { jest.useRealTimers(); });
+
+  it('Sending… then Kit started watering on the ack, then Finished on the run report', async () => {
+    hardware.mockResolvedValue(kit({}));
+    startManualIrrigation.mockResolvedValueOnce('cmd-1' as never);
+    status.mockResolvedValueOnce(answer('sent')).mockResolvedValueOnce(answer('started')).mockResolvedValue(answer('finished'));
+    jest.useFakeTimers();
+    await pressStart();
+    expect(screen.getByTestId('run-status').props.children).toBe('Sending…');
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe('Kit started watering'));
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe('Finished'));
+    expect(status).toHaveBeenCalledWith('cmd-1');
+    const calls = status.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS * 5); });
+    expect(status.mock.calls.length).toBe(calls);   // stops once finished
+  });
+
+  it("says \"Kit didn't respond — check it's online\" when the kit never acknowledges", async () => {
+    hardware.mockResolvedValue(kit({}));
+    startManualIrrigation.mockResolvedValueOnce('cmd-2' as never);
+    status.mockResolvedValue(answer('no_response'));
+    jest.useFakeTimers();
+    await pressStart();
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe("Kit didn't respond — check it's online"));
+  });
+
+  it('with no answer from the server at all, says the same after 60 s', async () => {
+    hardware.mockResolvedValue(kit({}));
+    startManualIrrigation.mockResolvedValueOnce('cmd-3' as never);
+    status.mockRejectedValue(new Error('offline'));
+    jest.useFakeTimers();
+    await pressStart();
+    for (let i = 0; i < Math.ceil(ACK_WAIT_MS / RUN_POLL_MS) + 1; i++) {
+      await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    }
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe("Kit didn't respond — check it's online"));
   });
 });

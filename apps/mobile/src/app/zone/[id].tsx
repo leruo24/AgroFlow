@@ -11,6 +11,7 @@ import { SoilPhPanel } from '@/components/SoilPhPanel';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 import { useConnectivity } from '@/lib/connectivity';
 import { useZoneKit } from '@/hooks/useZoneKit';
+import { useRunStatus, type RunState } from '@/hooks/useRunStatus';
 import { ApiHttpError } from '@/services/agroFlowApi';
 import { t, useI18n, type TranslationKey } from '@/i18n';
 // Dynamic Expo route: one screen for every irrigation zone, by route ID.
@@ -99,6 +100,14 @@ const MODE_KEYS: Record<string, TranslationKey> = {
   automatic: 'zone.modeAutomatic',
   scheduled: 'zone.modeScheduled',
   manual: 'zone.modeManual',
+};
+
+const RUN_STATE_KEYS: Record<RunState, TranslationKey> = {
+  sent: 'run.sent',
+  started: 'run.started',
+  finished: 'run.finished',
+  no_response: 'run.noResponse',
+  failed: 'run.failed',
 };
 
 function getErrorMessage(
@@ -291,6 +300,10 @@ export default function ZoneControlScreen() {
   // Water now needs a kit that is listening (the server refuses otherwise, 409).
   const kit = useZoneKit(zone?.id);
   const kitBlocked = kit === 'none' || kit === 'offline';
+
+  // The last Water now from this screen, followed until the kit reports it finished.
+  const [run, setRun] = useState<{ id: string; seconds: number } | null>(null);
+  const runState = useRunStatus(run?.id ?? null, run?.seconds ?? 0);
 
   useEffect(() => {
     if (
@@ -657,10 +670,11 @@ export default function ZoneControlScreen() {
             t('zone.start'),
           onPress: async () => {
             try {
-              await startManualIrrigation(
+              const commandId = await startManualIrrigation(
                 selectedZone.id,
                 duration
               );
+              if (commandId) setRun({ id: commandId, seconds: duration * 60 });
             } catch (error: unknown) {
               Alert.alert(
                 t('zone.startFailed'),
@@ -1798,7 +1812,17 @@ export default function ZoneControlScreen() {
                     <Text style={styles.offlineNote} accessibilityLiveRegion="polite">
                       {t('offline.needsConnection')}
                     </Text>
-                  ) : kitBlocked && !isOverrideActive ? (
+                  ) : null}
+                  {runState ? (
+                    <Text
+                      style={[styles.offlineNote, runState === 'finished' && { color: colors.success }]}
+                      accessibilityLiveRegion="polite"
+                      testID="run-status"
+                    >
+                      {t(RUN_STATE_KEYS[runState])}
+                    </Text>
+                  ) : null}
+                  {online && kitBlocked && !isOverrideActive ? (
                     <Text style={styles.offlineNote} accessibilityLiveRegion="polite" testID="irrigate-no-kit">
                       {t(kit === 'none' ? 'zone.noKit' : 'zone.kitOffline')}
                     </Text>

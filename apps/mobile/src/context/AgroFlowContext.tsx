@@ -734,10 +734,11 @@ type AgroFlowContextType = {//defines the structure of the AgroFlow context, inc
     mode: IrrigationMode
   ) => Promise<void>;
 
+  // Resolves to the command's id, so the zone screen can follow what the kit does with it.
   startManualIrrigation: (
     zoneId: string,
     durationMinutes: number
-  ) => Promise<void>;
+  ) => Promise<string | null>;
 
   stopManualIrrigation: (
     zoneId: string
@@ -1396,7 +1397,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       zone.irrigation
         .override.active
     ) {
-      return;
+      return null;
     }
 
     // Safety: never queued. A start sent hours late could water a zone nobody wants watered,
@@ -1405,7 +1406,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       throw new Error(t('offline.needsConnection'));
     }
 
-    await sendManualIrrigationCommand(
+    const sent = await sendManualIrrigationCommand(
       zoneId,
       'start',
       durationMinutes * 60
@@ -1448,7 +1449,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     addAlert(//generates an alert to inform the user that manual irrigation has started for the specific zone. The alert includes a title, message, and type, and is added to the alerts state to notify users of important events related to irrigation and zone management.
       zoneId,
       'Start Command Sent',
-      `The manual command was accepted for ${durationMinutes} minutes. Confirm operation at the device.`,
+      `Sent to the kit for ${durationMinutes} minutes. The zone screen shows when the kit starts and finishes.`,
       'info'
     );
 
@@ -1478,6 +1479,8 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         60 *
         1000
     );
+
+    return sent?.id ?? null;
   }
 
   async function stopManualIrrigation(

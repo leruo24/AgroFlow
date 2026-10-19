@@ -330,6 +330,11 @@
     "onetap.failed": "Hierdie aanmeldskakel het verval of is reeds gebruik. Meld eerder aan met jou tydelike wagwoord.",
     "onetap.toLogin": "Gaan na aanmeld",
     "zone.noKit": "Geen kit aan hierdie sone gekoppel nie",
-    "zone.kitOffline": "Geen kit aan hierdie sone gekoppel nie: ons het die afgelope 5 minute niks van sy kit gehoor nie. Kyk of dit krag en WiFi het."
+    "zone.kitOffline": "Geen kit aan hierdie sone gekoppel nie: ons het die afgelope 5 minute niks van sy kit gehoor nie. Kyk of dit krag en WiFi het.",
+    "run.sent": "Stuur tans…",
+    "run.started": "Kit het begin water gee",
+    "run.finished": "Klaar",
+    "run.noResponse": "Kit het nie geantwoord nie — kyk of dit aanlyn is",
+    "run.failed": "Kon nie die kit bereik nie"
   }
 }

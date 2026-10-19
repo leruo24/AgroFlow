@@ -309,6 +309,25 @@ export function sendManualIrrigationCommand(
   );
 }
 
+// What the kit did with a command (GET /api/farmer/commands/{id}). state is the server's word:
+// sent, started (the kit acknowledged), finished (the kit reported the run), no_response, failed.
+export type CommandStatus = {
+  id: string;
+  zoneId: number;
+  command: string;
+  source: string;
+  state: string;
+  label: string;
+  durationSeconds: number | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export function fetchCommandStatus(commandId: string) {
+  return authorizedRequest<CommandStatus>(`/api/farmer/commands/${encodeURIComponent(commandId)}`);
+}
+
 export function updateZoneThroughApi(
   zoneId: string,
   settings: Record<string, unknown>

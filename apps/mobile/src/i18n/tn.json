@@ -330,6 +330,11 @@
     "onetap.failed": "Kgolagano e ya go tsena e fetile kgotsa e setse e dirisitswe. Tsena ka lefoko la sephiri la nakwana.",
     "onetap.toLogin": "Ya kwa go tsena",
     "zone.noKit": "Ga go na kite e e golaganeng le karolo e",
-    "zone.kitOffline": "Ga go na kite e e golaganeng le karolo e: kite ya yone ga e a utlwala mo metsotsong e le 5. Tlhola gore e na le motlakase le WiFi."
+    "zone.kitOffline": "Ga go na kite e e golaganeng le karolo e: kite ya yone ga e a utlwala mo metsotsong e le 5. Tlhola gore e na le motlakase le WiFi.",
+    "run.sent": "E a romelwa…",
+    "run.started": "Kite e simolotse go nosetsa",
+    "run.finished": "Go fedile",
+    "run.noResponse": "Kite ga e a araba — tlhola gore e mo inthaneteng",
+    "run.failed": "Ga re a kgona go fitlhelela kite"
   }
 }
