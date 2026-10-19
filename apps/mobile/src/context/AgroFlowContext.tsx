@@ -36,6 +36,12 @@ import {
 import {
   relativeMoisturePercent,
 } from '@/lib/moistureDisplay';
+
+import {
+  irrigationModeFromDb,
+  irrigationModeToDb,
+  type IrrigationMode,
+} from '@/lib/irrigationMode';
 // Irrigation statuses the app allows
 export type IrrigationStatus =
   | 'Active'
@@ -66,9 +72,8 @@ export type PumpStatus =
   | 'Off'
   | 'Fault'
   | 'Unknown';
-export type IrrigationMode =
-  | 'automatic'
-  | 'scheduled';
+// automatic | scheduled | manual; read and written through lib/irrigationMode.ts.
+export type { IrrigationMode } from '@/lib/irrigationMode';
 
 export type IrrigationSchedule = {//normal irrigation - later can be delegated to backend 
   enabled: boolean;
@@ -390,7 +395,8 @@ function deriveMoistureStatus(
   return 'Optimal';
 }
 
-function mapZoneRow(
+// Exported for the mode-mapping tests.
+export function mapZoneRow(
   row: ZoneRow,
   index: number,
   reading: ZoneLatestReadingRow | undefined,
@@ -512,15 +518,14 @@ function mapZoneRow(
     },
     irrigation: {
       status:
-        row.irrigation_mode ===
+        irrigationModeFromDb(row.irrigation_mode) ===
         'scheduled'
           ? 'Scheduled'
           : 'Off',
+      // A zone saved as 'manual' used to read as 'automatic' here. lib/irrigationMode.ts
+      // maps all three, and anything unknown to manual.
       mode:
-        row.irrigation_mode ===
-        'scheduled'
-          ? 'scheduled'
-          : 'automatic',
+        irrigationModeFromDb(row.irrigation_mode),
       lastIrrigation: {
         date: lastIrrigationDate,
         time: lastIrrigationTime.slice(0, 5),
@@ -544,8 +549,8 @@ function mapZoneRow(
       },
       automation: {
         enabled:
-          row.irrigation_mode !==
-          'scheduled',
+          irrigationModeFromDb(row.irrigation_mode) ===
+          'automatic',
         moistureThreshold,
         desiredMoisture,
         weatherAdjustment:
@@ -1559,16 +1564,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
     await updateZoneThroughApi(
       zoneId,
-      {
-          irrigationMode:
-            mode,
-          automationEnabled:
-            mode ===
-            'automatic',
-          scheduleEnabled:
-            mode ===
-            'scheduled',
-      }
+      irrigationModeToDb(mode)
     );
 
     setZones(
