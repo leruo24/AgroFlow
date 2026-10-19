@@ -328,6 +328,8 @@
     "signin.tempHint": "Mafoko a sephiri a nakwana ke ditlhaka le dinomoro di le 8, jaaka KX7P 4MRT. Dikgala le ditlhaka tse dinnye di siame. Morago ga diura di le 72 ga le sa dire: dirisa O lebetse lefoko la sephiri, kgotsa kopa motlhankedi wa gago.",
     "onetap.signingIn": "Re a go tsenya…",
     "onetap.failed": "Kgolagano e ya go tsena e fetile kgotsa e setse e dirisitswe. Tsena ka lefoko la sephiri la nakwana.",
-    "onetap.toLogin": "Ya kwa go tsena"
+    "onetap.toLogin": "Ya kwa go tsena",
+    "zone.noKit": "Ga go na kite e e golaganeng le karolo e",
+    "zone.kitOffline": "Ga go na kite e e golaganeng le karolo e: kite ya yone ga e a utlwala mo metsotsong e le 5. Tlhola gore e na le motlakase le WiFi."
   }
 }

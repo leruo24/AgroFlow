@@ -460,12 +460,53 @@ public static class FarmerEndpoints
         if (IrrigationRunRules.CheckRequest(request.Command, request.DurationSeconds) is { } problem)
             return Results.BadRequest(new { error = problem });
 
+        await using var connection = await dataSource.OpenConnectionAsync();
+
+        // A start needs a kit that is listening. Refused now (409) instead of accepted and
+        // marked failed 2 hours later. "Heard from" is the same rule as the Kit screen: the
+        // newer of hardware.last_seen and the zone's newest reading. A stop is always let through.
+        if (request.Command == "start")
+        {
+            var kitSql = $"""
+                select k.device_id is not null,
+                       greatest(k.last_seen, coalesce(r.recorded_at, k.last_seen))
+                  from zone z
+                  left join lateral (
+                    select h.device_id, h.last_seen from hardware h
+                     where h.zone_id = z.id and h.enrollment_status = 'active' and h.device_id is not null
+                     order by h.last_seen desc limit 1) k on true
+                  left join lateral (
+                    select max(x.recorded_at) as recorded_at from sensor_reading x where x.zone_id = z.id) r on true
+                 where z.id = $2 and ({FarmAccessSql});
+                """;
+            await using var kitCommand = new NpgsqlCommand(kitSql, connection);
+            kitCommand.Parameters.AddWithValue(userId);
+            kitCommand.Parameters.AddWithValue(zoneId);
+            await using (var reader = await kitCommand.ExecuteReaderAsync())
+            {
+                if (!await reader.ReadAsync()) return Results.NotFound();
+                var hasKit = reader.GetBoolean(0);
+                var lastContact = reader.IsDBNull(1) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(1);
+                var kit = IrrigationRunRules.Kit(hasKit, lastContact, DateTimeOffset.UtcNow);
+                if (kit != IrrigationRunRules.KitState.Online)
+                {
+                    return Results.Json(new
+                    {
+                        error = kit == IrrigationRunRules.KitState.None
+                            ? IrrigationRunRules.NoKitMessage
+                            : IrrigationRunRules.KitOfflineMessage,
+                        reason = kit == IrrigationRunRules.KitState.None ? "no_kit" : "kit_offline",
+                        lastSeen = lastContact,
+                    }, statusCode: StatusCodes.Status409Conflict);
+                }
+            }
+        }
+
         var sql = $"""
             insert into irrigation_commands (zone_id, command, source, duration_seconds)
             select z.id, $2, 'manual', $3 from zone z
             where z.id=$4 and ({FarmAccessSql}) returning id;
             """;
-        await using var connection = await dataSource.OpenConnectionAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue(userId);
         command.Parameters.AddWithValue(request.Command);

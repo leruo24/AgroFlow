@@ -57,6 +57,8 @@ jest.mock('@/components/AppAlert', () => ({
 }));
 
 jest.mock('@/services/agroFlowApi', () => ({
+  fetchZoneHardware: jest.fn(() => Promise.resolve({ hardwareId: 1, deviceId: 'AF-1', online: true })),
+  ApiHttpError: class ApiHttpError extends Error { status: number; constructor(m: string, s: number) { super(m); this.status = s; } },
   fetchZoneInsights: jest.fn(() => Promise.resolve({ insights: [], growth: null })),
   fetchSoilPh: jest.fn(() => Promise.resolve({ zoneId: 7, entries: [] })),
   logSoilPh: jest.fn(),

@@ -10,6 +10,8 @@ import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
 import { SoilPhPanel } from '@/components/SoilPhPanel';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 import { useConnectivity } from '@/lib/connectivity';
+import { useZoneKit } from '@/hooks/useZoneKit';
+import { ApiHttpError } from '@/services/agroFlowApi';
 import { t, useI18n, type TranslationKey } from '@/i18n';
 // Dynamic Expo route: one screen for every irrigation zone, by route ID.
 import {
@@ -285,6 +287,10 @@ export default function ZoneControlScreen() {
           routeId
         )
     );
+
+  // Water now needs a kit that is listening (the server refuses otherwise, 409).
+  const kit = useZoneKit(zone?.id);
+  const kitBlocked = kit === 'none' || kit === 'offline';
 
   useEffect(() => {
     if (
@@ -658,15 +664,24 @@ export default function ZoneControlScreen() {
             } catch (error: unknown) {
               Alert.alert(
                 t('zone.startFailed'),
-                error instanceof Error && error.message === t('offline.needsConnection')
-                  ? error.message
-                  : getErrorMessage(error, t('zone.commandFailed'))
+                startErrorText(error)
               );
             }
           },
         },
       ]
     );
+  }
+
+  // The server's refusals in the farmer's language: 409 is "no kit connected" (none, or not
+  // heard from), 400 says why the run was refused (for example longer than 5 minutes).
+  function startErrorText(error: unknown) {
+    if (error instanceof Error && error.message === t('offline.needsConnection')) return error.message;
+    if (error instanceof ApiHttpError && error.status === 409) {
+      return error.message.startsWith('No kit connected to this zone:') ? t('zone.kitOffline') : t('zone.noKit');
+    }
+    if (error instanceof ApiHttpError && error.status === 400) return error.message;
+    return getErrorMessage(error, t('zone.commandFailed'));
   }
 
   function handleStopManualRun() {
@@ -1760,12 +1775,12 @@ export default function ZoneControlScreen() {
                       styles.primaryButton,
                       isOverrideActive &&
                         styles.stopButton,
-                      !online && styles.primaryButtonDisabled,
+                      (!online || (kitBlocked && !isOverrideActive)) && styles.primaryButtonDisabled,
                     ]}
-                    disabled={!online}
+                    disabled={!online || (kitBlocked && !isOverrideActive)}
                     accessibilityRole="button"
-                    accessibilityState={{ disabled: !online }}
-                    accessibilityHint={online ? undefined : t('offline.needsConnection')}
+                    accessibilityState={{ disabled: !online || (kitBlocked && !isOverrideActive) }}
+                    accessibilityHint={!online ? t('offline.needsConnection') : kitBlocked && !isOverrideActive ? t(kit === 'none' ? 'zone.noKit' : 'zone.kitOffline') : undefined}
                     testID="irrigate-button"
                     onPress={
                       isOverrideActive
@@ -1782,6 +1797,10 @@ export default function ZoneControlScreen() {
                   {!online ? (
                     <Text style={styles.offlineNote} accessibilityLiveRegion="polite">
                       {t('offline.needsConnection')}
+                    </Text>
+                  ) : kitBlocked && !isOverrideActive ? (
+                    <Text style={styles.offlineNote} accessibilityLiveRegion="polite" testID="irrigate-no-kit">
+                      {t(kit === 'none' ? 'zone.noKit' : 'zone.kitOffline')}
                     </Text>
                   ) : null}
               </>

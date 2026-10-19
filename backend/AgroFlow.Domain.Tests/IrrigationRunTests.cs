@@ -10,7 +10,8 @@ using Xunit;
 
 namespace AgroFlow.Domain.Tests;
 
-// Release fixes on Water now (docs/irrigate-path.md): the 5-minute cap on the server.
+// Release fixes on Water now (docs/irrigate-path.md): the 5-minute cap on the server, and no
+// start without a kit that is listening.
 public class IrrigationRunTests : IClassFixture<ApiHost>
 {
     private readonly ApiHost _host;
@@ -55,5 +56,18 @@ public class IrrigationRunTests : IClassFixture<ApiHost>
         var res = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
         Assert.Contains("at most 5 minutes (300 seconds)", await res.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public void A_start_needs_an_enrolled_kit_heard_from_in_the_last_5_minutes()
+    {
+        var now = DateTimeOffset.Parse("2026-10-19T08:00:00Z");
+        Assert.Equal(IrrigationRunRules.KitState.None, IrrigationRunRules.Kit(false, now, now));
+        Assert.Equal(IrrigationRunRules.KitState.Online, IrrigationRunRules.Kit(true, now.AddMinutes(-4), now));
+        Assert.Equal(IrrigationRunRules.KitState.Offline, IrrigationRunRules.Kit(true, now.AddMinutes(-6), now));
+        Assert.Equal(IrrigationRunRules.KitState.Offline, IrrigationRunRules.Kit(true, null, now));   // never heard from
+        Assert.Equal(IrrigationRunRules.KitState.Online, IrrigationRunRules.Kit(true, now.AddSeconds(5), now));  // clock skew
+        Assert.Equal("No kit connected to this zone.", IrrigationRunRules.NoKitMessage);
+        Assert.StartsWith(IrrigationRunRules.NoKitMessage[..^1], IrrigationRunRules.KitOfflineMessage);
     }
 }

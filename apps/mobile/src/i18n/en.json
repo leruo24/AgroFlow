@@ -328,6 +328,8 @@
     "signin.tempHint": "Temporary passwords are 8 letters and numbers, like KX7P 4MRT. Spaces and small letters are fine. After 72 hours one stops working: use Forgot password, or ask your field officer.",
     "onetap.signingIn": "Signing you in…",
     "onetap.failed": "This sign-in link has expired or was already used. Sign in with your temporary password instead.",
-    "onetap.toLogin": "Go to sign in"
+    "onetap.toLogin": "Go to sign in",
+    "zone.noKit": "No kit connected to this zone",
+    "zone.kitOffline": "No kit connected to this zone: its kit has not been heard from in the last 5 minutes. Check it has power and WiFi."
   }
 }
