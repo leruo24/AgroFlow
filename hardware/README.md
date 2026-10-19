@@ -8,11 +8,16 @@ Firmware for every physical device in the AgroFlow platform.
 hardware/
 ├── shared/                           Cross-device docs/conventions (not tied to one sketch)
 │   └── MQTT_TOPICS.md                MQTT topic structure + payload shapes, used by every device type
-└── esp32/                            Devices built on the ESP32 (Arduino core)
-    └── AgroFlowIrrigationNode/       One sketch folder per device type
-        ├── AgroFlowIrrigationNode.ino
-        └── README.md                Device-specific setup - see this before flashing
+├── esp32/                            Devices built on the ESP32 (Arduino core)
+│   ├── AgroFlowIrrigationNode/       One sketch folder per device type
+│   │   ├── AgroFlowIrrigationNode.ino
+│   │   ├── OfflineBuffer.h          Offline ring buffer + replay, plain C++ (tested natively)
+│   │   └── README.md                Device-specific setup - see this before flashing
+│   └── tests/                        Native (g++/clang++) tests for the firmware's plain C++ parts
+└── sim/                              End-to-end kit simulation: local Postgres + MQTT + the real API
 ```
+
+Bringing up a new kit, step by step: [`docs/hardware-bringup.md`](../docs/hardware-bringup.md).
 
 Each device type gets its own sketch folder, grouped under its MCU family
 (`esp32/`, and any future `<mcu-family>/` sibling for a different platform).

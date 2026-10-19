@@ -63,7 +63,7 @@ page) to see the latest readings and start or stop the pump.
 
 - Opening the setup network: power-cycle the kit 3 times quickly (within ~10 s
   each); it also opens by itself when the saved WiFi has been gone 15 minutes,
-  and from the admin's "Open setup" button while the kit is online.
+  and from the admin's "Open setup page" button (Kits) while the kit is online.
 - Network: `AgroFlow-Setup-XXXX` (last 4 characters of the device ID), password
   `AF-` + the last 6 characters of the device ID (on the kit label). 2.4 GHz only.
 - The page asks for a login: user **`agroflow`**, password **the same `AF-…`

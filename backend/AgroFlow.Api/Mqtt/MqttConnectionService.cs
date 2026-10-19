@@ -76,7 +76,17 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         var password = _configuration["Mqtt:Password"]
             ?? throw new InvalidOperationException("Missing Mqtt:Password in configuration - see appsettings.json.");
 
-        _options = new MqttClientOptionsBuilder()
+        var builder = new MqttClientOptionsBuilder();
+
+        // Mqtt:ProtocolVersion is unset in production (MQTTnet's default, MQTT 5, which HiveMQ
+        // speaks). "311" selects MQTT 3.1.1 for a test broker that has only that, like the
+        // simulation's (hardware/sim). The kits themselves speak 3.1.1 (PubSubClient).
+        if (_configuration["Mqtt:ProtocolVersion"] == "311")
+        {
+            builder = builder.WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V311);
+        }
+
+        _options = builder
             .WithTcpServer(host, port)
             // Mqtt:UseTls defaults to true (HiveMQ Cloud). Only a local test broker turns it off.
             .WithTlsOptions(o => o.UseTls(!string.Equals(_configuration["Mqtt:UseTls"], "false", StringComparison.OrdinalIgnoreCase)))
