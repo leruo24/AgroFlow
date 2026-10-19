@@ -271,7 +271,7 @@
     "setup.flow.sizeInvalid": "Enter how much the container holds (more than 0).",
     "setup.flow.timeInvalid": "Time it for more than 2 seconds. Use a bigger container if it fills too fast.",
     "setup.flow.done": "Flow saved",
-    "setup.flow.tip": "A bucket works well. Fill it to a line you know, like 5 litres.",
+    "setup.flow.tip": "Use any bucket or container. Fill it to a line you know, and type how many litres that is.",
     "setup.soil.title": "Teach AgroFlow your soil",
     "setup.soil.why": "Every soil holds water differently. Two readings show AgroFlow what dry and wet look like in yours.",
     "setup.soil.noKit": "{zone}: waiting for kit. This opens once the kit is connected.",

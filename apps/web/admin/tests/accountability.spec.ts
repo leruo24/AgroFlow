@@ -7,7 +7,7 @@ const OTHER_ADMIN = "00000000-0000-4000-8000-0000000000bb";
 
 const alertRow = (id: number, message: string) => ({
   id, severity: "Critical", message, status: "Open", created_at: "2026-10-06T06:00:00Z",
-  zone: { id: 11, name: "Tub 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } },
+  zone: { id: 11, name: "Bed 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } },
 });
 
 const ALERTS = [alertRow(41, "Nobody has this one"), alertRow(42, "Thandi has this one")];

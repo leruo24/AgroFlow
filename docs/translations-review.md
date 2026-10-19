@@ -37,7 +37,7 @@ Tests check that every key exists in all three languages and that the `{placehol
   tank-refill comparison, and errors the server explains.
 - The raindrop helper’s greetings and the page help (the "?" button) are English.
 
-## App (324 strings)
+## App (332 strings)
 
 | Key | English | Afrikaans (draft) | Setswana (draft) |
 |---|---|---|---|
@@ -120,7 +120,7 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `zone.stopConfirmBody` | The pump stops and the zone goes back to {mode}. | Die pomp stop en die sone gaan terug na {mode}. | Pompo e a ema mme karolo e boela go {mode}. |
 | `zone.stop` | Stop | Stop | Emisa |
 | `zone.invalidDurationTitle` | Check the minutes | Kyk na die minute | Tlhola metsotso |
-| `zone.invalidDuration` | Enter between 1 and {max} minutes. The kit stops every run at {max} minutes. | Tik tussen 1 en {max} minute in. Die toestel stop elke beurt na {max} minute. | Tsenya magareng ga metsotso e le 1 le {max}. Sedirisiwa se emisa go nosetsa morago ga metsotso e le {max}. |
+| `zone.invalidDuration` | Enter between 1 and {max} minutes. This zone's pump is limited to {max} min per run. | Tik tussen 1 en {max} minute in. Hierdie sone se pomp is beperk tot {max} min per keer. | Kwala magareng ga 1 le metsotso e le {max}. Pompo ya karolo e e lekanyeditswe go metsotso e le {max} ka nako. |
 | `zone.startFailed` | Could not start watering | Kon nie begin water gee nie | Ga go a kgonega go simolola go nosetsa |
 | `zone.stopFailed` | Could not stop watering | Kon nie die water stop nie | Ga go a kgonega go emisa go nosetsa |
 | `zone.commandFailed` | The command could not be sent. Please try again. | Die bevel kon nie gestuur word nie. Probeer asseblief weer. | Taelo ga e a kgona go romelwa. Tswee-tswee leka gape. |
@@ -307,7 +307,7 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `setup.flow.sizeInvalid` | Enter how much the container holds (more than 0). | Tik in hoeveel die houer hou (meer as 0). | Tsenya gore sejana se tshola bokae (go feta 0). |
 | `setup.flow.timeInvalid` | Time it for more than 2 seconds. Use a bigger container if it fills too fast. | Meet langer as 2 sekondes. Gebruik 'n groter houer as dit te vinnig vol word. | Lekanya go feta metsotswana e le 2. Dirisa sejana se segolo fa se tlala ka bonako thata. |
 | `setup.flow.done` | Flow saved | Vloei gestoor | Go elela go bolokilwe |
-| `setup.flow.tip` | A bucket works well. Fill it to a line you know, like 5 litres. | 'n Emmer werk goed. Vul dit tot by 'n lyn wat jy ken, soos 5 liter. | Pakete e dira sentle. E tlatse go fitlha kwa mothalong o o o itseng, jaaka dilitara di le 5. |
+| `setup.flow.tip` | Use any bucket or container. Fill it to a line you know, and type how many litres that is. | Gebruik enige emmer of houer. Vul dit tot by 'n lyn wat jy ken, en tik in hoeveel liter dit is. | Dirisa pakete kgotsa sejana sefe kapa sefe. Se tlatse go fitlha kwa mothalong o o o itseng, mme o kwale gore ke dilitara di le kae. |
 | `setup.soil.title` | Teach AgroFlow your soil | Leer AgroFlow jou grond ken | Ruta AgroFlow ka mmu wa gago |
 | `setup.soil.why` | Every soil holds water differently. Two readings show AgroFlow what dry and wet look like in yours. | Elke grond hou water anders. Twee lesings wys vir AgroFlow hoe droog en nat in joune lyk. | Mmu mongwe le mongwe o tshola metsi ka tsela e e farologaneng. Dipalo di le pedi di bontsha AgroFlow gore mmu wa gago o lebega jang fa o omile le fa o le metsi. |
 | `setup.soil.noKit` | {zone}: waiting for kit. This opens once the kit is connected. | {zone}: wag vir toestel. Dit maak oop sodra die toestel gekoppel is. | {zone}: go letetswe sedirisiwa. Se se tla bulega fa sedirisiwa se golagane. |
@@ -365,6 +365,14 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `onetap.signingIn` | Signing you in… | Meld jou aan… | Re a go tsenya… |
 | `onetap.failed` | This sign-in link has expired or was already used. Sign in with your temporary password instead. | Hierdie aanmeldskakel het verval of is reeds gebruik. Meld eerder aan met jou tydelike wagwoord. | Kgolagano e ya go tsena e fetile kgotsa e setse e dirisitswe. Tsena ka lefoko la sephiri la nakwana. |
 | `onetap.toLogin` | Go to sign in | Gaan na aanmeld | Ya kwa go tsena |
+| `zone.noKit` | No kit connected to this zone | Geen kit aan hierdie sone gekoppel nie | Ga go na kite e e golaganeng le karolo e |
+| `zone.kitOffline` | No kit connected to this zone: its kit has not been heard from in the last 5 minutes. Check it has power and WiFi. | Geen kit aan hierdie sone gekoppel nie: ons het die afgelope 5 minute niks van sy kit gehoor nie. Kyk of dit krag en WiFi het. | Ga go na kite e e golaganeng le karolo e: kite ya yone ga e a utlwala mo metsotsong e le 5. Tlhola gore e na le motlakase le WiFi. |
+| `run.sent` | Sending… | Stuur tans… | E a romelwa… |
+| `run.started` | Kit started watering | Kit het begin water gee | Kite e simolotse go nosetsa |
+| `run.finished` | Finished | Klaar | Go fedile |
+| `run.noResponse` | Kit didn't respond — check it's online | Kit het nie geantwoord nie — kyk of dit aanlyn is | Kite ga e a araba — tlhola gore e mo inthaneteng |
+| `run.failed` | Could not reach the kit | Kon nie die kit bereik nie | Ga re a kgona go fitlhelela kite |
+| `today.overLimit` | Recommended {recommended} min — your pump is limited to {max} min per run; run it again after it finishes | Aanbeveel {recommended} min — jou pomp is beperk tot {max} min per keer; laat dit weer loop wanneer dit klaar is | Go atlenegisiwa metsotso e le {recommended} — pompo ya gago e lekanyeditswe go metsotso e le {max} ka nako; e tsamaise gape fa e fetsa |
 
 ## Telegram (37 strings)
 

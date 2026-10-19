@@ -11,15 +11,15 @@ type Row = {
   restoredByName: string | null; restoredAt: string | null;
 };
 
-const ZONES = [{ id: 11, name: "Tub 1", farm_id: 1, crop_type: null, planting_date: null, area_m2: null, flow_rate_lpm: 1.5, status: "Active" }];
+const ZONES = [{ id: 11, name: "Bed 1", farm_id: 1, crop_type: null, planting_date: null, area_m2: null, flow_rate_lpm: 1.5, status: "Active" }];
 const FARMS = [{ farm_id: 1, name: "Alpha Farm", latitude: -33.9, longitude: 18.4, status: "Active" }];
 const PENDING = [{ id: 5, farmer_id: "p1", farm_id: null, request_type: "new_farm", location: "Ceres", rough_size: 1,
   crop_type: "maize", notes: null, status: "pending", created_at: "2026-10-05T08:00:00Z", updated_at: "2026-10-05T08:00:00Z" }];
 const ALERTS = [
-  { id: 41, severity: "Critical", message: "Kit offline on Tub 1", status: "Open", created_at: "2026-10-06T06:00:00Z",
-    zone: { id: 11, name: "Tub 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } } },
+  { id: 41, severity: "Critical", message: "Kit offline on Bed 1", status: "Open", created_at: "2026-10-06T06:00:00Z",
+    zone: { id: 11, name: "Bed 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } } },
   { id: 42, severity: "Low", message: "Telegram not linked", status: "Open", created_at: "2026-10-06T07:00:00Z",
-    zone: { id: 11, name: "Tub 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } } },
+    zone: { id: 11, name: "Bed 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } } },
 ];
 const HEALTH = {
   overall: "down", checkedAt: new Date().toISOString(),
@@ -128,7 +128,7 @@ test("Alerts: dismiss one, it moves to Dismissed with its time and who, Restore 
   expect(posts[0].body).toMatchObject({ kind: "alert", critical: false });
 
   await page.locator('[data-surface="alerts"][data-view="all"]').click();
-  await expect(page.locator("tr", { hasText: "Kit offline on Tub 1" })).toBeVisible();
+  await expect(page.locator("tr", { hasText: "Kit offline on Bed 1" })).toBeVisible();
   const history = page.locator(".dismiss-history li", { hasText: "Telegram not linked" });
   await expect(history).toContainText("Raised");
   await expect(history).toContainText("Dismissed");

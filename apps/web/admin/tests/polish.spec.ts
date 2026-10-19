@@ -135,7 +135,8 @@ test("the landing page has no 'Who made this' section and keeps the Staff sign-i
 
 /* ------------------------------ 6. Settings ------------------------------ */
 
-test("Settings has only My account: profile, password and Telegram", async ({ page }) => {
+// Telegram is for farmers only (docs/telegram-farmers-only.md): staff get a note, no Connect.
+test("Settings has only My account: profile, password, and a farmers-only Telegram note", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
   await page.goto("/#settings");
   await expect(page.locator(".tab[data-tab]")).toHaveCount(1, { timeout: 15000 });
@@ -146,43 +147,49 @@ test("Settings has only My account: profile, password and Telegram", async ({ pa
   await expect(body.getByRole("heading", { name: "Your details" })).toBeVisible();
   await expect(body.getByRole("heading", { name: "Password" })).toBeVisible();
   await expect(body.getByRole("heading", { name: "Telegram" })).toBeVisible();
-  await expect(body.getByRole("button", { name: "Connect Telegram" })).toBeVisible();
+  await expect(body.locator("#myTelegramStatus")).toContainText("Telegram is for farmers only.");
+  await expect(body.getByRole("button", { name: "Connect Telegram" })).toHaveCount(0);
 });
 
 /* ---------------------------- 7. Plain errors ---------------------------- */
 
-async function settingsWithTelegramFailing(page: Page, pingWorks: boolean): Promise<string[]> {
+// An API read that fails, on a page that needs it: Activity (GET /api/admin/activity). This
+// used the staff Telegram panel in Settings, which is gone (staff do not use Telegram).
+const ACTIVITY = `${FAKE_API}/api/admin/activity**`;
+async function activityFailing(page: Page, pingWorks: boolean): Promise<string[]> {
   const warnings: string[] = [];
   page.on("console", (m) => { if (m.type() === "warning") warnings.push(m.text()); });
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
   // What an ad blocker does: the request never leaves the browser.
-  await page.route(`${FAKE_API}/api/telegram/me`, (route) => route.abort("blockedbyclient"));
+  await page.route(ACTIVITY, (route) => route.abort("blockedbyclient"));
   if (!pingWorks) await page.route(`${FAKE_API}/api/public/ping`, (route) => route.abort("internetdisconnected"));
-  await page.goto("/#settings");
+  await page.goto("/#activity");
   return warnings;
 }
 
 test("a request a browser extension blocks says so, while the server answers a ping", async ({ page }) => {
-  const warnings = await settingsWithTelegramFailing(page, true);
-  const card = page.locator("#myTelegramStatus .error-state-card");
+  const warnings = await activityFailing(page, true);
+  const card = page.locator(".error-state-card");
   await expect(card).toBeVisible({ timeout: 15000 });
   await expect(card).toContainText(BLOCKED);
   await expect(page.locator("body")).not.toContainText("Failed to fetch");
   await expect(card.getByRole("button", { name: "Retry" })).toBeVisible();
   // The technical detail is in the console, not on the page.
-  expect(warnings.some((w) => w.includes("/api/telegram/me"))).toBe(true);
+  expect(warnings.some((w) => w.includes("/api/admin/activity"))).toBe(true);
 });
 
 test("when the server cannot be reached at all, the plain server sentence", async ({ page }) => {
-  await settingsWithTelegramFailing(page, false);
-  const card = page.locator("#myTelegramStatus .error-state-card");
+  await activityFailing(page, false);
+  const card = page.locator(".error-state-card");
   await expect(card).toContainText(SERVER, { timeout: 15000 });
   await expect(page.locator("body")).not.toContainText("Failed to fetch");
 
   // Retry once the network is back.
-  await page.unroute(`${FAKE_API}/api/telegram/me`);
+  await page.unroute(ACTIVITY);
+  await page.unroute(`${FAKE_API}/api/public/ping`);
   await card.getByRole("button", { name: "Retry" }).click();
-  await expect(page.getByRole("button", { name: "Connect Telegram" })).toBeVisible();
+  await expect(page.locator(".error-state-card")).toHaveCount(0, { timeout: 15000 });
+  await expect(page.locator("#content")).toHaveAttribute("data-page", "activity");
 });
 
 test("a failed Supabase read on a page shows the plain sentence, never 'Failed to fetch'", async ({ page }) => {

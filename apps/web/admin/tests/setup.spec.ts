@@ -15,7 +15,7 @@ const TODAY = {
   day: "2026-10-06",
   zones: [
     {
-      zoneId: 11, name: "Tub 1",
+      zoneId: 11, name: "Bed 1",
       action: { kind: "water", text: "Water about 8 min this morning (about 12 L)" },
       why: { summary: "Your soil has dried to the watering point.", facts: [], rule: "r", confidence: "Medium" },
       confidence: { level: "medium", reason: "Medium: based on the weather; the planting date is missing." },
@@ -32,7 +32,7 @@ async function open(page: Page, extra?: (method: string, path: string) => unknow
       const custom = extra?.(method, path);
       if (custom !== undefined) return custom;
       if (method === "GET" && path === "/api/farms") return FARMS;
-      if (method === "GET" && path === "/api/farmer/reports/zones") return [{ zoneId: 11, name: "Tub 1", farmId: 1, cropType: "tomato" }];
+      if (method === "GET" && path === "/api/farmer/reports/zones") return [{ zoneId: 11, name: "Bed 1", farmId: 1, cropType: "tomato" }];
       if (method === "GET" && path === "/api/farmer/farms/1/today") return TODAY;
       if (method === "GET" && path === "/api/users/farmers") return [{ id: "f1", name: "Owner A", email: "a@example.com", phone: null }];
       return undefined;
@@ -144,9 +144,9 @@ test("the farm drawer shows each zone's watering mode, Manual included", async (
   const errors = captureErrors(page);
   await open(page, (method, path) => method === "GET" && path === "/api/farmer/reports/zones"
     ? [
-        { zoneId: 11, name: "Tub 1", cropType: "tomato", irrigationMode: "manual" },
-        { zoneId: 12, name: "Tub 2", cropType: "spinach", irrigationMode: "automatic" },
-        { zoneId: 13, name: "Tub 3", cropType: "onion", irrigationMode: "scheduled" },
+        { zoneId: 11, name: "Bed 1", cropType: "tomato", irrigationMode: "manual" },
+        { zoneId: 12, name: "Bed 2", cropType: "spinach", irrigationMode: "automatic" },
+        { zoneId: 13, name: "Bed 3", cropType: "onion", irrigationMode: "scheduled" },
       ]
     : undefined);
   await page.locator('[data-act="view-farm"][data-id="1"]').click();

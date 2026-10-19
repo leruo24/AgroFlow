@@ -271,7 +271,7 @@
     "setup.flow.sizeInvalid": "Tik in hoeveel die houer hou (meer as 0).",
     "setup.flow.timeInvalid": "Meet langer as 2 sekondes. Gebruik 'n groter houer as dit te vinnig vol word.",
     "setup.flow.done": "Vloei gestoor",
-    "setup.flow.tip": "'n Emmer werk goed. Vul dit tot by 'n lyn wat jy ken, soos 5 liter.",
+    "setup.flow.tip": "Gebruik enige emmer of houer. Vul dit tot by 'n lyn wat jy ken, en tik in hoeveel liter dit is.",
     "setup.soil.title": "Leer AgroFlow jou grond ken",
     "setup.soil.why": "Elke grond hou water anders. Twee lesings wys vir AgroFlow hoe droog en nat in joune lyk.",
     "setup.soil.noKit": "{zone}: wag vir toestel. Dit maak oop sodra die toestel gekoppel is.",

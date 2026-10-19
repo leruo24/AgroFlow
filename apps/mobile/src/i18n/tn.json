@@ -271,7 +271,7 @@
     "setup.flow.sizeInvalid": "Tsenya gore sejana se tshola bokae (go feta 0).",
     "setup.flow.timeInvalid": "Lekanya go feta metsotswana e le 2. Dirisa sejana se segolo fa se tlala ka bonako thata.",
     "setup.flow.done": "Go elela go bolokilwe",
-    "setup.flow.tip": "Pakete e dira sentle. E tlatse go fitlha kwa mothalong o o o itseng, jaaka dilitara di le 5.",
+    "setup.flow.tip": "Dirisa pakete kgotsa sejana sefe kapa sefe. Se tlatse go fitlha kwa mothalong o o o itseng, mme o kwale gore ke dilitara di le kae.",
     "setup.soil.title": "Ruta AgroFlow ka mmu wa gago",
     "setup.soil.why": "Mmu mongwe le mongwe o tshola metsi ka tsela e e farologaneng. Dipalo di le pedi di bontsha AgroFlow gore mmu wa gago o lebega jang fa o omile le fa o le metsi.",
     "setup.soil.noKit": "{zone}: go letetswe sedirisiwa. Se se tla bulega fa sedirisiwa se golagane.",
