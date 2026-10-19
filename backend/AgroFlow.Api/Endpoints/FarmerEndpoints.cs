@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgroFlow.Business;
 using System.Globalization;
 using Npgsql;
 using NpgsqlTypes;
@@ -455,10 +456,9 @@ public static class FarmerEndpoints
         long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
-        if (request.Command is not ("start" or "stop")) return Results.BadRequest(new { error = "Command must be start or stop." });
-        if (request.Command == "start" && request.DurationSeconds is null)
-            return Results.BadRequest(new { error = "A start command requires a duration." });
-        if (request.DurationSeconds is <= 0 or > 3600) return Results.BadRequest(new { error = "Duration must be between 1 and 3600 seconds." });
+        // At most 300 s, the kit's own cap (IrrigationRunRules).
+        if (IrrigationRunRules.CheckRequest(request.Command, request.DurationSeconds) is { } problem)
+            return Results.BadRequest(new { error = problem });
 
         var sql = $"""
             insert into irrigation_commands (zone_id, command, source, duration_seconds)
