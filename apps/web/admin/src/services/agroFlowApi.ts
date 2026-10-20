@@ -84,6 +84,8 @@ export type LocationSearchResult = {
   detail: string;
   latitude: number;
   longitude: number;
+  province?: string | null;
+  district?: string | null;
 };
 
 export type ReverseLocationResult = {
@@ -94,8 +96,37 @@ export type ReverseLocationResult = {
   displayName: string | null;
 };
 
-export function searchLocations(query: string): Promise<LocationSearchResult[]> {
-  return getAuthorized(`/api/admin/locations/search?q=${encodeURIComponent(query)}`);
+/* Town search (Open-Meteo, South Africa only), within one province when given. Tolerant of
+ * misspellings: "Mafeking" finds Mahikeng. */
+export function searchLocations(query: string, province?: string | null): Promise<LocationSearchResult[]> {
+  const p = province ? `&province=${encodeURIComponent(province)}` : "";
+  return getAuthorized(`/api/admin/locations/search?q=${encodeURIComponent(query)}${p}`);
+}
+
+/* The farm's province and town (migration 0053) with its coordinates. Staff only: farmers
+ * never edit the location. */
+export async function setFarmPlace(
+  farmId: number,
+  input: { province: string | null; town: string | null; latitude: number; longitude: number },
+): Promise<{ message: string }> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const response = await navigationAwareFetch(`${API_BASE}/api/admin/farms/${farmId}/location`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error(errorMessage(await response.text(), response.status));
+  return await response.json() as { message: string };
+}
+
+/* The saved province and town, to open the edit drawer pre-filled. Null before 0053. */
+export async function getFarmPlace(farmId: number): Promise<{ province: string | null; town: string | null } | null> {
+  const { data, error } = await supabase.from("farm").select("province, town").eq("farm_id", farmId).maybeSingle();
+  if (error || !data) return null;
+  const row = data as { province: string | null; town: string | null };
+  return { province: row.province ?? null, town: row.town ?? null };
 }
 
 export function reverseLocation(latitude: number, longitude: number): Promise<ReverseLocationResult> {
@@ -127,6 +158,7 @@ export async function inviteFarmer(input: {
 export type FarmerOnboardedResult = {
   message: string;
   profileId: string;
+  farmId?: number | null;
   email: string;
   temporaryPassword: string;
   telegramDeepLink: string | null;
@@ -225,8 +257,8 @@ export async function registerFarm(input: {
       rootDepthLimitM?: number | null;
     }[];
   };
-}): Promise<void> {
-  await postAuthorized("/api/farms/register", input);
+}): Promise<{ farm_id?: number }> {
+  return (await postAuthorized<{ farm_id?: number } | undefined>("/api/farms/register", input)) ?? {};
 }
 
 export async function updateFarmLocation(

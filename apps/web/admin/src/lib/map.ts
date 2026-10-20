@@ -1,7 +1,14 @@
-/* Leaflet farm-location picker. Decimal coordinates are the authoritative
- * values; search, DMS input, the marker and reverse geocoding all synchronise
- * with those same two fields. */
-import { formatDecimal, formatDms, parseCoordinatePair, validCoordinates } from "@/lib/coordinates";
+/* Leaflet farm-location picker, for staff (farmers never edit the location). In order:
+ * province (the nine) -> town search as you type, limited to that province (Open-Meteo,
+ * South Africa, tolerant of misspellings, shown as "Town, District/Municipality, Province")
+ * -> a draggable pin -> latitude and longitude, checked against South Africa's bounds, or
+ * "Use my current location" (the browser's GPS, only when tapped). Decimal coordinates are
+ * the authoritative values; search, DMS input, the marker and reverse geocoding all
+ * synchronise with those same two fields. Reverse lookups go through the API, which keeps
+ * to the Nominatim usage policy (one request a second, a User-Agent, cached). */
+import {
+  OUTSIDE_SA, PROVINCES, formatDecimal, formatDms, insideSouthAfrica, parseCoordinatePair, validCoordinates,
+} from "@/lib/coordinates";
 import { plainError } from "@/lib/plainError";
 import { reverseLocation, searchLocations, type LocationSearchResult } from "@/services/agroFlowApi";
 
@@ -59,10 +66,18 @@ function loadLeaflet(): Promise<LeafletGlobal> {
 
 export type LocationPickerHandle = { destroy(): void };
 
+const SEARCH_DELAY_MS = 350;
+
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
 export function locationPickerHtml(opts: {
   name?: string;
   latitude?: number | null;
   longitude?: number | null;
+  province?: string | null;
+  town?: string | null;
 }): string {
   const lat = opts.latitude ?? "";
   const lng = opts.longitude ?? "";
@@ -70,10 +85,17 @@ export function locationPickerHtml(opts: {
   const pair = typeof lat === "number" && typeof lng === "number" ? formatDecimal(lat, lng) : "";
   return `<section class="map-pick" data-map-pick="${id}" aria-labelledby="${id}-title">
     <h4 id="${id}-title">Farm location</h4>
-    <p class="muted">Search for a town, village, farm or district; choose the point on the map; or enter precise coordinates. A street address is not required.</p>
+    <p class="muted">Choose the province, then start typing the nearest town. Drag the pin to the farm itself, or enter precise coordinates. A street address is not required.</p>
+    <label class="f">Province
+      <select data-field="province" data-map-province>
+        <option value="">Choose a province</option>
+        ${PROVINCES.map((p) => `<option value="${p}"${opts.province === p ? " selected" : ""}>${p}</option>`).join("")}
+      </select>
+    </label>
+    <input type="hidden" data-field="town" data-map-town value="${escapeAttr(opts.town ?? "")}" />
     <form class="map-search" data-map-search>
-      <label class="f">Place or address
-        <span class="map-search-row"><input type="search" data-map-query autocomplete="off" placeholder="e.g. Sesobe, North West" /><button type="submit" class="btn secondary">Search</button></span>
+      <label class="f">Nearest town
+        <span class="map-search-row"><input type="search" data-map-query autocomplete="off" value="${escapeAttr(opts.town ?? "")}" placeholder="e.g. Mahikeng" /><button type="submit" class="btn secondary">Search</button></span>
       </label>
     </form>
     <div class="map-search-results" data-map-results role="listbox" aria-label="Location search results" hidden></div>
@@ -87,9 +109,11 @@ export function locationPickerHtml(opts: {
       <input type="text" data-map-pair value="${pair}" placeholder="-25.037, 26.434 or 25° 02′ 13″ S, 26° 26′ 02″ E" />
     </label>
     <div class="map-pick-fields">
-      <label class="f">Latitude<input type="number" step="any" min="-90" max="90" data-field="latitude" data-map-lat value="${lat}" placeholder="-25.037" /></label>
-      <label class="f">Longitude<input type="number" step="any" min="-180" max="180" data-field="longitude" data-map-lng value="${lng}" placeholder="26.434" /></label>
+      <label class="f">Latitude<input type="number" step="any" min="-35" max="-22" data-field="latitude" data-map-lat value="${lat}" placeholder="-25.037" /></label>
+      <label class="f">Longitude<input type="number" step="any" min="16" max="33" data-field="longitude" data-map-lng value="${lng}" placeholder="26.434" /></label>
     </div>
+    <button type="button" class="btn ghost" data-map-gps>Use my current location</button>
+    <p class="muted">South Africa only: latitude -35 to -22, longitude 16 to 33. The current location is read once, only when you press the button.</p>
   </section>`;
 }
 
@@ -107,7 +131,10 @@ export async function mountLocationPicker(container: HTMLElement): Promise<Locat
   const region = container.querySelector<HTMLElement>("[data-map-region]");
   const dms = container.querySelector<HTMLElement>("[data-map-dms]");
   const decimal = container.querySelector<HTMLElement>("[data-map-decimal]");
-  const locationInput = (container.closest("[data-wizard]") ?? container.closest(".drawer"))
+  const provinceSelect = container.querySelector<HTMLSelectElement>("[data-map-province]");
+  const townInput = container.querySelector<HTMLInputElement>("[data-map-town]");
+  const gpsButton = container.querySelector<HTMLButtonElement>("[data-map-gps]");
+  const locationInput = (container.closest("[data-wizard]") ?? container.closest(".drawer") ?? container.closest(".onboarding-panel"))
     ?.querySelector<HTMLInputElement>('[data-field="location"]');
   if (!canvas || !latInput || !lngInput || !pairInput) return { destroy: () => undefined };
 
@@ -120,7 +147,7 @@ export async function mountLocationPicker(container: HTMLElement): Promise<Locat
     if (!latInput.value || !lngInput.value) return null;
     const lat = Number(latInput.value);
     const lng = Number(lngInput.value);
-    return validCoordinates(lat, lng) ? [lat, lng] : null;
+    return insideSouthAfrica(lat, lng) ? [lat, lng] : null;
   };
   const showCoordinates = (lat: number, lng: number): void => {
     if (placeBox) placeBox.hidden = false;
@@ -177,6 +204,10 @@ export async function mountLocationPicker(container: HTMLElement): Promise<Locat
       say("Latitude must be -90 to 90 and longitude -180 to 180. Keep the latitude first.");
       return;
     }
+    if (!insideSouthAfrica(lat, lng)) {
+      say(OUTSIDE_SA);
+      return;
+    }
     if (map && L) {
       if (marker) marker.setLatLng([lat, lng]);
       else {
@@ -204,7 +235,11 @@ export async function mountLocationPicker(container: HTMLElement): Promise<Locat
 
   const fromFields = (): void => {
     const next = current();
-    if (!next) return void say("Enter a valid latitude and longitude.");
+    if (!next) {
+      const lat = Number(latInput.value);
+      const lng = Number(lngInput.value);
+      return void say(latInput.value && lngInput.value && validCoordinates(lat, lng) ? OUTSIDE_SA : "Enter a valid latitude and longitude.");
+    }
     place(next[0], next[1], false);
     pairInput.value = formatDecimal(next[0], next[1]);
     map?.setView(next, 13);
@@ -220,20 +255,30 @@ export async function mountLocationPicker(container: HTMLElement): Promise<Locat
 
   const selectResult = (item: LocationSearchResult): void => {
     showLocality(item.name, item.detail);
+    if (townInput) townInput.value = item.name;
+    if (queryInput) queryInput.value = item.name;
+    if (provinceSelect && item.province && (PROVINCES as readonly string[]).includes(item.province)) provinceSelect.value = item.province;
     place(item.latitude, item.longitude, true, false);
     map?.setView([item.latitude, item.longitude], 13);
     if (results) results.hidden = true;
   };
-  searchForm?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const query = queryInput?.value.trim() ?? "";
+  // Town search: as the admin types (after a short pause), on Enter or Search, and again
+  // when the province changes. Only the latest answer is shown.
+  let searchSequence = 0;
+  let searchTimer: number | undefined;
+  const search = (query: string): void => {
     if (query.length < 2) return void say("Type at least two characters to search.");
-    say("Searching for matching places…");
+    const province = provinceSelect?.value || null;
+    const sequence = ++searchSequence;
+    say(province ? `Searching for towns in ${province}…` : "Searching for matching places…");
     if (results) results.hidden = true;
-    void searchLocations(query).then((items) => {
+    void searchLocations(query, province).then((items) => {
+      if (sequence !== searchSequence) return;
       if (!results) return;
       results.replaceChildren();
-      if (items.length === 0) return void say("No matching place was found. You can still enter coordinates or choose the map.");
+      if (items.length === 0) return void say(province
+        ? `No matching town was found in ${province}. Check the province, or enter coordinates or choose the map.`
+        : "No matching place was found. You can still enter coordinates or choose the map.");
       for (const item of items) {
         const button = document.createElement("button");
         button.type = "button";
@@ -243,15 +288,49 @@ export async function mountLocationPicker(container: HTMLElement): Promise<Locat
         title.textContent = item.name;
         const detail = document.createElement("span");
         detail.textContent = item.detail;
+        button.dataset["lat"] = String(item.latitude);
+        button.dataset["lng"] = String(item.longitude);
         button.append(title, detail);
         button.addEventListener("click", () => selectResult(item));
         results.appendChild(button);
       }
       results.hidden = false;
       say(`${items.length} matching ${items.length === 1 ? "place" : "places"}. Choose the intended location.`);
-    }).catch((error) => say(plainError(error, "Location search is unavailable. Enter coordinates instead.")));
+    }).catch((error) => { if (sequence === searchSequence) say(plainError(error, "Location search is unavailable. Enter coordinates instead.")); });
+  };
+  searchForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    window.clearTimeout(searchTimer);
+    search(queryInput?.value.trim() ?? "");
+  });
+  queryInput?.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    if (townInput) townInput.value = "";
+    const query = queryInput.value.trim();
+    if (query.length < 2) { if (results) results.hidden = true; return; }
+    searchTimer = window.setTimeout(() => search(query), SEARCH_DELAY_MS);
+  });
+  provinceSelect?.addEventListener("change", () => {
+    const query = queryInput?.value.trim() ?? "";
+    if (query.length >= 2 && !townInput?.value) search(query);
+  });
+
+  // "Use my current location": the browser's GPS, read once and only on this tap.
+  gpsButton?.addEventListener("click", () => {
+    if (!("geolocation" in navigator)) return void say("This browser cannot read the current location. Enter coordinates instead.");
+    say("Reading your current location…");
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        if (!insideSouthAfrica(latitude, longitude)) return void say(OUTSIDE_SA);
+        place(latitude, longitude, true);
+        map?.setView([latitude, longitude], 15);
+      },
+      () => say("The current location could not be read. Allow location for this site, or enter coordinates."),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
   });
 
   window.setTimeout(() => map?.invalidateSize(), 60);
-  return { destroy: () => { try { map?.remove(); } catch { /* already removed */ } } };
+  return { destroy: () => { window.clearTimeout(searchTimer); try { map?.remove(); } catch { /* already removed */ } } };
 }

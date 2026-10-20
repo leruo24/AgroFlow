@@ -2,6 +2,7 @@ import { pageHeader, panel } from "@/ui/components";
 /* The crop list is the one the engine can resolve, not free text: an unknown crop means the
  * zone never gets advice. See data/referenceData.ts. */
 import { ZONE_CROPS } from "@/data/referenceData";
+import { locationPickerHtml } from "@/lib/map";
 
 /* Farmer Onboarding: two-step wizard.
  * Step 1: farmer account details. Step 2: farm details and zones. Steps and zone rows are
@@ -305,11 +306,11 @@ ${panel(
       </label>
 
       <label class="f">
-        Location
+        Nearest locality (filled in from the town you choose below)
         <input
           type="text"
           data-field="location"
-          placeholder="Ceres, Western Cape"
+          placeholder="Mahikeng, North West"
         />
       </label>
 
@@ -336,6 +337,8 @@ ${panel(
         />
       </label>
     </div>
+
+    ${locationPickerHtml({ name: "onboardingLocation" })}
 
     <div id="zonesContainer" class="zones-container"></div>
 

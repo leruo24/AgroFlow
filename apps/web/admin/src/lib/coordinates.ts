@@ -73,3 +73,21 @@ export function formatDms(latitude: number, longitude: number): string {
 export function formatDecimal(latitude: number, longitude: number, precision = 5): string {
   return `${latitude.toFixed(precision)}, ${longitude.toFixed(precision)}`;
 }
+
+/* South Africa, as the API checks it (AgroFlow.Domain LocationRules): a box around the country.
+ * It only catches typing mistakes such as a swapped sign or latitude and longitude the wrong
+ * way round; a few neighbouring places also fall inside it. */
+export const SA_BOUNDS = { minLat: -35, maxLat: -22, minLon: 16, maxLon: 33 } as const;
+
+export function insideSouthAfrica(latitude: number, longitude: number): boolean {
+  return validCoordinates(latitude, longitude) &&
+    latitude >= SA_BOUNDS.minLat && latitude <= SA_BOUNDS.maxLat &&
+    longitude >= SA_BOUNDS.minLon && longitude <= SA_BOUNDS.maxLon;
+}
+
+export const OUTSIDE_SA = "That point is outside South Africa. Latitude is between -35 and -22, longitude between 16 and 33.";
+
+export const PROVINCES = [
+  "Eastern Cape", "Free State", "Gauteng", "KwaZulu-Natal", "Limpopo",
+  "Mpumalanga", "North West", "Northern Cape", "Western Cape",
+] as const;

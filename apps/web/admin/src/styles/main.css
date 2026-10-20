@@ -2082,6 +2082,8 @@ tbody tr:last-child td{border-bottom:none}
   border-radius:10px;
   background:var(--surface, #fff);
 }
+/* [hidden] must beat display:grid, or the results stay open after a town is chosen. */
+.map-search-results[hidden], .map-pick-status[hidden], .map-place[hidden], .map-pick-canvas[hidden]{ display:none; }
 .map-search-result{
   display:grid;
   gap:2px;

@@ -68,13 +68,13 @@ import { ZONE_CROPS } from "@/data/referenceData";
 import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
 import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
-import { formatDecimal, formatDms, validCoordinates } from "@/lib/coordinates";
+import { OUTSIDE_SA, formatDecimal, formatDms, insideSouthAfrica, validCoordinates } from "@/lib/coordinates";
 import { telegramState } from "@/pages/users";
 import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
 import { initBell } from "@/app/bell";
 import { isStaffRole } from "@/lib/staff";
-import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -773,6 +773,22 @@ async function openFarmDetail(id: number): Promise<void> {
 function openFarmLocationEditor(id: number): void {
   const farm = api.findFarm(id);
   if (!farm) return;
+  void getFarmPlace(farm.id).catch(() => null).then((place) => openFarmLocationDrawer(farm, place));
+}
+
+/* Saves the province and town (0053) with the coordinates. The coordinates are already saved
+ * by the caller, so a failure here only warns. */
+async function saveFarmPlace(farmId: number, v: Record<string, string>, latitude: number, longitude: number): Promise<void> {
+  const province = (v["province"] ?? "").trim() || null;
+  const town = (v["town"] ?? "").trim() || null;
+  try {
+    await setFarmPlace(farmId, { province, town, latitude, longitude });
+  } catch (error) {
+    toast(`The coordinates are saved, but not the province and town: ${plainError(error, "try again from the farm's location.")}`, "warn");
+  }
+}
+
+function openFarmLocationDrawer(farm: Farm, place: { province: string | null; town: string | null } | null): void {
   openDrawer({
     title: `Farm location · ${farm.name}`,
     subtitle: "Precise coordinates are used for weather and agronomy.",
@@ -781,7 +797,7 @@ function openFarmLocationEditor(id: number): void {
       <label class="f">Nearest locality (optional)
         <input type="text" data-field="location" value="${esc(farm.location)}" placeholder="e.g. Sesobe, North West" />
       </label>
-      ${locationPickerHtml({ name: `farmLocation${farm.id}`, latitude: farm.latitude, longitude: farm.longitude })}`,
+      ${locationPickerHtml({ name: `farmLocation${farm.id}`, latitude: farm.latitude, longitude: farm.longitude, province: place?.province, town: place?.town })}`,
     confirmLabel: "Save farm location",
     onOpen: () => {
       const host = document.querySelector<HTMLElement>(`[data-map-pick="farmLocation${farm.id}"]`);
@@ -794,11 +810,16 @@ function openFarmLocationEditor(id: number): void {
         toast("Enter a valid latitude and longitude before saving.", "warn");
         return false;
       }
+      if (!insideSouthAfrica(latitude, longitude)) {
+        toast(OUTSIDE_SA, "warn");
+        return false;
+      }
       void updateFarmLocation(farm.id, {
         location: (values["location"] ?? "").trim(),
         latitude,
         longitude,
       }).then(async () => {
+        await saveFarmPlace(farm.id, values, latitude, longitude);
         toast(`${farm.name}'s location is updated.`, "success");
         await refresh();
       }).catch((error: unknown) => showErrorModal(
@@ -1341,12 +1362,13 @@ async function handleAction(el: HTMLElement): Promise<void> {
       if ((latitude !== null || longitude !== null) && !hasCoordinates) {
         return void toast("Enter both latitude and longitude in their valid ranges.", "warn");
       }
+      if (hasCoordinates && !insideSouthAfrica(latitude!, longitude!)) return void toast(OUTSIDE_SA, "warn");
       if (!(v["location"] ?? "").trim() && !hasCoordinates) {
         return void toast("Search for a farm location or enter its coordinates.", "warn");
       }
 
       try {
-        await registerFarm({
+        const registered = await registerFarm({
           ownerId: v["ownerId"] ?? "",
           farm: {
             farmName: (v["farmName"] ?? "").trim(),
@@ -1358,6 +1380,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
           },
         });
 
+        if (hasCoordinates && registered.farm_id) await saveFarmPlace(registered.farm_id, v, latitude!, longitude!);
         closeDrawer();
         toast(`${v["farmName"] || "The farm"} is registered.`, "success");
         await completeLaunchingRequest(`Completed by registering the farm "${(v["farmName"] ?? "").trim()}".`);
@@ -1415,6 +1438,10 @@ async function handleAction(el: HTMLElement): Promise<void> {
         zones,
       },
     });
+
+    const lat = v["latitude"] ? Number(v["latitude"]) : NaN;
+    const lng = v["longitude"] ? Number(v["longitude"]) : NaN;
+    if (result.farmId && insideSouthAfrica(lat, lng)) await saveFarmPlace(result.farmId, v, lat, lng);
 
     toast(
       "Farmer onboarded successfully.",
@@ -3073,6 +3100,13 @@ function goToOnboardingStep(step: 1 | 2 | 3): void {
   document.querySelectorAll<HTMLElement>("[data-step]").forEach((el) => {
     el.style.display = el.dataset["step"] === String(step) ? "" : "none";
   });
+  // The location picker is on step 2; it is mounted once that step is visible, so the map
+  // can measure itself.
+  const picker = document.querySelector<HTMLElement>('[data-map-pick="onboardingLocation"]');
+  if (step === 2 && picker && !picker.dataset["mounted"]) {
+    picker.dataset["mounted"] = "1";
+    void mountLocationPicker(picker);
+  }
   document.querySelectorAll<HTMLElement>("[data-step-indicator]").forEach((el) => {
     el.classList.toggle("active", el.dataset["stepIndicator"] === String(step));
   });
@@ -3095,7 +3129,10 @@ function validateOnboardingStep1(v: Record<string, string>): string | null {
 
 function validateOnboardingStep2(v: Record<string, string>, zoneCount: number): string | null {
   if (!v["farmName"]?.trim()) return "Farm name is required.";
-  if (!v["location"]?.trim()) return "Farm location is required.";
+  const lat = v["latitude"] ? Number(v["latitude"]) : null;
+  const lng = v["longitude"] ? Number(v["longitude"]) : null;
+  if (!v["location"]?.trim()) return "Choose the farm's province and town, or type its nearest locality.";
+  if ((lat !== null || lng !== null) && !(lat !== null && lng !== null && insideSouthAfrica(lat, lng))) return OUTSIDE_SA;
   if (!v["farmSize"] || Number(v["farmSize"]) <= 0) return "Enter a valid farm size.";
   if (zoneCount === 0) return "Add at least one zone.";
 
