@@ -1,0 +1,345 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
+<View
+  style={
+    [
+      {
+        "backgroundColor": "#FFFFFF",
+        "borderColor": "#E4E7E4",
+        "borderRadius": 12,
+        "borderWidth": 1,
+        "gap": 8,
+        "padding": 16,
+      },
+      undefined,
+      undefined,
+    ]
+  }
+>
+  <View
+    style={
+      {
+        "borderBottomColor": "rgba(20,26,20,0.08)",
+        "borderBottomWidth": 0.5,
+        "flexDirection": "row",
+        "paddingVertical": 16,
+      }
+    }
+  >
+    <View
+      accessibilityLabel="Total zones: 2"
+      accessible={true}
+      style={
+        {
+          "flex": 1,
+          "flexBasis": 0,
+          "gap": 4,
+          "minWidth": 0,
+          "paddingRight": 8,
+        }
+      }
+    >
+      <Text
+        adjustsFontSizeToFit={true}
+        minimumFontScale={0.7}
+        numberOfLines={1}
+        style={
+          {
+            "color": "#253126",
+            "fontSize": 24,
+            "fontWeight": "600",
+          }
+        }
+      >
+        2
+      </Text>
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 13,
+            "lineHeight": 18,
+          }
+        }
+      >
+        Total zones
+      </Text>
+    </View>
+    <View
+      accessibilityLabel="Watering now: —, No kit connected"
+      accessible={true}
+      style={
+        {
+          "flex": 1,
+          "flexBasis": 0,
+          "gap": 4,
+          "minWidth": 0,
+          "paddingRight": 8,
+        }
+      }
+    >
+      <Text
+        adjustsFontSizeToFit={true}
+        minimumFontScale={0.7}
+        numberOfLines={1}
+        style={
+          {
+            "color": "#253126",
+            "fontSize": 24,
+            "fontWeight": "600",
+          }
+        }
+      >
+        —
+      </Text>
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 13,
+            "lineHeight": 18,
+          }
+        }
+      >
+        Watering now
+      </Text>
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 11,
+            "lineHeight": 16,
+          }
+        }
+      >
+        No kit connected
+      </Text>
+    </View>
+    <View
+      accessibilityLabel="On a schedule: 0"
+      accessible={true}
+      style={
+        {
+          "flex": 1,
+          "flexBasis": 0,
+          "gap": 4,
+          "minWidth": 0,
+          "paddingRight": 8,
+        }
+      }
+    >
+      <Text
+        adjustsFontSizeToFit={true}
+        minimumFontScale={0.7}
+        numberOfLines={1}
+        style={
+          {
+            "color": "#253126",
+            "fontSize": 24,
+            "fontWeight": "600",
+          }
+        }
+      >
+        0
+      </Text>
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 13,
+            "lineHeight": 18,
+          }
+        }
+      >
+        On a schedule
+      </Text>
+    </View>
+  </View>
+  <View
+    style={
+      {
+        "flexDirection": "row",
+        "flexWrap": "wrap",
+        "rowGap": 12,
+      }
+    }
+  >
+    <View
+      accessibilityLabel="Soil moisture: 57%"
+      accessible={true}
+      style={
+        {
+          "gap": 4,
+          "paddingRight": 8,
+          "width": "50%",
+        }
+      }
+    >
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 13,
+            "lineHeight": 18,
+          }
+        }
+      >
+        Soil moisture
+      </Text>
+      <Text
+        adjustsFontSizeToFit={true}
+        minimumFontScale={0.8}
+        numberOfLines={1}
+        style={
+          [
+            {
+              "color": "#253126",
+              "fontSize": 15,
+              "fontWeight": "600",
+              "lineHeight": 22,
+            },
+            undefined,
+          ]
+        }
+      >
+        57%
+      </Text>
+    </View>
+    <View
+      accessibilityLabel="Temperature: 21.4°C"
+      accessible={true}
+      style={
+        {
+          "gap": 4,
+          "paddingRight": 8,
+          "width": "50%",
+        }
+      }
+    >
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 13,
+            "lineHeight": 18,
+          }
+        }
+      >
+        Temperature
+      </Text>
+      <Text
+        adjustsFontSizeToFit={true}
+        minimumFontScale={0.8}
+        numberOfLines={1}
+        style={
+          [
+            {
+              "color": "#253126",
+              "fontSize": 15,
+              "fontWeight": "600",
+              "lineHeight": 22,
+            },
+            undefined,
+          ]
+        }
+      >
+        21.4°C
+      </Text>
+    </View>
+    <View
+      accessibilityLabel="Water today: None yet today"
+      accessible={true}
+      style={
+        {
+          "gap": 4,
+          "paddingRight": 8,
+          "width": "50%",
+        }
+      }
+    >
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 13,
+            "lineHeight": 18,
+          }
+        }
+      >
+        Water today
+      </Text>
+      <Text
+        adjustsFontSizeToFit={false}
+        minimumFontScale={0.8}
+        numberOfLines={2}
+        style={
+          [
+            {
+              "color": "#253126",
+              "fontSize": 15,
+              "fontWeight": "600",
+              "lineHeight": 22,
+            },
+            {
+              "color": "#637064",
+              "fontWeight": "400",
+            },
+          ]
+        }
+      >
+        None yet today
+      </Text>
+    </View>
+    <View
+      accessibilityLabel="Last watering: 20 Oct 2026"
+      accessible={true}
+      style={
+        {
+          "gap": 4,
+          "paddingRight": 8,
+          "width": "50%",
+        }
+      }
+    >
+      <Text
+        numberOfLines={2}
+        style={
+          {
+            "color": "#637064",
+            "fontSize": 13,
+            "lineHeight": 18,
+          }
+        }
+      >
+        Last watering
+      </Text>
+      <Text
+        adjustsFontSizeToFit={true}
+        minimumFontScale={0.8}
+        numberOfLines={1}
+        style={
+          [
+            {
+              "color": "#253126",
+              "fontSize": 15,
+              "fontWeight": "600",
+              "lineHeight": 22,
+            },
+            undefined,
+          ]
+        }
+      >
+        20 Oct 2026
+      </Text>
+    </View>
+  </View>
+</View>
+`;

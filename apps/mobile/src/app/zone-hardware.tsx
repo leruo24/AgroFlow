@@ -29,6 +29,7 @@ import {
   KitOfflineError,
   type ZoneHardware,
 } from '@/services/agroFlowApi';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 // "last seen 4 minutes ago" in as few words as possible. Null when there is nothing to say,
 // so the caller shows no clause instead of "last seen never".
@@ -54,6 +55,8 @@ function describeLastSeen(iso: string | null): string | null {
 }
 
 export default function ZoneHardwareScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneHardwareStyles(colors), [colors]);
 
@@ -148,7 +151,7 @@ export default function ZoneHardwareScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]} showsVerticalScrollIndicator={false}>
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.navigate('/irrigation'))}
           accessibilityRole="button"

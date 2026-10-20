@@ -15,7 +15,8 @@ export type PageId =
   | "settings"
   | "onboarding"
   | "requests"
-  | "mqttLogins";
+  | "mqttLogins"
+  | "droughtCommunity";
 
 export interface NavItem {
   id: PageId;

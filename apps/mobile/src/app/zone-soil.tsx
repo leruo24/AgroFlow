@@ -22,6 +22,8 @@ import { HelpButton } from '@/components/HelpButton';
 import { SoilIcon } from '@/components/SoilIcon';
 import { createZoneSoilStyles } from '@/styles/zoneSoilStyles';
 import { saveZoneSoilType, type ZoneSoilType } from '@/services/agroFlowApi';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { Space } from '@/constants/colors';
 
 // The "how it feels" lines are the usual field texture check (squeeze a handful), not
 // FAO-56; FAO-56 only supplies the water-holding numbers.
@@ -52,6 +54,8 @@ const SOILS: {
 ];
 
 export default function ZoneSoilScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneSoilStyles(colors), [colors]);
 
@@ -97,7 +101,7 @@ export default function ZoneSoilScreen() {
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={() => router.back()}
-          style={{ padding: 12 }}
+          style={{ padding: Space.md }}
         >
           <ArrowLeft size={22} color={colors.text} strokeWidth={1.8} />
         </Pressable>
@@ -110,7 +114,7 @@ export default function ZoneSoilScreen() {
         <HelpButton screen="zoneSoil" />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}>
         <Text style={styles.hint}>
           Not sure? Pick <Text style={styles.hintStrong}>Loam</Text>. It&apos;s the
           most common garden soil.

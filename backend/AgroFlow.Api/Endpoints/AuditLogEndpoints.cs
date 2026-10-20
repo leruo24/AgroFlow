@@ -308,6 +308,11 @@ public static class AuditLogEndpoints
             AuditActions.UserPasswordResetSelf => $"{actor} reset their own password with a Telegram code",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",
+            AuditActions.DroughtModeChanged => $"{actor} changed drought mode on farm {entityId}{where}",
+            AuditActions.SettingChanged => $"{actor} changed the setting {entityId}",
+            AuditActions.CommunityReportHidden => $"{actor} hid community report {entityId}",
+            AuditActions.FarmLocationChanged => $"{actor} changed the location of farm {entityId}{where}",
+            AuditActions.StaffNoticeResolved => $"{actor} closed staff notice {entityId}",
             AuditActions.ZoneMaxRunChanged => $"{actor} changed the maximum run time of zone {entityId}{where}",
             // Public enquiries.
             "enquiry.claimed" => $"{actor} took on enquiry {entityId}",

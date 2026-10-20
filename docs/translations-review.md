@@ -37,7 +37,7 @@ Tests check that every key exists in all three languages and that the `{placehol
   tank-refill comparison, and errors the server explains.
 - The raindrop helper’s greetings and the page help (the "?" button) are English.
 
-## App (332 strings)
+## App (522 strings)
 
 | Key | English | Afrikaans (draft) | Setswana (draft) |
 |---|---|---|---|
@@ -100,6 +100,7 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `home.reports` | Reports | Verslae | Dipego |
 | `home.settings` | Settings | Instellings | Dithulaganyo |
 | `home.unread` | {count} unread | {count} ongelees | {count} tse di sa balwang |
+| `home.community` | Farmers nearby | Boere naby | Balemi ba ba gaufi |
 | `zone.irrigationControl` | Irrigation control | Besproeiingsbeheer | Taolo ya nosetso |
 | `zone.mode` | MODE | MODUS | MOKGWA |
 | `zone.relay` | RELAY | RELAIS | RELEI |
@@ -341,7 +342,117 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `setup.card.continue` | Continue | Gaan voort | Tswelela |
 | `setup.card.next` | Next: {task} | Volgende: {task} | Se se latelang: {task} |
 | `setup.card.wet` | Soil: save the wet reading for {zone} | Grond: stoor die nat lesing vir {zone} | Mmu: boloka palo ya mmu o metsi bakeng sa {zone} |
+| `setup.looksRight` | Looks right | Lyk reg | Go siame |
+| `setup.sameAsFirst` | Same as {zone} | Dieselfde as {zone} | Go tshwana le {zone} |
+| `setup.section.you` | You | Jy | Wena |
+| `setup.section.farm` | Your farm | Jou plaas | Polase ya gago |
+| `setup.section.zones` | Each zone | Elke sone | Sone nngwe le nngwe |
+| `setup.section.alerts` | Alerts & help | Waarskuwings en hulp | Ditlhagiso le thuso |
+| `setup.location.title` | Is this your farm? | Is dit jou plaas? | A e ke polase ya gago? |
+| `setup.location.why` | Your field officer saved where your farm is. AgroFlow uses it for the weather and for alerts from farmers nearby. | Jou veldbeampte het gestoor waar jou plaas is. AgroFlow gebruik dit vir die weer en vir waarskuwings van boere naby. | Motlhankedi wa gago wa masimo o bolokile fa polase ya gago e leng teng. AgroFlow e e dirisetsa maemo a bosa le ditlhagiso go tswa go balemi ba ba gaufi. |
+| `setup.location.unknown` | No place saved yet | Nog geen plek gestoor nie | Ga go na lefelo le le bolokilweng |
+| `setup.location.noPoint` | There is no map point for your farm yet. Your field officer can add it. | Daar is nog geen kaartpunt vir jou plaas nie. Jou veldbeampte kan dit byvoeg. | Ga go ise go nne le ntlha ya mmapa ya polase ya gago. Motlhankedi wa gago a ka e tsenya. |
+| `setup.location.coords` | Map point: {lat}, {lon} | Kaartpunt: {lat}, {lon} | Ntlha ya mmapa: {lat}, {lon} |
+| `setup.location.mapA11y` | Map of your farm near {place} | Kaart van jou plaas naby {place} | Mmapa wa polase ya gago gaufi le {place} |
+| `setup.location.wrong` | Something's wrong - tell my field officer | Iets is verkeerd - sê vir my veldbeampte | Sengwe se phoso - bolelela motlhankedi wa me |
+| `setup.location.sent` | Thank you. Your field officer will check your farm's place. | Dankie. Jou veldbeampte sal jou plaas se plek nagaan. | Re a leboga. Motlhankedi wa gago o tla tlhola lefelo la polase ya gago. |
+| `setup.water.title` | Where does your water come from? | Waar kom jou water vandaan? | Metsi a gago a tswa kae? |
+| `setup.water.why` | If you water from a tank, AgroFlow keeps an eye on how much is left. | As jy uit 'n tenk natlei, hou AgroFlow dop hoeveel oor is. | Fa o nosetsa ka metsi a tanka, AgroFlow e tla ela tlhoko gore go setse a le kae. |
+| `setup.water.tank` | A tank | 'n Tenk | Tanka |
+| `setup.water.borehole` | A borehole | 'n Boorgat | Sediba se se epilweng |
+| `setup.water.municipal` | Municipal tap water | Munisipale kraanwater | Metsi a pompo a masepala |
+| `setup.water.river_dam` | A river or dam | 'n Rivier of dam | Noka kgotsa letamo |
+| `setup.water.other` | Something else | Iets anders | Sengwe se sele |
+| `setup.tank.title` | Your tank | Jou tenk | Tanka ya gago |
+| `setup.tank.why` | With the size and how full it is now, AgroFlow can tell you how many days of water you have left. | Met die grootte en hoe vol dit nou is, kan AgroFlow jou sê vir hoeveel dae jy nog water het. | Ka bogolo le gore e tletse go le kae jaanong, AgroFlow e ka go bolelela gore o setse le metsi a malatsi a le kae. |
+| `setup.tank.size` | How much does it hold? | Hoeveel hou dit? | E tshwara metsi a le kae? |
+| `setup.tank.litres` | {n} L | {n} L | {n} L |
+| `setup.tank.custom` | Another size, in litres | 'n Ander grootte, in liter | Bogolo jo bongwe, ka dilitara |
+| `setup.tank.howFull` | How full is it now? | Hoe vol is dit nou? | E tletse go le kae jaanong? |
+| `setup.tank.full` | Full | Vol | E tletse |
+| `setup.tank.threeQuarters` | 3/4 | 3/4 | 3/4 |
+| `setup.tank.half` | 1/2 | 1/2 | 1/2 |
+| `setup.tank.quarter` | 1/4 | 1/4 | 1/4 |
+| `setup.tank.nearlyEmpty` | Nearly empty | Amper leeg | E batla e se na sepe |
+| `setup.tank.ph` | Water pH, if you know it (you can leave this) | Water se pH, as jy dit weet (jy kan dit los) | pH ya metsi, fa o e itse (o ka e tlogela) |
+| `setup.tank.save` | Save my tank | Stoor my tenk | Boloka tanka ya me |
+| `setup.tank.needSize` | Choose how much the tank holds. | Kies hoeveel die tenk hou. | Tlhopha gore tanka e tshwara metsi a le kae. |
+| `setup.tank.needLevel` | Choose how full it is now. | Kies hoe vol dit nou is. | Tlhopha gore e tletse go le kae jaanong. |
+| `setup.tank.badPh` | pH is a number from 0 to 14. | pH is 'n getal van 0 tot 14. | pH ke palo go tloga go 0 go ya go 14. |
+| `setup.irrigation.title` | How is {zone} watered? | Hoe word {zone} natgelei? | {zone} e nosediwa jang? |
+| `setup.irrigation.why` | Some water is lost on the way to the roots. Drip loses little, a hose or furrow loses more, so AgroFlow adds a little to the amount for the way you water. | Van die water gaan verlore op pad na die wortels. Drup verloor min, 'n voor verloor meer, dus voeg AgroFlow 'n bietjie by vir die manier waarop jy natlei. | Metsi mangwe a latlhega pele a fitlha kwa medung. Go conta go latlha a mannye, mosele o latlha a mantsi, ka jalo AgroFlow e oketsa go le gonnye go ya ka tsela e o nosetsang ka yone. |
+| `setup.irrigation.drip` | Drip | Drup | Go conta |
+| `setup.irrigation.sprinkler` | Sprinkler | Sproeier | Sefafatsi |
+| `setup.irrigation.micro_sprinkler` | Micro-sprinkler | Mikrosproeier | Sefafatsi se sennye |
+| `setup.irrigation.centre_pivot` | Centre pivot | Spilpunt | Sefafatsi se se dikologang |
+| `setup.irrigation.surface` | Furrow or flood | Voor of vloed | Mosele kgotsa go elela |
+| `setup.irrigation.hand` | By hand (hose or can) | Met die hand (pyp of kan) | Ka seatla (phaephe kgotsa kane) |
+| `setup.soilType.title` | What is the soil like in {zone}? | Hoe lyk die grond in {zone}? | Mmu wa {zone} o ntse jang? |
+| `setup.soilType.why` | Sandy soil dries out fast and clay holds water long, so AgroFlow waters each a little differently. | Sandgrond droog vinnig uit en klei hou water lank, dus lei AgroFlow elkeen 'n bietjie anders nat. | Mmu wa motlhaba o oma ka bonako mme letsopa le tshwara metsi lobaka lo loleele, ka jalo AgroFlow e nosetsa mongwe le mongwe ka tsela e e farologanang. |
+| `setup.soilType.sandy` | Sandy | Sanderig | Motlhaba |
+| `setup.soilType.sandyDesc` | Feels gritty and falls apart in your hand, even when wet. | Voel korrelrig en val uitmekaar in jou hand, selfs as dit nat is. | Go utlwala go le makwata mme o phatlalala mo seatleng, le fa o le metsi. |
+| `setup.soilType.loam` | Loam (ordinary garden soil) | Leem (gewone tuingrond) | Mmu o o tlwaelegileng wa tshingwana |
+| `setup.soilType.loamDesc` | Dark and crumbly. A wet handful holds together, then breaks. | Donker en krummelrig. 'n Nat handvol hou saam en breek dan. | O lefifi e bile o a phuthologa. Seatla se se metsi se a kgomarela, morago se robege. |
+| `setup.soilType.clay` | Clay | Klei | Letsopa |
+| `setup.soilType.clayDesc` | Sticky when wet, hard and cracked when dry. | Taai as dit nat is, hard en gekraak as dit droog is. | Le a kgomarela fa le le metsi, le thata e bile le a phatloga fa le omile. |
+| `setup.size.title` | How big is {zone}? | Hoe groot is {zone}? | {zone} e kgolo go le kae? |
+| `setup.size.why` | The size turns the water the crop needs into litres. | Die grootte verander die water wat die gewas nodig het in liter. | Bogolo bo fetola metsi a sejalo se a tlhokang go nna dilitara. |
+| `setup.size.label` | Size | Grootte | Bogolo |
+| `setup.size.m2` | {n} m² | {n} m² | {n} m² |
+| `setup.size.m2Unit` | Square metres (m²) | Vierkante meter (m²) | Dimetara tse di sekwere (m²) |
+| `setup.size.haUnit` | Hectares (ha) | Hektaar (ha) | Dihekethara (ha) |
+| `setup.size.save` | Save the size | Stoor die grootte | Boloka bogolo |
+| `setup.size.invalid` | Enter a size bigger than 0. | Tik 'n grootte groter as 0. | Tsenya bogolo jo bo fetang 0. |
+| `setup.maxRun.title` | Longest watering at a time | Langste natlei op 'n slag | Nako e telele ya go nosetsa ka nako nngwe |
+| `setup.maxRun.why` | The pump never runs longer than this in one go, to keep it safe and stop water running away. | Die pomp loop nooit langer as dit op een slag nie, om dit veilig te hou en te keer dat water wegloop. | Pompo ga e ke e bereka go feta fa ka nako nngwe, go e sireletsa le go thibela metsi go elela. |
+| `setup.maxRun.minutes` | {n} min | {n} min | {n} metsotso |
+| `setup.maxRun.ask` | Ask your field officer to change this. | Vra jou veldbeampte om dit te verander. | Kopa motlhankedi wa gago go fetola se. |
+| `setup.maxRun.ok` | OK | Reg | Go siame |
+| `setup.alerts.title` | Which alerts do you want? | Watter waarskuwings wil jy hê? | O batla ditlhagiso dife? |
+| `setup.alerts.why` | Every alert shows in the app. Choose which ones also come to Telegram. | Elke waarskuwing wys in die app. Kies watter ook na Telegram kom. | Tlhagiso nngwe le nngwe e bonala mo appeng. Tlhopha tse di tla tlang gape kwa Telegram. |
+| `setup.alerts.watering` | Time to water | Tyd om nat te lei | Nako ya go nosetsa |
+| `setup.alerts.lowTank` | Tank running low | Tenk raak leeg | Tanka e a fela |
+| `setup.alerts.drought` | Drought mode | Droogtemodus | Mokgwa wa leuba |
+| `setup.alerts.community` | Reports from farmers nearby | Verslae van boere naby | Dipego go tswa go balemi ba ba gaufi |
+| `setup.alerts.weather` | Weather warnings | Weerwaarskuwings | Ditlhagiso tsa bosa |
+| `setup.alerts.telegramFor` | Send {what} to Telegram | Stuur {what} na Telegram | Romela {what} kwa Telegram |
+| `setup.alerts.inApp` | In the app | In die app | Mo appeng |
+| `setup.alerts.noTelegram` | Link Telegram to get these on your phone too. | Koppel Telegram om dit ook op jou foon te kry. | Golaganya Telegram go di amogela gape mo founung ya gago. |
+| `setup.alerts.quiet` | Quiet at night | Stil in die nag | Go didimala bosigo |
+| `setup.alerts.quietHours` | No Telegram messages from {start} to {end}, except a fire heading your way. | Geen Telegram-boodskappe van {start} tot {end} nie, behalwe 'n brand wat na jou kant toe kom. | Ga go melaetsa ya Telegram go tloga {start} go ya {end}, fa e se molelo o o tlang kwa go wena. |
+| `setup.community.title` | Alerts from farmers nearby | Waarskuwings van boere naby | Ditlhagiso go tswa go balemi ba ba gaufi |
+| `setup.community.why` | Farmers can warn each other about pests, crop disease, fire, water problems and bad weather. Your name is never shown. | Boere kan mekaar waarsku oor plae, gewassiektes, brand, waterprobleme en slegte weer. Jou naam word nooit gewys nie. | Balemi ba ka tlhagisana ka disenyi, malwetse a dijalo, molelo, mathata a metsi le bosa jo bo maswe. Leina la gago ga le ke le bontshiwa. |
+| `setup.community.limit` | Each farm can add up to 2 reports every 36 hours, so alerts stay useful. Saying "I'm seeing this too" does not count. | Elke plaas kan tot 2 verslae elke 36 uur byvoeg, sodat waarskuwings nuttig bly. "Ek sien dit ook" tel nie. | Polase nngwe le nngwe e ka tsenya dipego di le 2 mo diureng dingwe le dingwe di le 36, gore ditlhagiso di nne mosola. Go re "Le nna ke a se bona" ga go balwe. |
+| `setup.community.unverified` | These are community reports and have not been independently checked. | Dit is gemeenskapsverslae en is nie onafhanklik nagegaan nie. | Tse ke dipego tsa setšhaba mme ga di a tlhatlhobiwa ka boikemelo. |
+| `setup.community.on` | Yes, send me these alerts | Ja, stuur vir my hierdie waarskuwings | Ee, nthomelela ditlhagiso tse |
+| `setup.community.off` | No thanks | Nee dankie | Nnyaa ke a leboga |
+| `setup.help.title` | Help while you learn | Hulp terwyl jy leer | Thuso fa o ntse o ithuta |
+| `setup.help.why` | Drip and the "?" buttons explain things as you go. Switch them off once you know your way around. | Drup en die "?"-knoppies verduidelik dinge soos jy gaan. Skakel hulle af sodra jy jou pad ken. | Drip le dikonopo tsa "?" di tlhalosa dilo fa o ntse o tsamaya. Di time fa o setse o itse tsela. |
+| `setup.help.drip` | Show Drip's tips | Wys Drup se wenke | Bontsha dikgakololo tsa Drip |
+| `setup.help.icons` | Show "?" help buttons | Wys "?"-hulpknoppies | Bontsha dikonopo tsa thuso tsa "?" |
+| `setup.done.pending` | Still to do | Nog om te doen | Tse di saleng go dirwa |
+| `setup.done.tank` | Tank {litres} L, about {level} | Tenk {litres} L, omtrent {level} | Tanka {litres} L, e ka nna {level} |
+| `setup.done.levelUnknown` | level not known yet | vlak nog nie bekend nie | boemo ga bo ise bo itsiwe |
+| `setup.done.level.full` | full | vol | e tletse |
+| `setup.done.level.threeQuarters` | three-quarters full | driekwart vol | e tletse dikarolo tse tharo tsa bone |
+| `setup.done.level.half` | half full | half vol | e tletse sephatlo |
+| `setup.done.level.quarter` | a quarter full | 'n kwart vol | e tletse karolo ya bone |
+| `setup.done.level.nearlyEmpty` | nearly empty | amper leeg | e batla e se na sepe |
+| `setup.task.location` | Your farm's place | Jou plaas se plek | Lefelo la polase ya gago |
+| `setup.task.water` | Where water comes from | Waar water vandaan kom | Kwa metsi a tswang teng |
+| `setup.task.tank` | Your tank | Jou tenk | Tanka ya gago |
+| `setup.task.crop` | Crops and planting dates | Gewasse en plantdatums | Dijalo le malatsi a go jala |
+| `setup.task.irrigation` | How each zone is watered | Hoe elke sone natgelei word | Tsela e sone nngwe le nngwe e nosediwang ka yone |
+| `setup.task.soilType` | Soil type | Grondsoort | Mofuta wa mmu |
+| `setup.task.size` | Zone sizes | Sonegroottes | Bogolo jwa disone |
+| `setup.task.maxRun` | Longest watering | Langste natlei | Go nosetsa go go leele |
+| `setup.task.alerts` | Alerts | Waarskuwings | Ditlhagiso |
+| `setup.task.community` | Alerts from farmers nearby | Waarskuwings van boere naby | Ditlhagiso tsa balemi ba ba gaufi |
+| `setup.task.help` | Help buttons | Hulpknoppies | Dikonopo tsa thuso |
+| `setup.task.done` | All set | Alles gereed | Tsotlhe di siame |
 | `settings.redoSetup` | Redo setup | Doen opstelling weer | Dira thulaganyo gape |
+| `settings.alertChoices` | Alert choices and quiet hours | Waarskuwingkeuses en stil ure | Ditlhopho tsa ditlhagiso le diura tsa go didimala |
+| `settings.communityChoice` | Alerts from farmers nearby | Waarskuwings van boere naby | Ditlhagiso go tswa go balemi ba ba gaufi |
 | `forgot.title` | Forgot password | Wagwoord vergeet | O lebetse lefoko la sephiri |
 | `forgot.intro` | Enter the email you sign in with. We send a 6-digit code to your AgroFlow Telegram. | Tik die e-pos in waarmee jy aanmeld. Ons stuur 'n 6-syfer-kode na jou AgroFlow-Telegram. | Kwala imeile e o tsenang ka yone. Re romela khoutu ya dinomoro di le 6 kwa Telegram ya gago ya AgroFlow. |
 | `forgot.email` | Email address | E-posadres | Aterese ya imeile |
@@ -373,6 +484,85 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `run.noResponse` | Kit didn't respond — check it's online | Kit het nie geantwoord nie — kyk of dit aanlyn is | Kite ga e a araba — tlhola gore e mo inthaneteng |
 | `run.failed` | Could not reach the kit | Kon nie die kit bereik nie | Ga re a kgona go fitlhelela kite |
 | `today.overLimit` | Recommended {recommended} min — your pump is limited to {max} min per run; run it again after it finishes | Aanbeveel {recommended} min — jou pomp is beperk tot {max} min per keer; laat dit weer loop wanneer dit klaar is | Go atlenegisiwa metsotso e le {recommended} — pompo ya gago e lekanyeditswe go metsotso e le {max} ka nako; e tsamaise gape fa e fetsa |
+| `drought.on` | Drought mode is on | Droogtemodus is aan | Mokgwa wa leuba o butswe |
+| `drought.budget` | Your water budget | Jou waterbegroting | Tekanyetso ya gago ya metsi |
+| `drought.noBudget` | Set up your tank to see how many days of water you have. | Stel jou tenk op om te sien vir hoeveel dae jy water het. | Baakanya tanka ya gago go bona gore o na le metsi a malatsi a le kae. |
+| `drought.modeLabel` | Drought mode | Droogtemodus | Mokgwa wa leuba |
+| `drought.mode.auto` | Automatic | Outomaties | Ka bogone |
+| `drought.mode.on` | On | Aan | Butswe |
+| `drought.mode.off` | Off | Af | Tswetswe |
+| `drought.priority.full` | Water fully | Lei ten volle nat | Nosetsa ka botlalo |
+| `drought.priority.reduced` | Water at {pct}% | Lei {pct}% nat | Nosetsa ka {pct}% |
+| `drought.priority.skip` | Skip today | Slaan vandag oor | Tlola gompieno |
+| `drought.litres` | About {litres} L today | Omtrent {litres} L vandag | E ka nna {litres} L gompieno |
+| `community.title` | Farmers nearby | Boere naby | Balemi ba ba gaufi |
+| `community.subtitle` | Warn each other about pests, disease, fire, water and weather | Waarsku mekaar oor plae, siektes, brand, water en weer | Tlhagisanang ka disenyi, malwetse, molelo, metsi le bosa |
+| `community.add` | Report something | Rapporteer iets | Bega sengwe |
+| `community.nearby` | Reported near your farm | Naby jou plaas gerapporteer | Tse di begilweng gaufi le polase ya gago |
+| `community.none` | Nothing reported near your farm right now. | Niks naby jou plaas gerapporteer nie. | Ga go sepe se se begilweng gaufi le polase ya gago jaanong. |
+| `community.downwind` | The wind may be blowing this fire towards your farm. This is an estimate from the wind, not a prediction. | Die wind waai dalk hierdie brand na jou plaas toe. Dit is 'n skatting uit die wind, nie 'n voorspelling nie. | Phefo e ka tswa e foka molelo o kwa polaseng ya gago. Se ke kakanyo go tswa mo phefong, e seng ponelopele. |
+| `community.similar` | {n} nearby farms have reported something similar. | {n} plase naby het iets soortgelyks gerapporteer. | Dipolase di le {n} tse di gaufi di begile sengwe se se tshwanang. |
+| `community.confirmations` | {n} farmers are seeing this too. | {n} boere sien dit ook. | Balemi ba le {n} ba a se bona le bone. |
+| `community.yours` | You reported this. | Jy het dit gerapporteer. | O begile se. |
+| `community.alsoSeen` | You said you are seeing this too. | Jy het gesê jy sien dit ook. | O buile gore le wena o a se bona. |
+| `community.seeingToo` | I'm seeing this too | Ek sien dit ook | Le nna ke a se bona |
+| `community.severity.low` | Low | Laag | Kwa tlase |
+| `community.severity.moderate` | Moderate | Matig | Magareng |
+| `community.severity.high` | High | Hoog | Kwa godimo |
+| `community.cat.pest` | Pests | Plae | Disenyi |
+| `community.cat.disease` | Crop disease | Gewassiekte | Bolwetse jwa dijalo |
+| `community.cat.fire` | Fire | Brand | Molelo |
+| `community.cat.water` | Water problem | Waterprobleem | Bothata jwa metsi |
+| `community.cat.weather` | Bad weather | Slegte weer | Bosa jo bo maswe |
+| `community.sub.locusts` | Locusts | Sprinkane | Tsie |
+| `community.sub.fall_armyworm` | Fall armyworm | Herfskommandowurm | Seboko sa fall armyworm |
+| `community.sub.aphids` | Aphids | Plantluise | Dinta tsa dimela |
+| `community.sub.unusual_insects` | Unusual insects | Ongewone insekte | Dikhukhwane tse di sa tlwaelegang |
+| `community.sub.suspected_crop_disease` | Suspected crop disease | Vermoedelike gewassiekte | Go belaelwa bolwetse jwa dijalo |
+| `community.sub.veld_fire` | Veld fire | Veldbrand | Molelo wa naga |
+| `community.sub.smoke_nearby` | Smoke nearby | Rook naby | Mosi gaufi |
+| `community.sub.canal_not_flowing` | Canal not flowing | Kanaal vloei nie | Kanele ga e elele |
+| `community.sub.borehole_dry` | Borehole dry | Boorgat droog | Sediba se omile |
+| `community.sub.low_water` | Low water | Min water | Metsi a mannye |
+| `community.sub.burst_pipe` | Burst pipe | Gebarste pyp | Phaephe e thubegile |
+| `community.sub.possible_contamination` | Water may be dirty or unsafe | Water is dalk vuil of onveilig | Metsi a ka tswa a leswe kgotsa a sa babalesega |
+| `community.sub.hail` | Hail | Hael | Sefako |
+| `community.sub.flooding` | Flooding | Oorstroming | Merwalela |
+| `community.sub.frost` | Frost | Ryp | Serame |
+| `community.sub.extreme_wind` | Very strong wind | Baie sterk wind | Phefo e e maatla thata |
+| `community.sub.very_heavy_rain` | Very heavy rain | Baie swaar reën | Pula e e thata thata |
+| `community.dir.N` | North | Noord | Bokone |
+| `community.dir.NE` | North-east | Noordoos | Bokone-botlhaba |
+| `community.dir.E` | East | Oos | Botlhaba |
+| `community.dir.SE` | South-east | Suidoos | Borwa-botlhaba |
+| `community.dir.S` | South | Suid | Borwa |
+| `community.dir.SW` | South-west | Suidwes | Borwa-bophirima |
+| `community.dir.W` | West | Wes | Bophirima |
+| `community.dir.NW` | North-west | Noordwes | Bokone-bophirima |
+| `community.fire.update` | Update this fire | Werk hierdie brand by | Tlhabolola molelo o |
+| `community.fire.still_burning` | Still burning | Brand nog | O sa ntse o tuka |
+| `community.fire.under_control` | Under control | Onder beheer | O laolwa |
+| `community.fire.out` | Out | Uit | O timile |
+| `community.fire.spreadingTowards` | Or: spreading towards | Of: versprei na | Kgotsa: o anamela kwa |
+| `community.fire.spreading` | Send: spreading that way | Stuur: versprei soontoe | Romela: o anamela kwa teng |
+| `community.fire.pickDirection` | Choose which way it is spreading. | Kies in watter rigting dit versprei. | Tlhopha gore o anamela kwa kae. |
+| `community.fire.sent` | Update sent to {n} farms nearby. | Bywerking na {n} plase naby gestuur. | Tlhabololo e rometswe kwa dipolaseng di le {n} tse di gaufi. |
+| `community.fire.closed` | Thank you. The fire is marked as out and the report is closed. | Dankie. Die brand is as uit gemerk en die verslag is gesluit. | Re a leboga. Molelo o tshwailwe o timile mme pego e tswetswe. |
+| `community.form.title` | Report something near your farm | Rapporteer iets naby jou plaas | Bega sengwe gaufi le polase ya gago |
+| `community.form.what` | What are you seeing? | Wat sien jy? | O bona eng? |
+| `community.form.which` | Which one? | Watter een? | Efe? |
+| `community.form.howSerious` | How serious is it? | Hoe ernstig is dit? | Go masisi go le kae? |
+| `community.form.note` | A short note (you can leave this) | 'n Kort nota (jy kan dit los) | Molaetsa o mokhutshwane (o ka o tlogela) |
+| `community.form.count` | {n} of {max} letters | {n} van {max} letters | Ditlhaka di le {n} go tse {max} |
+| `community.form.place` | The report uses your farm's saved place. Your phone's location is never used, and your name is never shown. | Die verslag gebruik jou plaas se gestoorde plek. Jou foon se ligging word nooit gebruik nie, en jou naam word nooit gewys nie. | Pego e dirisa lefelo le le bolokilweng la polase ya gago. Lefelo la founu ya gago ga le ke le dirisiwa, mme leina la gago ga le ke le bontshiwa. |
+| `community.form.fireDanger` | If you're in danger, leave and call {call}. | As jy in gevaar is, gaan weg en bel {call}. | Fa o le mo kotsing, tsamaya mme o leletse {call}. |
+| `community.form.similar` | Already reported nearby. If it is the same, say you are seeing it too (this does not use up a report): | Reeds naby gerapporteer. As dit dieselfde is, sê jy sien dit ook (dit gebruik nie 'n verslag op nie): | Go setse go begilwe gaufi. Fa e le sone, bolela gore le wena o a se bona (se ga se dirise pego): |
+| `community.form.seeingTooThis` | I'm seeing this too: {what}, about {km} km away | Ek sien dit ook: {what}, omtrent {km} km ver | Le nna ke a se bona: {what}, e ka nna {km} km kgakala |
+| `community.form.send` | Send the report | Stuur die verslag | Romela pego |
+| `community.form.sent` | Thank you. Your report went to {n} farms nearby. | Dankie. Jou verslag is na {n} plase naby. | Re a leboga. Pego ya gago e ile kwa dipolaseng di le {n} tse di gaufi. |
+| `community.form.needCategory` | Choose what you are seeing. | Kies wat jy sien. | Tlhopha se o se bonang. |
+| `community.form.needSubtype` | Choose which one. | Kies watter een. | Tlhopha efe. |
+| `community.form.needSeverity` | Choose how serious it is. | Kies hoe ernstig dit is. | Tlhopha gore go masisi go le kae. |
 
 ## Telegram (37 strings)
 

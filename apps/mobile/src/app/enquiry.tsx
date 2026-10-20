@@ -11,8 +11,12 @@ import { createTodayStyles } from '@/styles/todayStyles';
 import { submitEnquiry, type EnquiryInput } from '@/services/agroFlowApi';
 import { ZONE_CROPS } from '@/lib/setupHelpers';
 import { CONSENT_TEXT, PROVINCES, TIMES, enquiryProblem } from '@/lib/enquiryForm';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { Space } from '@/constants/colors';
 
 export default function EnquiryScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
 
@@ -40,7 +44,7 @@ export default function EnquiryScreen() {
   }, [form]);
 
   const field = (label: string, key: 'fullName' | 'phone' | 'email' | 'town', props: object = {}) => (
-    <View style={{ gap: 4 }}>
+    <View style={{ gap: Space.xs }}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
@@ -56,7 +60,7 @@ export default function EnquiryScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ padding: 12 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ padding: Space.md }}>
           <ArrowLeft size={22} color={colors.text} strokeWidth={1.8} />
         </Pressable>
         <View style={{ flex: 1 }}>
@@ -65,11 +69,11 @@ export default function EnquiryScreen() {
       </View>
 
       {thanks ? (
-        <View style={{ padding: 16 }}>
+        <View style={{ padding: Space.lg }}>
           <Text style={styles.action} accessibilityLiveRegion="polite">{thanks}</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[{ padding: Space.lg, gap: Space.md }, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled">
           {field('Full name *', 'fullName', { autoComplete: 'name' })}
           {field('Phone number *', 'phone', { keyboardType: 'phone-pad', placeholder: '082 123 4567' })}
           {field('Email (optional)', 'email', { keyboardType: 'email-address', autoCapitalize: 'none' })}
@@ -86,7 +90,7 @@ export default function EnquiryScreen() {
 
           {field('Town *', 'town')}
 
-          <View style={{ gap: 4 }}>
+          <View style={{ gap: Space.xs }}>
             <Text style={styles.label}>Farm size in hectares (optional)</Text>
             <TextInput accessibilityLabel="Farm size in hectares" keyboardType="decimal-pad" style={styles.input}
               value={form.farmSizeHa == null ? '' : String(form.farmSizeHa)}

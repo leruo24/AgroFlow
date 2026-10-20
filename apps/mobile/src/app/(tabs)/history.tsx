@@ -9,6 +9,10 @@ import { useAgroFlow } from '@/context/AgroFlowContext';
 import { useTheme } from '@/context/ThemeContext';
 import { createScreenStyles } from '@/styles/screenStyles';
 import { createAlertHistoryStyles } from '@/styles/alertHistoryStyles';
+import { Card, CardList } from '@/components/ui/Card';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { triggerLabel } from '@/lib/labels';
+import { useI18n } from '@/i18n';
 import {
   describeStatus,
   fetchAlertHistory,
@@ -29,6 +33,8 @@ export default function HistoryScreen() {
     isFarmLoading, farmError, refreshFarms,
   } = useAgroFlow();
   const { colors } = useTheme();
+  const bottom = useBottomPadding();
+  const { t } = useI18n();
   const styles = useMemo(
     () => ({ ...createScreenStyles(colors), ...createAlertHistoryStyles(colors) }),
     [colors]
@@ -93,7 +99,7 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.page} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
         <ScreenHeader
           title="History"
           subtitle={farm ? farm.name : 'Review irrigation and system activity.'}
@@ -132,21 +138,21 @@ export default function HistoryScreen() {
                 description="Irrigation actions and system events will appear here."
               />
             ) : (
-              ordered.map((item) => (
-                <View key={item.id} style={styles.row}>
+              <CardList>{ordered.map((item) => (
+                <Card key={item.id}>
                   <View style={styles.rowTop}>
                     <Clock3 size={21} color={colors.textSecondary} strokeWidth={1.7} />
                     <Text style={styles.title}>{item.action}</Text>
                   </View>
                   <Text style={styles.body}>{item.description}</Text>
-                  <Text style={styles.caption}>{item.zone} · {item.source} · {item.type}</Text>
+                  <Text style={styles.caption}>{item.zone} · {triggerLabel(t, item.source)}</Text>
                   <Text style={styles.caption}>
                     {Number.isFinite(Date.parse(item.timestamp))
                       ? formatSast(item.timestamp)
-                      : 'Time unavailable'}
+                      : t('alerts.noTime')}
                   </Text>
-                </View>
-              ))
+                </Card>
+              ))}</CardList>
             )}
           </>
         ) : (
@@ -186,8 +192,8 @@ export default function HistoryScreen() {
             ) : visible.length === 0 ? (
               <DataState kind="empty" title="No alerts yet." />
             ) : (
-              visible.map((item) => (
-                <View key={item.id} style={styles.row}>
+              <CardList>{visible.map((item) => (
+                <Card key={item.id}>
                   <View style={styles.itemHeader}>
                     {item.kind === 'alert' ? (
                       <Bell size={19} color={colors.textSecondary} strokeWidth={1.7} />
@@ -210,11 +216,11 @@ export default function HistoryScreen() {
                       item.kind === 'alert' ? 'Alert' : 'Advice',
                       Number.isFinite(Date.parse(item.timestamp))
                         ? formatSast(item.timestamp)
-                        : 'Time unavailable',
+                        : t('alerts.noTime'),
                     ].join(' · ')}
                   </Text>
-                </View>
-              ))
+                </Card>
+              ))}</CardList>
             )}
           </>
         )}

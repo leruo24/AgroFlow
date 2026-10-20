@@ -20,6 +20,7 @@ import { useAppPreferences } from '@/hooks/useAppPreferences';
 import { disconnectTelegram, fetchTelegramLinkStatus } from '@/services/agroFlowApi';
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 const NOTIFICATION_PREFERENCES_KEY =
   'agroflow_notification_preferences';
@@ -52,6 +53,8 @@ const notificationOptions: {
 ];
 
 export default function SettingsScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(true);
   const {
     themePreference,
     resolvedTheme,
@@ -213,7 +216,7 @@ export default function SettingsScreen() {
         style={styles.page}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[]}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
       >
           <ScreenHeader title={t('settings.title')} subtitle={t('settings.subtitle')} help="settings" />
 
@@ -463,6 +466,30 @@ export default function SettingsScreen() {
           {telegramMessage ? (
             <Text style={styles.note} accessibilityLiveRegion="polite">{telegramMessage}</Text>
           ) : null}
+
+          {/* Which alerts also come to Telegram, and quiet hours: the wizard's alerts step. */}
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push('/setup?step=alerts' as never)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            testID="alert-choices"
+          >
+            <Text style={styles.profileText}>{t('settings.alertChoices')}</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
+          {/* Community alerts on or off (the wizard's step), and the reports themselves. */}
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push('/setup?step=community' as never)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            testID="community-choice"
+          >
+            <Text style={styles.profileText}>{t('settings.communityChoice')}</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
 
           {/* Every step of the setup wizard again, from the start (app/setup.tsx). */}
           <TouchableOpacity

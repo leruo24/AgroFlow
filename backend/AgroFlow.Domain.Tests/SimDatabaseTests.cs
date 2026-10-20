@@ -36,6 +36,13 @@ public sealed class SimDbHost : ApiHost
         if (ConnectionString is not { } cs) return;
         services.RemoveAll<NpgsqlDataSource>();
         services.AddSingleton(NpgsqlDataSource.Create(cs));
+        // These hold a connection string of their own (DB/XDB/Controller pattern).
+        services.RemoveAll<AgroFlow.Business.Fao56EngineController>();
+        services.AddSingleton(new AgroFlow.Business.Fao56EngineController(cs));
+        services.RemoveAll<AgroFlow.Business.TankPhController>();
+        services.AddSingleton(new AgroFlow.Business.TankPhController(cs));
+        services.RemoveAll<AgroFlow.Business.SimulationController>();
+        services.AddSingleton(new AgroFlow.Business.SimulationController(cs));
     }
 }
 

@@ -1,6 +1,6 @@
 import { countExplanation } from "@/lib/why";
 import { api, getFarmsNeedingSetup, getMqttPoolHealth, getFailedReportCount } from "@/data/api";
-import { getEnquirySummary, getAdminDismissals, clearDismissalCondition } from "@/services/agroFlowApi";
+import { getEnquirySummary, getAdminDismissals, clearDismissalCondition, getDroughtFarms, getStaffNotices } from "@/services/agroFlowApi";
 import { clearedConditions, viewOf, viewToggle } from "@/lib/dismiss";
 import { esc, fmtInt, fmtPct, fmtPct2, fmtDateTimeSast } from "@/lib/format";
 import {
@@ -32,6 +32,11 @@ async function renderDashboard(): Promise<string> {
     getFarmsNeedingSetup().catch(() => []),
     getMqttPoolHealth().catch(() => null),
     getFailedReportCount().catch(() => 0),
+  ]);
+  // Drought mode and farmers' location problems (0053-0055); empty before the migrations.
+  const [droughtFarms, staffNotices] = await Promise.all([
+    getDroughtFarms().catch(() => []),
+    getStaffNotices().catch(() => []),
   ]);
   // People waiting for a call, and call-backs that are due.
   const enquiries = await getEnquirySummary().catch(() => null);
@@ -102,6 +107,28 @@ async function renderDashboard(): Promise<string> {
       tone: "bad",
       icon: Icon.triangleAlert,
       why: countExplanation({ label: "Open critical alerts", what: "open alerts are marked Critical or High", count: criticalAlerts.length, counted: "alerts", rule: "An alert counts here while it is open (not Resolved or Closed) and its priority is Critical or High.", whyHighlighted: "A crop or a piece of equipment may need attention now.", clears: "Resolving the alert removes it.", query: "alert: status not in (Resolved, Closed) and priority in (Critical, High)" }),
+    },
+    {
+      title: "Location problems from farmers",
+      count: staffNotices.length,
+      body: "A farmer says their farm's saved place is wrong. Weather and community alerts use it.",
+      act: "go-drought-community",
+      key: "staff-notices",
+      conditionKey: `notices:${ids(staffNotices)}`,
+      tone: "warn",
+      icon: Icon.mapPin,
+      why: countExplanation({ label: "Location problems from farmers", what: "farmers said their farm's saved place is wrong", count: staffNotices.length, counted: "staff notices", rule: "A notice counts here from the moment a farmer presses Something's wrong in the app's setup until staff close it.", whyHighlighted: "Farmers cannot change the location themselves; the weather, drought mode and community alerts depend on it.", clears: "Fixing the location, then Close on the notice.", query: "staff_notice where resolved_at is null" }),
+    },
+    {
+      title: "Farms in drought mode",
+      count: droughtFarms.length,
+      body: "Low water and a dry forecast. Check the farm has what it needs.",
+      act: "go-drought-community",
+      key: "drought-farms",
+      conditionKey: `drought:${droughtFarms.map((f) => f.farmId).sort().join(",")}`,
+      tone: "warn",
+      icon: Icon.droplet,
+      why: countExplanation({ label: "Farms in drought mode", what: "farms are in drought mode", count: droughtFarms.length, counted: "farms", rule: "Automatic when the tank is low (or the soil is dry with no tank), less than the set rain is forecast for the week, and crop water use is above the farm's usual; or switched on by hand.", whyHighlighted: "The farmer is watering by priority and may run out of water.", clears: "Rain, a refill, or switching drought mode off.", query: "farm where drought_active" }),
     },
     {
       title: "Kits offline or faulty",

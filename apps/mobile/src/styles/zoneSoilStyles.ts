@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, type AppColors, Layout } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Styles for the Soil type screen.
@@ -8,7 +8,7 @@ import { sharedLayout } from './shared';
 export function createZoneSoilStyles(colors: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
-    content: { padding: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.six },
+    content: { padding: Layout.gutter, gap: Spacing.three },
 
     hint: { fontSize: Type.body, lineHeight: 23, color: colors.textSecondary },
     hintStrong: { fontWeight: '600', color: colors.text },

@@ -21,6 +21,7 @@ import { useAgroFlow } from '@/context/AgroFlowContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { createForecastStyles } from '@/styles/forecastStyles';
 import { fetchForecast, type ForecastDay, type ForecastResponse } from '@/services/agroFlowApi';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 // "3 Oct": short enough to fit under the weekday on a small phone.
 function shortDate(iso: string): string {
@@ -30,6 +31,8 @@ function shortDate(iso: string): string {
 }
 
 export default function ForecastScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const styles = useMemo(() => createForecastStyles(colors), [colors]);
   const { farm } = useAgroFlow();
@@ -78,7 +81,7 @@ export default function ForecastScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]} showsVerticalScrollIndicator={false}>
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))}
           accessibilityRole="button"

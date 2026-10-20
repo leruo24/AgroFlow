@@ -61,6 +61,52 @@ export const Radius = {
   full: 9999,
 } as const;
 
+// The one spacing scale: 4 / 8 / 12 / 16 / 24 / 32. Every padding, margin and gap in the app
+// uses one of these (Spacing above names the same steps for older code: one 4, two 8,
+// three 16, four 24, five 32).
+export const Space = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+} as const;
+
+// The type scale, by role: a page title, a section heading, body text, a field label and
+// small print. `Type` above keeps the older names (title = section heading, caption = label).
+export const TypeScale = {
+  title: 28,
+  section: Type.title,
+  body: Type.body,
+  label: Type.caption,
+  small: Type.label,
+} as const;
+
+// Page layout: the side gutter, the card's padding and the gap between cards, and the gap
+// from a section heading to its first card.
+export const Layout = {
+  gutter: Space.lg,
+  cardPadding: Space.lg,
+  cardGap: Space.md,
+  headingToCard: Space.md,
+  sectionGap: Space.xl,
+  // A grid column never gets narrower than this, so "21.4°C" or "1 400 L" stays on one line.
+  gridMinColumn: 120,
+} as const;
+
+// The one card look: every list item (zones, alerts, history, reports) and grouped block.
+export function cardStyle(colors: { surface: string; border: string }) {
+  return {
+    padding: Layout.cardPadding,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    gap: Space.sm,
+  } as const;
+}
+
 // Fixed heights for embedded media that need a real pixel size (a MapView needs height to
 // lay out). Kept apart from Spacing so nobody mistakes `farmMap: 190` for a spacing value.
 export const FixedMediaHeight = {

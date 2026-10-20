@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Type, Radius, Spacing, type AppColors } from '@/constants/colors';
+import { Type, Radius, Spacing, type AppColors, Space } from '@/constants/colors';
 
 export function createUpdatePasswordStyles(
   colors: AppColors
@@ -22,9 +22,9 @@ export function createUpdatePasswordStyles(
     container: {
       flex: 1,
       minHeight: 650,
-      paddingHorizontal: 20,
+      paddingHorizontal: Space.lg,
       paddingTop: 70,
-      paddingBottom: 24,
+      paddingBottom: Space.xl,
       backgroundColor:
         colors.background,
     },
@@ -38,7 +38,7 @@ export function createUpdatePasswordStyles(
     brandMark: {
       width: 13,
       height: 28,
-      marginRight: 9,
+      marginRight: Space.sm,
       backgroundColor:
         colors.primary,
     },
@@ -65,8 +65,8 @@ export function createUpdatePasswordStyles(
     },
 
     description: {
-      marginTop: 6,
-      marginBottom: 22,
+      marginTop: Space.xs,
+      marginBottom: Space.xl,
       maxWidth: 340,
       fontSize: Type.body,
       lineHeight: 19,
@@ -75,9 +75,9 @@ export function createUpdatePasswordStyles(
     },
 
     errorBox: {
-      marginBottom: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
+      marginBottom: Space.md,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.md,
       backgroundColor:
         colors.errorBackground,
       borderRadius: Radius.sm,
@@ -96,7 +96,7 @@ export function createUpdatePasswordStyles(
     },
 
     inputLabel: {
-      marginBottom: 7,
+      marginBottom: Space.sm,
       fontSize: Type.caption,
       fontWeight: '600',
       color:
@@ -104,8 +104,8 @@ export function createUpdatePasswordStyles(
     },
 
     confirmLabel: {
-      marginTop: 16,
-      marginBottom: 7,
+      marginTop: Space.lg,
+      marginBottom: Space.sm,
       fontSize: Type.caption,
       fontWeight: '600',
       color:
@@ -114,7 +114,7 @@ export function createUpdatePasswordStyles(
 
     input: {
       height: 52,
-      paddingHorizontal: 12,
+      paddingHorizontal: Space.md,
       backgroundColor:
         colors.background,
       borderWidth: 1,
@@ -149,7 +149,7 @@ export function createUpdatePasswordStyles(
 
     footer: {
       marginTop: 'auto',
-      paddingTop: 30,
+      paddingTop: Space.xxl,
       textAlign: 'center',
       fontSize: Type.caption,
       color:

@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, type AppColors, Layout } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Styles for the Reports screen: a short request form, then the list of requests.
@@ -8,7 +8,7 @@ import { sharedLayout } from './shared';
 export function createReportsStyles(colors: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
-    content: { padding: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.six },
+    content: { padding: Layout.gutter, gap: Spacing.three },
 
     group: { gap: Spacing.two },
     groupLabel: { fontSize: Type.label, color: colors.textMuted, textTransform: 'uppercase' },
@@ -66,12 +66,6 @@ export function createReportsStyles(colors: AppColors) {
       marginTop: Spacing.four,
     },
 
-    item: {
-      gap: Spacing.one,
-      paddingVertical: Spacing.three,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.divider,
-    },
     itemHeader: { ...sharedLayout.inlineRow, justifyContent: 'space-between' },
     itemTitle: { flex: 1, fontSize: Type.body, fontWeight: '600', color: colors.text },
     itemMeta: { fontSize: Type.caption, color: colors.textSecondary },

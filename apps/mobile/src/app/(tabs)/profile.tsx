@@ -45,6 +45,7 @@ import {
 import {
   createProfileStyles,
 } from '@/styles/profileStyles';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 type ProfileRecord = {
   id: string;
@@ -103,6 +104,8 @@ function formatRole(
 }
 
 export default function ProfileScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(true);
   const {
     user,
     updateProfile,
@@ -552,9 +555,7 @@ export default function ProfileScreen() {
           false
         }
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={
-          styles.scrollContent
-        }
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
       >
         <View
           style={

@@ -15,8 +15,12 @@ import { RecommendedCard } from '@/components/RecommendedCard';
 import { createTodayStyles } from '@/styles/todayStyles';
 import { changeZoneCrop, type RecommendedSettings } from '@/services/agroFlowApi';
 import { ZONE_CROPS, dayLabel, shiftDate } from '@/lib/setupHelpers';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { Space } from '@/constants/colors';
 
 export default function ZoneCropScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
   const { refreshZones } = useAgroFlow();
@@ -55,7 +59,7 @@ export default function ZoneCropScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ padding: 12 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ padding: Space.md }}>
           <ArrowLeft size={22} color={colors.text} strokeWidth={1.8} />
         </Pressable>
         <View style={{ flex: 1 }}>
@@ -63,7 +67,7 @@ export default function ZoneCropScreen() {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
+      <ScrollView contentContainerStyle={[{ padding: Space.lg, gap: Space.sm }, { paddingBottom: bottomPad }]}>
         <Text style={styles.label}>Crop</Text>
         <View style={styles.choices} accessibilityRole="radiogroup">
           {ZONE_CROPS.map((c) => (

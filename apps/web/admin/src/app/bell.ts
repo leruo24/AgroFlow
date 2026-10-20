@@ -6,11 +6,13 @@
  *   - a new enquiry nobody has taken on  (was a Telegram message to every admin)
  *   - an open critical alert             (zones or equipment)
  *   - a kit offline or faulty            (the equipment monitor)
+ *   - a farmer saying their farm's place is wrong (the app's setup wizard)
+ *   - a farm in drought mode
  * The count is checked when the shell opens and every minute. Each line opens the list it
  * counts, already filtered, with the same actions as Home's cards. */
 
 import { api } from "@/data/api";
-import { getEnquirySummary } from "@/services/agroFlowApi";
+import { getDroughtFarms, getEnquirySummary, getStaffNotices } from "@/services/agroFlowApi";
 import { esc } from "@/lib/format";
 
 export type BellCounts = {
@@ -19,6 +21,8 @@ export type BellCounts = {
   enquiriesWaiting: number;
   criticalAlerts: number;
   kitsOffline: number;
+  locationProblems?: number;
+  droughtFarms?: number;
 };
 
 export type BellItem = { key: string; title: string; count: number; act: string };
@@ -33,6 +37,8 @@ export function bellItems(c: BellCounts): BellItem[] {
     { key: "enquiries", title: "Enquiries waiting for a call", count: c.enquiriesWaiting, act: "go-enquiries" },
     { key: "alerts", title: "Open critical alerts", count: c.criticalAlerts, act: "go-alerts-critical" },
     { key: "kits", title: "Kits offline or faulty", count: c.kitsOffline, act: "go-kits-offline" },
+    { key: "notices", title: "Location problems from farmers", count: c.locationProblems ?? 0, act: "go-drought-community" },
+    { key: "drought", title: "Farms in drought mode", count: c.droughtFarms ?? 0, act: "go-drought-community" },
   ].filter((i) => i.count > 0);
 }
 
@@ -51,11 +57,13 @@ export function bellMenuHtml(items: BellItem[]): string {
 
 /* Each source may fail on its own: one unavailable queue must not empty the bell. */
 export async function loadBellCounts(): Promise<BellCounts> {
-  const [requests, alerts, hardware, enquiries] = await Promise.all([
+  const [requests, alerts, hardware, enquiries, notices, drought] = await Promise.all([
     api.getServiceRequests().catch(() => []),
     api.getAlerts().catch(() => []),
     api.getHardware().catch(() => []),
     getEnquirySummary().catch(() => null),
+    getStaffNotices().catch(() => []),
+    getDroughtFarms().catch(() => []),
   ]);
   return {
     requestsPending: requests.filter((r) => r.status === "pending").length,
@@ -63,6 +71,8 @@ export async function loadBellCounts(): Promise<BellCounts> {
     enquiriesWaiting: Number(enquiries?.waiting) || 0,
     criticalAlerts: alerts.filter((a) => !["Resolved", "Closed"].includes(a.status) && (a.priority === "Critical" || a.priority === "High")).length,
     kitsOffline: hardware.filter((h) => h.status === "Offline" || h.status === "Fault").length,
+    locationProblems: Array.isArray(notices) ? notices.length : 0,
+    droughtFarms: Array.isArray(drought) ? drought.length : 0,
   };
 }
 

@@ -38,6 +38,7 @@ import {
 import {
   looksTemporary,
 } from '@/lib/signInHelp';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 function getLoginErrorMessage(
   error: unknown,
@@ -86,6 +87,8 @@ function getLoginErrorMessage(
 }
 
 export default function LoginScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const {
     signIn,
   } = useAuth();
@@ -231,9 +234,7 @@ export default function LoginScreen() {
         }
       >
         <ScrollView
-          contentContainerStyle={
-            styles.scrollContent
-          }
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={
             false

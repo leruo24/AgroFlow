@@ -2,6 +2,7 @@
 
 import type { NavItem, PageId, PageOptions, PageRenderer, SettingsTab } from "@/types/models";
 import { dashboardPage } from "@/pages/dashboard";
+import { droughtCommunityPage } from "@/pages/droughtCommunity";
 import { usersPage } from "@/pages/users";
 import { farmsPage } from "@/pages/farms";
 import { onboardingPage } from "@/pages/onboarding";
@@ -31,6 +32,8 @@ export const NAV: NavItem[] = [
   { id: "farms", label: "Farms & zones", icon: Icon.tractor },
   { id: "hardware", label: "Kits", icon: Icon.radio },
   { id: "alerts", label: "Alerts", icon: Icon.bell },
+  // Drought mode, farmers' location problems and community reports to moderate.
+  { id: "droughtCommunity", label: "Drought & community", icon: Icon.droplet },
   { id: "maintenance", label: "Maintenance", icon: Icon.wrench },
   { id: "reports", label: "Reports", icon: Icon.barChart },
   { id: "activity", label: "Activity", icon: Icon.activity },
@@ -60,6 +63,7 @@ const PAGES: Record<PageId, PageRenderer> = {
   irrigation: () => irrigationPage(),
   activity: () => activityPage(),
   settings: () => settingsPage(),
+  droughtCommunity: () => droughtCommunityPage(),
 };
 
 export interface AppState {

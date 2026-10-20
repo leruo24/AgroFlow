@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { router } from '@/lib/router';
-import { Bell, ChevronRight, Clock3, CloudSun, Container, Droplets, FileText, Settings2 } from 'lucide-react-native';
+import { Bell, ChevronRight, Clock3, CloudSun, Container, Droplets, FileText, Settings2, Users } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAgroFlow } from '@/context/AgroFlowContext';
@@ -17,6 +17,10 @@ import { DripHelper } from '@/components/DripHelper';
 import { averageSoilText } from '@/lib/moistureDisplay';
 import { TodayCard } from '@/components/TodayCard';
 import { SetupCard } from '@/components/SetupCard';
+import { DroughtCard } from '@/components/DroughtCard';
+import { CardList } from '@/components/ui/Card';
+import { InfoGrid } from '@/components/ui/InfoGrid';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { fetchFarmToday, fetchTankStatus, type TankStatus, type TodayZone } from '@/services/agroFlowApi';
 import { useI18n } from '@/i18n';
 import { onReconnect } from '@/lib/connectivity';
@@ -29,7 +33,9 @@ export default function HomeScreen() {
   // without affecting Alerts, History and Irrigation.
   const styles = useMemo(() => ({ ...createScreenStyles(colors), ...createHomeStyles(colors) }), [colors]);
   // Only set-up zones: an uncalibrated sensor number is not a percentage.
-  const moisture = averageSoilText(zones.map(z => z.sensors.soilMoisture));
+  const moistureText = averageSoilText(zones.map(z => z.sensors.soilMoisture));
+  const moisture = moistureText === 'No reading' ? t('empty.noReading') : moistureText;
+  const bottom = useBottomPadding();
   const unread = alerts.filter(a => !a.read).length;
   // Today's cards come from GET /api/farmer/farms/{id}/today on the API.
   const [today, setToday] = useState<TodayZone[] | null>(null);
@@ -55,17 +61,18 @@ export default function HomeScreen() {
   // so we only add up zones that have one instead of showing a false 0.
   const zonesWithUsage = zones.filter(z => z.water.usedTodayLitres != null);
   const waterToday = zonesWithUsage.length === 0
-    ? t('home.noData')
+    ? t('empty.noWaterToday')
     : Math.round(zonesWithUsage.reduce((sum, z) => sum + z.water.usedTodayLitres!, 0)) + ' L';
   const metrics = [
     { label: t('home.metricMoisture'), value: moisture },
-    // There is no valve or relay feedback, so we show Unknown instead of guessing.
-    { label: t('home.metricIrrigating'), value: t('home.unknown') },
+    // There is no valve feedback: this counts runs sent to a kit. With no kit, there is nothing to count.
+    { label: t('home.metricIrrigating'), value: zones.some(z => z.sensors.soilMoisture.status === 'Online' || z.sensors.temperatureHumidity.status === 'Online')
+      ? String(zones.filter(z => z.irrigation.override.active).length) : t('empty.noKit') },
     { label: t('home.metricWater'), value: waterToday },
     { label: t('home.metricAlerts'), value: String(unread) },
   ];
   return <SafeAreaView style={styles.page} edges={['top']}>
-    <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottom }]} showsVerticalScrollIndicator={false}>
       <ScreenHeader title="AgroFlow" subtitle={t('home.subtitle')} help="home" />
       <FarmSelector />
       {isFarmLoading ? <DataState kind="loading" title={t('home.loadingFarm')} />
@@ -74,12 +81,14 @@ export default function HomeScreen() {
         : <>
           {/* Setup still to finish comes first; it is gone once setup is complete. */}
           <SetupCard />
+          {/* The water budget, and drought mode with each zone's priority when it is on. */}
+          <DroughtCard />
           {/* Today next: it is what a farmer opens the app to find out. */}
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('home.today')}</Text>
           {todayFailed ? <DataState kind="error" title={t('home.todayUnavailable')} onRetry={loadToday} />
             : today === null ? <DataState kind="loading" title={t('home.todayLoading')} />
             : today.length === 0 ? <DataState kind="empty" title={t('home.noZones')} description={t('home.noZonesToday')} />
-            : today.map(z => <TodayCard key={z.zoneId} zone={z} onLogged={loadToday} />)}
+            : <CardList>{today.map(z => <TodayCard key={z.zoneId} zone={z} onLogged={loadToday} />)}</CardList>}
           <FarmLocationMap key={farm.id} farm={farm} />
           <WeatherSummary key={farm.id + '-' + farm.latitude + '-' + farm.longitude} farm={farm} />
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('home.tank')}</Text>
@@ -98,7 +107,7 @@ export default function HomeScreen() {
             : zonesError ? <DataState kind="error" title={t('home.farmStatusUnavailable')} onRetry={refreshZones} />
             : zones.length === 0 ? <DataState kind="empty" title={t('home.noZones')} description={t('home.noZonesStatus')} />
             : <>
-              <View style={styles.metrics}>{metrics.map(metric => <View key={metric.label} style={styles.metric}><Text style={styles.statValue}>{metric.value}</Text><Text style={styles.caption}>{metric.label}</Text></View>)}</View>
+              <View style={styles.metrics}><InfoGrid testID="home-metrics" items={metrics.map(m => ({ ...m, muted: !/^\d/.test(m.value) }))} /></View>
               <Text style={styles.caption}>{pendingCommands > 0 ? t('home.commandsAccepted', { count: pendingCommands }) : ''}{t('home.noValveFeedback')}</Text>
             </>}
         </>}
@@ -111,6 +120,7 @@ export default function HomeScreen() {
         // app ("do I water tomorrow?").
         { label: t('home.weekAhead'), route: '/forecast' as const, Icon: CloudSun },
         { label: t('home.viewAlerts'), route: '/alerts' as const, Icon: Bell },
+        { label: t('home.community'), route: '/community' as never, Icon: Users },
         { label: t('home.logRefill'), route: '/tank?refill=1' as never, Icon: Container },
         { label: t('home.viewHistory'), route: '/history' as const, Icon: Clock3 },
         { label: t('home.reports'), route: '/reports' as const, Icon: FileText },

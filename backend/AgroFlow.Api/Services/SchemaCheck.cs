@@ -148,6 +148,22 @@ public sealed class SchemaCheck
             "select 1 from information_schema.columns where table_name = 'zone' and column_name = 'max_run_minutes'",
             "Every zone stays at a 5-minute maximum run, and staff cannot change it."),
 
+        new("0053", "column", "zone.irrigation_type",
+            "select 1 from information_schema.columns where table_name = 'zone' and column_name = 'irrigation_type'",
+            "Province, town, water source and irrigation type cannot be saved, and farmers cannot flag a wrong farm location."),
+
+        new("0054", "table", "app_setting",
+            "select to_regclass('public.app_setting')",
+            "Drought mode cannot run: its settings and the farm's drought state are missing."),
+
+        new("0055", "table", "community_report",
+            "select to_regclass('public.community_report')",
+            "Community alerts and each farmer's alert choices do not work."),
+
+        new("0056", "column", "farm.sim_scenario",
+            "select 1 from information_schema.columns where table_name = 'farm' and column_name = 'sim_scenario'",
+            "The Mahikeng and Ottoshoop demonstration farms for drought mode and community alerts are missing."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

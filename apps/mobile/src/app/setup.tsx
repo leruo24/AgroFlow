@@ -1,43 +1,68 @@
-// The setup wizard: one question per screen, from first sign-in to "All set".
+// The setup wizard: one question per screen, from first sign-in to "All set", in four sections
+// with their own progress - You, Your farm, Each zone, Alerts & help (17 steps).
 //   /setup             resumes at the first step not done
-//   /setup?step=soil   opens one step (from the zone screen, or Home's card)
+//   /setup?step=soil   opens one step (from the zone screen, Settings or Home's card)
 //   /setup?redo=1      "Redo setup" in Settings: every step, from the start
-// It reuses the app's own API calls (password, Telegram, crop, flow rate, soil readings), its
-// colours and fonts. Progress is what the server knows plus a little kept on the phone
-// (lib/setupProgress.ts), so the farmer can leave at any step and carry on later.
+// Everything the installer entered is shown pre-filled with "Looks right"; each value can be
+// changed later in Settings or on the zone screen. Farmers do not edit their farm's location
+// (staff set it); step 4 only confirms it or tells the field officer. Progress is what the
+// server knows plus a little kept on the phone (lib/setupProgress.ts).
 // Outside the tab group, so the tab bar is hidden while it is open.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { router } from '@/lib/router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useAgroFlow } from '@/context/AgroFlowContext';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, type AppColors, Space, Layout } from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
 import { TelegramSection } from '@/components/TelegramSection';
 import Drip from '@/components/mascot/Drip';
-import { changeZoneCrop, saveZoneCalibration, saveZoneSetup } from '@/services/agroFlowApi';
+import FarmMapSurface from '@/components/FarmMapSurface';
+import { useAppPreferences } from '@/hooks/useAppPreferences';
+import {
+  DEFAULT_PREFERENCES, changeZoneCrop, fetchNotificationPreferences, logTankRefill, reportLocationProblem,
+  saveIrrigationType, saveNotificationPreferences, saveTankCapacity, saveWaterSource, saveZoneCalibration,
+  saveZoneSetup, saveZoneSoilType, type NotificationPreferences,
+} from '@/services/agroFlowApi';
 import { isNetworkError } from '@/lib/connectivity';
 import { ZONE_CROPS, dayLabel, plantedWeeksAgo, shiftDate } from '@/lib/setupHelpers';
 import { useSetup } from '@/hooks/useSetup';
 import {
+  IRRIGATION_TYPES,
+  NO_FARM,
   OPTIONAL_STEPS,
+  SETUP_SECTIONS,
   SETUP_STEPS,
-  SETUP_TASKS,
+  SOIL_TYPES,
+  TANK_LEVELS,
+  TANK_SIZES,
+  WATER_SOURCES,
   addUnsent,
+  areaToM2,
+  confirm,
   flowRateFromContainer,
   nextStep,
   previousStep,
   resumeStep,
+  sameAsFirst,
+  sectionProgress,
+  setupComplete,
   soilConfidence,
+  soilTypeKey,
   stepDone,
   stepNumber,
+  tankLitres,
+  type IrrigationType,
   type SetupStep,
   type SetupZone,
+  type SoilType,
+  type WaterSource,
 } from '@/lib/setupProgress';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
@@ -46,6 +71,8 @@ function isStep(value: unknown): value is SetupStep {
 }
 
 export default function SetupScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const { t } = useI18n();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -78,6 +105,12 @@ export default function SetupScreen() {
     else if (router.canGoBack()) router.back();
   }, [step]);
 
+  // "Looks right": confirms a pre-filled answer and moves on.
+  const looksRight = useCallback((key: string) => {
+    updateLocal(l => confirm(l, key));
+    if (step) setStep(nextStep(step, { ...facts, confirmed: [...(facts.confirmed ?? []), key] }, redo));
+  }, [updateLocal, step, facts, redo]);
+
   if (!step) {
     return <SafeAreaView style={styles.page}><ActivityIndicator style={{ marginTop: 80 }} color={colors.primaryDark} /></SafeAreaView>;
   }
@@ -86,25 +119,46 @@ export default function SetupScreen() {
   const optional = OPTIONAL_STEPS.includes(step);
   // A forced password change cannot be put off or stepped past.
   const blocked = step === 'password' && facts.mustChangePassword;
-  const { n, of } = stepNumber(step);
+  const { n, of, section } = stepNumber(step);
+  const sp = sectionProgress(section, facts);
 
   const body = step === 'welcome' ? <WelcomeStep t={t} styles={styles} />
     : step === 'password' ? <PasswordStep t={t} styles={styles} />
     : step === 'telegram' ? <TelegramStep t={t} styles={styles} linked={facts.telegramLinked === true}
         onCheck={setup.reload} onNone={() => { updateLocal(l => ({ ...l, telegramDeclined: true })); goNext(); }} />
-    : step === 'zones' ? <ZonesStep t={t} styles={styles} zones={facts.zones} setup={setup} />
+    : step === 'location' ? <LocationStep t={t} styles={styles} setup={setup} onRight={() => looksRight('location')} />
+    : step === 'water' ? <WaterStep t={t} styles={styles} setup={setup}
+        onSaved={source => setStep(nextStep('water', { ...facts, farm: { ...(facts.farm ?? NO_FARM), waterSource: source } }, redo))} />
+    : step === 'tank' ? <TankStep t={t} styles={styles} setup={setup} onSaved={goNext} />
+    : step === 'crop' ? <ZonesStep t={t} styles={styles} zones={facts.zones} setup={setup} />
+    : step === 'irrigation' ? <IrrigationStep t={t} styles={styles} zones={facts.zones} setup={setup} />
+    : step === 'soilType' ? <SoilTypeStep t={t} styles={styles} zones={facts.zones} setup={setup} />
+    : step === 'size' ? <SizeStep t={t} styles={styles} zones={facts.zones} setup={setup} />
     : step === 'flow' ? <FlowStep t={t} styles={styles} zones={facts.zones} setup={setup} />
     : step === 'soil' ? <SoilStep t={t} styles={styles} zones={facts.zones} />
+    : step === 'maxRun' ? <MaxRunStep t={t} styles={styles} zones={facts.zones} onRight={() => looksRight('maxRun')} />
+    : step === 'alerts' ? <AlertsStep t={t} styles={styles} linked={facts.telegramLinked === true} onSaved={() => looksRight('alerts')} />
+    : step === 'community' ? <CommunityStep t={t} styles={styles} onSaved={() => looksRight('community')} />
+    : step === 'help' ? <HelpStep t={t} styles={styles} onRight={() => looksRight('help')} />
     : <DoneStep t={t} styles={styles} setup={setup} />;
 
   return <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
     <View style={styles.frame}>
       <View style={styles.progressHead} accessibilityRole="progressbar"
         accessibilityValue={{ min: 1, max: of, now: n }} accessibilityLabel={t('setup.progress', { n, of })}>
-        <Text style={styles.progressText} testID="setup-progress">{t('setup.progress', { n, of })}</Text>
+        <View style={styles.sectionRow}>
+          {SETUP_SECTIONS.map(s => {
+            const p = sectionProgress(s, facts);
+            return <Text key={s} testID={`setup-section-${s}`}
+              style={[styles.sectionChip, s === section && styles.sectionChipOn, p.done === p.total && styles.sectionChipDone]}>
+              {t(`setup.section.${s}` as TranslationKey)} {p.done}/{p.total}
+            </Text>;
+          })}
+        </View>
+        <Text style={styles.progressText} testID="setup-progress">{t('setup.progress', { n, of })} · {t(`setup.section.${section}` as TranslationKey)} {sp.done}/{sp.total}</Text>
         <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(n / of) * 100}%` }]} /></View>
       </View>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" testID={`setup-step-${step}`}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled" testID={`setup-step-${step}`}>
         {body}
       </ScrollView>
       <View style={styles.footer}>
@@ -245,14 +299,35 @@ function KitBadge({ t, styles, zone }: { t: T; styles: Styles; zone: SetupZone }
 const WEEK_CHOICES = [0, 1, 2, 4, 6, 8, 12, 16];
 
 function ZonesStep({ t, styles, zones, setup }: { t: T; styles: Styles; zones: SetupZone[]; setup: ReturnType<typeof useSetup> }) {
+  const { i, zone, next, go } = useZoneIndex(zones);
+  const { refreshZones } = useAgroFlow();
+  const [error, setError] = useState<string | null>(null);
+  const first = zones[0];
+  const copyFirst = async () => {
+    setError(null);
+    if (!zone || !first?.crop) return;
+    try {
+      await changeZoneCrop(zone.zoneId, { cropType: first.crop, plantingDate: first.plantingDate });
+      refreshZones();
+      setup.reload();
+      if (i < zones.length - 1) next();
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
   return <>
     <StepIntro styles={styles} title={t('setup.zones.title')} why={t('setup.zones.why')} tip={t('setup.zones.tip')} />
-    {zones.length === 0 ? <Text style={styles.help}>{t('setup.zones.none')}</Text>
-      : zones.map(zone => <ZoneCard key={zone.zoneId} t={t} styles={styles} zone={zone} setup={setup} />)}
+    <ZonePager t={t} styles={styles} zones={zones} i={i} go={go} />
+    {zone && i > 0 && first?.crop ? <Pressable accessibilityRole="button" onPress={() => { void copyFirst(); }} style={styles.secondaryWide} testID="setup-crop-same">
+      <Text style={styles.secondaryText}>{t('setup.sameAsFirst', { zone: first.name })}</Text>
+    </Pressable> : null}
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+    {!zone ? <Text style={styles.help}>{t('setup.zones.none')}</Text>
+      : <ZoneCard key={zone.zoneId} t={t} styles={styles} zone={zone} setup={setup} onSaved={i < zones.length - 1 ? next : undefined} />}
   </>;
 }
 
-function ZoneCard({ t, styles, zone, setup }: { t: T; styles: Styles; zone: SetupZone; setup: ReturnType<typeof useSetup> }) {
+function ZoneCard({ t, styles, zone, setup, onSaved }: { t: T; styles: Styles; zone: SetupZone; setup: ReturnType<typeof useSetup>; onSaved?: () => void }) {
   const { refreshZones } = useAgroFlow();
   const todayIso = new Date().toISOString().slice(0, 10);
   const [crop, setCrop] = useState<string | null>(ZONE_CROPS.some(c => c.value === zone.crop) ? zone.crop : null);
@@ -270,6 +345,7 @@ function ZoneCard({ t, styles, zone, setup }: { t: T; styles: Styles; zone: Setu
       setMessage(t('setup.zones.confirmed', { zone: zone.name }));
       refreshZones();
       setup.reload();
+      onSaved?.();
     } catch (e) {
       if (isNetworkError(e)) {
         // No signal: kept on the phone and sent when the connection is back (useSetup).
@@ -460,19 +536,419 @@ function SoilCard({ t, styles, zone }: { t: T; styles: Styles; zone: SetupZone }
   </View>;
 }
 
-// 7. All set: what is done, what is not, and what AgroFlow says today.
+// One zone per screen, for the per-zone steps. Zone 2 and after get "Same as Zone 1" when the
+// step offers it. After a zone is saved the next one opens by itself.
+function useZoneIndex(zones: SetupZone[]) {
+  const [index, setIndex] = useState(0);
+  const i = Math.min(index, Math.max(zones.length - 1, 0));
+  return { i, zone: zones[i] ?? null, next: () => setIndex(v => Math.min(v + 1, zones.length - 1)), go: setIndex };
+}
+
+function ZonePager({ t, styles, zones, i, go }: { t: T; styles: Styles; zones: SetupZone[]; i: number; go: (n: number) => void }) {
+  if (zones.length < 2) return null;
+  return <View style={styles.chips}>
+    {zones.map((z, n) => <Pressable key={z.zoneId} accessibilityRole="tab" accessibilityState={{ selected: n === i }}
+      onPress={() => go(n)} style={[styles.chip, n === i && styles.chipOn]} testID={`setup-zone-tab-${n}`}>
+      <Text style={[styles.chipText, n === i && styles.chipTextOn]}>{z.name}</Text>
+    </Pressable>)}
+  </View>;
+}
+
+function LooksRight({ t, styles, onPress, testID, label }: { t: T; styles: Styles; onPress: () => void; testID: string; label?: string }) {
+  return <Pressable accessibilityRole="button" onPress={onPress} style={styles.action} testID={testID}>
+    <Text style={styles.actionText}>{label ?? t('setup.looksRight')}</Text>
+  </Pressable>;
+}
+
+// 4. Is this your farm? Farmers do not edit the location (staff set it); they confirm it or
+// tell their field officer.
+function LocationStep({ t, styles, setup, onRight }: { t: T; styles: Styles; setup: ReturnType<typeof useSetup>; onRight: () => void }) {
+  const { farm } = useAgroFlow();
+  const f = setup.facts.farm;
+  const [sent, setSent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const hasPoint = f?.latitude != null && f?.longitude != null;
+  const place = [f?.town, f?.province].filter(Boolean).join(', ') || f?.location || t('setup.location.unknown');
+
+  const wrong = async () => {
+    setError(null);
+    if (!farm) return;
+    try {
+      const r = await reportLocationProblem(farm.id);
+      setup.updateLocal(l => ({ ...l, locationFlagged: true }));
+      setSent(r.message || t('setup.location.sent'));
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
+
+  return <>
+    <StepIntro styles={styles} title={t('setup.location.title')} why={t('setup.location.why')} />
+    <Text style={styles.cardTitle} testID="setup-location-place">{place}</Text>
+    {hasPoint
+      ? <View style={styles.mapBox} testID="setup-location-map" accessibilityLabel={t('setup.location.mapA11y', { place })}>
+          <FarmMapSurface latitude={f!.latitude!} longitude={f!.longitude!} zoom={13} onFailure={() => undefined} />
+        </View>
+      : <Text style={styles.help}>{t('setup.location.noPoint')}</Text>}
+    {hasPoint ? <Text style={styles.help}>{t('setup.location.coords', { lat: f!.latitude!.toFixed(4), lon: f!.longitude!.toFixed(4) })}</Text> : null}
+    {sent ? <Text style={styles.ok} accessibilityLiveRegion="polite" testID="setup-location-sent">{sent}</Text> : <>
+      <LooksRight t={t} styles={styles} onPress={onRight} testID="setup-location-right" />
+      <Pressable accessibilityRole="button" onPress={() => { void wrong(); }} style={styles.secondaryWide} testID="setup-location-wrong">
+        <Text style={styles.secondaryText}>{t('setup.location.wrong')}</Text>
+      </Pressable>
+    </>}
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+  </>;
+}
+
+// 5. Where the water comes from.
+function WaterStep({ t, styles, setup, onSaved }: { t: T; styles: Styles; setup: ReturnType<typeof useSetup>; onSaved: (source: WaterSource) => void }) {
+  const { farm } = useAgroFlow();
+  const current = setup.facts.farm?.waterSource ?? null;
+  const [error, setError] = useState<string | null>(null);
+  const pick = async (source: WaterSource) => {
+    setError(null);
+    if (!farm) return;
+    try {
+      await saveWaterSource(farm.id, source);
+      setup.reload();
+      onSaved(source);
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
+  return <>
+    <StepIntro styles={styles} title={t('setup.water.title')} why={t('setup.water.why')} />
+    {WATER_SOURCES.map(s => <Pressable key={s} accessibilityRole="radio" accessibilityState={{ checked: current === s }}
+      onPress={() => { void pick(s); }} style={[styles.choice, current === s && styles.choiceOn]} testID={`setup-water-${s}`}>
+      <Text style={[styles.choiceText, current === s && styles.choiceTextOn]}>{t(`setup.water.${s}` as TranslationKey)}</Text>
+    </Pressable>)}
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+  </>;
+}
+
+// 6. The tank: size, and how full it is now (a starting level for the tank estimate). Uses the
+// existing tank records (0046); a farm without a tank never sees this step.
+function TankStep({ t, styles, setup, onSaved }: { t: T; styles: Styles; setup: ReturnType<typeof useSetup>; onSaved: () => void }) {
+  const { farm } = useAgroFlow();
+  const f = setup.facts.farm;
+  const [size, setSize] = useState<number | null>(f?.tankCapacityLitres ?? null);
+  const [custom, setCustom] = useState('');
+  const [level, setLevel] = useState<number | null>(null);
+  const [ph, setPh] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const capacity = size ?? (Number(custom.replace(',', '.')) || null);
+
+  const save = async () => {
+    setError(null);
+    if (!farm) return;
+    if (!capacity || capacity <= 0) { setError(t('setup.tank.needSize')); return; }
+    if (level === null) { setError(t('setup.tank.needLevel')); return; }
+    const phValue = ph.trim() ? Number(ph.replace(',', '.')) : null;
+    if (phValue !== null && !(phValue >= 0 && phValue <= 14)) { setError(t('setup.tank.badPh')); return; }
+    setBusy(true);
+    try {
+      await saveTankCapacity(farm.id, capacity);
+      await logTankRefill(farm.id, { litresAdded: tankLitres(capacity, level), waterPh: phValue, refilledAt: new Date().toISOString() });
+      setup.reload();
+      onSaved();
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <>
+    <StepIntro styles={styles} title={t('setup.tank.title')} why={t('setup.tank.why')} />
+    <Text style={styles.label}>{t('setup.tank.size')}</Text>
+    <View style={styles.chips}>
+      {TANK_SIZES.map(s => <Pressable key={s} accessibilityRole="radio" accessibilityState={{ checked: size === s }}
+        onPress={() => { setSize(s); setCustom(''); }} style={[styles.chip, size === s && styles.chipOn]} testID={`setup-tank-size-${s}`}>
+        <Text style={[styles.chipText, size === s && styles.chipTextOn]}>{t('setup.tank.litres', { n: s.toLocaleString('en-ZA').replace(/,/g, ' ') })}</Text>
+      </Pressable>)}
+    </View>
+    <TextInput keyboardType="number-pad" value={custom} onChangeText={v => { setCustom(v); setSize(null); }} style={styles.input}
+      placeholder={t('setup.tank.custom')} accessibilityLabel={t('setup.tank.custom')} testID="setup-tank-custom" />
+    <Text style={styles.label}>{t('setup.tank.howFull')}</Text>
+    <View style={styles.chips}>
+      {TANK_LEVELS.map(l => <Pressable key={l.key} accessibilityRole="radio" accessibilityState={{ checked: level === l.fraction }}
+        onPress={() => setLevel(l.fraction)} style={[styles.chip, level === l.fraction && styles.chipOn]} testID={`setup-tank-level-${l.key}`}>
+        <Text style={[styles.chipText, level === l.fraction && styles.chipTextOn]}>{t(`setup.tank.${l.key}` as TranslationKey)}</Text>
+      </Pressable>)}
+    </View>
+    <Text style={styles.label}>{t('setup.tank.ph')}</Text>
+    <TextInput keyboardType="decimal-pad" value={ph} onChangeText={setPh} style={styles.input} accessibilityLabel={t('setup.tank.ph')} testID="setup-tank-ph" />
+    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { void save(); }} style={[styles.action, busy && styles.disabled]} testID="setup-tank-save">
+      <Text style={styles.actionText}>{t('setup.tank.save')}</Text>
+    </Pressable>
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite" testID="setup-tank-error">{error}</Text> : null}
+  </>;
+}
+
+// 8. How the zone is watered: only turns the advice's water need into the amount to apply
+// (FAO field application efficiency). The advice itself is not changed.
+function IrrigationStep({ t, styles, zones, setup }: { t: T; styles: Styles; zones: SetupZone[]; setup: ReturnType<typeof useSetup> }) {
+  const { i, zone, next, go } = useZoneIndex(zones);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const first = sameAsFirst(zones, 'irrigationType');
+  const pick = async (type: IrrigationType) => {
+    setError(null); setNote(null);
+    if (!zone) return;
+    try {
+      const r = await saveIrrigationType(zone.zoneId, type);
+      setNote(r.explanation);
+      setup.reload();
+      if (i < zones.length - 1) next();
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
+  if (!zone) return <Text style={styles.help}>{t('setup.zones.none')}</Text>;
+  return <>
+    <StepIntro styles={styles} title={t('setup.irrigation.title', { zone: zone.name })} why={t('setup.irrigation.why')} />
+    <ZonePager t={t} styles={styles} zones={zones} i={i} go={go} />
+    {i > 0 && first ? <Pressable accessibilityRole="button" onPress={() => { void pick(first as IrrigationType); }} style={styles.secondaryWide} testID="setup-irrigation-same">
+      <Text style={styles.secondaryText}>{t('setup.sameAsFirst', { zone: zones[0].name })}</Text>
+    </Pressable> : null}
+    <View style={styles.iconGrid}>
+      {IRRIGATION_TYPES.map(type => {
+        const on = zone.irrigationType === type;
+        return <Pressable key={type} accessibilityRole="radio" accessibilityState={{ checked: on }} onPress={() => { void pick(type); }}
+          style={[styles.iconChoice, on && styles.choiceOn]} testID={`setup-irrigation-${type}`}>
+          <Text style={styles.iconGlyph} accessibilityElementsHidden importantForAccessibility="no">{IRRIGATION_ICON[type]}</Text>
+          <Text style={[styles.choiceText, on && styles.choiceTextOn]}>{t(`setup.irrigation.${type}` as TranslationKey)}</Text>
+        </Pressable>;
+      })}
+    </View>
+    {note ? <Text style={styles.help} accessibilityLiveRegion="polite" testID="setup-irrigation-note">{note}</Text> : null}
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+  </>;
+}
+
+// Pictures for the irrigation types, plain characters so they need no image files.
+const IRRIGATION_ICON: Record<IrrigationType, string> = {
+  drip: '💧', sprinkler: '⛲', micro_sprinkler: '🌦', centre_pivot: '🔄', surface: '〰', hand: '🪣',
+};
+
+// 9. Soil type: three types, in plain words. The default (loam) counts once confirmed.
+function SoilTypeStep({ t, styles, zones, setup }: { t: T; styles: Styles; zones: SetupZone[]; setup: ReturnType<typeof useSetup> }) {
+  const { i, zone, next, go } = useZoneIndex(zones);
+  const [error, setError] = useState<string | null>(null);
+  const first = sameAsFirst(zones, 'soilType');
+  const pick = async (soil: SoilType) => {
+    setError(null);
+    if (!zone) return;
+    try {
+      if (soil !== zone.soilType) await saveZoneSoilType(zone.zoneId, soil);
+      setup.updateLocal(l => confirm(l, soilTypeKey(zone.zoneId)));
+      setup.reload();
+      if (i < zones.length - 1) next();
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
+  if (!zone) return <Text style={styles.help}>{t('setup.zones.none')}</Text>;
+  return <>
+    <StepIntro styles={styles} title={t('setup.soilType.title', { zone: zone.name })} why={t('setup.soilType.why')} />
+    <ZonePager t={t} styles={styles} zones={zones} i={i} go={go} />
+    {i > 0 && first ? <Pressable accessibilityRole="button" onPress={() => { void pick(first as SoilType); }} style={styles.secondaryWide} testID="setup-soiltype-same">
+      <Text style={styles.secondaryText}>{t('setup.sameAsFirst', { zone: zones[0].name })}</Text>
+    </Pressable> : null}
+    {SOIL_TYPES.map(soil => {
+      const on = (zone.soilType ?? 'loam') === soil;
+      return <Pressable key={soil} accessibilityRole="radio" accessibilityState={{ checked: on }} onPress={() => { void pick(soil); }}
+        style={[styles.choice, on && styles.choiceOn]} testID={`setup-soiltype-${soil}`}>
+        <Text style={[styles.choiceText, on && styles.choiceTextOn]}>{t(`setup.soilType.${soil}` as TranslationKey)}</Text>
+        <Text style={styles.help}>{t(`setup.soilType.${soil}Desc` as TranslationKey)}</Text>
+      </Pressable>;
+    })}
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+  </>;
+}
+
+// 10. Zone size, in square metres or hectares.
+function SizeStep({ t, styles, zones, setup }: { t: T; styles: Styles; zones: SetupZone[]; setup: ReturnType<typeof useSetup> }) {
+  const { i, zone, next, go } = useZoneIndex(zones);
+  const [value, setValue] = useState('');
+  const [unit, setUnit] = useState<'m2' | 'ha'>('m2');
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setValue(zone?.areaM2 ? String(zone.areaM2) : ''); setUnit('m2'); }, [zone?.zoneId, zone?.areaM2]);
+  const save = async (m2: number | null) => {
+    setError(null);
+    if (!zone) return;
+    if (m2 === null) { setError(t('setup.size.invalid')); return; }
+    try {
+      await saveZoneSetup(zone.zoneId, { areaM2: m2 });
+      setup.reload();
+      if (i < zones.length - 1) next();
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
+  if (!zone) return <Text style={styles.help}>{t('setup.zones.none')}</Text>;
+  const first = sameAsFirst(zones, 'areaM2');
+  return <>
+    <StepIntro styles={styles} title={t('setup.size.title', { zone: zone.name })} why={t('setup.size.why')} />
+    <ZonePager t={t} styles={styles} zones={zones} i={i} go={go} />
+    {zone.areaM2 ? <LooksRight t={t} styles={styles} testID="setup-size-right" onPress={() => { void save(zone.areaM2!); }}
+      label={`${t('setup.looksRight')} · ${t('setup.size.m2', { n: zone.areaM2 })}`} /> : null}
+    {i > 0 && first ? <Pressable accessibilityRole="button" onPress={() => { void save(first as number); }} style={styles.secondaryWide} testID="setup-size-same">
+      <Text style={styles.secondaryText}>{t('setup.sameAsFirst', { zone: zones[0].name })}</Text>
+    </Pressable> : null}
+    <TextInput keyboardType="decimal-pad" value={value} onChangeText={setValue} style={styles.input}
+      accessibilityLabel={t('setup.size.label')} testID="setup-size-value" />
+    <View style={styles.chips}>
+      {(['m2', 'ha'] as const).map(u => <Pressable key={u} accessibilityRole="radio" accessibilityState={{ checked: unit === u }}
+        onPress={() => setUnit(u)} style={[styles.chip, unit === u && styles.chipOn]} testID={`setup-size-unit-${u}`}>
+        <Text style={[styles.chipText, unit === u && styles.chipTextOn]}>{t(`setup.size.${u}Unit` as TranslationKey)}</Text>
+      </Pressable>)}
+    </View>
+    <Pressable accessibilityRole="button" onPress={() => { void save(areaToM2(Number(value.replace(',', '.')), unit)); }} style={styles.action} testID="setup-size-save">
+      <Text style={styles.actionText}>{t('setup.size.save')}</Text>
+    </Pressable>
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite" testID="setup-size-error">{error}</Text> : null}
+  </>;
+}
+
+// 13. The maximum run time: set by staff for the pump; read-only for the farmer.
+function MaxRunStep({ t, styles, zones, onRight }: { t: T; styles: Styles; zones: SetupZone[]; onRight: () => void }) {
+  return <>
+    <StepIntro styles={styles} title={t('setup.maxRun.title')} why={t('setup.maxRun.why')} />
+    {zones.map(z => <View key={z.zoneId} style={styles.summaryRow} testID={`setup-maxrun-${z.zoneId}`}>
+      <Text style={styles.summaryTask}>{z.name}</Text>
+      <Text style={styles.summaryState}>{t('setup.maxRun.minutes', { n: z.maxRunMinutes ?? 5 })}</Text>
+    </View>)}
+    <Text style={styles.help}>{t('setup.maxRun.ask')}</Text>
+    <LooksRight t={t} styles={styles} onPress={onRight} testID="setup-maxrun-right" label={t('setup.maxRun.ok')} />
+  </>;
+}
+
+// 14. Which alerts, and which also on Telegram. In-app is always on.
+function AlertsStep({ t, styles, linked, onSaved }: { t: T; styles: Styles; linked: boolean; onSaved: () => void }) {
+  const [prefs, setPrefs] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
+  const [quiet, setQuiet] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    fetchNotificationPreferences().then(p => { setPrefs(p); setQuiet(!!p.quietStart && !!p.quietEnd); }).catch(() => undefined);
+  }, []);
+  const rows: { key: keyof NotificationPreferences; label: TranslationKey }[] = [
+    { key: 'wateringTelegram', label: 'setup.alerts.watering' },
+    { key: 'lowTankTelegram', label: 'setup.alerts.lowTank' },
+    { key: 'droughtTelegram', label: 'setup.alerts.drought' },
+    { key: 'communityTelegram', label: 'setup.alerts.community' },
+    { key: 'weatherTelegram', label: 'setup.alerts.weather' },
+  ];
+  const save = async () => {
+    setError(null);
+    const next = { ...prefs, quietStart: quiet ? prefs.quietStart ?? '21:00' : null, quietEnd: quiet ? prefs.quietEnd ?? '06:00' : null };
+    try {
+      await saveNotificationPreferences(next);
+      onSaved();
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
+  return <>
+    <StepIntro styles={styles} title={t('setup.alerts.title')} why={t('setup.alerts.why')} />
+    {rows.map(r => <View key={r.key} style={styles.switchRow}>
+      <Text style={styles.summaryTask}>{t(r.label)}</Text>
+      {linked
+        ? <Switch value={prefs[r.key] as boolean} onValueChange={v => setPrefs(p => ({ ...p, [r.key]: v }))}
+            accessibilityLabel={t('setup.alerts.telegramFor', { what: t(r.label) })} testID={`setup-alerts-${r.key}`} />
+        : <Text style={styles.help}>{t('setup.alerts.inApp')}</Text>}
+    </View>)}
+    {!linked ? <Text style={styles.help}>{t('setup.alerts.noTelegram')}</Text> : <>
+      <View style={styles.switchRow}>
+        <Text style={styles.summaryTask}>{t('setup.alerts.quiet')}</Text>
+        <Switch value={quiet} onValueChange={setQuiet} accessibilityLabel={t('setup.alerts.quiet')} testID="setup-alerts-quiet" />
+      </View>
+      {quiet ? <Text style={styles.help}>{t('setup.alerts.quietHours', { start: prefs.quietStart ?? '21:00', end: prefs.quietEnd ?? '06:00' })}</Text> : null}
+    </>}
+    <Pressable accessibilityRole="button" onPress={() => { void save(); }} style={styles.action} testID="setup-alerts-save">
+      <Text style={styles.actionText}>{t('setup.looksRight')}</Text>
+    </Pressable>
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+  </>;
+}
+
+// 15. Community alerts: on by default, with the 2-reports-in-36-hours rule explained.
+function CommunityStep({ t, styles, onSaved }: { t: T; styles: Styles; onSaved: () => void }) {
+  const [prefs, setPrefs] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { fetchNotificationPreferences().then(setPrefs).catch(() => undefined); }, []);
+  const save = async (optIn: boolean) => {
+    setError(null);
+    try {
+      await saveNotificationPreferences({ ...prefs, communityOptIn: optIn });
+      onSaved();
+    } catch (e) {
+      setError(isNetworkError(e) ? t('offline.needsConnection') : e instanceof Error && e.message ? e.message : t('log.failed'));
+    }
+  };
+  return <>
+    <StepIntro styles={styles} title={t('setup.community.title')} why={t('setup.community.why')} tip={t('setup.community.limit')} />
+    <Text style={styles.help}>{t('setup.community.unverified')}</Text>
+    <Pressable accessibilityRole="button" onPress={() => { void save(true); }} style={[styles.action, prefs.communityOptIn && styles.actionDone]} testID="setup-community-on">
+      <Text style={styles.actionText}>{t('setup.community.on')}</Text>
+    </Pressable>
+    <Pressable accessibilityRole="button" onPress={() => { void save(false); }} style={styles.secondaryWide} testID="setup-community-off">
+      <Text style={styles.secondaryText}>{t('setup.community.off')}</Text>
+    </Pressable>
+    {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
+  </>;
+}
+
+// 16. Drip and the "?" help icons.
+function HelpStep({ t, styles, onRight }: { t: T; styles: Styles; onRight: () => void }) {
+  const { preferences, setPreference } = useAppPreferences();
+  return <>
+    <StepIntro styles={styles} title={t('setup.help.title')} why={t('setup.help.why')} />
+    <View style={styles.switchRow}>
+      <Text style={styles.summaryTask}>{t('setup.help.drip')}</Text>
+      <Switch value={preferences.showRaindropHelper} onValueChange={v => setPreference('showRaindropHelper', v)}
+        accessibilityLabel={t('setup.help.drip')} testID="setup-help-drip" />
+    </View>
+    <View style={styles.switchRow}>
+      <Text style={styles.summaryTask}>{t('setup.help.icons')}</Text>
+      <Switch value={preferences.showPageHelp} onValueChange={v => setPreference('showPageHelp', v)}
+        accessibilityLabel={t('setup.help.icons')} testID="setup-help-icons" />
+    </View>
+    <LooksRight t={t} styles={styles} onPress={onRight} testID="setup-help-right" />
+  </>;
+}
+
+// 17. All set: a summary of everything, what is still to do, and each zone's first advice.
 function DoneStep({ t, styles, setup }: { t: T; styles: Styles; setup: ReturnType<typeof useSetup> }) {
-  const all = SETUP_TASKS.every(s => stepDone(s, setup.facts));
+  const f = setup.facts;
+  const all = setupComplete(f);
+  const farm = f.farm;
+  const tank = farm?.waterSource === 'tank' && farm.tankCapacityLitres
+    ? t('setup.done.tank', {
+        litres: Math.round(farm.tankCapacityLitres).toLocaleString('en-ZA').replace(/,/g, ' '),
+        level: farm.tankRemainingLitres != null ? tankLevelWords(t, farm.tankRemainingLitres / farm.tankCapacityLitres) : t('setup.done.levelUnknown'),
+      })
+    : farm?.waterSource ? t(`setup.water.${farm.waterSource}` as TranslationKey) : null;
+  const pending = SETUP_STEPS.filter(s => s !== 'done' && !stepDone(s, f));
   return <>
     <View style={styles.doneHead}><Drip mood={all ? 'happy' : 'wave'} size={56} /></View>
     <StepIntro styles={styles} title={all ? t('setup.done.title') : t('setup.done.partTitle')} why={t('setup.done.why')} />
-    {SETUP_TASKS.map(task => {
-      const ok = stepDone(task, setup.facts);
-      return <View key={task} style={styles.summaryRow} testID={`setup-summary-${task}`}>
+    <View style={styles.card} testID="setup-summary">
+      {tank ? <Text style={styles.cardTitle} testID="setup-summary-farm">{tank}</Text> : null}
+      {f.zones.map(z => <Text key={z.zoneId} style={styles.help} testID={`setup-summary-zone-${z.zoneId}`}>
+        {[z.name, z.crop ? cropLabel(z.crop) : null, z.irrigationType ? t(`setup.irrigation.${z.irrigationType}` as TranslationKey).toLowerCase() : null,
+          z.soilType ? t(`setup.soilType.${z.soilType}` as TranslationKey).toLowerCase() : null].filter(Boolean).join(' · ')}
+      </Text>)}
+    </View>
+    {pending.length ? <>
+      <Text style={styles.label}>{t('setup.done.pending')}</Text>
+      {pending.map(task => <View key={task} style={styles.summaryRow} testID={`setup-summary-${task}`}>
         <Text style={styles.summaryTask}>{t(`setup.task.${task}` as TranslationKey)}</Text>
-        <Text style={[styles.summaryState, ok ? styles.summaryOk : styles.summaryTodo]}>{ok ? `✓ ${t('setup.done.done')}` : t('setup.done.todo')}</Text>
-      </View>;
-    })}
+        <Text style={[styles.summaryState, styles.summaryTodo]}>{t('setup.done.todo')}</Text>
+      </View>)}
+    </> : null}
     {setup.today.map(z => <View key={z.zoneId} style={styles.card}>
       <Text style={styles.label}>{t('setup.done.preview', { zone: z.name })}</Text>
       <Text style={styles.cardTitle}>{z.action.text}</Text>
@@ -480,16 +956,25 @@ function DoneStep({ t, styles, setup }: { t: T; styles: Styles; setup: ReturnTyp
   </>;
 }
 
+function tankLevelWords(t: T, fraction: number): string {
+  const level = fraction >= 0.9 ? 'full' : fraction >= 0.625 ? 'threeQuarters' : fraction >= 0.375 ? 'half' : fraction >= 0.15 ? 'quarter' : 'nearlyEmpty';
+  return t(`setup.done.level.${level}` as TranslationKey);
+}
+
+function cropLabel(value: string): string {
+  return ZONE_CROPS.find(c => c.value === value)?.label ?? value;
+}
+
 function createStyles(colors: AppColors) {
   return StyleSheet.create({
     page: { flex: 1, backgroundColor: colors.background },
     // 320-430 px phones use the full width; wider screens (web, tablets) get a centred column.
     frame: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center' },
-    progressHead: { paddingHorizontal: Spacing.four, paddingTop: Spacing.three, gap: Spacing.two },
+    progressHead: { paddingHorizontal: Layout.gutter, paddingTop: Spacing.three, gap: Spacing.two },
     progressText: { color: colors.textSecondary, fontSize: Type.caption, fontWeight: '600' },
     progressTrack: { height: 8, borderRadius: 4, backgroundColor: colors.divider, overflow: 'hidden' },
     progressFill: { height: 8, borderRadius: 4, backgroundColor: colors.primaryDark },
-    content: { padding: Spacing.four, gap: Spacing.three, paddingBottom: 40 },
+    content: { padding: Layout.gutter, gap: Spacing.three },
     title: { color: colors.text, fontSize: 26, lineHeight: 32, fontWeight: '700' },
     why: { color: colors.textSecondary, fontSize: Type.body, lineHeight: 23 },
     label: { color: colors.text, fontSize: Type.body, fontWeight: '600', marginTop: Spacing.one },
@@ -509,7 +994,7 @@ function createStyles(colors: AppColors) {
     card: { gap: Spacing.two, padding: Spacing.three, borderRadius: Radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.divider, backgroundColor: colors.surface },
     cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, flexWrap: 'wrap' },
     cardTitle: { color: colors.text, fontSize: Type.title, fontWeight: '600', flexShrink: 1 },
-    badge: { fontSize: Type.caption, fontWeight: '700', paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: 999, overflow: 'hidden' },
+    badge: { fontSize: Type.caption, fontWeight: '700', paddingHorizontal: Spacing.two, paddingVertical: Space.xs, borderRadius: 999, overflow: 'hidden' },
     badgeOn: { color: colors.white, backgroundColor: colors.success },
     badgeOff: { color: colors.text, backgroundColor: colors.warningBackground },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
@@ -534,7 +1019,7 @@ function createStyles(colors: AppColors) {
     summaryOk: { color: colors.success },
     summaryTodo: { color: colors.warning },
     doneHead: { alignItems: 'center' },
-    footer: { flexDirection: 'row', gap: Spacing.two, padding: Spacing.four, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider, backgroundColor: colors.background },
+    footer: { flexDirection: 'row', gap: Spacing.two, padding: Layout.gutter, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider, backgroundColor: colors.background },
     primary: { flex: 2, minHeight: 52, borderRadius: Radius.sm, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
     primaryText: { color: colors.white, fontSize: Type.body, fontWeight: '700' },
     secondary: { flex: 1, minHeight: 52, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
@@ -543,5 +1028,14 @@ function createStyles(colors: AppColors) {
     linkButton: { minHeight: 48, justifyContent: 'center', alignItems: 'center' },
     link: { color: colors.primaryDark, fontSize: Type.body, fontWeight: '600', textDecorationLine: 'underline' },
     disabled: { opacity: 0.5 },
+    sectionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one },
+    sectionChip: { fontSize: Type.caption, color: colors.textSecondary, paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.divider, overflow: 'hidden' },
+    sectionChipOn: { color: colors.white, backgroundColor: colors.primaryDark, borderColor: colors.primaryDark, fontWeight: '700' },
+    sectionChipDone: { borderColor: colors.success },
+    mapBox: { height: 180, borderRadius: Radius.sm, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.divider },
+    iconGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+    iconChoice: { width: '47%', minHeight: 96, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', gap: Spacing.one, backgroundColor: colors.surface, padding: Spacing.two },
+    iconGlyph: { fontSize: 32 },
+    switchRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider },
   });
 }

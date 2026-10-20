@@ -31,6 +31,8 @@ import {
   type ReportPeriodChoice,
   type ReportRequestRow,
 } from '@/services/agroFlowApi';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { Card, CardList } from '@/components/ui/Card';
 
 const REPORT_TYPES: { key: ReportKind; label: string; needsZone: boolean }[] = [
   { key: 'water_usage', label: 'Water usage', needsZone: false },
@@ -46,6 +48,8 @@ const PERIODS: { key: ReportPeriodChoice; label: string }[] = [
 ];
 
 export default function ReportsScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const styles = useMemo(() => createReportsStyles(colors), [colors]);
   const { farm, zones } = useAgroFlow();
@@ -186,7 +190,7 @@ export default function ReportsScreen() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]} showsVerticalScrollIndicator={false}>
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))}
           accessibilityRole="button"
@@ -327,8 +331,8 @@ export default function ReportsScreen() {
         ) : rows.length === 0 ? (
           <Text style={styles.hint}>You have not asked for a report yet.</Text>
         ) : (
-          rows.map((row) => (
-            <View key={row.id} style={styles.item}>
+          <CardList>{rows.map((row) => (
+            <Card key={row.id}>
               <View style={styles.itemHeader}>
                 <Text style={styles.itemTitle}>{row.reportTypeLabel}</Text>
                 <Text style={statusStyle(row.status)}>{row.statusLabel}</Text>
@@ -362,8 +366,8 @@ export default function ReportsScreen() {
                   <Text style={styles.openButtonText}>Open</Text>
                 </Pressable>
               )}
-            </View>
-          ))
+            </Card>
+          ))}</CardList>
         )}
       </ScrollView>
     </SafeAreaView>

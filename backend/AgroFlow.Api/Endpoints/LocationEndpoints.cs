@@ -15,14 +15,16 @@ internal sealed record LocationSearchProviderResult(
     [property: JsonPropertyName("longitude")] double Longitude,
     [property: JsonPropertyName("admin1")] string? Province,
     [property: JsonPropertyName("admin2")] string? District,
-    [property: JsonPropertyName("country")] string? Country);
+    [property: JsonPropertyName("country")] string? Country,
+    [property: JsonPropertyName("admin3")] string? Municipality = null);
 
-internal sealed record LocationSearchItem(string Name, string Detail, double Latitude, double Longitude);
+// Detail is "Town, District/Municipality, Province".
+internal sealed record LocationSearchItem(string Name, string Detail, double Latitude, double Longitude, string? Province = null, string? District = null);
 internal sealed record ReverseLocationItem(string? Locality, string? District, string? Province, string? Country, string? DisplayName);
 
 public static class LocationEndpoints
 {
-    private static readonly ConcurrentDictionary<string, IReadOnlyList<LocationSearchItem>> SearchCache = new();
+    private static readonly ConcurrentDictionary<string, IReadOnlyList<(LocationSearchProviderResult Result, string? Municipality)>> SearchCache = new();
     private static readonly ConcurrentDictionary<string, ReverseLocationItem> ReverseCache = new();
     private static readonly SemaphoreSlim NominatimGate = new(1, 1);
     private static DateTimeOffset _lastNominatimRequest = DateTimeOffset.MinValue;
@@ -36,35 +38,64 @@ public static class LocationEndpoints
         group.MapGet("/reverse", ReverseAsync);
     }
 
-    private static async Task<IResult> SearchAsync(string? q, IHttpClientFactory clients, CancellationToken ct)
+    // Town search for the admin location picker (docs/drought-community.md, Part 3): limited to
+    // South Africa and, when given, to one province; tolerant of misspellings ("Mafeking" finds
+    // Mahikeng). Open-Meteo is asked for the typed name first, then for shorter prefixes when
+    // that finds nothing in the province, and the results are ranked by how close the town (or
+    // its local municipality) is to what was typed. Each answer is cached, so typing is one
+    // request per new prefix at most (the app also waits for a pause in typing).
+    private static async Task<IResult> SearchAsync(string? q, string? province, IHttpClientFactory clients, CancellationToken ct)
     {
         var query = q?.Trim() ?? "";
         if (query.Length < 2) return Results.BadRequest(new { error = "Type at least two characters to search." });
-        var key = query.ToLowerInvariant();
-        if (SearchCache.TryGetValue(key, out var cached)) return Results.Ok(cached);
+        if (province is not null && !AgroFlow.Business.LocationRules.IsProvince(province))
+            return Results.BadRequest(new { error = "Choose one of the nine provinces." });
 
-        var url = "https://geocoding-api.open-meteo.com/v1/search" +
-                  $"?name={Uri.EscapeDataString(query)}&count=8&language=en&format=json&countryCode=ZA";
-        using var response = await clients.CreateClient().GetAsync(url, ct);
-        if (!response.IsSuccessStatusCode) return Results.Problem("The location search provider is unavailable.", statusCode: 502);
-        var provider = await response.Content.ReadFromJsonAsync<LocationSearchResponse>(cancellationToken: ct);
-        var items = (provider?.Results ?? new List<LocationSearchProviderResult>())
-            .Where(r => Valid(r.Latitude, r.Longitude))
+        var found = new List<(LocationSearchProviderResult Result, string? Municipality)>();
+        foreach (var attempt in AgroFlow.Business.LocationRules.QueriesFor(query))
+        {
+            foreach (var r in await ProviderAsync(attempt, clients, ct))
+                if (province is null || string.Equals(r.Result.Province, province, StringComparison.OrdinalIgnoreCase))
+                    found.Add(r);
+            if (found.Count > 0) break;
+        }
+        var items = found
+            .Where(r => AgroFlow.Business.LocationRules.ValidateCoordinates(r.Result.Latitude, r.Result.Longitude) is null)
+            .OrderByDescending(r => Math.Max(AgroFlow.Business.LocationRules.Similarity(query, r.Result.Name),
+                                            r.Municipality is null ? 0 : AgroFlow.Business.LocationRules.Similarity(query, r.Municipality)))
             .Select(r => new LocationSearchItem(
-                r.Name,
-                string.Join(", ", new[] { r.District, r.Province, r.Country }.Where(x => !string.IsNullOrWhiteSpace(x))),
-                r.Latitude,
-                r.Longitude))
-            .DistinctBy(r => (r.Name, r.Detail, r.Latitude, r.Longitude))
+                r.Result.Name,
+                AgroFlow.Business.LocationRules.Display(r.Result.Name, r.Result.District, r.Result.Province),
+                r.Result.Latitude,
+                r.Result.Longitude,
+                r.Result.Province,
+                r.Result.District))
+            .DistinctBy(r => (r.Name, r.Detail))
+            .Take(8)
             .ToList();
-        SearchCache[key] = items;
         return Results.Ok(items);
+    }
+
+    private static async Task<IReadOnlyList<(LocationSearchProviderResult Result, string? Municipality)>> ProviderAsync(
+        string name, IHttpClientFactory clients, CancellationToken ct)
+    {
+        var key = name.ToLowerInvariant();
+        if (SearchCache.TryGetValue(key, out var cached)) return cached;
+        var url = "https://geocoding-api.open-meteo.com/v1/search" +
+                  $"?name={Uri.EscapeDataString(name)}&count=20&language=en&format=json&countryCode=ZA";
+        using var response = await clients.CreateClient().GetAsync(url, ct);
+        if (!response.IsSuccessStatusCode) return Array.Empty<(LocationSearchProviderResult, string?)>();
+        var provider = await response.Content.ReadFromJsonAsync<LocationSearchResponse>(cancellationToken: ct);
+        var list = (provider?.Results ?? new List<LocationSearchProviderResult>())
+            .Select(r => (r, r.Municipality)).ToList();
+        SearchCache[key] = list;
+        return list;
     }
 
     private static async Task<IResult> ReverseAsync(double latitude, double longitude, IHttpClientFactory clients, CancellationToken ct)
     {
-        if (!Valid(latitude, longitude))
-            return Results.BadRequest(new { error = "Latitude must be -90 to 90 and longitude -180 to 180." });
+        if (AgroFlow.Business.LocationRules.ValidateCoordinates(latitude, longitude) is { } outside)
+            return Results.BadRequest(new { error = outside });
         var key = $"{latitude:F5},{longitude:F5}";
         if (ReverseCache.TryGetValue(key, out var cached)) return Results.Ok(cached);
 

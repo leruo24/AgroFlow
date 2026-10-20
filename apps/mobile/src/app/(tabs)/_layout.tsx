@@ -13,11 +13,13 @@ import {
   ColorValue,
   Platform,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
 import { useI18n } from '@/i18n';
+import { Space } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeContext';//contains the colors
 import {
   createTabsLayoutStyles,
@@ -46,9 +48,14 @@ export default function TabsLayout() {//creates layout component
   // From an iPhone Home Screen the web app runs edge to edge (viewport-fit=cover), so the
   // floating bar sits above the home indicator. The native apps already allow for it.
   const { bottom } = useSafeAreaInsets();
-  const tabBarStyle = Platform.OS === 'web' && bottom > 0
-    ? [themedStyles.tabBar, { marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM + bottom }]
-    : themedStyles.tabBar;
+  // On a 320 px phone the five labels need the full width: a smaller side margin and label,
+  // so "Irrigation" is never cut to "Irrigati...".
+  const narrow = useWindowDimensions().width < 360;
+  const tabBarStyle = [
+    themedStyles.tabBar,
+    Platform.OS === 'web' && bottom > 0 && { marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM + bottom },
+    narrow && { marginHorizontal: Space.sm },
+  ];
 
   const unreadAlerts = alerts.filter(//gets unread alerts count
     (alert) => !alert.read
@@ -69,7 +76,7 @@ export default function TabsLayout() {//creates layout component
 
         tabBarStyle,
 
-        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarLabelStyle: [styles.tabBarLabel, narrow && { fontSize: 11 }],
         tabBarItemStyle: styles.tabBarItem,
         tabBarIconStyle: styles.tabBarIcon,
       }}
