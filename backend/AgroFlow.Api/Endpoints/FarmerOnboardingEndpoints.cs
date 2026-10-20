@@ -68,7 +68,9 @@ public record FarmerOnboardedResponse(
     string? TelegramDeepLink,
     string? TelegramCode,
     DateTimeOffset? TelegramCodeExpiresAt,
-    string? Warning);
+    string? Warning,
+    // The new farm, so the admin site can save its province and town next (PUT /api/admin/farms/{id}/location).
+    long? FarmId = null);
 
 internal sealed record SupabaseAuthUserResponse(Guid Id);
 
@@ -664,7 +666,8 @@ public static class FarmerOnboardingEndpoints
                 deepLink,
                 code,
                 expiresAt,
-                warning
+                warning,
+                farmId
             )
         );
     }

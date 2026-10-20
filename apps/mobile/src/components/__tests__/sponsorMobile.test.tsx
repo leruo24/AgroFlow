@@ -255,3 +255,20 @@ describe('Unlink Telegram in Settings', () => {
     expect(screen.queryByTestId('unlink-telegram')).toBeNull();
   });
 });
+
+describe('soil note in plain, translated words', () => {
+  it.each(['en', 'af', 'tn'] as const)('every moisture state has a %s word', (lang) => {
+    for (const state of ['Dry', 'Optimal', 'Wet', 'Unknown']) {
+      const key = `zone.moisture.${state}`;
+      expect(translate(lang, key as Parameters<typeof translate>[1])).not.toBe(key);
+    }
+  });
+
+  it('the zone screen says "Just right", not "Optimal"', async () => {
+    mockAgro = baseAgro();
+    mockParams = { id: '7' };
+    await render(<ZoneControlScreen />);
+    expect(await screen.findByText('Just right')).toBeTruthy();
+    expect(screen.queryByText('Optimal')).toBeNull();
+  });
+});

@@ -1,4 +1,4 @@
-// Home's "Setup 4/6 done — Continue": opens the setup wizard at the first step still to do,
+// Home's "Setup X/17 done — Continue": opens the setup wizard at the first step still to do,
 // and is gone once setup is complete. It also carries the soil reminder: after a dry reading,
 // the wet one is what it asks for next.
 import { useMemo } from 'react';

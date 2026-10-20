@@ -2082,6 +2082,8 @@ tbody tr:last-child td{border-bottom:none}
   border-radius:10px;
   background:var(--surface, #fff);
 }
+/* [hidden] must beat display:grid, or the results stay open after a town is chosen. */
+.map-search-results[hidden], .map-pick-status[hidden], .map-place[hidden], .map-pick-canvas[hidden]{ display:none; }
 .map-search-result{
   display:grid;
   gap:2px;
@@ -2330,3 +2332,10 @@ html:has(.experience-shell){ scrollbar-gutter:auto; }
   .hardware-hotspots button span{ left:calc(100% - 3px); }
   .hardware-hotspots button.is-label-left span{ right:calc(100% - 3px); left:auto; }
 }
+
+/* Drought & community: reasons and report notes are sentences, so they wrap. */
+.dc-page td{ white-space:normal; min-width:72px; }
+.dc-page td .muted{ display:inline-block; max-width:520px; }
+.community-map{ position:relative; overflow:hidden; }
+.dc-settings small{ display:block; margin-top:4px; }
+.settings-group{ margin:16px 0 6px; }

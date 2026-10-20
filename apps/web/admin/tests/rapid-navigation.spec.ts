@@ -17,6 +17,7 @@ const NAV = [
   { id: "farms", label: "Farms & zones" },
   { id: "hardware", label: "Kits" },
   { id: "alerts", label: "Alerts" },
+  { id: "droughtCommunity", label: "Drought & community" },
   { id: "maintenance", label: "Maintenance" },
   { id: "reports", label: "Reports" },
   { id: "activity", label: "Activity" },
