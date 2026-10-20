@@ -249,8 +249,10 @@ namespace AgroFlow.Business
             "Mpumalanga", "North West", "Northern Cape", "Western Cape",
         };
 
-        // Mainland South Africa (with Lesotho and Eswatini inside it): about 22.1-34.9 S,
-        // 16.4-32.9 E. Prince Edward Islands are not farmland and are left out.
+        // The rectangle around mainland South Africa: about 22.1-34.9 S, 16.4-32.9 E (Prince
+        // Edward Islands left out). It catches typed mistakes such as a flipped sign; parts of
+        // Botswana, Namibia, Zimbabwe and Mozambique fall inside it, so the province, the town
+        // search and the map pin are what really place a farm.
         public const double MinLat = -35.0, MaxLat = -22.0, MinLon = 16.0, MaxLon = 33.0;
 
         public static string? ValidateCoordinates(double? latitude, double? longitude)

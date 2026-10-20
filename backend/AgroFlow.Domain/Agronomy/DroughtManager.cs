@@ -142,6 +142,21 @@ namespace AgroFlow.Business.Agronomy
 
     public enum DroughtPriority { Full, Reduced, Skip, NoFactor }
 
+    public static class DroughtStages
+    {
+        // The engine's farmer-facing stage is the FAO-56 stage by another name
+        // (SoilWaterBalance.Stage: L_ini, L_dev, L_mid, L_late), so the mapping is one to one.
+        public static GrowthStage From(SeasonStage? stage) => stage switch
+        {
+            SeasonStage.Establishing => GrowthStage.Initial,
+            SeasonStage.Growing => GrowthStage.Development,
+            SeasonStage.PeakGrowth => GrowthStage.MidSeason,
+            SeasonStage.NearingHarvest => GrowthStage.LateSeason,
+            SeasonStage.SeasonComplete => GrowthStage.PastSeasonEnd,
+            _ => GrowthStage.NotYetPlanted,
+        };
+    }
+
     public sealed record ZoneDroughtAdvice(
         long ZoneId,
         string ZoneName,

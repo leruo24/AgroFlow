@@ -38,6 +38,12 @@ public static class AuditActions
     public const string ZoneUpdated = "zone.updated";
     // Staff changed a zone's maximum run time (migration 0052).
     public const string ZoneMaxRunChanged = "zone.max_run_changed";
+    // Drought mode and community alerts (migrations 0054-0055).
+    public const string DroughtModeChanged = "farm.drought_mode_changed";
+    public const string SettingChanged = "settings.changed";
+    public const string CommunityReportHidden = "community.report_hidden";
+    public const string FarmLocationChanged = "farm.location_changed";
+    public const string StaffNoticeResolved = "staff_notice.resolved";
     public const string ZoneAdviceRun = "zone.advice_run";
 
     // A farmer (or admin) changed a zone's crop or planting date.

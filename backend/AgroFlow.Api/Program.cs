@@ -143,6 +143,16 @@ builder.Services.AddHostedService<TemporaryPasswordExpiryService>();
 // Telegram is for farmers only: unlink any staff account that still has a chat (audited).
 builder.Services.AddSingleton<StaffTelegramCleanupService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<StaffTelegramCleanupService>());
+// Drought mode and community alerts (docs/drought-community.md). Thresholds: app_setting (0054).
+builder.Services.AddSingleton<AppSettingsStore>();
+builder.Services.AddSingleton<FarmerMessenger>();
+builder.Services.AddSingleton<DroughtEvaluator>();
+builder.Services.AddHostedService<DroughtMonitorService>();
+builder.Services.AddSingleton<IWindProvider, OpenMeteoWind>();
+builder.Services.AddSingleton(sp => new CommunityService(
+    sp.GetRequiredService<NpgsqlDataSource>(), sp.GetRequiredService<AppSettingsStore>(), sp.GetRequiredService<IWindProvider>(),
+    sp.GetRequiredService<FarmerMessenger>(), sp.GetRequiredService<IAuditWriter>(), sp.GetRequiredService<ILogger<CommunityService>>()));
+builder.Services.AddHostedService<CommunityExpiryService>();
 builder.Services.AddSingleton<SupabaseAdminService>();
 
 // Stops the same event being messaged again and again. The forecast refreshes
@@ -354,6 +364,7 @@ app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 app.MapCommandStatusEndpoints();   // Irrigate: sent -> started -> finished
 app.MapZoneRunLimitEndpoints();     // staff: a zone's maximum run time
+app.MapDroughtCommunityEndpoints(); // drought mode, community alerts, wizard farm settings
 app.MapReportEndpoints();
 app.MapFao56EngineEndpoints();
 app.MapForecastEndpoints();
