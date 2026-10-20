@@ -39,7 +39,13 @@ import {
 
 import { isOnline, onReconnect } from '@/lib/connectivity';
 import { zoneMaxRunMinutes } from '@/lib/runLimit';
-import { t } from '@/i18n';
+import { t, type TranslationKey } from '@/i18n';
+
+// An alert's title from its stored severity (Critical / Warning / Info, any case).
+export function alertTitle(severity: string | null | undefined): string {
+  const key = (severity ?? '').toLowerCase();
+  return ['critical', 'warning', 'info'].includes(key) ? t(`alerts.kind.${key}` as TranslationKey) : t('alerts.kind.info');
+}
 
 import {
   irrigationModeFromDb,
@@ -174,7 +180,13 @@ export type Zone = {
     usedTodayLitres: number | null;
     latestCycleLitres: number;
     flowRateLpm: number;
+    // The sum of this month's watering events (estimated litres); null when there were none.
+    monthLitres?: number | null;
   };
+  // When the kit last sent a reading (zone_latest_reading.last_reading_at); null if never.
+  lastReadingAt?: string | null;
+  // The zone's soil type as stored (zone.soil_type: sandy / loam / clay), or null.
+  soilType?: string | null;
 // Weather adjustment
   weather: {
     rainExpected: boolean;
@@ -413,7 +425,8 @@ export function mapZoneRow(
   lastEvent: IrrigationEventRow | undefined,
   usedTodayLitres: number | null,
   weather: WeatherRow | null,
-  zoneAlerts: AlertRow[]
+  zoneAlerts: AlertRow[],
+  monthLitres: number | null = null
 ): Zone {
   const moistureThreshold =
     Number(row.moisture_threshold ?? 30);
@@ -592,7 +605,10 @@ export function mapZoneRow(
         runtimeSeconds > 0
           ? Math.round((estimatedLitres / (runtimeSeconds / 60)) * 10) / 10
           : 0,
+      monthLitres,
     },
+    lastReadingAt: reading?.last_reading_at ?? null,
+    soilType: (row as { soil_type?: string | null }).soil_type ?? null,
     weather: {
       rainExpected,
       message: weatherMessage,
@@ -643,6 +659,17 @@ async function fetchZonesForFarm(
     alertsByZone.set(key, list);
   }
 
+  // This month's watering per zone, from the events already loaded (no extra request).
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthByZone = new Map<string, number>();
+  for (const event of (events ?? []) as IrrigationEventRow[]) {
+    if (event.estimated_litres == null || new Date(event.started_at) < monthStart) continue;
+    const key = String(event.zone_id);
+    monthByZone.set(key, (monthByZone.get(key) ?? 0) + Number(event.estimated_litres));
+  }
+
   const mappedZones = rows.map((row, index) =>
     mapZoneRow(
       row,
@@ -653,7 +680,8 @@ async function fetchZonesForFarm(
       // real recorded zero.
       usageByZone.get(String(row.id)) ?? null,
       latestWeather,
-      alertsByZone.get(String(row.id)) ?? []
+      alertsByZone.get(String(row.id)) ?? [],
+      monthByZone.has(String(row.id)) ? Math.round(monthByZone.get(String(row.id))!) : null
     ));
 
   const zoneNames = new Map(
@@ -663,7 +691,8 @@ async function fetchZonesForFarm(
       id: `database-${alert.id}`,
       farmId,
       type: alert.severity.toLowerCase(),
-      title: `${alert.severity} Alert`,
+      // The stored severity in plain words, never "warning Alert".
+      title: alertTitle(alert.severity),
       message: alert.message,
       zone: alert.zone_id === null ? null : zoneNames.get(String(alert.zone_id)) ?? null,
       zoneId: alert.zone_id === null ? null : String(alert.zone_id),

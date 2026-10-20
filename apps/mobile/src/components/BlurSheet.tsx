@@ -83,7 +83,8 @@ export function BlurSheet({
           ]}
         >
           <View style={styles.header}>
-            <Text style={styles.title} numberOfLines={1}>
+            {/* The title wraps: "How does the soil feel? Spinach bed" must never be cut off. */}
+            <Text style={styles.title} accessibilityRole="header">
               {title ?? ''}
             </Text>
 
@@ -142,6 +143,8 @@ function createStyles(colors: AppColors) {
     header: {
       minHeight: 56,
       paddingHorizontal: Space.lg,
+      paddingVertical: Space.sm,
+      gap: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',

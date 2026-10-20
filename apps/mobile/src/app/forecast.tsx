@@ -22,6 +22,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { createForecastStyles } from '@/styles/forecastStyles';
 import { fetchForecast, type ForecastDay, type ForecastResponse } from '@/services/agroFlowApi';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { t, useI18n } from '@/i18n';
 
 // "3 Oct": short enough to fit under the weekday on a small phone.
 function shortDate(iso: string): string {
@@ -31,6 +32,8 @@ function shortDate(iso: string): string {
 }
 
 export default function ForecastScreen() {
+  // Re-renders in the farmer's language; t() below reads the same choice.
+  useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -59,7 +62,7 @@ export default function ForecastScreen() {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : 'The forecast could not be loaded.'
+          : t('forecast.loadFailed')
       );
     } finally {
       setLoading(false);
@@ -85,7 +88,7 @@ export default function ForecastScreen() {
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('common.back')}
           hitSlop={8}
           style={{ alignSelf: 'flex-start' }}
         >
@@ -93,7 +96,7 @@ export default function ForecastScreen() {
         </Pressable>
 
         <ScreenHeader
-          title="The week ahead"
+          title={t('forecast.title')}
           subtitle={zoneName ?? data?.zoneName ?? farm?.name ?? undefined}
           help="forecast"
         />
@@ -106,11 +109,10 @@ export default function ForecastScreen() {
           // Says whether there is nothing to show or something is broken; an empty screen looks broken.
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>
-              {data?.message ?? 'Forecast not available right now'}
+              {data?.message ?? t('forecast.none')}
             </Text>
             <Text style={styles.emptyBody}>
-              We get the weather for your area a few times a day. If this keeps saying the same
-              thing, check that your farm has its location set.
+              {t('forecast.noneBody')}
             </Text>
           </View>
         ) : (
@@ -134,18 +136,18 @@ export default function ForecastScreen() {
                     index === data.days.length - 1 && styles.dayRowLast,
                   ]}
                   accessibilityLabel={[
-                    isToday ? 'Today' : day.weekday,
+                    isToday ? t('forecast.today') : day.weekday,
                     day.minC !== null && day.maxC !== null
-                      ? `${day.minC} to ${day.maxC} degrees`
-                      : 'temperature not known',
-                    day.rainMm !== null ? `${day.rainMm} millimetres of rain` : 'rain not known',
+                      ? t('forecast.degreesA11y', { min: day.minC, max: day.maxC })
+                      : t('forecast.noTemp'),
+                    day.rainMm !== null ? t('forecast.rainA11y', { mm: day.rainMm }) : t('forecast.noRain'),
                     day.advice ?? '',
                   ]
                     .filter(Boolean)
                     .join(', ')}
                 >
                   <View style={styles.dayLabel}>
-                    <Text style={styles.weekday}>{isToday ? 'Today' : day.weekday}</Text>
+                    <Text style={styles.weekday}>{isToday ? t('forecast.today') : day.weekday}</Text>
                     <Text style={styles.dayDate}>{shortDate(day.date)}</Text>
                   </View>
 
@@ -155,15 +157,15 @@ export default function ForecastScreen() {
                     <Text style={styles.temps}>
                       {day.minC !== null && day.maxC !== null
                         ? `${day.minC}° to ${day.maxC}°`
-                        : 'Temperature not known'}
+                        : t('forecast.noTemp')}
                     </Text>
 
                     <Text style={wet ? styles.rainWet : styles.rain}>
                       {day.rainMm === null
-                        ? 'Rain not known'
+                        ? t('forecast.noRain')
                         : day.rainMm === 0
-                          ? 'No rain expected'
-                          : `${day.rainMm} mm rain`}
+                          ? t('forecast.dry')
+                          : t('forecast.rainMm', { mm: day.rainMm })}
                     </Text>
 
                     {/* Only when the engine had something to say. */}

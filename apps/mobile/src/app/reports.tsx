@@ -33,21 +33,24 @@ import {
 } from '@/services/agroFlowApi';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { Card, CardList } from '@/components/ui/Card';
+import { t, useI18n, type TranslationKey } from '@/i18n';
 
-const REPORT_TYPES: { key: ReportKind; label: string; needsZone: boolean }[] = [
-  { key: 'water_usage', label: 'Water usage', needsZone: false },
+const REPORT_TYPES: { key: ReportKind; label: TranslationKey; needsZone: boolean }[] = [
+  { key: 'water_usage', label: 'reports.type.water', needsZone: false },
   // The moisture report takes a zoneId only, so it cannot run for a whole farm.
-  { key: 'moisture', label: 'Soil moisture', needsZone: true },
-  { key: 'schedule', label: 'Watering schedule & advice', needsZone: false },
+  { key: 'moisture', label: 'reports.type.moisture', needsZone: true },
+  { key: 'schedule', label: 'reports.type.schedule', needsZone: false },
 ];
 
-const PERIODS: { key: ReportPeriodChoice; label: string }[] = [
-  { key: 'last_7_days', label: 'Last 7 days' },
-  { key: 'last_30_days', label: 'Last 30 days' },
-  { key: 'custom', label: 'Choose dates' },
+const PERIODS: { key: ReportPeriodChoice; label: TranslationKey }[] = [
+  { key: 'last_7_days', label: 'reports.period.7' },
+  { key: 'last_30_days', label: 'reports.period.30' },
+  { key: 'custom', label: 'reports.period.custom' },
 ];
 
 export default function ReportsScreen() {
+  // Re-renders in the farmer's language; t() below reads the same choice.
+  useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -83,7 +86,7 @@ export default function ReportsScreen() {
       setError(null);
     } catch (loadError) {
       setError(
-        loadError instanceof Error ? loadError.message : 'Your reports could not be loaded.'
+        loadError instanceof Error ? loadError.message : t('reports.loadFailed')
       );
     } finally {
       setLoading(false);
@@ -136,7 +139,7 @@ export default function ReportsScreen() {
 
       setError(
         isOurFault
-          ? "This report couldn't be made. Try again later."
+          ? t('reports.makeFailed')
           : message
       );
     } finally {
@@ -146,12 +149,12 @@ export default function ReportsScreen() {
 
   const confirmStopAuto = useCallback(() => {
     Alert.alert(
-      'Stop automatic reports?',
-      'You will stop getting reports on their own. You can still ask for one here any time, and our team can switch them back on for you.',
+      t('reports.stopTitle'),
+      t('reports.stopBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Stop them',
+          text: t('reports.stopConfirm'),
           style: 'destructive',
           onPress: () => {
             void stopAutoReports()
@@ -160,7 +163,7 @@ export default function ReportsScreen() {
                 void load();
               })
               .catch((e: unknown) =>
-                setError(e instanceof Error ? e.message : 'That could not be changed.')
+                setError(e instanceof Error ? e.message : t('reports.changeFailed'))
               );
           },
         },
@@ -194,54 +197,54 @@ export default function ReportsScreen() {
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('common.back')}
           hitSlop={8}
           style={{ alignSelf: 'flex-start' }}
         >
           <ArrowLeft size={24} color={colors.text} strokeWidth={2.25} />
         </Pressable>
 
-        <ScreenHeader title="Your reports" subtitle={farm?.name ?? undefined} help="reports" />
+        <ScreenHeader title={t('reports.title')} subtitle={farm?.name ?? undefined} help="reports" />
 
         {/* Automatic reports, if the team set them up */}
         {auto?.enabled && (
           <View style={styles.autoCard}>
             <Text style={styles.autoTitle}>{auto.description}</Text>
             <Text style={styles.autoBody}>
-              These arrive on their own. You will also find them in the list below.
+              {t('reports.autoBody')}
             </Text>
             <Pressable
               onPress={confirmStopAuto}
               accessibilityRole="button"
-              accessibilityLabel="Stop automatic reports"
+              accessibilityLabel={t('reports.stop')}
               style={styles.autoStop}
             >
-              <Text style={styles.autoStopText}>Stop automatic reports</Text>
+              <Text style={styles.autoStopText}>{t('reports.stop')}</Text>
             </Pressable>
           </View>
         )}
 
         {/* Request form */}
         <View style={styles.group}>
-          <Text style={styles.groupLabel}>What kind of report</Text>
+          <Text style={styles.groupLabel}>{t('reports.whatKind')}</Text>
           <View style={styles.chipRow}>
-            {REPORT_TYPES.map((t) =>
-              chip(t.label, reportType === t.key, () => setReportType(t.key), t.key)
+            {REPORT_TYPES.map((rt) =>
+              chip(t(rt.label), reportType === rt.key, () => setReportType(rt.key), rt.key)
             )}
           </View>
         </View>
 
         {usesDates ? (
           <View style={styles.group}>
-            <Text style={styles.groupLabel}>Which days</Text>
+            <Text style={styles.groupLabel}>{t('reports.whichDays')}</Text>
             <View style={styles.chipRow}>
-              {PERIODS.map((p) => chip(p.label, period === p.key, () => setPeriod(p.key), p.key))}
+              {PERIODS.map((p) => chip(t(p.label), period === p.key, () => setPeriod(p.key), p.key))}
             </View>
 
             {period === 'custom' && (
               <View style={styles.dateRow}>
                 <View style={styles.dateField}>
-                  <Text style={styles.dateLabel}>From</Text>
+                  <Text style={styles.dateLabel}>{t('reports.from')}</Text>
                   <TextInput
                     style={styles.dateInput}
                     value={customStart}
@@ -249,11 +252,11 @@ export default function ReportsScreen() {
                     placeholder="2026-09-01"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
-                    accessibilityLabel="Start date, year dash month dash day"
+                    accessibilityLabel={t('reports.fromA11y')}
                   />
                 </View>
                 <View style={styles.dateField}>
-                  <Text style={styles.dateLabel}>To</Text>
+                  <Text style={styles.dateLabel}>{t('reports.to')}</Text>
                   <TextInput
                     style={styles.dateInput}
                     value={customEnd}
@@ -261,7 +264,7 @@ export default function ReportsScreen() {
                     placeholder="2026-09-30"
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
-                    accessibilityLabel="End date, year dash month dash day"
+                    accessibilityLabel={t('reports.toA11y')}
                   />
                 </View>
               </View>
@@ -269,22 +272,21 @@ export default function ReportsScreen() {
           </View>
         ) : (
           <Text style={styles.hint}>
-            The watering schedule always covers today and the week ahead, so there are no dates to
-            choose.
+            {t('reports.scheduleNoDates')}
           </Text>
         )}
 
         <View style={styles.group}>
-          <Text style={styles.groupLabel}>Which zone</Text>
+          <Text style={styles.groupLabel}>{t('reports.whichZone')}</Text>
           <View style={styles.chipRow}>
             {/* "All zones" is hidden for soil moisture - that report is for
                 one zone and offering a choice that gets refused is worse
                 than not offering it. */}
-            {!needsZone && chip('All zones', zoneId === 'all', () => setZoneId('all'), 'z-all')}
+            {!needsZone && chip(t('reports.allZones'), zoneId === 'all', () => setZoneId('all'), 'z-all')}
             {zones.map((z) => chip(z.name, zoneId === z.id, () => setZoneId(z.id), `z-${z.id}`))}
           </View>
           {needsZone && zoneId === 'all' && (
-            <Text style={styles.hint}>A soil moisture report is for one zone. Please pick one.</Text>
+            <Text style={styles.hint}>{t('reports.pickOneZone')}</Text>
           )}
 
           {/* Picking a zone is not just a filter on the water usage report -
@@ -295,8 +297,8 @@ export default function ReportsScreen() {
           {reportType === 'water_usage' && (
             <Text style={styles.hint}>
               {zoneId === 'all'
-                ? 'All zones gives a short summary. Pick one zone for the full report, with charts and advice.'
-                : 'You will get the full report for this zone: charts, what the crop needed, and advice.'}
+                ? t('reports.allZonesHint')
+                : t('reports.oneZoneHint')}
             </Text>
           )}
         </View>
@@ -305,7 +307,7 @@ export default function ReportsScreen() {
           onPress={submit}
           disabled={submitting || (needsZone && zoneId === 'all')}
           accessibilityRole="button"
-          accessibilityLabel="Request this report"
+          accessibilityLabel={t('reports.request')}
           style={[
             styles.submit,
             (submitting || (needsZone && zoneId === 'all')) && styles.submitBusy,
@@ -314,7 +316,7 @@ export default function ReportsScreen() {
           {submitting ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.submitText}>Make me this report</Text>
+            <Text style={styles.submitText}>{t('reports.make')}</Text>
           )}
         </Pressable>
 
@@ -323,13 +325,13 @@ export default function ReportsScreen() {
 
         {/* Past reports */}
         <Text accessibilityRole="header" style={styles.sectionTitle}>
-          Your reports
+          {t('reports.title')}
         </Text>
 
         {loading ? (
           <ActivityIndicator color={colors.primaryDark} />
         ) : rows.length === 0 ? (
-          <Text style={styles.hint}>You have not asked for a report yet.</Text>
+          <Text style={styles.hint}>{t('reports.none')}</Text>
         ) : (
           <CardList>{rows.map((row) => (
             <Card key={row.id}>
@@ -340,9 +342,9 @@ export default function ReportsScreen() {
 
               <Text style={styles.itemMeta}>
                 {[
-                  row.zoneName ?? 'All zones',
+                  row.zoneName ?? t('reports.allZones'),
                   row.periodLabel,
-                  row.requestedVia === 'auto' ? 'Sent automatically' : null,
+                  row.requestedVia === 'auto' ? t('reports.auto') : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
@@ -355,15 +357,15 @@ export default function ReportsScreen() {
                   onPress={() => {
                     void openReportPdf(row.filePath!).catch((e: unknown) =>
                       setError(
-                        e instanceof Error ? e.message : 'This report could not be opened.'
+                        e instanceof Error ? e.message : t('reports.openFailed')
                       )
                     );
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open the ${row.reportTypeLabel} report`}
+                  accessibilityLabel={t('reports.openA11y', { report: row.reportTypeLabel })}
                   style={styles.openButton}
                 >
-                  <Text style={styles.openButtonText}>Open</Text>
+                  <Text style={styles.openButtonText}>{t('reports.open')}</Text>
                 </Pressable>
               )}
             </Card>

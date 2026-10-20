@@ -138,10 +138,9 @@ export function wireLogin(root: HTMLElement): void {
     // form, so there is nothing to do here.
   });
 
-  // Clearing the hash drops #/login, which main.ts's hashchange listener
-  // renders as the landing page.
+  // The product site is the site's root address, a separate page from /staff/.
   root.querySelector<HTMLButtonElement>("#loginBackHome")?.addEventListener("click", () => {
-    window.location.hash = "";
+    window.location.assign(new URL("../", window.location.href).pathname);
   });
 
   wireForgot(root, form, emailInput);

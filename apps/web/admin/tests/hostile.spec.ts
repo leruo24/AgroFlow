@@ -33,7 +33,7 @@ test("hostile farm names are shown as text and never run", async ({ page }) => {
     minDelayMs: 10, maxDelayMs: 30,
     respond: (method, path) => (method === "GET" && path === "/api/farms" ? FARMS : undefined),
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator('[data-act="view-farm"][data-id="1"]')).toContainText(XSS_IMG, { timeout: 15000 });
   await expect(page.locator('[data-act="view-farm"][data-id="2"]')).toContainText("Ngqeleni 🌱 ' OR 1=1 --");
 
@@ -50,7 +50,7 @@ test("the activity CSV neutralises formulas and keeps plain negative numbers", a
     minDelayMs: 10, maxDelayMs: 30,
     respond: (method, path) => (method === "GET" && path.startsWith("/api/admin/activity") && !path.includes("/farm/") ? ACTIVITY : undefined),
   });
-  await page.goto("/#activity");
+  await page.goto("/staff/#activity");
   await expect(page.locator("body")).toContainText(XSS_SCRIPT, { timeout: 15000 });
   expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined();
 

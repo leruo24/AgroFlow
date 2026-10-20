@@ -53,29 +53,29 @@ async function tile(page: Page, label: string): Promise<number> {
 }
 
 test("Home's farms, requests waiting and open alerts equal what the list pages show", async ({ page }) => {
-  await open(page, "/#dashboard");
+  await open(page, "/staff/#dashboard");
   const farms = await tile(page, "Farms");
   const waiting = await tile(page, "Requests waiting");
   const openAlerts = await tile(page, "Open alerts");
   expect([farms, waiting, openAlerts]).toEqual([3, 2, 2]);
 
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator('[data-act="view-farm"]')).toHaveCount(farms, { timeout: 15000 });
 
-  await page.goto("/#requests");
+  await page.goto("/staff/#requests");
   await expect(page.locator("tbody tr", { hasText: "pending" })).toHaveCount(waiting, { timeout: 15000 });
 
-  await page.goto("/#alerts");
+  await page.goto("/staff/#alerts");
   await expect(page.locator("tr", { hasText: "open alert" })).toHaveCount(openAlerts, { timeout: 15000 });
 });
 
 test("each Home tile opens the list it counts", async ({ page }) => {
-  await open(page, "/#dashboard");
+  await open(page, "/staff/#dashboard");
   await expect(page.locator(".card", { hasText: "Requests waiting" })).toBeVisible({ timeout: 15000 });
   await page.locator(".card", { hasText: "Requests waiting" }).first().click();
   await expect(page).toHaveURL(/#requests/);
 
-  await page.goto("/#dashboard");
+  await page.goto("/staff/#dashboard");
   await page.locator(".card", { hasText: /^\s*Farms/ }).first().click();
   await expect(page).toHaveURL(/#farms/);
 });

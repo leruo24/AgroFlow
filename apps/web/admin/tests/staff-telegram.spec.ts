@@ -39,7 +39,7 @@ async function signedIn(page: Page): Promise<void> {
 test("the bell shows the staff notices that used to go to Telegram, and opens each list", async ({ page }) => {
   const errors = captureErrors(page);
   await signedIn(page);
-  await page.goto("/#dashboard");
+  await page.goto("/staff/#dashboard");
   const bell = page.locator("#bellBtn");
   await expect(bell).toBeVisible({ timeout: 15000 });
   // 1 request + 1 call-back due + 2 enquiries waiting.
@@ -63,7 +63,7 @@ test("the bell shows the staff notices that used to go to Telegram, and opens ea
 test("Change password is in the account menu and opens the password box", async ({ page }) => {
   const errors = captureErrors(page);
   await signedIn(page);
-  await page.goto("/#dashboard");
+  await page.goto("/staff/#dashboard");
   await page.locator("#avatarBtn").click();
   await page.locator("#avatarMenu").getByRole("link", { name: "Change password" }).click();
   await expect(page.locator("#content")).toHaveAttribute("data-page", "settings", { timeout: 15000 });
@@ -78,7 +78,7 @@ test("Change password is in the account menu and opens the password box", async 
 test("staff are not listed as farmers, so there is no Telegram Connect for them", async ({ page }) => {
   const errors = captureErrors(page);
   await signedIn(page);
-  await page.goto("/#users");
+  await page.goto("/staff/#users");
   await expect(page.locator("#content")).toHaveAttribute("data-page", "users", { timeout: 15000 });
   await expect(page.getByText("Thandi Nkosi").first()).toBeVisible();
   await expect(page.getByText("Field Officer")).toHaveCount(0);

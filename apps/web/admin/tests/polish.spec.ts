@@ -35,7 +35,7 @@ async function requestsPage(page: Page): Promise<void> {
       return undefined;
     },
   });
-  await page.goto("/#requests");
+  await page.goto("/staff/#requests");
   await expect(page.locator(".requests-table")).toBeVisible({ timeout: 15000 });
 }
 
@@ -81,7 +81,7 @@ test("Requests: a farmer with no name shows the email or phone; with neither, th
 
 test("the sidebar logo and name go Home", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
-  await page.goto("/#alerts");
+  await page.goto("/staff/#alerts");
   await expect(page.locator("#headerTitle")).not.toHaveText("Dashboard", { timeout: 15000 });
   await page.locator("#brandHome").click();
   await expect(page).toHaveURL(/#dashboard$/);
@@ -90,9 +90,9 @@ test("the sidebar logo and name go Home", async ({ page }) => {
 });
 
 for (const where of ["sidebar", "avatar menu"] as const) {
-  test(`Log out from the ${where} ends the session and shows the landing page`, async ({ page }) => {
+  test(`Log out from the ${where} ends the session and shows staff sign-in`, async ({ page }) => {
     const log = await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
-    await page.goto("/#dashboard");
+    await page.goto("/staff/#dashboard");
     await expect(page.locator("#appShell")).toBeVisible({ timeout: 15000 });
 
     if (where === "sidebar") {
@@ -102,8 +102,10 @@ for (const where of ["sidebar", "avatar menu"] as const) {
       await page.locator("#avatarMenu").getByRole("button", { name: "Log out" }).click();
     }
 
-    await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible();
+    // Back to staff sign-in on /staff/, not the product site.
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
     await expect(page.locator("#appShell")).toHaveCount(0);
+    expect(new URL(page.url()).pathname).toBe("/staff/");
     expect(new URL(page.url()).hash).toBe("");
     expect(await page.evaluate(() => window.localStorage.getItem("sb-testproject-auth-token"))).toBeNull();
     expect(log.requests.some((r) => r.url.includes("/auth/v1/logout"))).toBe(true);
@@ -112,25 +114,25 @@ for (const where of ["sidebar", "avatar menu"] as const) {
 
 test("Log out still ends the session on this computer when Supabase cannot be reached", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
-  await page.goto("/#dashboard");
+  await page.goto("/staff/#dashboard");
   await expect(page.locator("#appShell")).toBeVisible({ timeout: 15000 });
   await page.route(`${FAKE_SUPABASE}/auth/v1/logout**`, (route) => route.abort("internetdisconnected"));
 
   await page.locator(".sidebar").getByRole("button", { name: "Log out" }).click();
-  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   expect(await page.evaluate(() => window.localStorage.getItem("sb-testproject-auth-token"))).toBeNull();
 });
 
 /* ---------------------------- 5. Landing page ---------------------------- */
 
-test("the landing page has no 'Who made this' section and keeps the Staff sign-in entry", async ({ page }) => {
+test("the landing page has no 'Who made this' section and no staff sign-in link", async ({ page }) => {
   await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("Who made this")).toHaveCount(0);
   await expect(page.locator("#creditsHeading")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Staff sign-in" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Staff sign-in" })).toHaveCount(0);
 });
 
 /* ------------------------------ 6. Settings ------------------------------ */
@@ -138,7 +140,7 @@ test("the landing page has no 'Who made this' section and keeps the Staff sign-i
 // Telegram is for farmers only (docs/telegram-farmers-only.md): staff get a note, no Connect.
 test("Settings has only My account: profile, password, and a farmers-only Telegram note", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
-  await page.goto("/#settings");
+  await page.goto("/staff/#settings");
   await expect(page.locator(".tab[data-tab]")).toHaveCount(1, { timeout: 15000 });
   await expect(page.locator(".tab[data-tab]")).toHaveText("My account");
   await expect(page.getByText("Platform thresholds")).toHaveCount(0);
@@ -163,7 +165,7 @@ async function activityFailing(page: Page, pingWorks: boolean): Promise<string[]
   // What an ad blocker does: the request never leaves the browser.
   await page.route(ACTIVITY, (route) => route.abort("blockedbyclient"));
   if (!pingWorks) await page.route(`${FAKE_API}/api/public/ping`, (route) => route.abort("internetdisconnected"));
-  await page.goto("/#activity");
+  await page.goto("/staff/#activity");
   return warnings;
 }
 
@@ -196,7 +198,7 @@ test("a failed Supabase read on a page shows the plain sentence, never 'Failed t
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
   await page.route(`${FAKE_SUPABASE}/rest/v1/service_request**`, (route) => route.abort("failed"));
   await page.route(`${FAKE_API}/api/public/ping`, (route) => route.abort("failed"));
-  await page.goto("/#requests");
+  await page.goto("/staff/#requests");
   await expect(page.locator(".error-state-card")).toContainText(SERVER, { timeout: 30000 });
   await expect(page.locator("body")).not.toContainText("Failed to fetch");
   await expect(page.locator("body")).not.toContainText("TypeError");

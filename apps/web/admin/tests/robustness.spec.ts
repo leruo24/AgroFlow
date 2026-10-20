@@ -22,7 +22,7 @@ for (const id of PAGES) {
   test(`${id}: loads with an empty database and says so`, async ({ page }) => {
     const errors = captureErrors(page);
     await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
-    await page.goto(`/#${id}`);
+    await page.goto(`/staff/#${id}`);
     await expect(page.locator(".page-head, h1, .page-title").first()).toBeVisible({ timeout: 15_000 });
     await settled(page);
     expect(errors).toEqual([]);
@@ -40,7 +40,7 @@ for (const id of PAGES) {
       if (url.pathname === "/rest/v1/profile" && (url.searchParams.get("id") ?? "").includes(ADMIN_ID)) return route.fallback();
       return route.fulfill({ status: 500, contentType: "application/json", body: '{"message":"boom"}' });
     });
-    await page.goto(`/#${id}`);
+    await page.goto(`/staff/#${id}`);
     await settled(page);
     const content = page.locator("#content");
     if (DEGRADE_BY_SECTION.includes(id)) {
@@ -60,7 +60,7 @@ for (const [w, h] of [[1366, 768], [1920, 1080], [390, 844]] as const) {
     await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
     const wide: string[] = [];
     for (const id of PAGES) {
-      await page.goto(`/#${id}`);
+      await page.goto(`/staff/#${id}`);
       await expect(page.locator(".page-head, h1, .page-title").first()).toBeVisible({ timeout: 15_000 });
       await settled(page);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -74,7 +74,7 @@ test("the loading animation clears within 10 s even when its video is blocked", 
   await page.route(/\.(mp4|webm)(\?.*)?$/, (route) => route.abort());
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
   const started = Date.now();
-  await page.goto("/#dashboard");
+  await page.goto("/staff/#dashboard");
   await expect(page.locator("#agroflow-splash")).toHaveCount(0, { timeout: 11_000 });
   expect(Date.now() - started).toBeLessThan(11_000);
 });
@@ -87,7 +87,7 @@ test("a signed-in farmer is not let into the console", async ({ page }) => {
         ? { id: ADMIN_ID, name: "A Farmer", email: "farmer@example.com", role: "farm_user" }
         : undefined,
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator("#nav")).toHaveCount(0, { timeout: 15_000 });
   await expect(page.locator("body")).not.toContainText("Farms & zones");
 });
@@ -102,7 +102,7 @@ test("a refused registration shows the server's own sentence, not 'Request faile
   });
   await page.route(`${FAKE_API}/api/farms/register`, (route) =>
     route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ message: "Farm size must be greater than 0." }) }));
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await page.locator('[data-act="add-farm"]').click();
   const wiz = page.locator('[data-wizard="register-farm"]');
   await wiz.locator(".picker-option", { hasText: "Owner A" }).click();

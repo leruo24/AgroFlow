@@ -6,7 +6,7 @@
  * rest of this app; no new colours, framework or dependency. */
 
 import { dismissButton, hiddenBy, historyList, type Dismissal, type DismissView } from "@/lib/dismiss";
-import { whyLink, type Explanation } from "@/lib/why";
+import { type Explanation } from "@/lib/why";
 import { esc, fmtDateTimeSast } from "@/lib/format";
 import type { Handling } from "@/types/models";
 import { Icon } from "@/lib/icons";
@@ -317,7 +317,7 @@ function attentionItem(c: AttentionCard): string {
   const dismiss = dismissButton({
     kind: "attention", key: c.key ?? c.act, title: `${c.title}: ${c.count}`, critical: c.tone === "bad", conditionKey: c.conditionKey ?? null,
   });
-  return `<div class="attn-item">${attentionCard(c)}${whyLink(c.why)}${dismiss}</div>`;
+  return `<div class="attn-item">${attentionCard(c)}${dismiss}</div>`;
 }
 
 /* Active / Dismissed / All. Dismissed cards leave the queue but are listed in its history

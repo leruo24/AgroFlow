@@ -57,6 +57,8 @@ jest.mock('@/components/AppAlert', () => ({
 }));
 
 jest.mock('@/services/agroFlowApi', () => ({
+  // The zone screen's Sensor Readings card asks for the farm's tank.
+  fetchTankStatus: jest.fn(() => Promise.resolve({ farmId: 1, capacityLitres: null, estimatedRemainingLitres: null, isLow: false })),
   fetchZoneHardware: jest.fn(() => Promise.resolve({ hardwareId: 1, deviceId: 'AF-1', online: true })),
   ApiHttpError: class ApiHttpError extends Error { status: number; constructor(m: string, s: number) { super(m); this.status = s; } },
   fetchZoneInsights: jest.fn(() => Promise.resolve({ insights: [], growth: null })),
@@ -264,11 +266,12 @@ describe('soil note in plain, translated words', () => {
     }
   });
 
-  it('the zone screen says "Just right", not "Optimal"', async () => {
+  it('the soil tile on the zone screen says Good (from Optimal), never the stored word', async () => {
     mockAgro = baseAgro();
     mockParams = { id: '7' };
     await render(<ZoneControlScreen />);
-    expect(await screen.findByText('Just right')).toBeTruthy();
+    const tile = await screen.findByTestId('sensor-tile-soil');
+    expect(tile.props.accessibilityLabel).toMatch(/Good/);
     expect(screen.queryByText('Optimal')).toBeNull();
   });
 });

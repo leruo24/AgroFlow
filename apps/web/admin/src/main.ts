@@ -27,6 +27,25 @@ setAfterRender(wirePageInteractions);
 
 type ViewState = "loading" | "welcome" | "signed-out" | "signed-in" | "reset-password";
 
+/* Two areas, two addresses, two layouts:
+ *   the root address (/)      -> the product site, always, even with a staff session
+ *   /staff/ (staff/index.html) -> staff sign-in, then the console
+ * Nothing on the product site links to /staff/. Old staff addresses (#/admin, #/login on the
+ * root, and /admin/) forward to /staff/ so bookmarks keep working. A password reset link
+ * (?reset=1) works on either address and continues to /staff/. */
+const STAFF_PATH = /\/staff(\/(index\.html)?)?$/;
+const inStaffArea = (): boolean => STAFF_PATH.test(window.location.pathname);
+
+/* The site's root directory, from either page: "/" or a sub-path like "/agroflow/". */
+function siteRoot(): string {
+  const path = window.location.pathname;
+  return inStaffArea() ? path.replace(STAFF_PATH, "/") : path.replace(/[^/]*$/, "");
+}
+
+export function staffUrl(hash = ""): string {
+  return `${siteRoot()}staff/${hash}`;
+}
+
 /* Whether the visitor has asked to see the login form yet.
  * A visitor with no session starts on the landing page and gets the login form only by
  * pressing Admin login. It is kept in the URL hash, so #/login can be bookmarked, a reload
@@ -40,6 +59,7 @@ const LOGIN_HASH = "#/login";
  * (public/admin/index.html). Same screen as #/login, which old links and bookmarks still use. */
 const STAFF_HASH = "#/admin";
 
+/* An old staff address on the product site (#/login, #/admin). */
 function loginRequestedFromHash(): boolean {
   return window.location.hash === LOGIN_HASH || window.location.hash === STAFF_HASH;
 }
@@ -54,8 +74,12 @@ function leaveReset(): void {
   const params = new URLSearchParams(window.location.search);
   params.delete(RESET_QUERY);
   const query = params.toString();
-  history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : "") +
-    (isAdminAuthenticated() ? "" : LOGIN_HASH));
+  // Done (or expired) on the product site's address: continue to staff sign-in or the console.
+  if (!inStaffArea()) {
+    window.location.replace(staffUrl());
+    return;
+  }
+  history.replaceState(null, "", window.location.pathname + (query ? `?${query}` : ""));
 }
 
 function getRoot(): HTMLElement {
@@ -66,8 +90,8 @@ function getRoot(): HTMLElement {
 
 function currentState(): ViewState {
   if (resetRequested()) return "reset-password";
-  if (isAdminAuthenticated()) return "signed-in";
-  return loginRequestedFromHash() ? "signed-out" : "welcome";
+  if (!inStaffArea()) return "welcome";
+  return isAdminAuthenticated() ? "signed-in" : "signed-out";
 }
 
 /* The state #root is currently showing. render() records it, so an auth event
@@ -87,14 +111,12 @@ function render(state: ViewState): void {
     return;
   }
 
+  document.body.classList.toggle("area-public", state === "welcome");
+  document.body.classList.toggle("area-staff", state !== "welcome");
+
   if (state === "welcome") {
     root.innerHTML = WELCOME_HTML;
-    wireWelcome(root, () => {
-      // Changing the hash is what triggers the re-render, through the
-      // hashchange listener in boot(). Setting it here AND rendering would
-      // render twice.
-      window.location.hash = STAFF_HASH;
-    });
+    wireWelcome(root);
     return;
   }
 
@@ -131,9 +153,10 @@ function render(state: ViewState): void {
   root.querySelectorAll<HTMLButtonElement>("[data-logout]").forEach((button) =>
     button.addEventListener("click", () => {
       document.getElementById("avatarMenu")?.classList.remove("open");
+      // Back to staff sign-in, on /staff/ (not the product site).
       void signOut().then(() => {
         history.replaceState(null, "", window.location.pathname + window.location.search);
-        if (shownState !== "welcome") render(currentState());
+        render(currentState());
       });
     }),
   );
@@ -147,6 +170,11 @@ function render(state: ViewState): void {
 }
 
 async function boot(): Promise<void> {
+  // Old staff links on the product site (#/admin, #/login): the console lives at /staff/ now.
+  if (!inStaffArea() && !resetRequested() && loginRequestedFromHash()) {
+    window.location.replace(staffUrl());
+    return;
+  }
   render("loading"); // explicit, even though index.html's static #root content already shows this - every state this app can be in goes through render(), no exceptions
   await initAuth();
   render(currentState());
@@ -157,6 +185,10 @@ async function boot(): Promise<void> {
   window.addEventListener("hashchange", () => {
     // supabase-js clearing a reset link's tokens from the hash must not leave the reset page.
     if (shownState === "reset-password" && resetRequested()) return;
+    if (!inStaffArea() && loginRequestedFromHash()) {
+      window.location.replace(staffUrl());
+      return;
+    }
     if (isAdminAuthenticated()) return;
     const next = currentState();
     if (next !== shownState) render(next);
@@ -172,10 +204,6 @@ async function boot(): Promise<void> {
     // new visitor sees. Clearing the hash does it; the listener above renders. Only from the
     // console: a rejected farmer sign-in also signs out, and must stay on the login screen so
     // they can read where the app is.
-    if (!isAdminAuthenticated() && shownState === "signed-in" && loginRequestedFromHash() && !resetRequested()) {
-      window.location.hash = "";
-    }
-
     const next = currentState();
 
     // Auth events while signed out (a rejected sign-in's SIGNED_IN then SIGNED_OUT) do not

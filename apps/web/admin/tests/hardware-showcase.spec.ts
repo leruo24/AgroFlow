@@ -74,9 +74,10 @@ test("public hardware story is usable and does not block the rest of the landing
   );
   expect(hasHorizontalOverflow).toBe(false);
 
-  await page.getByRole("link", { name: "Staff sign-in" }).first().click();
-  await expect(page).toHaveURL(/#\/admin$/);
-  await expect(page.getByRole("heading", { name: "AgroFlow" })).toBeVisible();
+  // No way into the console from the product site; staff use /staff/.
+  await expect(page.getByRole("link", { name: "Staff sign-in" })).toHaveCount(0);
+  await page.goto("/staff/");
+  await expect(page.getByRole("heading", { name: "AgroFlow" })).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   expect(errors).toEqual([]);
 });

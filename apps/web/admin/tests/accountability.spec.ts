@@ -37,7 +37,7 @@ async function open(page: Page) {
       return undefined;
     },
   });
-  await page.goto("/#alerts");
+  await page.goto("/staff/#alerts");
   await expect(page.locator("tr", { hasText: "Thandi has this one" })).toBeVisible({ timeout: 15000 });
 }
 

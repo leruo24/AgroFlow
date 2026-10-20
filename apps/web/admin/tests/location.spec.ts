@@ -61,7 +61,7 @@ async function openFarmWizard(page: Page, writes: unknown[], reverseResult = tru
       writes.push(JSON.parse(request.postData() ?? "{}"));
     }
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await page.locator('[data-act="add-farm"]').click();
   const wizard = page.locator('[data-wizard="register-farm"]');
   await wizard.locator(".picker-option", { hasText: "Owner A" }).click();
@@ -155,7 +155,7 @@ test("saved farm coordinates populate the edit map and remain authoritative", as
       saved = JSON.parse(request.postData() ?? "{}");
     }
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await page.locator('[data-act="view-farm"][data-id="7"]').click();
   await page.locator('[data-act="edit-farm-location"]').click();
   const drawer = page.locator("#drawerPanel");

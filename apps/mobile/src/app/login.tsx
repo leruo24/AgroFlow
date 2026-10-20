@@ -33,6 +33,7 @@ import {
 
 import {
   t,
+  useI18n,
 } from '@/i18n';
 
 import {
@@ -47,7 +48,7 @@ function getLoginErrorMessage(
   if (
     !(error instanceof Error)
   ) {
-    return 'Unable to sign in. Please try again.';
+    return t('signin.failed');
   }
 
   const message =
@@ -60,8 +61,8 @@ function getLoginErrorMessage(
   ) {
     // Looks like one of our temporary passwords: say how they are typed and that they expire.
     return looksTemporary(typedPassword)
-      ? `Incorrect email address or password. ${t('signin.tempHint')}`
-      : 'Incorrect email address or password.';
+      ? `${t('signin.wrong')} ${t('signin.tempHint')}`
+      : t('signin.wrong');
   }
 
   if (
@@ -69,7 +70,7 @@ function getLoginErrorMessage(
       'email not confirmed'
     )
   ) {
-    return 'Your email is not confirmed. Please contact your AgroFlow administrator.';
+    return t('signin.notConfirmed');
   }
 
   if (
@@ -80,13 +81,15 @@ function getLoginErrorMessage(
       'fetch'
     )
   ) {
-    return 'Unable to connect. Check your internet connection and try again.';
+    return t('signin.noConnection');
   }
 
   return error.message;
 }
 
 export default function LoginScreen() {
+  // Re-renders in the farmer's language.
+  useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const {
@@ -150,7 +153,7 @@ export default function LoginScreen() {
       !cleanedEmail
     ) {
       setError(
-        'Please enter your email address.'
+        t('signin.needEmail')
       );
 
       return;
@@ -165,7 +168,7 @@ export default function LoginScreen() {
       !emailIsValid
     ) {
       setError(
-        'Please enter a valid email address.'
+        t('signin.badEmail')
       );
 
       return;
@@ -175,7 +178,7 @@ export default function LoginScreen() {
       !password.trim()
     ) {
       setError(
-        'Please enter your password.'
+        t('signin.needPassword')
       );
 
       return;
@@ -270,7 +273,7 @@ export default function LoginScreen() {
                     styles.brandSubtitle
                   }
                 >
-                  Smart Irrigation
+                  {t('signin.tagline')}
                 </Text>
               </View>
             </View>
@@ -285,7 +288,7 @@ export default function LoginScreen() {
                   styles.title
                 }
               >
-                Sign In
+                {t('signin.title')}
               </Text>
 
               <Text
@@ -293,7 +296,7 @@ export default function LoginScreen() {
                   styles.description
                 }
               >
-                Enter your AgroFlow account details.
+                {t('signin.subtitle')}
               </Text>
             </View>
 
@@ -330,7 +333,7 @@ export default function LoginScreen() {
                     styles.inputLabel
                   }
                 >
-                  Email Address
+                  {t('signin.email')}
                 </Text>
 
                 <TextInput
@@ -385,7 +388,7 @@ export default function LoginScreen() {
                       styles.inputLabel
                     }
                   >
-                    Password
+                    {t('signin.password')}
                   </Text>
 
                   <TouchableOpacity
@@ -401,7 +404,7 @@ export default function LoginScreen() {
                         styles.forgotText
                       }
                     >
-                      Forgot password?
+                      {t('signin.forgot')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -430,7 +433,7 @@ export default function LoginScreen() {
                         }
                       }
                     }
-                    placeholder="Enter your password"
+                    placeholder={t('signin.passwordPlaceholder')}
                     placeholderTextColor={
                       colors.textMuted
                     }
@@ -474,8 +477,8 @@ export default function LoginScreen() {
                       }
                     >
                       {showPassword
-                        ? 'Hide'
-                        : 'Show'}
+                        ? t('signin.hide')
+                        : t('signin.show')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -504,8 +507,8 @@ export default function LoginScreen() {
                   }
                 >
                   {loading
-                    ? 'Signing In...'
-                    : 'Sign In'}
+                    ? t('signin.signingIn')
+                    : t('signin.button')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -517,7 +520,7 @@ export default function LoginScreen() {
               activeOpacity={0.7}
             >
               <Text style={styles.forgotText}>
-                Not a farmer on AgroFlow yet? Ask for a call
+                {t('signin.askCall')}
               </Text>
             </TouchableOpacity>
 
@@ -526,7 +529,7 @@ export default function LoginScreen() {
                 styles.footer
               }
             >
-              AgroFlow Smart Irrigation System
+              {t('signin.footer')}
             </Text>
           </View>
         </ScrollView>

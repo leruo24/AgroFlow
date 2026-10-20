@@ -41,6 +41,8 @@ jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { name: 'Tha
 jest.mock('@/services/insightsService', () => ({ fetchAlertExplanations: jest.fn(() => Promise.resolve({})), todayInSast: () => '2026-10-20' }));
 jest.mock('@/components/AppAlert', () => ({ AppAlert: { alert: jest.fn() } }));
 jest.mock('@/services/agroFlowApi', () => ({
+  // The zone screen's Sensor Readings card asks for the farm's tank.
+  fetchTankStatus: jest.fn(() => Promise.resolve({ farmId: 1, capacityLitres: null, estimatedRemainingLitres: null, isLow: false })),
   fetchZoneHardware: jest.fn(() => Promise.resolve({ hardwareId: null, deviceId: null, online: false })),
   ApiHttpError: class ApiHttpError extends Error { status = 0; },
   fetchZoneInsights: jest.fn(() => Promise.resolve({ insights: [], growth: null })),
@@ -92,7 +94,7 @@ describe('labels for database values', () => {
     expect(cropLabel(t, 'dry_beans')).toBe('Dry beans');
     expect(soilLabel(t, 'loam')).toBe('Loam');
     expect(modeLabel(t, 'scheduled')).toBe('On a schedule');
-    expect(healthLabel(t, 'Unknown')).toBe('Not known yet');
+    expect(healthLabel(t, 'Unknown')).toBe('Not enough data yet');
     expect(sensorLabel(t, 'Low Battery')).toBe('Battery low');
     expect(triggerLabel(t, 'auto')).toBe('Automatic');
     expect(cropLabel(tFor('af'), 'leafy_veg')).toBe('Blaargroente');
@@ -205,7 +207,7 @@ describe('screens show friendly values', () => {
 
   it('Zone: the live readings say "No kit connected", and no raw value shows', async () => {
     await render(<ZoneControlScreen />);
-    expect(await screen.findByTestId('zone-live')).toBeTruthy();
+    expect(await screen.findByTestId('sensor-readings')).toBeTruthy();
     expect(screen.getAllByText('No kit connected').length).toBeGreaterThan(0);
     for (const bad of NEVER) expect(screen.queryAllByText(bad)).toHaveLength(0);
   });

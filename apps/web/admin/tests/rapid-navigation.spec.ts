@@ -60,7 +60,7 @@ async function openConsole(page: Page): Promise<string[]> {
   const errors = captureErrors(page);
   await instrument(page);
   await mockBackend(page, { seed: 7 });
-  await page.goto("/#dashboard");
+  await page.goto("/staff/#dashboard");
   await expect(page.locator("#nav button[data-page]")).toHaveCount(NAV.length);
   await settled(page);
   return errors;
@@ -71,7 +71,7 @@ for (const seed of [7, 19, 101]) {
     const errors = captureErrors(page);
     await instrument(page);
     await mockBackend(page, { seed });
-    await page.goto("/#dashboard");
+    await page.goto("/staff/#dashboard");
     await expect(page.locator("#nav button[data-page]")).toHaveCount(NAV.length);
     await settled(page);
 
