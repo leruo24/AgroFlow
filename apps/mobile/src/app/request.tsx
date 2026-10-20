@@ -22,6 +22,7 @@ import {
 } from '@/services/agroFlowApi';
 import { useTheme } from '@/context/ThemeContext';
 import { createServiceRequestStyles } from '@/styles/serviceRequestStyles';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 type RequestType = 'new_farm' | 'new_zone';
 
@@ -46,6 +47,8 @@ const cropOptions: {
 ];
 
 export default function ServiceRequestScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
 
   const styles = useMemo(
@@ -254,9 +257,7 @@ export default function ServiceRequestScreen() {
       >
         <ScrollView
           style={styles.page}
-          contentContainerStyle={
-            styles.scrollContent
-          }
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

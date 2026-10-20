@@ -2,8 +2,7 @@ import { StyleSheet } from 'react-native';
 
 import {
   Spacing,
-  Type,
-} from '@/constants/colors';
+  Type, Space, Layout } from '@/constants/colors';
 
 export function createServiceRequestStyles(
   colors: any
@@ -24,7 +23,7 @@ export function createServiceRequestStyles(
     },
 
     scrollContent: {
-      paddingHorizontal: Spacing.four,
+      paddingHorizontal: Layout.gutter,
       paddingTop: Spacing.three,
       paddingBottom: Spacing.six,
     },
@@ -110,7 +109,7 @@ export function createServiceRequestStyles(
     },
 
     optionDescription: {
-      marginTop: 4,
+      marginTop: Space.xs,
       fontSize: Type.caption,
       lineHeight: 18,
       color: colors.muted,

@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Type, Radius, Spacing, type AppColors } from '@/constants/colors';
+import { Type, Radius, Spacing, type AppColors, Space } from '@/constants/colors';
 
 export function createForgotPasswordStyles(
   colors: AppColors
@@ -24,9 +24,9 @@ export function createForgotPasswordStyles(
     container: {
       flex: 1,
       minHeight: 650,
-      paddingHorizontal: 20,
-      paddingTop: 12,
-      paddingBottom: 24,
+      paddingHorizontal: Space.lg,
+      paddingTop: Space.md,
+      paddingBottom: Space.xl,
       backgroundColor:
         colors.background,
     },
@@ -34,7 +34,7 @@ export function createForgotPasswordStyles(
     topBar: {
       minHeight: 48,
       justifyContent: 'center',
-      marginBottom: 12,
+      marginBottom: Space.md,
     },
 
     backButton: {
@@ -44,7 +44,7 @@ export function createForgotPasswordStyles(
     },
 
     backArrow: {
-      marginRight: 5,
+      marginRight: Space.xs,
       fontSize: Type.display,
       lineHeight: 30,
       color:
@@ -67,7 +67,7 @@ export function createForgotPasswordStyles(
     brandMark: {
       width: 13,
       height: 28,
-      marginRight: 9,
+      marginRight: Space.sm,
       backgroundColor:
         colors.primary,
     },
@@ -87,7 +87,7 @@ export function createForgotPasswordStyles(
     },
 
     heading: {
-      marginBottom: 22,
+      marginBottom: Space.xl,
     },
 
     title: {
@@ -98,7 +98,7 @@ export function createForgotPasswordStyles(
     },
 
     description: {
-      marginTop: 6,
+      marginTop: Space.xs,
       maxWidth: 330,
       fontSize: Type.body,
       lineHeight: 19,
@@ -107,9 +107,9 @@ export function createForgotPasswordStyles(
     },
 
     errorBox: {
-      marginBottom: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
+      marginBottom: Space.md,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.md,
       backgroundColor:
         colors.errorBackground,
       borderRadius: Radius.sm,
@@ -128,11 +128,11 @@ export function createForgotPasswordStyles(
     },
 
     inputGroup: {
-      marginBottom: 18,
+      marginBottom: Space.lg,
     },
 
     inputLabel: {
-      marginBottom: 7,
+      marginBottom: Space.sm,
       fontSize: Type.caption,
       fontWeight: '600',
       color:
@@ -141,7 +141,7 @@ export function createForgotPasswordStyles(
 
     input: {
       height: 52,
-      paddingHorizontal: 12,
+      paddingHorizontal: Space.md,
       backgroundColor:
         colors.background,
       borderWidth: 1,
@@ -189,7 +189,7 @@ export function createForgotPasswordStyles(
     },
 
     infoText: {
-      marginTop: 4,
+      marginTop: Space.xs,
       fontSize: Type.caption,
       lineHeight: 15,
       color:
@@ -213,7 +213,7 @@ export function createForgotPasswordStyles(
     },
 
     successEmail: {
-      marginTop: 7,
+      marginTop: Space.sm,
       fontSize: Type.caption,
       fontWeight: '600',
       color:
@@ -240,7 +240,7 @@ export function createForgotPasswordStyles(
 
     footer: {
       marginTop: 'auto',
-      paddingTop: 30,
+      paddingTop: Space.xxl,
       textAlign: 'center',
       fontSize: Type.caption,
       color:

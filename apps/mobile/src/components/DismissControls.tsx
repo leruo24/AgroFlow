@@ -4,6 +4,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { BlurSheet } from '@/components/BlurSheet';
 import { createTodayStyles } from '@/styles/todayStyles';
 import type { DismissView } from '@/lib/dismissals';
+import { Space } from '@/constants/colors';
 
 // The app's dismiss pieces: the x button, the Active / Dismissed / All switch, the
 // 5-second Undo bar, and the note sheet a critical item asks for.
@@ -12,7 +13,7 @@ export function DismissButton({ label, onPress }: { label: string; onPress: () =
   const { colors } = useTheme();
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`Dismiss: ${label}`} hitSlop={10} onPress={onPress}
-      style={{ paddingHorizontal: 8, paddingVertical: 2 }}>
+      style={{ paddingHorizontal: Space.sm, paddingVertical: 2 }}>
       <Text style={{ fontSize: 20, lineHeight: 22, color: colors.textMuted }}>×</Text>
     </Pressable>
   );
@@ -47,7 +48,7 @@ export function UndoBar({ message, onUndo, onDone }: { message: string | null; o
   if (!message) return null;
   return (
     <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      backgroundColor: colors.text, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginVertical: 8 }}>
+      backgroundColor: colors.text, borderRadius: 8, paddingHorizontal: Space.md, paddingVertical: Space.sm, marginVertical: Space.sm }}>
       <Text style={{ color: colors.white, flex: 1 }}>{message}</Text>
       <Pressable accessibilityRole="button" accessibilityLabel="Undo" onPress={() => {
         if (used.current) return;
@@ -55,7 +56,7 @@ export function UndoBar({ message, onUndo, onDone }: { message: string | null; o
         onUndo();
         onDone();
       }}>
-        <Text style={{ color: colors.primary, fontWeight: '700', paddingLeft: 12 }}>Undo</Text>
+        <Text style={{ color: colors.primary, fontWeight: '700', paddingLeft: Space.md }}>Undo</Text>
       </Pressable>
     </View>
   );

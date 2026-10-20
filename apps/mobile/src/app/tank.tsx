@@ -7,11 +7,14 @@ import { router } from '@/lib/router';
 import { useAgroFlow } from '@/context/AgroFlowContext';
 import { useTheme } from '@/context/ThemeContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { Radius, Spacing, Type } from '@/constants/colors';
+import { Radius, Spacing, Type, Layout } from '@/constants/colors';
 import { fetchTankStatus, logTankRefill, saveTankCapacity, type TankStatus } from '@/services/agroFlowApi';
 import { useI18n } from '@/i18n';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 export default function TankScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { farm } = useAgroFlow();
   const { colors } = useTheme();
   const { t } = useI18n();
@@ -21,7 +24,7 @@ export default function TankScreen() {
     page: { flex: 1, backgroundColor: colors.background },
     head: { flexDirection: 'row', alignItems: 'center' },
     back: { padding: Spacing.three, minWidth: 48, minHeight: 48, justifyContent: 'center' },
-    content: { padding: Spacing.four, paddingBottom: 80, gap: Spacing.three },
+    content: { padding: Layout.gutter, gap: Spacing.three },
     section: { gap: Spacing.two, paddingVertical: Spacing.three, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider },
     title: { color: colors.text, fontSize: Type.title, fontWeight: '600' },
     estimate: { color: colors.text, fontSize: 25, lineHeight: 32, fontWeight: '600' },
@@ -103,7 +106,7 @@ export default function TankScreen() {
       <Pressable accessibilityRole="button" accessibilityLabel={t('common.back')} onPress={() => router.back()} style={styles.back}><ArrowLeft size={22} color={colors.text} /></Pressable>
       <View style={{ flex: 1 }}><ScreenHeader title={t('tank.title')} subtitle={farm?.name} /></View>
     </View>
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled">
       {loading ? <ActivityIndicator color={colors.primaryDark} /> : status?.estimatedRemainingLitres != null ? <View style={styles.section}>
         <Text style={styles.estimate}>{t('home.tankLeft', { litres: Math.round(status.estimatedRemainingLitres) })}</Text>
         <Text style={styles.help}>{t('tank.estimateHelp')}</Text>

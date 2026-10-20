@@ -1,5 +1,5 @@
 import { Platform, StyleSheet } from 'react-native';
-import { Radius, Type, type AppColors } from '@/constants/colors';
+import { Radius, Type, type AppColors, Space } from '@/constants/colors';
 
 export const FLOATING_TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 80 : 72;
 export const FLOATING_TAB_BAR_MARGIN_BOTTOM = Platform.OS === 'ios' ? 8 : 12;
@@ -23,9 +23,9 @@ export function createTabsLayoutStyles(colors: AppColors) {
       // Browsers draw the label taller than Android does, so web needs a little more room or the
       // descenders ("g", "y") are cut off.
       height: FLOATING_TAB_BAR_HEIGHT,
-      marginHorizontal: 16,
+      marginHorizontal: Space.lg,
       marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM,
-      paddingTop: 8,
+      paddingTop: Space.sm,
       paddingBottom: Platform.OS === 'ios' ? 15 : Platform.OS === 'web' ? 10 : 8,
       borderRadius: Radius.md,
       position: 'absolute',

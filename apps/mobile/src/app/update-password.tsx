@@ -42,6 +42,7 @@ import {
 import {
   createUpdatePasswordStyles,
 } from '@/styles/updatePasswordStyles';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 function getRecoveryParameters(
   url: string
@@ -69,6 +70,8 @@ function getRecoveryParameters(
 }
 
 export default function UpdatePasswordScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const {
     source,
   } = useLocalSearchParams<{
@@ -476,9 +479,7 @@ export default function UpdatePasswordScreen() {
         }
       >
         <ScrollView
-          contentContainerStyle={
-            styles.scrollContent
-          }
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={
             false

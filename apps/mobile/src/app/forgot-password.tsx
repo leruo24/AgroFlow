@@ -22,10 +22,13 @@ import { useI18n } from '@/i18n';
 import { MIN_PASSWORD_LENGTH, normaliseResetCode } from '@/lib/signInHelp';
 import { requestPasswordReset, resetPasswordWithCode } from '@/services/agroFlowApi';
 import { createForgotPasswordStyles } from '@/styles/forgotPasswordStyles';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ForgotPasswordScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const { t } = useI18n();
   const styles = useMemo(() => createForgotPasswordStyles(colors), [colors]);
@@ -92,7 +95,7 @@ export default function ForgotPasswordScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
             <View style={styles.topBar}>
               <TouchableOpacity style={styles.backButton} onPress={back} activeOpacity={0.7} accessibilityRole="button">

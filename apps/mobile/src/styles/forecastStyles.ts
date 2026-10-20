@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, type AppColors, Layout } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Styles for the 7-day Forecast screen.
@@ -9,7 +9,7 @@ import { sharedLayout } from './shared';
 export function createForecastStyles(colors: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
-    content: { padding: Spacing.three, gap: Spacing.three, paddingBottom: Spacing.six },
+    content: { padding: Layout.gutter, gap: Spacing.three },
 
     zoneNote: { fontSize: Type.body, lineHeight: 22, color: colors.textSecondary },
 
