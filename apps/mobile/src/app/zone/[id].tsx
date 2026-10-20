@@ -1530,9 +1530,6 @@ export default function ZoneControlScreen() {
                   style={
                     styles.controlValue
                   }
-                  numberOfLines={
-                    1
-                  }
                 >
                   {healthLabel(t, selectedZone.healthStatus)}
                 </Text>

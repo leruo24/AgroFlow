@@ -7,6 +7,25 @@
  * app/router.ts): it is its own layout, outside the console's shell. */
 
 import { Icon } from "@/lib/icons";
+
+/* The product page's phone screenshots (taken from the app with the simulated Mahikeng farm by
+ * apps/mobile/scripts/visual-polish-screenshots.mjs ... product). Each has its own alt text. */
+const APP_SHOTS: { file: string; caption: string; alt: string }[] = [
+  { file: "home.jpg", caption: "Home",
+    alt: "The AgroFlow app's Home screen for Mahikeng (Simulated): setup 11 of 17 done with a Continue button, and the drought card saying about 1 000 litres are left." },
+  { file: "sensors.jpg", caption: "Sensor readings",
+    alt: "A zone's Sensor Readings card: soil moisture 38% marked Good, temperature 27.4 °C, humidity 22%, water tank 1 000 litres and flow 6 litres a minute, updated 5 minutes ago." },
+  { file: "irrigate.jpg", caption: "Water a zone",
+    alt: "The zone's irrigation control: Automatic, Scheduled or Manual mode, how many minutes to water, and a Water now button." },
+  { file: "alerts.jpg", caption: "Alerts",
+    alt: "The Alerts screen listing a simulated alert that the maize zone is getting dry." },
+  { file: "setup-location.jpg", caption: "Setup: is this your farm?",
+    alt: "A setup step asking 'Is this your farm?' with Mahikeng, North West on a small map and the buttons Looks right and Something's wrong." },
+  { file: "setup-irrigation.jpg", caption: "Setup: how is it watered?",
+    alt: "A setup step asking how the maize zone is watered, with picture buttons for drip, sprinkler, micro-sprinkler, centre pivot, furrow and by hand." },
+  { file: "drought.jpg", caption: "Drought mode",
+    alt: "The drought card: drought mode is on, the water budget lasts 5 days at normal watering or 8 days in drought mode, and each zone's priority for today." },
+];
 import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
 import { initHardwareShowcase } from "@/features/hardware3d";
 import { WEB_APP_URL, appLinksHtml } from "@/lib/downloads";
@@ -232,6 +251,21 @@ export const WELCOME_HTML = `
                 <h3 class="landing-feature-title">${escapeHtml(f.title)}</h3>
                 <p class="landing-feature-body">${escapeHtml(f.body)}</p>
               </div>
+            </li>`).join("")}
+        </ul>
+      </section>
+
+      <section class="landing-section" id="the-app" aria-labelledby="appShotsHeading">
+        <p class="landing-eyebrow">The app</p>
+        <h2 id="appShotsHeading" class="landing-h2">What a farmer sees on their phone</h2>
+        <p class="app-shots-note">Screens from the AgroFlow app with a simulated farm near Mahikeng. No real farm or person is shown.</p>
+        <ul class="app-shots">
+          ${APP_SHOTS.map((s) => `
+            <li class="app-shot">
+              <figure>
+                <div class="phone-frame"><img src="media/app/${s.file}" alt="${escapeHtml(s.alt)}" loading="lazy" width="390" height="844" /></div>
+                <figcaption>${escapeHtml(s.caption)}</figcaption>
+              </figure>
             </li>`).join("")}
         </ul>
       </section>

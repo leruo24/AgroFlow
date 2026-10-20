@@ -39,7 +39,13 @@ import {
 
 import { isOnline, onReconnect } from '@/lib/connectivity';
 import { zoneMaxRunMinutes } from '@/lib/runLimit';
-import { t } from '@/i18n';
+import { t, type TranslationKey } from '@/i18n';
+
+// An alert's title from its stored severity (Critical / Warning / Info, any case).
+export function alertTitle(severity: string | null | undefined): string {
+  const key = (severity ?? '').toLowerCase();
+  return ['critical', 'warning', 'info'].includes(key) ? t(`alerts.kind.${key}` as TranslationKey) : t('alerts.kind.info');
+}
 
 import {
   irrigationModeFromDb,
@@ -685,7 +691,8 @@ async function fetchZonesForFarm(
       id: `database-${alert.id}`,
       farmId,
       type: alert.severity.toLowerCase(),
-      title: `${alert.severity} Alert`,
+      // The stored severity in plain words, never "warning Alert".
+      title: alertTitle(alert.severity),
       message: alert.message,
       zone: alert.zone_id === null ? null : zoneNames.get(String(alert.zone_id)) ?? null,
       zoneId: alert.zone_id === null ? null : String(alert.zone_id),

@@ -5,13 +5,15 @@
 //   EXPO_PUBLIC_SUPABASE_URL=https://testproject.supabase.co EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=test-anon-key \
 //   EXPO_PUBLIC_AGROFLOW_API_BASE=https://api.agroflow.test npx expo export --clear --platform web --output-dir <build>
 //   node scripts/visual-polish-screenshots.mjs <build> <out> ../web/admin [width height]
+//   ... <build> ../web/admin/public/media/app ../web/admin 390 844 product
+//     (the product page's phone screenshots: JPEG, simulated Mahikeng farm only)
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const [, , buildArg, outDir, adminDir, w = '390', h = '844'] = process.argv;
+const [, , buildArg, outDir, adminDir, w = '390', h = '844', mode = 'all'] = process.argv;
 const buildDir = path.resolve(buildArg);
 const { chromium } = require(path.join(path.resolve(adminDir), 'node_modules', 'playwright-core'));
 
@@ -141,6 +143,29 @@ const SCREENS = [
   ['setup', '/setup?step=location'],
 ];
 const tag = String(viewport.width);
+if (mode === 'product') {
+  // The product page's phone screenshots (apps/web/admin/src/pages/welcome.ts).
+  const shot = (p, name) => p.screenshot({ path: path.join(outDir, `${name}.jpg`), type: 'jpeg', quality: 82 });
+  const p = await newPage(true);
+  const visit = async (url) => { await p.goto(BASE + url); await p.waitForTimeout(2600); };
+  // Drip the helper is dismissed for these, so it does not cover the screens.
+  await p.addInitScript(() => window.localStorage.setItem('agroflow_app_preferences', JSON.stringify({ showPageHelp: false, showRaindropHelper: false })));
+  await visit('/'); await shot(p, 'home');
+  // React Native Web scrolls an inner box, so scroll the card itself to the top of it.
+  await p.evaluate(() => document.querySelector('[data-testid="drought-card"]')?.scrollIntoView({ block: 'start' }));
+  await p.waitForTimeout(400); await shot(p, 'drought');
+  await visit('/zone/1'); await shot(p, 'sensors');
+  await p.evaluate(() => document.querySelector('[data-testid="irrigate-button"]')?.scrollIntoView({ block: 'center' }));
+  await p.waitForTimeout(400); await shot(p, 'irrigate');
+  await visit('/alerts'); await shot(p, 'alerts');
+  await visit('/setup?step=location'); await shot(p, 'setup-location');
+  await visit('/setup?step=irrigation'); await shot(p, 'setup-irrigation');
+  await p.context().close();
+  console.log(JSON.stringify({ done: 'product', pageErrors: errors }));
+  await browser.close();
+  server.close();
+  process.exit(0);
+}
 const page = await newPage(true);
 for (const [name, url] of SCREENS) {
   await page.goto(BASE + url);
