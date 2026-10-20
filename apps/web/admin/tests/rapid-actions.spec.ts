@@ -37,7 +37,7 @@ test("detail panels: the last row clicked is the one that opens", async ({ page 
       path.includes("/farms/1/") ? 2000 : path.includes("/farms/2/") ? 20 : undefined,
   });
 
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator('[data-act="view-farm"]')).toHaveCount(2);
   await settled(page);
 
@@ -63,7 +63,7 @@ test("leaving a page while its panel is loading does not open the panel on the n
     respond: (method, path) => (method === "GET" && path === "/api/farms" ? FARMS : undefined),
   });
 
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator('[data-act="view-farm"]')).toHaveCount(2);
   await settled(page);
 
@@ -84,7 +84,7 @@ test("settings: clicking My account repeatedly settles on one filled panel", asy
   const errors = captureErrors(page);
   await mockBackend(page, { seed: 11 });
 
-  await page.goto("/#settings");
+  await page.goto("/staff/#settings");
   await expect(page.locator(".tab[data-tab]")).toHaveCount(1);
   await settled(page);
 
@@ -103,7 +103,7 @@ test("double-clicking Save sends exactly one request", async ({ page }) => {
   const errors = captureErrors(page);
   const log = await mockBackend(page, { seed: 13 });
 
-  await page.goto("/#settings");
+  await page.goto("/staff/#settings");
   await expect(page.locator('[data-act="save-my-profile"]')).toBeVisible();
   await settled(page);
 
@@ -123,7 +123,7 @@ test("double-clicking a drawer's confirm creates one thing, not two", async ({ p
   const errors = captureErrors(page);
   const log = await mockBackend(page, { seed: 17 });
 
-  await page.goto("/#users");
+  await page.goto("/staff/#users");
   await expect(page.locator('[data-act="create-farmer-direct"]')).toBeVisible();
   await settled(page);
 
@@ -155,7 +155,7 @@ test("returning to the tab does not rebuild the console", async ({ page }) => {
   const errors = captureErrors(page);
   await mockBackend(page, { seed: 23 });
 
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator("#appShell")).toBeVisible();
   await settled(page);
 

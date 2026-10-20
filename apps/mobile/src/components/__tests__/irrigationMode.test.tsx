@@ -34,6 +34,8 @@ jest.mock('expo-router', () => {
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { name: 'Thandi' } }) }));
 jest.mock('@/services/insightsService', () => ({ fetchAlertExplanations: jest.fn(() => Promise.resolve({})), todayInSast: () => '2026-10-19' }));
 jest.mock('@/services/agroFlowApi', () => ({
+  // The zone screen's Sensor Readings card asks for the farm's tank.
+  fetchTankStatus: jest.fn(() => Promise.resolve({ farmId: 1, capacityLitres: null, estimatedRemainingLitres: null, isLow: false })),
   fetchZoneHardware: jest.fn(() => Promise.resolve({ hardwareId: 1, deviceId: 'AF-1', online: true })),
   ApiHttpError: class ApiHttpError extends Error { status: number; constructor(m: string, s: number) { super(m); this.status = s; } },
   fetchFarmerDashboard: jest.fn(),

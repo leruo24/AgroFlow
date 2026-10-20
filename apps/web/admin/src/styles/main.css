@@ -820,6 +820,12 @@ tbody tr:last-child td{border-bottom:none}
 @media (max-width:520px){
   .kpis,.kpis.four,.kpis.five,.kpis.secondary,.sk-grid{grid-template-columns:1fr}
   .status-chip{display:none}
+  /* On a phone the page title keeps its words: the search box shrinks instead. */
+  .header{gap:8px}
+  .header-l{flex:1 1 auto}
+  .header h2{white-space:nowrap}
+  .header-r{gap:8px}
+  .search{min-width:0;width:104px}
 }
 
 /* reduced motion */
@@ -2194,20 +2200,13 @@ html{ scrollbar-gutter: stable; }
 
 /* While a page is loading, the outgoing page's buttons must not take a click. */
 #content[aria-busy="true"]{ pointer-events: none; }
+/* ...except the slow-loading Retry, which must be pressable while the page is still busy. */
+#content[aria-busy="true"] [data-loading-retry]{ pointer-events: auto; }
+.loading-indicator [data-loading-retry]{ margin-left: 8px; }
 
-/* "Why am I seeing this?"
- * The link sits beside a card or tile, never inside it (a button inside a button is
- * invalid), so the wrappers keep the grid cell a single column. */
+/* A KPI tile or Needs-attention card with its controls (dismiss) below it. */
 .kpi-item, .attn-item{ display:flex; flex-direction:column; gap:4px; min-width:0; }
 .kpi-item > .card, .attn-item > .attn-card{ flex:1; }
-.why-link{
-  align-self:flex-start; background:none; border:0; padding:4px 2px; cursor:pointer;
-  color:var(--accent); font-size:12px; font-weight:600; text-decoration:underline;
-}
-.why-link:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
-.why-body .why-summary{ font-size:15px; font-weight:600; margin:0 0 12px; }
-.why-body .detail-row small{ display:block; }
-.why-technical p{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; opacity:.85; }
 
 /* The Reports page. */
 .report-preview{ width:100%; height:720px; border:1px solid var(--line, #e2e8e4); border-radius:8px; background:#fff; }
@@ -2323,7 +2322,7 @@ html:has(.experience-shell){ scrollbar-gutter:auto; }
   .sidebar-toggle, .avatar, .dismiss-x{ min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
   .btn, .seg, .search, select, textarea,
   input:not([type=checkbox]):not([type=radio]):not([type=hidden]){ min-height:44px; }
-  .why-link, .link, .landing-text-link, .landing-nav a, .row-act a, td a{ display:inline-flex; align-items:center; min-height:44px; }
+  .link, .landing-text-link, .landing-nav a, .row-act a, td a{ display:inline-flex; align-items:center; min-height:44px; }
   .row-act a, td a, .landing-nav a{ min-width:44px; justify-content:center; }
   .seg, .tab, .req-tab, .nav button, .side-logout, #loginBackHome{ min-width:44px; min-height:44px; }
   .hardware-controls button{ min-width:44px; min-height:44px; }
@@ -2339,3 +2338,14 @@ html:has(.experience-shell){ scrollbar-gutter:auto; }
 .community-map{ position:relative; overflow:hidden; }
 .dc-settings small{ display:block; margin-top:4px; }
 .settings-group{ margin:16px 0 6px; }
+
+/* The product page's app screenshots, each in a phone frame. One row that scrolls sideways on a
+   phone, a grid on a wide screen. */
+.app-shots-note{ margin:-8px 0 22px; color:var(--text-2, #4b5a52); max-width:62ch; }
+.app-shots{ list-style:none; margin:0; padding:0 0 8px; display:grid; gap:22px; grid-auto-flow:column; grid-auto-columns:minmax(200px, 230px); overflow-x:auto; scroll-snap-type:x mandatory; }
+.app-shot{ scroll-snap-align:start; }
+.app-shot figure{ margin:0; display:flex; flex-direction:column; gap:10px; align-items:center; }
+.phone-frame{ width:100%; aspect-ratio:390/844; padding:10px; border-radius:34px; background:#10241a; box-shadow:0 18px 40px rgba(11,58,91,.18); }
+.phone-frame img{ display:block; width:100%; height:100%; object-fit:cover; object-position:top; border-radius:24px; background:#fff; }
+.app-shot figcaption{ font-weight:600; color:#0b3a5b; text-align:center; }
+@media (min-width: 1100px){ .app-shots{ grid-auto-flow:row; grid-template-columns:repeat(4, 1fr); grid-auto-columns:auto; overflow:visible; } }

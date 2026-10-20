@@ -46,6 +46,7 @@ import {
   createProfileStyles,
 } from '@/styles/profileStyles';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { t, useI18n } from '@/i18n';
 
 type ProfileRecord = {
   id: string;
@@ -104,6 +105,8 @@ function formatRole(
 }
 
 export default function ProfileScreen() {
+  // Re-renders in the farmer's language; t() below reads the same choice.
+  useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(true);
   const {
@@ -317,7 +320,7 @@ export default function ProfileScreen() {
           );
 
           setProfileError(
-            'Could not load the latest profile information.'
+            t('profile.loadFailed')
           );
         } finally {
           if (
@@ -430,8 +433,8 @@ export default function ProfileScreen() {
       !cleanFirstName
     ) {
       Alert.alert(
-        'Name Required',
-        'Enter your first name.'
+        t('profile.nameRequired'),
+        t('profile.enterFirstName')
       );
 
       return;
@@ -491,8 +494,8 @@ export default function ProfileScreen() {
       );
 
       Alert.alert(
-        'Profile Updated',
-        'Your profile details have been saved.'
+        t('profile.updated'),
+        t('profile.updatedBody')
       );
     } catch (
       error: unknown
@@ -503,8 +506,8 @@ export default function ProfileScreen() {
       );
 
       Alert.alert(
-        'Update Failed',
-        'Your profile could not be updated.'
+        t('profile.updateFailed'),
+        t('profile.updateFailedBody')
       );
     } finally {
       setSaving(
@@ -515,18 +518,18 @@ export default function ProfileScreen() {
 // Ask the user to confirm, then sign out, which clears the auth state and the stored session.
   function handleLogout() {
     Alert.alert(
-      'Log Out?',
-      'You will need to sign in again to access AgroFlow.',
+      t('profile.logOutTitle'),
+      t('profile.logOutBody'),
       [
         {
           text:
-            'Cancel',
+            t('common.cancel'),
           style:
             'cancel',
         },
         {
           text:
-            'Log Out',
+            t('profile.logOut'),
           style:
             'destructive',
           onPress:
@@ -586,7 +589,7 @@ export default function ProfileScreen() {
                 styles.backText
               }
             >
-              Back
+              {t('common.back')}
             </Text>
           </TouchableOpacity>
 
@@ -617,7 +620,7 @@ export default function ProfileScreen() {
                   styles.editButtonText
                 }
               >
-                Edit Profile
+                {t('profile.edit')}
               </Text>
             </TouchableOpacity>
           ) : (
@@ -637,7 +640,7 @@ export default function ProfileScreen() {
                   styles.cancelTopText
                 }
               >
-                Cancel
+                {t('common.cancel')}
               </Text>
             </TouchableOpacity>
           )}
@@ -716,7 +719,7 @@ export default function ProfileScreen() {
                 styles.sectionTitle
               }
             >
-              Personal Details
+              {t('profile.personal')}
             </Text>
 
             <View
@@ -734,7 +737,7 @@ export default function ProfileScreen() {
                     styles.inputLabel
                   }
                 >
-                  First Name
+                  {t('profile.firstName')}
                 </Text>
 
                 <TextInput
@@ -747,7 +750,7 @@ export default function ProfileScreen() {
                   style={
                     styles.input
                   }
-                  placeholder="First name"
+                  placeholder={t('profile.firstName')}
                   placeholderTextColor={
                     colors.textMuted
                   }
@@ -765,7 +768,7 @@ export default function ProfileScreen() {
                     styles.inputLabel
                   }
                 >
-                  Last Name
+                  {t('profile.lastName')}
                 </Text>
 
                 <TextInput
@@ -778,7 +781,7 @@ export default function ProfileScreen() {
                   style={
                     styles.input
                   }
-                  placeholder="Last name"
+                  placeholder={t('profile.lastName')}
                   placeholderTextColor={
                     colors.textMuted
                   }
@@ -796,7 +799,7 @@ export default function ProfileScreen() {
                     styles.inputLabel
                   }
                 >
-                  Email (read only)
+                  {t('profile.emailReadOnly')}
                 </Text>
 
                 <TextInput
@@ -807,7 +810,7 @@ export default function ProfileScreen() {
                     styles.input,
                     styles.readOnlyInput,
                   ]}
-                  placeholder="Email address"
+                  placeholder={t('signin.email')}
                   placeholderTextColor={
                     colors.textMuted
                   }
@@ -836,7 +839,7 @@ export default function ProfileScreen() {
                     styles.inputLabel
                   }
                 >
-                  Phone
+                  {t('profile.phone')}
                 </Text>
 
                 <TextInput
@@ -849,7 +852,7 @@ export default function ProfileScreen() {
                   style={
                     styles.input
                   }
-                  placeholder="Phone number"
+                  placeholder={t('profile.phoneNumber')}
                   placeholderTextColor={
                     colors.textMuted
                   }
@@ -881,8 +884,8 @@ export default function ProfileScreen() {
                 }
               >
                 {saving
-                  ? 'Saving...'
-                  : 'Save Changes'}
+                  ? t('common.saving')
+                  : t('profile.save')}
               </Text>
             </TouchableOpacity>
           </>
@@ -893,7 +896,7 @@ export default function ProfileScreen() {
                 styles.sectionTitle
               }
             >
-              Account Information
+              {t('profile.account')}
             </Text>
 
             <View
@@ -902,32 +905,32 @@ export default function ProfileScreen() {
               }
             >
               <ProfileRow
-                label="First Name"
+                label={t('profile.firstName')}
                 value={
-                  displayedFirstName || 'Not added'
+                  displayedFirstName || t('profile.notAdded')
                 }
               />
 
               <ProfileRow
-                label="Last Name"
+                label={t('profile.lastName')}
                 value={
                   displayedLastName ||
-                  'Not added'
+                  t('profile.notAdded')
                 }
               />
 
               <ProfileRow
-                label="Email"
+                label={t('profile.email')}
                 value={
                   displayedEmail
                 }
               />
 
               <ProfileRow
-                label="Phone"
+                label={t('profile.phone')}
                 value={
                   displayedPhone ||
-                  'Not added'
+                  t('profile.notAdded')
                 }
                 last
               />
@@ -940,7 +943,7 @@ export default function ProfileScreen() {
             styles.sectionTitle
           }
         >
-          Farm
+          {t('profile.farm')}
         </Text>
 
         <View
@@ -951,13 +954,13 @@ export default function ProfileScreen() {
           <FarmSelector />
 
           <ProfileRow
-            label="Location"
+            label={t('profile.location')}
             value={
               isFarmLoading
-                ? 'Loading...'
+                ? t('profile.loading')
                 : farm?.location ??
                   farmError ??
-                  'Not available'
+                  t('profile.notAvailable')
             }
             last
           />
@@ -992,7 +995,7 @@ export default function ProfileScreen() {
                   styles.changePasswordText
                 }
               >
-                Change Password
+                {t('profile.changePassword')}
               </Text>
             </TouchableOpacity>
 
@@ -1012,7 +1015,7 @@ export default function ProfileScreen() {
                   styles.logoutText
                 }
               >
-                Log Out
+                {t('profile.logOut')}
               </Text>
             </TouchableOpacity>
           </>

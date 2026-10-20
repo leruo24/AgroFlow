@@ -1,14 +1,31 @@
 /* The public product page: what anyone who opens the AgroFlow link sees.
  * The link is shared with people who are not staff (a farmer, a sponsor, a lecturer, a partner
  * at the Cisco Edge Centre), so the page is for customers: what AgroFlow does, how it works,
- * request a call and get the app. Nothing from the console is on it; staff get one quiet
- * "Staff sign-in" link (#/admin, or /admin/ which forwards there).
+ * request a call and get the app. Nothing from the console is on it, not even a link to it:
+ * staff sign in at the separate /staff/ address (see main.ts).
  * It is one of the states in main.ts's render() and not a PageId in the router (see
- * app/router.ts), because like the login screen it is outside the signed-in shell. It does
- * not change signing in: "Staff sign-in" only asks main.ts to show the login screen, and a
- * visitor with a valid admin session goes straight to the dashboard. */
+ * app/router.ts): it is its own layout, outside the console's shell. */
 
 import { Icon } from "@/lib/icons";
+
+/* The product page's phone screenshots (taken from the app with the simulated Mahikeng farm by
+ * apps/mobile/scripts/visual-polish-screenshots.mjs ... product). Each has its own alt text. */
+const APP_SHOTS: { file: string; caption: string; alt: string }[] = [
+  { file: "home.jpg", caption: "Home",
+    alt: "The AgroFlow app's Home screen for Mahikeng (Simulated): setup 11 of 17 done with a Continue button, and the drought card saying about 1 000 litres are left." },
+  { file: "sensors.jpg", caption: "Sensor readings",
+    alt: "A zone's Sensor Readings card: soil moisture 38% marked Good, temperature 27.4 °C, humidity 22%, water tank 1 000 litres and flow 6 litres a minute, updated 5 minutes ago." },
+  { file: "irrigate.jpg", caption: "Water a zone",
+    alt: "The zone's irrigation control: Automatic, Scheduled or Manual mode, how many minutes to water, and a Water now button." },
+  { file: "alerts.jpg", caption: "Alerts",
+    alt: "The Alerts screen listing a simulated alert that the maize zone is getting dry." },
+  { file: "setup-location.jpg", caption: "Setup: is this your farm?",
+    alt: "A setup step asking 'Is this your farm?' with Mahikeng, North West on a small map and the buttons Looks right and Something's wrong." },
+  { file: "setup-irrigation.jpg", caption: "Setup: how is it watered?",
+    alt: "A setup step asking how the maize zone is watered, with picture buttons for drip, sprinkler, micro-sprinkler, centre pivot, furrow and by hand." },
+  { file: "drought.jpg", caption: "Drought mode",
+    alt: "The drought card: drought mode is on, the water budget lasts 5 days at normal watering or 8 days in drought mode, and each zone's priority for today." },
+];
 import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
 import { initHardwareShowcase } from "@/features/hardware3d";
 import { WEB_APP_URL, appLinksHtml } from "@/lib/downloads";
@@ -75,7 +92,6 @@ export const WELCOME_HTML = `
         <a href="#get-app">Get the app</a>
         <a href="#enquire">Contact</a>
       </nav>
-      <a class="landing-staff-link" href="#/admin" id="welcomeLogin">Staff sign-in</a>
     </header>
 
     <main class="landing-main">
@@ -239,6 +255,21 @@ export const WELCOME_HTML = `
         </ul>
       </section>
 
+      <section class="landing-section" id="the-app" aria-labelledby="appShotsHeading">
+        <p class="landing-eyebrow">The app</p>
+        <h2 id="appShotsHeading" class="landing-h2">What a farmer sees on their phone</h2>
+        <p class="app-shots-note">Screens from the AgroFlow app with a simulated farm near Mahikeng. No real farm or person is shown.</p>
+        <ul class="app-shots">
+          ${APP_SHOTS.map((s) => `
+            <li class="app-shot">
+              <figure>
+                <div class="phone-frame"><img src="media/app/${s.file}" alt="${escapeHtml(s.alt)}" loading="lazy" width="390" height="844" /></div>
+                <figcaption>${escapeHtml(s.caption)}</figcaption>
+              </figure>
+            </li>`).join("")}
+        </ul>
+      </section>
+
       <section class="landing-section public-technology" id="technology" aria-labelledby="technologyHeading">
         <div>
           <p class="landing-eyebrow">Technology</p>
@@ -278,19 +309,10 @@ export const WELCOME_HTML = `
     </main>
     <footer class="landing-footer">
       <span>AgroFlow</span><span>Smart irrigation for real growing areas.</span>
-      <a class="landing-staff-link" href="#/admin" id="welcomeLoginBottom">Staff sign-in</a>
     </footer>
   </div>`;
 
-/* onLogin is called by both Staff sign-in links, in the header and the footer. They are real
- * links to #/admin, so they also work opened in a new tab; the click handler only avoids a
- * second render. */
-export function wireWelcome(root: HTMLElement, onLogin: () => void): void {
-  root.querySelectorAll<HTMLAnchorElement>("#welcomeLogin, #welcomeLoginBottom")
-    .forEach((link) => link.addEventListener("click", (e) => {
-      e.preventDefault();
-      onLogin();
-    }));
+export function wireWelcome(root: HTMLElement): void {
   wireEnquiry(root);
   initHardwareShowcase(root);
   root.querySelector<HTMLButtonElement>("[data-experience-launch]")?.addEventListener("click", async (event) => {

@@ -129,7 +129,7 @@ describe('signing in', () => {
     await render(<LoginScreen />);
     await fireEvent.changeText(screen.getByPlaceholderText(/example/i), 'thandi@example.org');
     await fireEvent.changeText(screen.getByPlaceholderText('Enter your password'), 'kx7p 4mrt');
-    const buttons = screen.getAllByText('Sign In');
+    const buttons = screen.getAllByText('Sign in');
     await fireEvent.press(buttons[buttons.length - 1]!);
     expect(await screen.findByText(/Temporary passwords are 8 letters and numbers, like KX7P 4MRT/)).toBeTruthy();
     expect(screen.getByText(/After 72 hours one stops working/)).toBeTruthy();

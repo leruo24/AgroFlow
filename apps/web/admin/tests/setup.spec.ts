@@ -38,7 +38,7 @@ async function open(page: Page, extra?: (method: string, path: string) => unknow
       return undefined;
     },
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator('[data-act="view-farm"][data-id="1"]')).toBeVisible({ timeout: 15000 });
 }
 
@@ -51,7 +51,7 @@ test("the farm drawer shows each zone's action, confidence and next step", async
   await expect(row).toContainText("Water about 8 min this morning (about 12 L)", { timeout: 15000 });
   await expect(row).toContainText("Medium");
   await expect(row).toContainText("Add the planting date");
-  await expect(row.locator(".why-link")).toHaveCount(2);
+  await expect(row.getByText("Why am I seeing this?")).toHaveCount(0);   // farmers only
 
   expect(errors).toEqual([]);
 });

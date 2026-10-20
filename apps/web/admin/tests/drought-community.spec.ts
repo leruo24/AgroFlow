@@ -104,7 +104,7 @@ async function open(page: Page, writes: Write[], hash = "#droughtCommunity") {
       writes.push({ method: request.method(), path, body: JSON.parse(request.postData() ?? "{}") });
     }
   });
-  await page.goto(`/${hash}`);
+  await page.goto(`/staff/${hash}`);
 }
 
 test("Home's Needs attention and the bell show drought farms and location problems", async ({ page }) => {

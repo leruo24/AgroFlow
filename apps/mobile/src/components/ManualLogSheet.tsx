@@ -116,7 +116,7 @@ export function ManualLogSheet({ zoneId, zoneName, mode, onClose, onSaved }: Pro
         ) : mode === 'feel' ? (
           <>
             <Text style={styles.intro}>{t('log.feelIntro')}</Text>
-            <View style={styles.choices}>
+            <View style={styles.feelChoices}>
               {FEELS.map((f) => (
                 <Pressable
                   key={f.key}
@@ -125,7 +125,8 @@ export function ManualLogSheet({ zoneId, zoneName, mode, onClose, onSaved }: Pro
                   accessibilityState={{ disabled: busy }}
                   disabled={busy}
                   onPress={() => run(() => logSoilFeel(zoneId, f.key))}
-                  style={[styles.choice, busy && styles.busy]}
+                  style={[styles.feelChoice, busy && styles.busy]}
+                  testID={`feel-${f.key}`}
                 >
                   <Text style={styles.choiceText}>{t(f.label)}</Text>
                   <Text style={styles.choiceHint}>{t(f.hint)}</Text>

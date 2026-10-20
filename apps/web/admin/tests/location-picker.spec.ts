@@ -103,7 +103,7 @@ async function openFarmWizard(page: Page, searches: Search[], writes: { path: st
       writes.push({ path, body: JSON.parse(request.postData() ?? "{}") });
     }
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await page.locator('[data-act="add-farm"]').click();
   const wizard = page.locator('[data-wizard="register-farm"]');
   await wizard.locator(".picker-option", { hasText: "Owner A" }).click();
@@ -251,7 +251,7 @@ async function openEditDrawer(page: Page, saved: { path: string; body: Record<st
     const path = new URL(request.url()).pathname;
     if (request.method() === "PUT" && path.endsWith("/7/location")) saved.push({ path, body: JSON.parse(request.postData() ?? "{}") });
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await page.locator('[data-act="view-farm"][data-id="7"]').click();
   await page.locator('[data-act="edit-farm-location"]').click();
   return page.locator("#drawerPanel");

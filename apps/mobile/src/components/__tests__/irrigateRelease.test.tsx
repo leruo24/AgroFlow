@@ -37,6 +37,8 @@ jest.mock('@/services/insightsService', () => ({ fetchAlertExplanations: jest.fn
 const mockAlert = jest.fn();
 jest.mock('@/components/AppAlert', () => ({ AppAlert: { alert: (...a: unknown[]) => mockAlert(...a) } }));
 jest.mock('@/services/agroFlowApi', () => ({
+  // The zone screen's Sensor Readings card asks for the farm's tank.
+  fetchTankStatus: jest.fn(() => Promise.resolve({ farmId: 1, capacityLitres: null, estimatedRemainingLitres: null, isLow: false })),
   ApiHttpError: class ApiHttpError extends Error { status: number; constructor(m: string, s: number) { super(m); this.status = s; } },
   fetchZoneHardware: jest.fn(),
   fetchCommandStatus: jest.fn(),

@@ -43,7 +43,7 @@ function respond(method: string, path: string): unknown {
 test("Reports leads with farm reports, pre-filled, and has no hollow report types", async ({ page }) => {
   const errors = captureErrors(page);
   await mockBackend(page, { minDelayMs: 10, maxDelayMs: 40, respond });
-  await page.goto("/#reports");
+  await page.goto("/staff/#reports");
 
   const panels = page.locator(".panel h4");
   await expect(panels.first()).toHaveText("Farm reports", { timeout: 15000 });
@@ -62,7 +62,7 @@ test("Reports leads with farm reports, pre-filled, and has no hollow report type
 
 test("Farms needing attention this week comes from the farmers' advice and opens with a Why", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 10, maxDelayMs: 40, respond });
-  await page.goto("/#reports");
+  await page.goto("/staff/#reports");
 
   const over = page.locator('[data-act="view-attention"][data-id="over"]');
   await expect(over).toContainText("1 farm over-watering", { timeout: 15000 });
@@ -71,7 +71,8 @@ test("Farms needing attention this week comes from the farmers' advice and opens
   await over.click();
   const drawer = page.locator("#drawerPanel");
   await expect(drawer).toContainText("Bravo Farm · Bed 1");
-  await expect(drawer.getByRole("button", { name: "Why am I seeing this?" })).toHaveCount(1);
+  // No "Why am I seeing this?" in the console (it is for farmers, in the app).
+  await expect(drawer.getByRole("button", { name: "Why am I seeing this?" })).toHaveCount(0);
 });
 
 test("Automatic reports: daily, a chosen day, per-zone PDFs, recipients, last/next, and a test send", async ({ page }) => {
@@ -86,7 +87,7 @@ test("Automatic reports: daily, a chosen day, per-zone PDFs, recipients, last/ne
       return respond(method, path);
     },
   });
-  await page.goto("/#reports");
+  await page.goto("/staff/#reports");
 
   await expect(page.locator("#autoReportsSummary")).toContainText("Next send", { timeout: 15000 });
   await page.locator("#autoReportsEdit").click();

@@ -159,8 +159,11 @@ export async function signIn(email: string, password: string): Promise<void> {
  * Redirect URLs), or Supabase sends people to the Site URL instead. */
 export const RESET_QUERY = "reset";
 
+/* Always the site's root address, also when asked from /staff/: that is the address on
+ * Supabase's allowed redirect list, and main.ts sends a finished reset on to /staff/. */
 export function passwordResetRedirectUrl(): string {
-  return `${window.location.origin}${window.location.pathname}?${RESET_QUERY}=1`;
+  const root = window.location.pathname.replace(/staff(\/(index\.html)?)?$/, "");
+  return `${window.location.origin}${root}?${RESET_QUERY}=1`;
 }
 
 /** The same reply whatever the email, so the form cannot find out who has an account. */
