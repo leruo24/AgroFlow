@@ -318,7 +318,7 @@
     "setup.location.noPoint": "Daar is nog geen kaartpunt vir jou plaas nie. Jou veldbeampte kan dit byvoeg.",
     "setup.location.coords": "Kaartpunt: {lat}, {lon}",
     "setup.location.mapA11y": "Kaart van jou plaas naby {place}",
-    "setup.location.wrong": "Iets is verkeerd - sê vir my veldbeampte",
+    "setup.location.wrong": "Iets is verkeerd — sê vir my veldbeampte",
     "setup.location.sent": "Dankie. Jou veldbeampte sal jou plaas se plek nagaan.",
     "setup.water.title": "Waar kom jou water vandaan?",
     "setup.water.why": "As jy uit 'n tenk natlei, hou AgroFlow dop hoeveel oor is.",

@@ -49,7 +49,7 @@ import { DroughtCard } from '@/components/DroughtCard';
 import CommunityScreen, { COMMUNITY_CATEGORIES } from '@/app/community';
 import { resetLanguageForTests } from '@/i18n';
 
-const honesty = 'AgroFlow does not predict droughts and this is not an official drought declaration. It is based on your tank, your soil and the weather forecast.';
+const honesty = "Worked out from your farm's own tank estimate, soil readings and weather forecast. It is not a drought prediction or an official drought declaration.";
 const droughtOn: api.DroughtView = {
   farmId: 1, active: true, automatic: true, override: null,
   reason: 'Drought mode on: tank about 20% full (drought line 25%); 2 mm of rain forecast over 7 days (less than 5 mm counts as dry); crop water use 6 mm a day forecast against 5 mm usual for this farm.',

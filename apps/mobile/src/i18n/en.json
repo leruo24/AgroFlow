@@ -318,7 +318,7 @@
     "setup.location.noPoint": "There is no map point for your farm yet. Your field officer can add it.",
     "setup.location.coords": "Map point: {lat}, {lon}",
     "setup.location.mapA11y": "Map of your farm near {place}",
-    "setup.location.wrong": "Something's wrong - tell my field officer",
+    "setup.location.wrong": "Something's wrong — tell my field officer",
     "setup.location.sent": "Thank you. Your field officer will check your farm's place.",
     "setup.water.title": "Where does your water come from?",
     "setup.water.why": "If you water from a tank, AgroFlow keeps an eye on how much is left.",

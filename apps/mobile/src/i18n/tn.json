@@ -318,7 +318,7 @@
     "setup.location.noPoint": "Ga go ise go nne le ntlha ya mmapa ya polase ya gago. Motlhankedi wa gago a ka e tsenya.",
     "setup.location.coords": "Ntlha ya mmapa: {lat}, {lon}",
     "setup.location.mapA11y": "Mmapa wa polase ya gago gaufi le {place}",
-    "setup.location.wrong": "Sengwe se phoso - bolelela motlhankedi wa me",
+    "setup.location.wrong": "Sengwe se phoso — bolelela motlhankedi wa me",
     "setup.location.sent": "Re a leboga. Motlhankedi wa gago o tla tlhola lefelo la polase ya gago.",
     "setup.water.title": "Metsi a gago a tswa kae?",
     "setup.water.why": "Fa o nosetsa ka metsi a tanka, AgroFlow e tla ela tlhoko gore go setse a le kae.",

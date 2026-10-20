@@ -13,7 +13,10 @@
 // (3 s here, 3 min on the board); a kept pump run uploaded twice is counted once. Then the
 // API-side database tests run against the same Postgres (SimDatabaseTests: no kit / kit
 // offline / over the maximum refused, sent -> started -> finished, staff and Telegram,
-// weather in the app).
+// weather in the app), and the drought, community and fire scenarios (DroughtCommunityDbTests),
+// each reported as its own line here. Before that: the 0056 demo farms near Mahikeng are
+// seeded as expected, and the drought check that runs when the API starts went through every
+// farm without an error.
 // Exit code 0 = every check passed. Needs Node 20+ and the .NET 8 SDK.
 import net from 'node:net';
 import path from 'node:path';
@@ -253,6 +256,28 @@ try {
   const kept = (await q("select count(*)::int n from irrigation_event where zone_id = $1 and sync_status = 'offline_queued'", [zoneId])).rows[0].n;
   check('a kept pump run uploaded twice is counted once', r1.status === 200 && r2.status === 200 && kept === 1, `${kept} row(s)`);
 
+  // 9b. Drought mode and community alerts: the demo farms (0056) and the start-up drought check.
+  const demo = (await q(`select f.name, f.latitude, f.longitude, f.sim_scenario, f.water_source,
+      (select count(*)::int from zone z where z.farm_id = f.farm_id) zones
+      from farm f where f.name in ('Mahikeng (Simulated)', 'Ottoshoop (Simulated)') order by f.name`)).rows;
+  const mahikeng = demo.find(f => f.name === 'Mahikeng (Simulated)');
+  const ottoshoop = demo.find(f => f.name === 'Ottoshoop (Simulated)');
+  check('the demo drought farm near Mahikeng is seeded: tank, 3 zones, drought scenario',
+    mahikeng?.sim_scenario === 'drought' && mahikeng?.water_source === 'tank' && mahikeng?.zones === 3, JSON.stringify(mahikeng));
+  // Haversine, as CommunityRules.DistanceKm: Ottoshoop is the neighbour inside the community radius.
+  const km = (a, b) => {
+    const r = x => Number(x) * Math.PI / 180;
+    const h = Math.sin((r(b.latitude) - r(a.latitude)) / 2) ** 2 +
+      Math.cos(r(a.latitude)) * Math.cos(r(b.latitude)) * Math.sin((r(b.longitude) - r(a.longitude)) / 2) ** 2;
+    return 2 * 6371 * Math.asin(Math.sqrt(h));
+  };
+  const apart = mahikeng && ottoshoop ? km(mahikeng, ottoshoop) : NaN;
+  check('the second demo farm (Ottoshoop) is within the 50 km pest and fire radius of Mahikeng',
+    apart > 20 && apart < 50, `${apart.toFixed(1)} km apart`);
+  await sleep(1500);
+  check('the drought check that runs at start-up went through every farm without an error',
+    !/Drought check failed/.test(apiLogText()), /Drought check failed/.test(apiLogText()) ? 'see the API log' : '');
+
   // 10. The API's own routes against this database (farmer and admin routes need a login the
   //     simulation cannot make, so they run in-process with the test sign-in):
   //     backend/AgroFlow.Domain.Tests/SimDatabaseTests.cs.
@@ -275,6 +300,17 @@ try {
     tests.code === 0 && total >= 8 && passed === total && failedN === 0 && skippedN === 0,
     `${passed} of ${total} passed, ${failedN} failed, ${skippedN} skipped`);
   if (tests.code !== 0) console.log(tests.out.split('\n').filter(l => /Failed |Assert|Error Message|expected|actual/i.test(l)).slice(0, 30).join('\n'));
+  // The drought, community and fire scenarios, one line each.
+  const passedTest = name => new RegExp(`Passed\\s+\\S*DroughtCommunityDbTests\\.${name}`).test(tests.out);
+  check('scenario, drought: a low tank and a dry forecast turn drought mode on, with the water budget and zone priorities; by hand too',
+    passedTest('Drought_mode_turns_on_from_the_farms_own_data_with_a_budget_and_zone_priorities_and_by_hand'));
+  check('scenario, community: 2 reports per 36 hours (confirming does not count); nearby farms told by distance only, never the reporter',
+    passedTest('Two_reports_per_36_hours_the_third_is_refused_and_confirming_does_not_count') &&
+    passedTest('Nearby_opted_in_farms_are_told_with_distance_only_and_never_the_reporter'));
+  check('scenario, fire: downwind farms first, wider radius at 3 confirmations, "out" closes it',
+    passedTest('A_fire_marks_downwind_farms_escalates_at_three_confirmations_and_out_closes_it'));
+  check('scenario, moderation: staff hide a report with a reason and it stops notifying; reports expire',
+    passedTest('Staff_hide_a_report_with_a_reason_it_stops_notifying_and_reports_expire'));
 } catch (error) {
   check('simulation ran to the end', false, error.message);
 } finally {

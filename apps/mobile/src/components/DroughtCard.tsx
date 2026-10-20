@@ -82,7 +82,7 @@ function ZoneRow({ z, styles, t }: { z: DroughtZone; styles: Styles; t: T }) {
       <Text style={styles.zoneName}>{z.zoneName}</Text>
       <Text style={[styles.badge, tone]}>{label}</Text>
     </View>
-    {z.droughtLitres != null ? <Text style={styles.body}>{t('drought.litres', { litres: Math.round(z.droughtLitres) })}</Text> : null}
+    {z.droughtLitres != null && z.droughtLitres > 0 ? <Text style={styles.body}>{t('drought.litres', { litres: Math.round(z.droughtLitres) })}</Text> : null}
     <Text style={styles.help}>{z.why}</Text>
   </View>;
 }
