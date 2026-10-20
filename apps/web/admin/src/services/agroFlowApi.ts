@@ -1126,3 +1126,57 @@ export function getEntityTimeline(entityType: string, entityId: string): Promise
 
 /** Who is dealing with a request. Independent of status: somebody picks a
     request up before it is scheduled. */
+
+/* ---- Drought mode, community reports and their settings (docs/drought-community.md) ---- */
+
+export type DroughtFarm = {
+  farmId: number; name: string; since: string | null; reason: string | null; override: "on" | "off" | null; isSimulated: boolean;
+};
+
+export function getDroughtFarms(): Promise<DroughtFarm[]> {
+  return authorizedJson<DroughtFarm[]>("/api/admin/drought-farms", "GET");
+}
+
+export function setFarmDroughtMode(farmId: number, mode: "on" | "off" | "auto"): Promise<{ active: boolean; reason: string }> {
+  return authorizedJson(`/api/admin/farms/${farmId}/drought`, "PUT", { mode });
+}
+
+/* "Something's wrong - tell my field officer" from the farmer's setup wizard. */
+export type StaffNotice = {
+  id: number; farmId: number | null; farmName: string; kind: string; message: string; createdAt: string; farmerName: string;
+};
+
+export function getStaffNotices(): Promise<StaffNotice[]> {
+  return authorizedJson<StaffNotice[]>("/api/admin/staff-notices", "GET");
+}
+
+export function resolveStaffNotice(id: number): Promise<{ message: string }> {
+  return authorizedJson(`/api/admin/staff-notices/${id}/resolve`, "POST", {});
+}
+
+/* Staff see the reporter; farmers never do. */
+export type CommunityReportAdmin = {
+  id: number; category: string; subtype: string; label: string; severity: string; description: string | null;
+  latitude: number; longitude: number; radiusKm: number; status: "active" | "hidden" | "expired" | "closed";
+  fireState: string | null; escalated: boolean; createdAt: string; expiresAt: string; hiddenReason: string | null;
+  reporterName: string; reporterEmail: string; farmName: string; confirmations: number; notifiedFarms: number;
+  reporterHiddenCount: number; reporterTotal: number;
+};
+
+export function getCommunityReports(): Promise<CommunityReportAdmin[]> {
+  return authorizedJson<CommunityReportAdmin[]>("/api/admin/community/reports", "GET");
+}
+
+export function hideCommunityReport(id: number, reason: string): Promise<{ message?: string; error?: string }> {
+  return authorizedJson(`/api/admin/community/reports/${id}/hide`, "POST", { reason });
+}
+
+export type AppSetting = { key: string; value: number | string | boolean; description: string; source: string; updatedAt: string };
+
+export function getDroughtCommunitySettings(): Promise<AppSetting[]> {
+  return authorizedJson<AppSetting[]>("/api/admin/settings/drought-community", "GET");
+}
+
+export function saveDroughtCommunitySettings(settings: { key: string; value: number | string | boolean }[]): Promise<{ message: string; settings: AppSetting[] }> {
+  return authorizedJson("/api/admin/settings/drought-community", "PUT", { settings });
+}

@@ -39,7 +39,7 @@ type LeafletGlobal = {
 declare global { interface Window { L?: LeafletGlobal; } }
 let loader: Promise<LeafletGlobal> | null = null;
 
-function loadLeaflet(): Promise<LeafletGlobal> {
+export function loadLeaflet(): Promise<LeafletGlobal> {
   if (window.L) return Promise.resolve(window.L);
   if (loader) return loader;
   loader = new Promise<LeafletGlobal>((resolve, reject) => {

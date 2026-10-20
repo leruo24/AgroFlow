@@ -68,13 +68,14 @@ import { ZONE_CROPS } from "@/data/referenceData";
 import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
 import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
+import { changedSettings, mountCommunityMap } from "@/pages/droughtCommunity";
 import { OUTSIDE_SA, formatDecimal, formatDms, insideSouthAfrica, validCoordinates } from "@/lib/coordinates";
 import { telegramState } from "@/pages/users";
 import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
 import { initBell } from "@/app/bell";
 import { isStaffRole } from "@/lib/staff";
-import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace } from "@/services/agroFlowApi";
+import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace, setFarmDroughtMode, resolveStaffNotice, hideCommunityReport, saveDroughtCommunitySettings } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -830,6 +831,26 @@ function openFarmLocationDrawer(farm: Farm, place: { province: string | null; to
   });
 }
 
+/* Hide a community report: the reason is recorded in Activity, and the report stops notifying. */
+function openHideReport(id: number): void {
+  openDrawer({
+    title: "Hide this community report",
+    subtitle: "Farmers stop seeing it and no more alerts go out. The reason is recorded in Activity.",
+    fields: [{ label: "Why (for example: false report, duplicate, not a farming matter)", value: "", editable: true, name: "hideReason" }],
+    confirmLabel: "Hide the report",
+    onConfirm: (values) => {
+      const reason = (values["hideReason"] ?? "").trim();
+      if (reason.length < 3) {
+        toast("Say why it is being hidden.", "warn");
+        return false;
+      }
+      void hideCommunityReport(id, reason)
+        .then(() => { toast("Report hidden.", "success"); void refresh(); })
+        .catch((e: unknown) => showErrorModal("Could not hide the report", plainError(e, "The report is still showing.")));
+    },
+  });
+}
+
 function openTankCapacityEditor(id: number): void {
   const farm = api.findFarm(id);
   if (!farm) return;
@@ -1177,6 +1198,44 @@ async function handleAction(el: HTMLElement): Promise<void> {
     /* Farms */
     case "view-farm": return openFarmDetail(numId);
     case "edit-farm-location": return openFarmLocationEditor(numId);
+
+    /* Drought & community page. */
+    case "drought-mode": {
+      const mode = el.dataset["mode"] as "on" | "off" | "auto" | undefined;
+      if (!mode) return;
+      try {
+        const view = await setFarmDroughtMode(numId, mode);
+        toast(view.active ? "Drought mode is on for this farm." : "Drought mode is off for this farm.", "success");
+      } catch (e) {
+        showErrorModal("Could not change drought mode", plainError(e, "Drought mode was not changed."));
+      }
+      return void refresh();
+    }
+    case "resolve-notice": {
+      try {
+        await resolveStaffNotice(numId);
+        toast("Notice closed.", "success");
+      } catch (e) {
+        showErrorModal("Could not close the notice", plainError(e, "The notice is still open."));
+      }
+      return void refresh();
+    }
+    case "hide-report":
+      return openHideReport(numId);
+    case "save-dc-settings": {
+      const changes = changedSettings(document);
+      if (typeof changes === "string") return void toast(changes, "warn");
+      if (!changes.length) return void toast("Nothing has changed.", "info");
+      try {
+        const r = await saveDroughtCommunitySettings(changes);
+        toast(r.message, "success");
+      } catch (e) {
+        showErrorModal("Could not save the settings", plainError(e, "Nothing was changed."));
+      }
+      return void refresh();
+    }
+    case "go-drought-community":
+      return void navigate("droughtCommunity");
     case "edit-tank-capacity": return openTankCapacityEditor(numId);
     /* Register a kit in five steps instead of typing a zone id from memory. The claim attaches
      * the kit to this zone, so a wrong zone would put a farmer's readings against someone
@@ -4010,6 +4069,7 @@ export function wirePageInteractions(): void {
 
   wireFilters();
   wireLiveReports();
+  void mountCommunityMap();
  wireOnboardingZones();
   prefillOnboardingFromEnquiry();
   void refreshEnquiryBadge();
