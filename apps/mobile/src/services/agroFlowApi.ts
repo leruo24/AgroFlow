@@ -1185,3 +1185,115 @@ export function saveLanguagePreference(language: Language) {
 }
 
 onLanguageChange(lang => { void saveLanguagePreference(lang).catch(() => undefined); });
+
+// ---- Drought mode, community alerts and the wizard's farm settings (docs/drought-community.md)
+
+export type FarmSetup = {
+  farmId: number;
+  farm: { name: string; location: string | null; latitude: number | null; longitude: number | null; province: string | null; town: string | null; waterSource: string | null } | null;
+  zones: { zoneId: number; name: string; crop: string | null; plantingDate: string | null; soilType: string | null; areaM2: number | null; flowRateLpm: number | null; irrigationType: string | null; maxRunMinutes: number }[];
+  tank: { capacityLitres: number | null; estimatedRemainingLitres: number | null } | null;
+};
+
+export function fetchFarmSetup(farmId: string | number) {
+  return authorizedRequest<FarmSetup>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/setup`);
+}
+
+export function saveWaterSource(farmId: string | number, waterSource: string) {
+  return authorizedRequest<{ message: string }>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/water-source`, {
+    method: 'PUT', body: JSON.stringify({ waterSource }),
+  });
+}
+
+export function saveIrrigationType(zoneId: number, irrigationType: string) {
+  return authorizedRequest<{ message: string; explanation: string }>(`/api/farmer/zones/${zoneId}/irrigation-type`, {
+    method: 'PUT', body: JSON.stringify({ irrigationType }),
+  });
+}
+
+// "Something's wrong — tell my field officer": a notice for staff; farmers never edit the location.
+export function reportLocationProblem(farmId: string | number, note?: string) {
+  return authorizedRequest<{ message: string }>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/location-problem`, {
+    method: 'POST', body: JSON.stringify({ note: note ?? null }),
+  });
+}
+
+export type NotificationPreferences = {
+  wateringTelegram: boolean;
+  lowTankTelegram: boolean;
+  droughtTelegram: boolean;
+  communityTelegram: boolean;
+  weatherTelegram: boolean;
+  communityOptIn: boolean;
+  quietStart: string | null;
+  quietEnd: string | null;
+};
+
+export const DEFAULT_PREFERENCES: NotificationPreferences = {
+  wateringTelegram: true, lowTankTelegram: true, droughtTelegram: true, communityTelegram: true, weatherTelegram: true,
+  communityOptIn: true, quietStart: null, quietEnd: null,
+};
+
+export function fetchNotificationPreferences() {
+  return authorizedRequest<NotificationPreferences>('/api/farmer/notification-preferences');
+}
+
+export function saveNotificationPreferences(prefs: NotificationPreferences) {
+  return authorizedRequest<{ message: string }>('/api/farmer/notification-preferences', { method: 'PUT', body: JSON.stringify(prefs) });
+}
+
+export type DroughtZone = {
+  zoneId: number; zoneName: string; crop: string | null; priority: 'full' | 'reduced' | 'skip' | 'nofactor';
+  fraction: number; ky: number | null; normalLitres: number | null; droughtLitres: number | null; why: string;
+  irrigationType: string | null; efficiencyNote: string;
+};
+
+export type DroughtView = {
+  farmId: number; active: boolean; automatic: boolean; override: 'on' | 'off' | null; reason: string; since: string | null;
+  budget: { litresLeft: number; normalDays: number; droughtDays: number; text: string } | null;
+  summary: string | null; zones: DroughtZone[]; honesty: string; source: string;
+};
+
+export function fetchDrought(farmId: string | number) {
+  return authorizedRequest<DroughtView>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/drought`);
+}
+
+export function setDroughtMode(farmId: string | number, mode: 'on' | 'off' | 'auto') {
+  return authorizedRequest<DroughtView>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/drought`, {
+    method: 'PUT', body: JSON.stringify({ mode }),
+  });
+}
+
+export type CommunityCategory = 'pest' | 'disease' | 'fire' | 'water' | 'weather';
+export type CommunitySeverity = 'low' | 'moderate' | 'high';
+
+export type NearbyReport = {
+  reportId: number; category: CommunityCategory; subtype: string; label: string; severity: CommunitySeverity; message: string;
+  distanceKm: number; downwind: boolean; similarFarms: number; confirmations: number; fireState: string | null;
+  createdAt: string; expiresAt: string; mine: boolean; confirmed: boolean; canUpdate: boolean; updates: string[];
+};
+
+export type CommunityLimit = { allowed: boolean; nextAllowedAt: string | null; message: string };
+
+export function fetchCommunity(farmId: string | number) {
+  return authorizedRequest<{ reports: NearbyReport[]; limit: CommunityLimit; unverified: string }>(
+    `/api/farmer/farms/${encodeURIComponent(String(farmId))}/community`);
+}
+
+// The report's place is the farm's saved location (set by staff); the phone is never tracked.
+export function createCommunityReport(report: { farmId: number; category: CommunityCategory; subtype: string; severity: CommunitySeverity; description?: string }) {
+  return authorizedRequest<{ id: number; notifiedFarms: number; limit: string; nextAllowedAt: string | null }>(
+    '/api/farmer/community/reports', { method: 'POST', body: JSON.stringify(report) });
+}
+
+export function confirmCommunityReport(reportId: number, farmId: number) {
+  return authorizedRequest<{ confirmations: number; message: string }>(`/api/farmer/community/reports/${reportId}/confirm`, {
+    method: 'POST', body: JSON.stringify({ farmId }),
+  });
+}
+
+export function updateCommunityReport(reportId: number, kind: 'still_burning' | 'spreading' | 'under_control' | 'out', direction?: string) {
+  return authorizedRequest<{ notifiedFarms: number; closed: boolean }>(`/api/farmer/community/reports/${reportId}/updates`, {
+    method: 'POST', body: JSON.stringify({ kind, direction: direction ?? null }),
+  });
+}
