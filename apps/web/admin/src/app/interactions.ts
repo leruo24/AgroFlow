@@ -76,7 +76,6 @@ import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/au
 import { initBell } from "@/app/bell";
 import { isStaffRole } from "@/lib/staff";
 import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace, setFarmDroughtMode, resolveStaffNotice, hideCommunityReport, saveDroughtCommunitySettings } from "@/services/agroFlowApi";
-import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
 /* Pickers */
@@ -703,9 +702,9 @@ async function openFarmDetail(id: number): Promise<void> {
                    <td data-zone-mode="${esc(z.irrigationMode ?? "")}">${esc(z.irrigationMode ? IRRIGATION_MODE_LABEL[z.irrigationMode] ?? z.irrigationMode : "—")}</td>
                    <td data-zone-max-run="${z.maxRunMinutes ?? 5}">${z.maxRunMinutes ?? 5} min
                      <a href="#" class="row-act" data-act="zone-max-run" data-id="${z.zoneId}" data-max="${z.maxRunMinutes ?? 5}" data-name="${esc(z.name)}">Change</a></td>
-                   <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
+                   <td>${t ? esc(t.action.text) : `<span class="muted">Not available</span>`}</td>
                    <td>${t?.confidence
-                     ? `<b>${levelLabel[t.confidence.level]}</b> ${whyLink(asExplanation(t.confidenceExplanation))}`
+                     ? `<b>${levelLabel[t.confidence.level]}</b>`
                      : `<span class="muted">—</span>`}</td>
                    <td>${t?.nextStep ? esc(t.nextStep.ask) : `<span class="muted">Nothing missing</span>`}</td>
                    <td>
@@ -902,13 +901,6 @@ async function handleAction(el: HTMLElement): Promise<void> {
   const numId = Number(idAttr);
 
   switch (act) {
-    /* "Why am I seeing this?": every link in the console opens here */
-    case "why": {
-      const e = getWhy(idAttr);
-      if (!e) return;
-      return openDrawer({ title: WHY_LINK_TEXT, subtitle: e.summary, wide: true, bodyHtml: whyHtml(e) });
-    }
-
     /* Filters */
     case "clear-filters":
       resetFilter(appState.activePage);
@@ -2097,7 +2089,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
               <h6>Advice written for the farmer (${r.insights.length})</h6>
               ${r.insights.length
                 ? `<ul class="drawer-list">${r.insights.map((i) =>
-                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)} ${whyLink(asExplanation(i.explanation))}</li>`).join("")}</ul>`
+                    `<li><b>${esc(i.severity)}</b> — ${esc(i.message)}</li>`).join("")}</ul>`
                 : `<p class="muted">Nothing to tell the farmer today.</p>`}
             </div>
 
@@ -2679,13 +2671,11 @@ async function handleAction(el: HTMLElement): Promise<void> {
     case "view-alert": {
       const a = api.findAlert(idAttr);
       if (!a) return;
-      // The alert's own explanation, if it has one (migration 0039). We take the panel intent
-      // before the await: if another panel is asked for meanwhile, this one must not open over it.
+      // We take the panel intent before the await: if another panel is asked for meanwhile,
+      // this one must not open over it. (No "Why am I seeing this?" in the console: that is
+      // for farmers, in the app.)
       const alertIntent = currentPanelIntent();
-      const [alertWhy, history] = await Promise.all([
-        api.getAlertExplanation(a.id).catch(() => null),
-        getEntityTimeline("alert", a.id).catch(() => null),
-      ]);
+      const history = await getEntityTimeline("alert", a.id).catch(() => null);
       return openDrawer({
         intent: alertIntent,
         title: a.id,
@@ -2704,7 +2694,6 @@ async function handleAction(el: HTMLElement): Promise<void> {
               <div class="detail-row"><span>Status</span><b>${esc(a.status)}</b></div>
             </div>
           </div>
-          ${alertWhy ? `<div class="drawer-section"><h6>${esc(WHY_LINK_TEXT)}</h6>${whyHtml(alertWhy)}</div>` : ""}
           <div class="drawer-section"><h6>Timeline</h6>
             ${history === null
               ? `<p class="muted">The timeline could not be read.</p>`
@@ -3939,8 +3928,7 @@ function wireLiveReports(): void {
   });
 }
 
-/* One "Farms needing attention" line, opened: every farm and zone behind it, each with its
- * own "Why am I seeing this?". */
+/* One "Farms needing attention" line, opened: every farm and zone behind it. */
 function openAttentionGroup(key: string): void {
   const group = findAttentionGroup(key);
   if (!group) return;
@@ -3952,7 +3940,6 @@ function openAttentionGroup(key: string): void {
       <li>
         <b>${liveEsc(i.farm)} · ${liveEsc(i.zone)}</b> - ${liveEsc(i.message)}
         <small class="muted">${liveEsc(fmtDate(i.day))}</small>
-        ${whyLink(i.explanation)}
       </li>`).join("")}</ul></div>`,
   });
 }

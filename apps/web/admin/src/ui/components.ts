@@ -2,7 +2,6 @@
  * Animation hooks are data-* attributes and .reveal classes, which lib/animate.ts picks up
  * after the content is inserted. */
 
-import { whyLink, countExplanation } from "@/lib/why";
 import { esc, fmtInt, badgeTone, trendClass } from "@/lib/format";
 import { PRESET_LABELS, activeFilterCount, rangeLabel } from "@/lib/filters";
 import { Icon } from "@/lib/icons";
@@ -70,20 +69,9 @@ export function kpiCard(opts: KpiOptions): string {
       }>${inner}</button>`
     : `<div class="card reveal">${inner}</div>`;
 
-  if (!opts.why) return tile;
-
-  // The link sits beside the tile, never inside it: a button inside a button is invalid.
-  const why = whyLink(countExplanation({
-    label: opts.label,
-    what: opts.why.counts,
-    count: opts.value,
-    counted: opts.label,
-    rule: opts.why.rule,
-    whyHighlighted: opts.why.highlighted ?? "",
-    clears: opts.why.clears ?? "The number updates the next time this page loads.",
-    query: opts.why.query,
-  }));
-  return `<div class="kpi-item">${tile}${why}</div>`;
+  // No "Why am I seeing this?" in the console (it is for farmers, in the app); opts.why is
+  // the tile's description, kept with the tile.
+  return `<div class="kpi-item">${tile}</div>`;
 }
 
 /* panels */

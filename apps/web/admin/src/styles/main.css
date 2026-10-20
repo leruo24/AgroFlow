@@ -2195,19 +2195,9 @@ html{ scrollbar-gutter: stable; }
 /* While a page is loading, the outgoing page's buttons must not take a click. */
 #content[aria-busy="true"]{ pointer-events: none; }
 
-/* "Why am I seeing this?"
- * The link sits beside a card or tile, never inside it (a button inside a button is
- * invalid), so the wrappers keep the grid cell a single column. */
+/* A KPI tile or Needs-attention card with its controls (dismiss) below it. */
 .kpi-item, .attn-item{ display:flex; flex-direction:column; gap:4px; min-width:0; }
 .kpi-item > .card, .attn-item > .attn-card{ flex:1; }
-.why-link{
-  align-self:flex-start; background:none; border:0; padding:4px 2px; cursor:pointer;
-  color:var(--accent); font-size:12px; font-weight:600; text-decoration:underline;
-}
-.why-link:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:4px; }
-.why-body .why-summary{ font-size:15px; font-weight:600; margin:0 0 12px; }
-.why-body .detail-row small{ display:block; }
-.why-technical p{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; opacity:.85; }
 
 /* The Reports page. */
 .report-preview{ width:100%; height:720px; border:1px solid var(--line, #e2e8e4); border-radius:8px; background:#fff; }
@@ -2323,7 +2313,7 @@ html:has(.experience-shell){ scrollbar-gutter:auto; }
   .sidebar-toggle, .avatar, .dismiss-x{ min-width:44px; min-height:44px; display:inline-flex; align-items:center; justify-content:center; }
   .btn, .seg, .search, select, textarea,
   input:not([type=checkbox]):not([type=radio]):not([type=hidden]){ min-height:44px; }
-  .why-link, .link, .landing-text-link, .landing-nav a, .row-act a, td a{ display:inline-flex; align-items:center; min-height:44px; }
+  .link, .landing-text-link, .landing-nav a, .row-act a, td a{ display:inline-flex; align-items:center; min-height:44px; }
   .row-act a, td a, .landing-nav a{ min-width:44px; justify-content:center; }
   .seg, .tab, .req-tab, .nav button, .side-logout, #loginBackHome{ min-width:44px; min-height:44px; }
   .hardware-controls button{ min-width:44px; min-height:44px; }

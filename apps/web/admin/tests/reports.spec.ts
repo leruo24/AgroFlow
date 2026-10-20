@@ -71,7 +71,8 @@ test("Farms needing attention this week comes from the farmers' advice and opens
   await over.click();
   const drawer = page.locator("#drawerPanel");
   await expect(drawer).toContainText("Bravo Farm · Bed 1");
-  await expect(drawer.getByRole("button", { name: "Why am I seeing this?" })).toHaveCount(1);
+  // No "Why am I seeing this?" in the console (it is for farmers, in the app).
+  await expect(drawer.getByRole("button", { name: "Why am I seeing this?" })).toHaveCount(0);
 });
 
 test("Automatic reports: daily, a chosen day, per-zone PDFs, recipients, last/next, and a test send", async ({ page }) => {

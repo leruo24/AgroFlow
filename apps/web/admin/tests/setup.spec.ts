@@ -51,7 +51,7 @@ test("the farm drawer shows each zone's action, confidence and next step", async
   await expect(row).toContainText("Water about 8 min this morning (about 12 L)", { timeout: 15000 });
   await expect(row).toContainText("Medium");
   await expect(row).toContainText("Add the planting date");
-  await expect(row.locator(".why-link")).toHaveCount(2);
+  await expect(row.getByText("Why am I seeing this?")).toHaveCount(0);   // farmers only
 
   expect(errors).toEqual([]);
 });

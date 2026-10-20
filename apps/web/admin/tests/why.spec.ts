@@ -1,11 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { mockBackend, captureErrors } from "./mockBackend";
 
-/* Item 2c: "Why am I seeing this?" in the admin console.
- *
- * Every KPI tile and Needs-attention card explains what it counts and why it
- * is highlighted; an alert shows its own stored explanation; admins see the
- * technical line. Mocked backend only - nothing touches the live database. */
+/* "Why am I seeing this?" is for farmers, in the app: the admin console shows no such link
+ * or panel anywhere, not on Home's tiles and cards, not in an alert that has a stored
+ * explanation. Mocked backend only - nothing touches the live database. */
 
 const WHY = "Why am I seeing this?";
 
@@ -34,7 +32,7 @@ const ALERT_EXPLANATION = {
   },
 };
 
-test("Home: every KPI tile and the Needs-attention card explain themselves, with the technical line for admins", async ({ page }) => {
+test("Home has no Why links on its tiles or Needs-attention cards", async ({ page }) => {
   const errors = captureErrors(page);
   await mockBackend(page, {
     minDelayMs: 10,
@@ -49,28 +47,14 @@ test("Home: every KPI tile and the Needs-attention card explain themselves, with
 
   await page.goto("/staff/#dashboard");
   await expect(page.locator(".attn-card", { hasText: "Zones missing setup" })).toBeVisible({ timeout: 15000 });
-
-  // Six tiles on Home, each with its own link, plus the attention card's.
-  await expect(page.locator(".kpi-item .why-link")).toHaveCount(6);
-  await expect(page.locator(".attn-item .why-link")).toHaveCount(1);
-
-  // The link is beside the card, never inside it.
-  await expect(page.locator(".attn-card .why-link, .card .why-link")).toHaveCount(0);
-
-  await page.locator(".attn-item", { hasText: "Zones missing setup" }).getByRole("button", { name: WHY }).click();
-  const drawer = page.locator(".drawer, [role=dialog]").filter({ hasText: WHY }).first();
-  await expect(drawer).toContainText("Zones missing setup: 1. Advice for these zones is less certain until the missing detail is added.");
-  await expect(drawer).toContainText("What this counts");
-  await expect(drawer).toContainText("Technical (admins only)");
-  await expect(drawer).toContainText("planting_date");
-
-  // And the copy no longer claims the engine cannot advise (item 2).
+  await expect(page.getByText(WHY)).toHaveCount(0);
+  await expect(page.locator(".why-link, [data-act=\"why\"]")).toHaveCount(0);
+  // And the copy no longer claims the engine cannot advise.
   await expect(page.locator("body")).not.toContainText("the engine cannot advise");
-
   expect(errors).toEqual([]);
 });
 
-test("an alert opens with its own stored explanation", async ({ page }) => {
+test("an alert with a stored explanation still shows no Why panel in the console", async ({ page }) => {
   const errors = captureErrors(page);
   await mockBackend(page, {
     minDelayMs: 10,
@@ -85,27 +69,9 @@ test("an alert opens with its own stored explanation", async ({ page }) => {
 
   await page.goto("/staff/#alerts");
   await page.locator('[data-act="view-alert"][data-id="42"]').first().click({ timeout: 15000 });
-
-  const drawer = page.locator(".drawer, [role=dialog]").filter({ hasText: "Zone entered Critical" }).first();
-  await expect(drawer).toContainText(WHY);
-  await expect(drawer).toContainText("The zone's soil sensor reading dropped very low.");
-  await expect(drawer).toContainText("Soil sensor reading");
-  await expect(drawer).toContainText("Technical (admins only)");
-
-  expect(errors).toEqual([]);
-});
-
-test("an alert with no stored explanation shows no Why section - never a generic one", async ({ page }) => {
-  await mockBackend(page, {
-    minDelayMs: 10,
-    maxDelayMs: 40,
-    respond: (method, path) => (method === "GET" && path === "/rest/v1/alert" ? [ALERT_ROW] : undefined),
-  });
-
-  await page.goto("/staff/#alerts");
-  await page.locator('[data-act="view-alert"][data-id="42"]').first().click({ timeout: 15000 });
-
   const drawer = page.locator(".drawer, [role=dialog]").filter({ hasText: "Zone entered Critical" }).first();
   await expect(drawer).toContainText("Timeline");
   await expect(drawer).not.toContainText(WHY);
+  await expect(drawer).not.toContainText("Technical (admins only)");
+  expect(errors).toEqual([]);
 });
