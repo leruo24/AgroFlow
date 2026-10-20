@@ -13,6 +13,7 @@
  * - Some mutations (setUserStatus, restartDevice, assignTechnician, ...) have no column or RLS
  * grant behind them. They change the in-memory copy for feedback but do not save to Postgres. */
 
+import { isStaffRole } from "@/lib/staff";
 import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import { asExplanation, type Explanation } from "@/lib/why";
@@ -270,7 +271,9 @@ export const api = {
   /* Farmers only. /api/users also returns administrators for the Assign pickers, but the
    * Farmers page and farmer counts must not include staff. getAdministrators() is the other half. */
   async getFarmerAccounts(): Promise<User[]> {
-    return (await api.getUsers()).filter((u) => u.role !== "admin");
+    // Farmers only: staff (admins and field officers) are not farmer accounts, and never use
+    // Telegram (docs/telegram-farmers-only.md).
+    return (await api.getUsers()).filter((u) => !isStaffRole(u.role));
   },
 
   /* The people a request or an alert can be assigned to. */

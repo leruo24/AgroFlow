@@ -660,7 +660,7 @@ public static class FarmerOnboardingEndpoints
                 "Farmer onboarded successfully.",
                 userId!.Value,
                 request.Farmer.Email.Trim(),
-                temporaryPassword,
+                AgroFlow.Business.EasyPassword.Display(temporaryPassword),   // "KX7P 4MRT"; set without the space
                 deepLink,
                 code,
                 expiresAt,

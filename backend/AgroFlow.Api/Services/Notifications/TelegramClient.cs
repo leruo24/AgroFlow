@@ -43,10 +43,36 @@ public sealed class TelegramClient
     public const string WhyCallbackPrefix = "why:";
     public const string WhyButtonText = "Why am I seeing this?";
 
-    public async Task<bool> SendMessageAsync(
+    public Task<bool> SendMessageAsync(
         long chatId,
         string text,
         long? whyExplanationId,
+        CancellationToken cancellationToken) =>
+        SendWithMarkupAsync(chatId, text, whyExplanationId is null ? null : new
+        {
+            inline_keyboard = new[]
+            {
+                new[] { new { text = WhyButtonText, callback_data = WhyCallbackPrefix + whyExplanationId.Value } },
+            },
+        }, cancellationToken);
+
+    // A message with one button that opens a web address, e.g. "Sign in to AgroFlow".
+    // Telegram only allows http(s) addresses on these buttons.
+    public Task<bool> SendMessageWithLinkAsync(
+        long chatId,
+        string text,
+        string buttonText,
+        string url,
+        CancellationToken cancellationToken) =>
+        SendWithMarkupAsync(chatId, text, new
+        {
+            inline_keyboard = new[] { new[] { new { text = buttonText, url } } },
+        }, cancellationToken);
+
+    private async Task<bool> SendWithMarkupAsync(
+        long chatId,
+        string text,
+        object? replyMarkup,
         CancellationToken cancellationToken)
     {
         if (!_options.IsConfigured)
@@ -64,7 +90,7 @@ public sealed class TelegramClient
         {
             var client = _httpClientFactory.CreateClient();
 
-            object payload = whyExplanationId is null
+            object payload = replyMarkup is null
                 ? new
                 {
                     chat_id = chatId,
@@ -76,13 +102,7 @@ public sealed class TelegramClient
                     chat_id = chatId,
                     text,
                     disable_web_page_preview = true,
-                    reply_markup = new
-                    {
-                        inline_keyboard = new[]
-                        {
-                            new[] { new { text = WhyButtonText, callback_data = WhyCallbackPrefix + whyExplanationId.Value } },
-                        },
-                    },
+                    reply_markup = replyMarkup,
                 };
 
             using var response = await client.PostAsJsonAsync(

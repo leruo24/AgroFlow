@@ -213,7 +213,7 @@ public static class UserEndpoints
 
         return Results.Ok(new
         {
-            message = "Farmer account deleted successfully. Farm data was retained."
+            message = "The account was removed. Their farms, zones and history were kept."
         });
     }
     private static async Task<IResult> GetFarmersAsync(

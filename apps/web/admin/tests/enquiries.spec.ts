@@ -143,7 +143,7 @@ test("Start onboarding fills the onboarding form from the enquiry, and finishing
   await expect(page.locator('[data-field="farmSize"]')).toHaveValue("2");
   await page.locator('[data-field="farmName"]').fill("Keen Farm");
   await page.locator("[data-zone-count]").fill("1");
-  await page.locator('[data-field="zone_name_0"]').fill("Tub 1");
+  await page.locator('[data-field="zone_name_0"]').fill("Bed 1");
   await page.locator('[data-field="zone_crop_0"]').selectOption("potato");
   await page.locator('[data-field="zone_area_preset_0"]').selectOption("small");
   await page.locator('[data-act="onboarding-submit"]').click();

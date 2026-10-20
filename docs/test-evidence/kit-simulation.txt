@@ -1,0 +1,26 @@
+# node hardware/sim/run-e2e.mjs, 2026-10-19T12:41Z, branch feat/kit-offline
+Starting a local Postgres and applying every migration...
+   applied 44 migrations (0001_foundation.sql .. 0048_simulated_farms.sql); zone_latest_reading dropped before: 0007_move_irrigation_logic_to_api.sql, 0010_zone_schema_realignment.sql
+   seeded farmer, farm 3, zone 3 (automatic), kit with a one-time code
+   MQTT broker on 127.0.0.1:18830
+Starting AgroFlow.Api...
+   API up
+   claimed: zone 3, farm 3 (token held in memory only)
+PASS  kit enrols with the one-time code
+PASS  the code works once only - second claim -> 401
+   MQTT connected as agroflow-sim, subscribed to agroflow/farm/3/device/SIMKIT00A1B2/commands
+PASS  live readings are stored - {"Humidity":3,"SoilMoisture":3,"Temperature":3}
+PASS  kit shows online - {"status":"Online","enrollment_status":"active","recent":true}
+PASS  a late reading is stored with its own time, once - 1 row(s) at 2026-10-19T09:41:30.000Z
+PASS  a late dry reading does not start automatic watering - 0 new command(s)
+   command received: start (auto)
+PASS  control: a live dry reading does start automatic watering
+   command received: stop (auto)
+   command received: start for 60s (manual)
+PASS  the manual 1-minute command reaches the kit - start 60s
+PASS  the kit acknowledges it - ACK 200, status executed
+PASS  the run is logged as an irrigation event - {"runtime_seconds":60,"trigger_source":"manual","sync_status":"synced","estimated_litres":"1.50"}
+PASS  a kept pump run uploaded twice is counted once - 1 row(s)
+
+11 passed, 0 failed
+exit code 0

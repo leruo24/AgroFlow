@@ -20,7 +20,7 @@ const REQUESTS = [
 
 const alert = (id: number, status: string, message: string) => ({
   id, severity: "Warning", message, status, created_at: "2026-10-06T06:00:00Z",
-  zone: { id: 11, name: "Tub 1", farm: { farm_id: 1, name: "Farm 1", status: "Active", owner: { name: "Owner 1", email: null } } },
+  zone: { id: 11, name: "Bed 1", farm: { farm_id: 1, name: "Farm 1", status: "Active", owner: { name: "Owner 1", email: null } } },
 });
 const ALERTS = [alert(41, "Open", "First open alert"), alert(42, "Open", "Second open alert"), alert(43, "Resolved", "A resolved alert")];
 

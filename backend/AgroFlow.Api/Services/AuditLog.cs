@@ -30,8 +30,14 @@ public static class AuditActions
     public const string UserInvited = "user.invited";
     public const string UserDeleted = "user.deleted";
     public const string UserPasswordReset = "user.password_reset";
+    // The farmer reset their own password with a code from the Telegram bot.
+    public const string UserPasswordResetSelf = "user.password_reset_self";
+    // A staff account had Telegram linked and was unlinked: Telegram is for farmers only.
+    public const string TelegramStaffUnlinked = "telegram.staff_unlinked";
 
     public const string ZoneUpdated = "zone.updated";
+    // Staff changed a zone's maximum run time (migration 0052).
+    public const string ZoneMaxRunChanged = "zone.max_run_changed";
     public const string ZoneAdviceRun = "zone.advice_run";
 
     // A farmer (or admin) changed a zone's crop or planting date.
@@ -45,6 +51,7 @@ public static class AuditActions
     public const string MqttPoolAdded = "mqtt_pool.added";
     public const string ReportScheduleChanged = "report_schedule.changed";
     public const string TelegramCodeIssued = "telegram.code_issued";
+    public const string TelegramUnlinked = "telegram.unlinked";
 }
 
 /// Writes the append-only record of admin actions (migration 0037).

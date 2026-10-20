@@ -3,7 +3,7 @@ import { describeEvent } from '../eventText';
 import { flowRateFromBottle, plantedWeeksAgo } from '../setupHelpers';
 
 describe('Finish setup arithmetic (item 6)', () => {
-  it('turns seconds to fill a 500 mL bottle into litres a minute', () => {
+  it('turns seconds to fill the marked flow-rate test bottle into litres a minute', () => {
     expect(flowRateFromBottle(15)).toBe(2);   // 0.5 / 15 x 60
     expect(flowRateFromBottle(30)).toBe(1);
     expect(flowRateFromBottle(7)).toBe(4.29);
@@ -34,6 +34,8 @@ describe('History lines (item 6)', () => {
 
   it('leaves kit events as they were', () => {
     const kit = describeEvent({ runtime_seconds: 300, estimated_litres: 7.5, trigger_source: 'automatic' });
-    expect(kit).toEqual({ action: 'Irrigation recorded', description: 'Irrigation ran for 5 minutes.', source: 'automatic' });
+    expect(kit).toEqual({ action: 'Watering finished', description: 'The kit watered for 5 minutes and stopped.', source: 'automatic' });
+    expect(describeEvent({ runtime_seconds: 60, trigger_source: 'manual' }).description).toBe('The kit watered for 1 minute and stopped.');
+    expect(describeEvent({ runtime_seconds: 45, trigger_source: 'manual' }).description).toBe('The kit watered for 45 seconds and stopped.');
   });
 });

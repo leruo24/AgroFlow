@@ -91,10 +91,13 @@ public class ApiContractTests : IClassFixture<ApiHost>
     // here on purpose - an accidentally open route fails this test.
     private static readonly string[] ExpectedOpen =
     {
+        "GET /api/devices/config",
         "GET /api/devices/firmware-check",
         "GET /api/devices/mqtt-credentials",
         "GET /api/public/ping",
         "POST /api/auth/forgot-password",
+        "POST /api/auth/one-tap",
+        "POST /api/auth/reset-password",
         "POST /api/devices/claim",
         "POST /api/devices/commands/{id}/executed",
         "POST /api/irrigation-events",

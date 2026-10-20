@@ -16,5 +16,7 @@ export function createHomeStyles(colors: AppColors) {
     tankCard: { paddingVertical: Spacing.three, gap: Spacing.one, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider },
     tankEstimate: { color: colors.text, fontSize: Type.title, lineHeight: 25, fontWeight: '600' },
     tankLink: { color: colors.primaryDark, fontSize: Type.body, fontWeight: '600', paddingVertical: Spacing.two },
+    // A 48 pt target, not just the words: easier to hit with a thumb in the field.
+    tankLinkTarget: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },
   });
 }

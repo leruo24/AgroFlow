@@ -129,6 +129,20 @@ builder.Services.Configure<PasswordResetOptions>(
 
 builder.Services.AddSingleton<TelegramClient>();
 builder.Services.AddSingleton<TelegramOnboardingService>();
+builder.Services.AddSingleton<ITelegramLinkStore, DbTelegramLinkStore>();
+builder.Services.AddSingleton<TelegramUnlinkService>();
+// Forgot password over Telegram, admin resets, one-tap sign-in, 72-hour temporary passwords.
+builder.Services.AddSingleton<IPasswordResetStore, DbPasswordResetStore>();
+builder.Services.AddSingleton<IAuthAdmin, SupabaseAuthAdmin>();
+builder.Services.AddSingleton<IResetMessenger, TelegramResetMessenger>();
+builder.Services.AddSingleton(sp => new PasswordResetFlow(
+    sp.GetRequiredService<IPasswordResetStore>(), sp.GetRequiredService<IAuthAdmin>(),
+    sp.GetRequiredService<IResetMessenger>(), sp.GetRequiredService<IAuditWriter>(),
+    sp.GetRequiredService<IConfiguration>()));
+builder.Services.AddHostedService<TemporaryPasswordExpiryService>();
+// Telegram is for farmers only: unlink any staff account that still has a chat (audited).
+builder.Services.AddSingleton<StaffTelegramCleanupService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<StaffTelegramCleanupService>());
 builder.Services.AddSingleton<SupabaseAdminService>();
 
 // Stops the same event being messaged again and again. The forecast refreshes
@@ -158,7 +172,6 @@ builder.Services.AddSingleton<TelegramWhyHandler>();
 
 // Password recovery over Telegram, because Supabase's email reset needs SMTP
 // and we have none.
-builder.Services.AddSingleton<PasswordResetService>();
 
 // Singleton because MqttConnectionService and the hosted services below hold it
 // for the whole process; it keeps no per-request state. Without a bot token every
@@ -294,6 +307,7 @@ app.Use(async (context, next) =>
         path.StartsWithSegments("/api/devices/claim") ||
         path.StartsWithSegments("/api/devices/mqtt-credentials") ||
         path.StartsWithSegments("/api/devices/firmware-check") ||
+        path.StartsWithSegments("/api/devices/config") ||
         path.StartsWithSegments("/api/devices/commands") ||
         path.StartsWithSegments("/api/irrigation-events");
 
@@ -334,9 +348,12 @@ app.MapSensorReadingEndpoints();
 app.MapIrrigationEventEndpoints();
 app.MapDeviceEnrollmentEndpoints();
 app.MapDeviceCommandEndpoints();
+app.MapDeviceConfigEndpoints();
 app.MapZoneHardwareEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
+app.MapCommandStatusEndpoints();   // Irrigate: sent -> started -> finished
+app.MapZoneRunLimitEndpoints();     // staff: a zone's maximum run time
 app.MapReportEndpoints();
 app.MapFao56EngineEndpoints();
 app.MapForecastEndpoints();

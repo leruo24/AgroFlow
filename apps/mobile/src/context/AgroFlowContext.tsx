@@ -36,6 +36,16 @@ import {
 import {
   relativeMoisturePercent,
 } from '@/lib/moistureDisplay';
+
+import { isOnline, onReconnect } from '@/lib/connectivity';
+import { zoneMaxRunMinutes } from '@/lib/runLimit';
+import { t } from '@/i18n';
+
+import {
+  irrigationModeFromDb,
+  irrigationModeToDb,
+  type IrrigationMode,
+} from '@/lib/irrigationMode';
 // Irrigation statuses the app allows
 export type IrrigationStatus =
   | 'Active'
@@ -66,9 +76,8 @@ export type PumpStatus =
   | 'Off'
   | 'Fault'
   | 'Unknown';
-export type IrrigationMode =
-  | 'automatic'
-  | 'scheduled';
+// automatic | scheduled | manual; read and written through lib/irrigationMode.ts.
+export type { IrrigationMode } from '@/lib/irrigationMode';
 
 export type IrrigationSchedule = {//normal irrigation - later can be delegated to backend 
   enabled: boolean;
@@ -100,6 +109,8 @@ export type Zone = {
   plantingDate: string | null;
   healthStatus: string;
   isSimulated?: boolean;
+  // The longest single run (zone.max_run_minutes, 0052; staff set it). lib/runLimit.ts.
+  maxRunMinutes?: number;
   // null means the zone's water_saved column was never set, which is different from a real 0.
   waterSavedLitres: number | null;
 
@@ -117,6 +128,9 @@ export type Zone = {
       // True once the wet/dry setup is done. Until then `value` is the sensor's own number and
       // must never be shown with a %.
       calibrated: boolean;
+      // Each half of the wet/dry setup on its own, for the setup wizard's confidence meter.
+      wetSaved?: boolean;
+      drySaved?: boolean;
       simulated?: boolean;
     };
 
@@ -218,6 +232,7 @@ type FarmRow = {
 type ZoneRow = {
   id: DatabaseId;
   farm_id: DatabaseId;
+  max_run_minutes?: number | null;
   name?: string | null;
   location?: string | null;
   crop_type?: string | null;
@@ -390,7 +405,8 @@ function deriveMoistureStatus(
   return 'Optimal';
 }
 
-function mapZoneRow(
+// Exported for the mode-mapping tests.
+export function mapZoneRow(
   row: ZoneRow,
   index: number,
   reading: ZoneLatestReadingRow | undefined,
@@ -500,6 +516,8 @@ function mapZoneRow(
           calibrated ? moistureValue : null, moistureThreshold, desiredMoisture
         ),
         calibrated,
+        wetSaved: calibrationWet != null,
+        drySaved: calibrationDry != null,
         simulated: reading?.moisture_simulated === true,
       },
       temperatureHumidity: {
@@ -510,17 +528,17 @@ function mapZoneRow(
         status: temperatureValue == null || humidityValue == null ? 'Offline' : sensorStatus,
       },
     },
+    maxRunMinutes: zoneMaxRunMinutes(row.max_run_minutes),
     irrigation: {
       status:
-        row.irrigation_mode ===
+        irrigationModeFromDb(row.irrigation_mode) ===
         'scheduled'
           ? 'Scheduled'
           : 'Off',
+      // A zone saved as 'manual' used to read as 'automatic' here. lib/irrigationMode.ts
+      // maps all three, and anything unknown to manual.
       mode:
-        row.irrigation_mode ===
-        'scheduled'
-          ? 'scheduled'
-          : 'automatic',
+        irrigationModeFromDb(row.irrigation_mode),
       lastIrrigation: {
         date: lastIrrigationDate,
         time: lastIrrigationTime.slice(0, 5),
@@ -544,8 +562,8 @@ function mapZoneRow(
       },
       automation: {
         enabled:
-          row.irrigation_mode !==
-          'scheduled',
+          irrigationModeFromDb(row.irrigation_mode) ===
+          'automatic',
         moistureThreshold,
         desiredMoisture,
         weatherAdjustment:
@@ -721,10 +739,11 @@ type AgroFlowContextType = {//defines the structure of the AgroFlow context, inc
     mode: IrrigationMode
   ) => Promise<void>;
 
+  // Resolves to the command's id, so the zone screen can follow what the kit does with it.
   startManualIrrigation: (
     zoneId: string,
     durationMinutes: number
-  ) => Promise<void>;
+  ) => Promise<string | null>;
 
   stopManualIrrigation: (
     zoneId: string
@@ -1133,6 +1152,9 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     ]
   );
 
+  // Back online: reload the farm, so the saved copies on screen are replaced by live data.
+  useEffect(() => onReconnect(() => { loadZones(); }), [loadZones]);
+
   useEffect(() => {//loads history and alerts from AsyncStorage. Zone configuration is no longer restored locally because Supabase is now its source of truth.
     if (isAuthLoading) return;
     setHistory([]);
@@ -1380,10 +1402,16 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       zone.irrigation
         .override.active
     ) {
-      return;
+      return null;
     }
 
-    await sendManualIrrigationCommand(
+    // Safety: never queued. A start sent hours late could water a zone nobody wants watered,
+    // so with no connection the command is refused here, not kept for later.
+    if (!isOnline()) {
+      throw new Error(t('offline.needsConnection'));
+    }
+
+    const sent = await sendManualIrrigationCommand(
       zoneId,
       'start',
       durationMinutes * 60
@@ -1426,7 +1454,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     addAlert(//generates an alert to inform the user that manual irrigation has started for the specific zone. The alert includes a title, message, and type, and is added to the alerts state to notify users of important events related to irrigation and zone management.
       zoneId,
       'Start Command Sent',
-      `The manual command was accepted for ${durationMinutes} minutes. Confirm operation at the device.`,
+      `Sent to the kit for ${durationMinutes} minutes. The zone screen shows when the kit starts and finishes.`,
       'info'
     );
 
@@ -1456,6 +1484,8 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         60 *
         1000
     );
+
+    return sent?.id ?? null;
   }
 
   async function stopManualIrrigation(
@@ -1473,6 +1503,12 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
         .override.active
     ) {
       return;
+    }
+
+    // Never queued either. Offline, the kit still stops by itself: every start carries its
+    // duration and the kit has a 5-minute safety cap.
+    if (!isOnline()) {
+      throw new Error(t('offline.needsConnection'));
     }
 
     // A timed start already has its own deadline on the device. We still send an explicit
@@ -1559,16 +1595,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
 
     await updateZoneThroughApi(
       zoneId,
-      {
-          irrigationMode:
-            mode,
-          automationEnabled:
-            mode ===
-            'automatic',
-          scheduleEnabled:
-            mode ===
-            'scheduled',
-      }
+      irrigationModeToDb(mode)
     );
 
     setZones(

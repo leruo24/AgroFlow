@@ -10,7 +10,7 @@ import { mockBackend, captureErrors } from "./mockBackend";
 const WHY = "Why am I seeing this?";
 
 const ZONES_NEEDING_SETUP = {
-  zone: [{ id: 11, name: "Tub 1", farm_id: 1, crop_type: null, planting_date: null, area_m2: null, flow_rate_lpm: 1.5, status: "Active" }],
+  zone: [{ id: 11, name: "Bed 1", farm_id: 1, crop_type: null, planting_date: null, area_m2: null, flow_rate_lpm: 1.5, status: "Active" }],
   farm: [{ farm_id: 1, name: "Alpha Farm", latitude: -33.9, longitude: 18.4, status: "Active" }],
 };
 
@@ -20,7 +20,7 @@ const ALERT_ROW = {
   message: "Zone entered Critical: soil sensor reading 12.",
   status: "Open",
   created_at: "2026-10-06T06:00:00Z",
-  zone: { id: 11, name: "Tub 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } },
+  zone: { id: 11, name: "Bed 1", farm: { farm_id: 1, name: "Alpha Farm", status: "Active", owner: { name: "Owner A", email: null } } },
 };
 
 const ALERT_EXPLANATION = {

@@ -137,6 +137,39 @@ namespace AgroFlow.Data
             return Convert.ToDecimal(command.ExecuteScalar());
         }
 
+        public bool RefillAlreadyLogged(long farmId, DateTimeOffset at, decimal litres)
+        {
+            using var connection = Open();
+            using var command = new NpgsqlCommand(
+                "select exists (select 1 from tank_refill where farm_id = $1 and refilled_at = $2 and litres_added = $3)",
+                connection);
+            command.Parameters.AddWithValue(farmId);
+            command.Parameters.AddWithValue(NpgsqlDbType.TimestampTz, at);
+            command.Parameters.AddWithValue(litres);
+            return command.ExecuteScalar() is true;
+        }
+
+        public SoilPhEntry? FindSoilPh(long zoneId, DateTimeOffset measuredAt, decimal ph)
+        {
+            using var connection = Open();
+            using var command = new NpgsqlCommand(
+                "select id, note from soil_ph_log where zone_id = $1 and measured_at = $2 and ph = $3 order by id limit 1",
+                connection);
+            command.Parameters.AddWithValue(zoneId);
+            command.Parameters.AddWithValue(NpgsqlDbType.TimestampTz, measuredAt);
+            command.Parameters.AddWithValue(ph);
+            using var reader = command.ExecuteReader();
+            if (!reader.Read()) return null;
+            return new SoilPhEntry
+            {
+                Id = reader.GetInt64(0),
+                ZoneId = zoneId,
+                Ph = ph,
+                MeasuredAt = measuredAt,
+                Note = reader.IsDBNull(1) ? null : reader.GetString(1),
+            };
+        }
+
         public void InsertRefill(
             long farmId, decimal litres, decimal? waterPh, DateTimeOffset at, Guid profileId,
             decimal? estimatedUsed, decimal? observedUsed)

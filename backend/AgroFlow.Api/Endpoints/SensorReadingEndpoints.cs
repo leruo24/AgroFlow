@@ -5,9 +5,11 @@ using Npgsql;
 
 namespace AgroFlow.Api.Endpoints;
 
-public record SensorReadingRequest(long ZoneId, string SensorType, float Value);
+// RecordedAt: the kit's own time for a reading it kept while offline (see ReadingAge).
+public record SensorReadingRequest(long ZoneId, string SensorType, float Value, DateTimeOffset? RecordedAt = null);
 
-public record SensorReadingResponse(string HealthStatus, string? CommandIssued);
+// Timing: "Live" (acted on), "Late" (stored only) or "Rejected" (too old or in the future).
+public record SensorReadingResponse(string HealthStatus, string? CommandIssued, string Timing = "Live");
 
 // HTTP route for sensor readings. The insert, health and auto-irrigation logic is
 // in SensorReadingProcessor, shared with the MQTT handler; this endpoint only
@@ -34,8 +36,9 @@ public static class SensorReadingEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync();
         var result = await SensorReadingProcessor.ProcessAsync(
-            connection, request.ZoneId, request.SensorType, request.Value, notifications, cancellationToken);
+            connection, request.ZoneId, request.SensorType, request.Value, notifications, cancellationToken,
+            recordedAt: request.RecordedAt);
 
-        return Results.Ok(new SensorReadingResponse(result.HealthStatus, result.CommandIssued));
+        return Results.Ok(new SensorReadingResponse(result.HealthStatus, result.CommandIssued, result.Timing.ToString()));
     }
 }

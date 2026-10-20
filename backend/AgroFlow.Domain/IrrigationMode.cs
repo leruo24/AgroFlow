@@ -28,6 +28,22 @@ namespace AgroFlow.Business
             return string.Equals(irrigationMode, Automatic, StringComparison.OrdinalIgnoreCase);
         }
 
+        // The stored value as one of the three names, for the app and the admin site. Anything
+        // unrecognised (null, empty, a value added later) reads as Manual, the mode in which
+        // AgroFlow never waters by itself, so a screen can never show "Automatic" for a zone
+        // that the server would not water automatically.
+        public static string Canonical(string? irrigationMode)
+        {
+            if (string.Equals(irrigationMode?.Trim(), Automatic, StringComparison.OrdinalIgnoreCase)) return Automatic;
+            if (string.Equals(irrigationMode?.Trim(), Scheduled, StringComparison.OrdinalIgnoreCase)) return Scheduled;
+            return Manual;
+        }
+
+        // Whether a kit may water by itself while it cannot reach the server (the firmware's
+        // offline fallback). Only an Automatic zone: Manual means never by itself, and a
+        // Scheduled zone waters on its schedule from the server, not on a raw sensor reading.
+        public static bool AllowsKitFallback(string? irrigationMode) => AllowsAutoCommands(irrigationMode);
+
         public static bool IsRecognised(string? irrigationMode)
         {
             return string.Equals(irrigationMode, Automatic, StringComparison.OrdinalIgnoreCase)

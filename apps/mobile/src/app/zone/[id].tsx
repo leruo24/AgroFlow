@@ -7,9 +7,14 @@ import { HelpButton } from '@/components/HelpButton';
 import { ZoneInsightsCard } from '@/components/ZoneInsightsCard';
 import { ZoneGrowthBar } from '@/components/ZoneGrowthBar';
 import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
-import { CalibrateSoilSheet } from '@/components/CalibrateSoilSheet';
 import { SoilPhPanel } from '@/components/SoilPhPanel';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
+import { useConnectivity } from '@/lib/connectivity';
+import { useZoneKit } from '@/hooks/useZoneKit';
+import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
+import { useRunStatus, type RunState } from '@/hooks/useRunStatus';
+import { ApiHttpError } from '@/services/agroFlowApi';
+import { t, useI18n, type TranslationKey } from '@/i18n';
 // Dynamic Expo route: one screen for every irrigation zone, by route ID.
 import {
   ArrowLeft,
@@ -66,28 +71,43 @@ const SCHEDULE_DAY_OPTIONS = [
   'Sun',
 ];
 
+
 type IrrigationModeSelection =
   | 'automatic'
   | 'scheduled'
   | 'manual';
 
 const IRRIGATION_MODE_OPTIONS: {
-  label: string;
+  label: TranslationKey;
   value: IrrigationModeSelection;
 }[] = [
   {
-    label: 'Automatic',
+    label: 'zone.modeAutomatic',
     value: 'automatic',
   },
   {
-    label: 'Scheduled',
+    label: 'zone.modeScheduled',
     value: 'scheduled',
   },
   {
-    label: 'Manual',
+    label: 'zone.modeManual',
     value: 'manual',
   },
 ];
+
+const MODE_KEYS: Record<string, TranslationKey> = {
+  automatic: 'zone.modeAutomatic',
+  scheduled: 'zone.modeScheduled',
+  manual: 'zone.modeManual',
+};
+
+const RUN_STATE_KEYS: Record<RunState, TranslationKey> = {
+  sent: 'run.sent',
+  started: 'run.started',
+  finished: 'run.finished',
+  no_response: 'run.noResponse',
+  failed: 'run.failed',
+};
 
 function getErrorMessage(
   error: unknown,
@@ -110,6 +130,12 @@ export default function ZoneControlScreen() {
   const {
     colors,
   } = useTheme();
+
+  // Re-renders this screen in the farmer's language; t() below reads the same choice.
+  useI18n();
+
+  // Watering needs the kit to hear the command now, so it is off while offline (never queued).
+  const { online } = useConnectivity();
 
   const styles =
     useMemo(
@@ -145,11 +171,14 @@ export default function ZoneControlScreen() {
   ] =
     useState(false);
 
+  // The kit stops every run at 5 minutes (SAFETY_MAX_RUN_MS in the firmware), so a manual
+  // run is 1 to the zone's maximum run time (5 by default; staff set it) and starts at 5, or
+  // at the maximum when that is lower.
   const [
     manualDuration,
     setManualDuration,
   ] =
-    useState('20');
+    useState('5');
 
   const [
     isEditingZone,
@@ -246,8 +275,6 @@ export default function ZoneControlScreen() {
   const [zoneGrowth, setZoneGrowth] =
     useState<ZoneGrowth | null>(null);
 
-  const [calibrateVisible, setCalibrateVisible] =
-    useState(false);
 
   const routeId =
     Array.isArray(
@@ -269,6 +296,20 @@ export default function ZoneControlScreen() {
           routeId
         )
     );
+
+  // Water now needs a kit that is listening (the server refuses otherwise, 409).
+  const kit = useZoneKit(zone?.id);
+
+  // The duration box never starts above this zone's maximum run time.
+  const zoneMaxRun = zoneMaxRunMinutes(zone?.maxRunMinutes);
+  useEffect(() => {
+    setManualDuration(current => (Number(current) > zoneMaxRun ? String(defaultRunMinutes(zoneMaxRun)) : current));
+  }, [zoneMaxRun]);
+  const kitBlocked = kit === 'none' || kit === 'offline';
+
+  // The last Water now from this screen, followed until the kit reports it finished.
+  const [run, setRun] = useState<{ id: string; seconds: number } | null>(null);
+  const runState = useRunStatus(run?.id ?? null, run?.seconds ?? 0);
 
   useEffect(() => {
     if (
@@ -456,12 +497,9 @@ export default function ZoneControlScreen() {
     },
   ];
 
-  // Manual is temporary, so it never replaces the saved Automatic/Scheduled mode.
+  // The saved mode (Manual included); a one-off Water now run does not change it.
   const displayedBaseMode =
-    selectedMode ===
-    'manual'
-      ? selectedZone.irrigation.mode
-      : selectedMode;
+    selectedMode;
 
   const zoneSummaryRows = [
     [
@@ -556,18 +594,9 @@ export default function ZoneControlScreen() {
       return;
     }
 
-    if (
-      mode ===
-      'manual'
-    ) {
-      setSelectedMode(
-        'manual'
-      );
-
-      return;
-    }
-
-    // Leaving the Manual preview for the saved mode is only a local UI change.
+    // Manual is a saved mode like the other two (AgroFlow then never waters this zone by
+    // itself). It used to be a preview that was never saved, and a zone saved as manual
+    // elsewhere read back as Automatic.
     if (
       mode ===
       selectedZone.irrigation.mode
@@ -622,39 +651,40 @@ export default function ZoneControlScreen() {
       duration <
         1 ||
       duration >
-        60
+        zoneMaxRunMinutes(selectedZone.maxRunMinutes)
     ) {
       Alert.alert(
-        'Invalid Duration',
-        'Enter a duration between 1 and 60 minutes.'
+        t('zone.invalidDurationTitle'),
+        t('zone.invalidDuration', { max: zoneMaxRunMinutes(selectedZone.maxRunMinutes) })
       );
 
       return;
     }
 
     Alert.alert(
-      'Start Manual Irrigation?',
-      `Run irrigation for ${duration} minutes?`,
+      t('zone.startConfirmTitle', { zone: selectedZone.name }),
+      t('zone.startConfirmBody', { minutes: duration }),
       [
         {
           text:
-            'Cancel',
+            t('common.cancel'),
           style:
             'cancel',
         },
         {
           text:
-            'Start',
+            t('zone.start'),
           onPress: async () => {
             try {
-              await startManualIrrigation(
+              const commandId = await startManualIrrigation(
                 selectedZone.id,
                 duration
               );
+              if (commandId) setRun({ id: commandId, seconds: duration * 60 });
             } catch (error: unknown) {
               Alert.alert(
-                'Could Not Start Irrigation',
-                getErrorMessage(error, 'The command could not be sent. Please retry.')
+                t('zone.startFailed'),
+                startErrorText(error)
               );
             }
           },
@@ -663,20 +693,31 @@ export default function ZoneControlScreen() {
     );
   }
 
+  // The server's refusals in the farmer's language: 409 is "no kit connected" (none, or not
+  // heard from), 400 says why the run was refused (for example longer than 5 minutes).
+  function startErrorText(error: unknown) {
+    if (error instanceof Error && error.message === t('offline.needsConnection')) return error.message;
+    if (error instanceof ApiHttpError && error.status === 409) {
+      return error.message.startsWith('No kit connected to this zone:') ? t('zone.kitOffline') : t('zone.noKit');
+    }
+    if (error instanceof ApiHttpError && error.status === 400) return error.message;
+    return getErrorMessage(error, t('zone.commandFailed'));
+  }
+
   function handleStopManualRun() {
     Alert.alert(
-      'Stop Manual Irrigation?',
-      `Stop irrigation for ${selectedZone.name} and return to ${selectedZone.irrigation.mode} mode?`,
+      t('zone.stopConfirmTitle', { zone: selectedZone.name }),
+      t('zone.stopConfirmBody', { mode: t(MODE_KEYS[selectedZone.irrigation.mode] ?? 'zone.modeAutomatic').toLowerCase() }),
       [
         {
           text:
-            'Cancel',
+            t('common.cancel'),
           style:
             'cancel',
         },
         {
           text:
-            'Stop',
+            t('zone.stop'),
           style:
             'destructive',
           onPress: async () => {
@@ -686,8 +727,10 @@ export default function ZoneControlScreen() {
               );
             } catch (error: unknown) {
               Alert.alert(
-                'Could Not Stop Irrigation',
-                getErrorMessage(error, 'The command could not be sent. Please retry.')
+                t('zone.stopFailed'),
+                error instanceof Error && error.message === t('offline.needsConnection')
+                  ? error.message
+                  : getErrorMessage(error, t('zone.commandFailed'))
               );
             }
           },
@@ -1437,10 +1480,8 @@ export default function ZoneControlScreen() {
           <TouchableOpacity
             style={styles.linkRow}
             onPress={() =>
-              router.push({
-                pathname: '/zone-setup',
-                params: { zoneId: String(selectedZone.id) },
-              })
+              // One setup flow for the whole farm (app/setup.tsx), resumed where it was left.
+              router.push('/setup' as never)
             }
             activeOpacity={0.7}
             accessibilityRole="button"
@@ -1505,9 +1546,8 @@ export default function ZoneControlScreen() {
               styles.linkRow
             }
             onPress={() =>
-              setCalibrateVisible(
-                true
-              )
+              // The wet/dry setup now lives in the setup wizard's soil step.
+              router.push('/setup?step=soil' as never)
             }
             activeOpacity={0.7}
             accessibilityRole="button"
@@ -1565,7 +1605,7 @@ export default function ZoneControlScreen() {
                   styles.panelTitle
                 }
               >
-                Irrigation Control
+                {t('zone.irrigationControl')}
               </Text>
 
               <Text
@@ -1574,12 +1614,12 @@ export default function ZoneControlScreen() {
                 }
               >
                 {isOverrideActive
-                  ? 'Manual command sent'
+                  ? t('zone.manualCommandSent')
                   : selectedMode === 'manual'
-                    ? 'Manual'
+                    ? t('zone.modeManual')
                     : displayedBaseMode === 'automatic'
-                    ? 'Automatic'
-                    : 'Scheduled'}
+                    ? t('zone.modeAutomatic')
+                    : t('zone.modeScheduled')}
               </Text>
             </View>
 
@@ -1598,7 +1638,7 @@ export default function ZoneControlScreen() {
                     styles.controlLabel
                   }
                 >
-                  MODE
+                  {t('zone.mode')}
                 </Text>
 
                 <Text
@@ -1607,12 +1647,12 @@ export default function ZoneControlScreen() {
                   }
                 >
                   {isOverrideActive
-                    ? 'Manual request'
+                    ? t('zone.manualRequest')
                     : selectedMode === 'manual'
-                      ? 'Manual'
+                      ? t('zone.modeManual')
                       : displayedBaseMode === 'automatic'
-                      ? 'Automatic'
-                      : 'Scheduled'}
+                      ? t('zone.modeAutomatic')
+                      : t('zone.modeScheduled')}
                 </Text>
               </View>
 
@@ -1626,7 +1666,7 @@ export default function ZoneControlScreen() {
                     styles.controlLabel
                   }
                 >
-                  RELAY
+                  {t('zone.relay')}
                 </Text>
 
                 <Text
@@ -1652,7 +1692,7 @@ export default function ZoneControlScreen() {
                     styles.controlLabel
                   }
                 >
-                  HEALTH
+                  {t('zone.health')}
                 </Text>
 
                 <Text
@@ -1676,7 +1716,7 @@ export default function ZoneControlScreen() {
               }
             >
               <Text style={styles.modeSelectorLabel}>
-                Irrigation Mode
+                {t('zone.irrigationMode')}
               </Text>
 
               <View style={styles.modeSelector}>
@@ -1685,11 +1725,8 @@ export default function ZoneControlScreen() {
                     option
                   ) => {
                     const isSelected =
-                      isOverrideActive
-                        ? option.value ===
-                          'manual'
-                        : selectedMode ===
-                          option.value;
+                      selectedMode ===
+                      option.value;
 
                     return (
                       <TouchableOpacity
@@ -1724,7 +1761,7 @@ export default function ZoneControlScreen() {
                           adjustsFontSizeToFit
                           minimumFontScale={0.85}
                         >
-                          {option.label}
+                          {t(option.label)}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -1732,20 +1769,19 @@ export default function ZoneControlScreen() {
                 )}
               </View>
 
-              {selectedMode ===
-                'manual' ||
-              isOverrideActive ? (
-                <>
+              {/* A one-off run is possible in every mode; it does not change the mode, and
+                  the server holds automatic commands back for 30 minutes after it. */}
+              <>
                   {!isOverrideActive && (
                     <>
                       <Text style={styles.inputLabel}>
-                        Duration (minutes)
+                        {t('zone.duration')}
                       </Text>
 
                       <TextInput
                         value={manualDuration}
                         onChangeText={setManualDuration}
-                        placeholder="20"
+                        placeholder="5"
                         placeholderTextColor={colors.text}
                         keyboardType="number-pad"
                         maxLength={4}
@@ -1759,7 +1795,13 @@ export default function ZoneControlScreen() {
                       styles.primaryButton,
                       isOverrideActive &&
                         styles.stopButton,
+                      (!online || (kitBlocked && !isOverrideActive)) && styles.primaryButtonDisabled,
                     ]}
+                    disabled={!online || (kitBlocked && !isOverrideActive)}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: !online || (kitBlocked && !isOverrideActive) }}
+                    accessibilityHint={!online ? t('offline.needsConnection') : kitBlocked && !isOverrideActive ? t(kit === 'none' ? 'zone.noKit' : 'zone.kitOffline') : undefined}
+                    testID="irrigate-button"
                     onPress={
                       isOverrideActive
                         ? handleStopManualRun
@@ -1768,11 +1810,35 @@ export default function ZoneControlScreen() {
                   >
                     <Text style={styles.primaryButtonText}>
                       {isOverrideActive
-                        ? 'Send Stop Command'
-                        : 'Start Manual Run'}
+                        ? t('zone.stopRun')
+                        : t('zone.startRun')}
                     </Text>
                   </TouchableOpacity>
-                </>
+                  {!online ? (
+                    <Text style={styles.offlineNote} accessibilityLiveRegion="polite">
+                      {t('offline.needsConnection')}
+                    </Text>
+                  ) : null}
+                  {runState ? (
+                    <Text
+                      style={[styles.offlineNote, runState === 'finished' && { color: colors.success }]}
+                      accessibilityLiveRegion="polite"
+                      testID="run-status"
+                    >
+                      {t(RUN_STATE_KEYS[runState])}
+                    </Text>
+                  ) : null}
+                  {online && kitBlocked && !isOverrideActive ? (
+                    <Text style={styles.offlineNote} accessibilityLiveRegion="polite" testID="irrigate-no-kit">
+                      {t(kit === 'none' ? 'zone.noKit' : 'zone.kitOffline')}
+                    </Text>
+                  ) : null}
+              </>
+
+              {selectedMode === 'manual' ? (
+                <Text style={styles.inputLabel}>
+                  {t('zone.manualNote')}
+                </Text>
               ) : selectedMode ===
                 'scheduled' ? (
                 <TouchableOpacity
@@ -1780,7 +1846,7 @@ export default function ZoneControlScreen() {
                   onPress={openScheduleEditor}
                 >
                   <Text style={styles.secondaryButtonText}>
-                    Edit Regular Schedule
+                    {t('zone.editSchedule')}
                   </Text>
                 </TouchableOpacity>
               ) : (
@@ -1789,7 +1855,7 @@ export default function ZoneControlScreen() {
                   onPress={beginZoneEditing}
                 >
                   <Text style={styles.secondaryButtonText}>
-                    Edit Moisture Thresholds
+                    {t('zone.editThresholds')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -2121,23 +2187,6 @@ export default function ZoneControlScreen() {
               </View>
       </BlurSheet>
 
-      {/* Teaching the sensor what wet and dry look like in THIS soil. Its own
-          sheet (not a BlurSheet row) because it is two independent saves made
-          on different days - soaked soil and properly dry soil are a day or
-          more apart - rather than one choice. */}
-      <CalibrateSoilSheet
-        zoneId={Number(
-          selectedZone.id
-        )}
-        visible={
-          calibrateVisible
-        }
-        onClose={() =>
-          setCalibrateVisible(
-            false
-          )
-        }
-      />
     </SafeAreaView>
   );
 }

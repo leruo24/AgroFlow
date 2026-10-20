@@ -61,7 +61,7 @@ test("register a farm with the keyboard only", async ({ page }) => {
   await page.keyboard.press("Enter");
 
   await tabTo(page, '[data-field="zone_name_0"]');
-  await page.keyboard.type("Tub 1");
+  await page.keyboard.type("Bed 1");
   await tabTo(page, '[data-field="zone_crop_0"]');
   await page.keyboard.type("Maize");
   await tabTo(page, '[data-act="zone-soil"][data-soil="clay"]');

@@ -44,7 +44,8 @@ export const Spacing = {
 // ~12-13sp, body ~15-16sp, title ~17-18sp. `display` is the one large number per screen
 // (a stat or a temperature).
 export const Type = {
-  label: 11,
+  // 12 on web, where browsers expect at least 12 px; the phones keep 11.
+  label: Platform.OS === 'web' ? 12 : 11,
   caption: 13,
   body: 15,
   title: 18,

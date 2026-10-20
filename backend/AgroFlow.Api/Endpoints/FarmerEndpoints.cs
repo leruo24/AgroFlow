@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgroFlow.Business;
 using System.Globalization;
 using Npgsql;
 using NpgsqlTypes;
@@ -21,6 +22,7 @@ public record ZoneSettingsRequest(
 
 public record ManualIrrigationRequest(string Command, int? DurationSeconds);
 public record ProfileUpdateRequest(string Name, string? Phone);
+public record LanguageRequest(string? Language);
 
 public record FarmerServiceRequest(
     string RequestType,
@@ -43,6 +45,7 @@ public static class FarmerEndpoints
         group.MapGet("/dashboard", GetDashboardAsync);
         group.MapGet("/weather/current", GetCurrentWeatherAsync);
         group.MapPut("/profile", UpdateProfileAsync);
+        group.MapPut("/language", UpdateLanguageAsync);
         group.MapPost("/password-changed", ClearMustChangePasswordAsync);
 
         group.MapPost("/requests", CreateFarmerServiceRequestAsync);
@@ -301,6 +304,36 @@ public static class FarmerEndpoints
         return await command.ExecuteScalarAsync() is null ? Results.NotFound() : Results.NoContent();
     }
 
+    // Settings -> Language. Only the caller's own row; the Telegram messages they get then use
+    // it (BotText). Needs migration 0049; before that it says so instead of failing.
+    private static async Task<IResult> UpdateLanguageAsync(
+        LanguageRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+        var language = request.Language?.Trim().ToLowerInvariant();
+        if (language is null || !AgroFlow.Api.Services.Notifications.BotText.Languages.Contains(language))
+        {
+            return Results.BadRequest(new { error = "Choose English (en), Afrikaans (af) or Setswana (tn)." });
+        }
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using (var check = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'profile' and column_name = 'language')",
+            connection))
+        {
+            if (await check.ExecuteScalarAsync(cancellationToken) is not true)
+            {
+                return Results.Conflict(new { error = "Saving the language needs database migration 0049, which has not been applied yet." });
+            }
+        }
+
+        await using var command = new NpgsqlCommand(
+            "update profile set language = $1 where id = $2 returning id", connection);
+        command.Parameters.AddWithValue(language);
+        command.Parameters.AddWithValue(userId);
+        return await command.ExecuteScalarAsync(cancellationToken) is null ? Results.NotFound() : Results.NoContent();
+    }
+
     // The app calls this right after a farmer sets their own password, which takes
     // them off the forced-change screen.
     // Security: migration 0024 does not let clients update must_change_password, so
@@ -311,6 +344,21 @@ public static class FarmerEndpoints
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        // The farmer's own password now: the temporary one's 72-hour clock (0050) stops too.
+        await using (var has = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'profile' and column_name = 'temp_password_expires_at')",
+            connection))
+        {
+            if (await has.ExecuteScalarAsync(cancellationToken) is true)
+            {
+                await using var clear = new NpgsqlCommand(
+                    "update profile set must_change_password = false, temp_password_expires_at = null where id = $1", connection);
+                clear.Parameters.AddWithValue(userId);
+                await clear.ExecuteNonQueryAsync(cancellationToken);
+                return Results.NoContent();
+            }
+        }
+
         await using var command = new NpgsqlCommand(
             "update profile set must_change_password = false where id = $1", connection);
         command.Parameters.AddWithValue(userId);
@@ -408,17 +456,63 @@ public static class FarmerEndpoints
         long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
-        if (request.Command is not ("start" or "stop")) return Results.BadRequest(new { error = "Command must be start or stop." });
-        if (request.Command == "start" && request.DurationSeconds is null)
-            return Results.BadRequest(new { error = "A start command requires a duration." });
-        if (request.DurationSeconds is <= 0 or > 3600) return Results.BadRequest(new { error = "Duration must be between 1 and 3600 seconds." });
+        // Never over the kit's 120-minute ceiling; the zone's own maximum is checked below.
+        if (IrrigationRunRules.CheckRequest(request.Command, request.DurationSeconds) is { } problem)
+            return Results.BadRequest(new { error = problem });
+
+        await using var connection = await dataSource.OpenConnectionAsync();
+
+        // A start needs a kit that is listening. Refused now (409) instead of accepted and
+        // marked failed 2 hours later. "Heard from" is the same rule as the Kit screen: the
+        // newer of hardware.last_seen and the zone's newest reading. A stop is always let through.
+        // A start longer than the zone's maximum run time (0052) is refused first (400).
+        if (request.Command == "start")
+        {
+            var maxExpr = await AgroFlow.Api.Services.ZoneRunLimit.ExpressionAsync(connection);
+            var kitSql = $"""
+                select k.device_id is not null,
+                       greatest(k.last_seen, coalesce(r.recorded_at, k.last_seen)),
+                       {maxExpr}
+                  from zone z
+                  left join lateral (
+                    select h.device_id, h.last_seen from hardware h
+                     where h.zone_id = z.id and h.enrollment_status = 'active' and h.device_id is not null
+                     order by h.last_seen desc limit 1) k on true
+                  left join lateral (
+                    select max(x.recorded_at) as recorded_at from sensor_reading x where x.zone_id = z.id) r on true
+                 where z.id = $2 and ({FarmAccessSql});
+                """;
+            await using var kitCommand = new NpgsqlCommand(kitSql, connection);
+            kitCommand.Parameters.AddWithValue(userId);
+            kitCommand.Parameters.AddWithValue(zoneId);
+            await using (var reader = await kitCommand.ExecuteReaderAsync())
+            {
+                if (!await reader.ReadAsync()) return Results.NotFound();
+                var zoneMax = IrrigationRunRules.ZoneMaxOrDefault(reader.IsDBNull(2) ? null : reader.GetInt32(2));
+                if (IrrigationRunRules.CheckAgainstZone(request.DurationSeconds!.Value, zoneMax) is { } tooLong)
+                    return Results.BadRequest(new { error = tooLong, maxRunMinutes = zoneMax });
+                var hasKit = reader.GetBoolean(0);
+                var lastContact = reader.IsDBNull(1) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(1);
+                var kit = IrrigationRunRules.Kit(hasKit, lastContact, DateTimeOffset.UtcNow);
+                if (kit != IrrigationRunRules.KitState.Online)
+                {
+                    return Results.Json(new
+                    {
+                        error = kit == IrrigationRunRules.KitState.None
+                            ? IrrigationRunRules.NoKitMessage
+                            : IrrigationRunRules.KitOfflineMessage,
+                        reason = kit == IrrigationRunRules.KitState.None ? "no_kit" : "kit_offline",
+                        lastSeen = lastContact,
+                    }, statusCode: StatusCodes.Status409Conflict);
+                }
+            }
+        }
 
         var sql = $"""
             insert into irrigation_commands (zone_id, command, source, duration_seconds)
             select z.id, $2, 'manual', $3 from zone z
             where z.id=$4 and ({FarmAccessSql}) returning id;
             """;
-        await using var connection = await dataSource.OpenConnectionAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue(userId);
         command.Parameters.AddWithValue(request.Command);

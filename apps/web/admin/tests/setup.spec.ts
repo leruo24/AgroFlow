@@ -15,7 +15,7 @@ const TODAY = {
   day: "2026-10-06",
   zones: [
     {
-      zoneId: 11, name: "Tub 1",
+      zoneId: 11, name: "Bed 1",
       action: { kind: "water", text: "Water about 8 min this morning (about 12 L)" },
       why: { summary: "Your soil has dried to the watering point.", facts: [], rule: "r", confidence: "Medium" },
       confidence: { level: "medium", reason: "Medium: based on the weather; the planting date is missing." },
@@ -32,7 +32,7 @@ async function open(page: Page, extra?: (method: string, path: string) => unknow
       const custom = extra?.(method, path);
       if (custom !== undefined) return custom;
       if (method === "GET" && path === "/api/farms") return FARMS;
-      if (method === "GET" && path === "/api/farmer/reports/zones") return [{ zoneId: 11, name: "Tub 1", farmId: 1, cropType: "tomato" }];
+      if (method === "GET" && path === "/api/farmer/reports/zones") return [{ zoneId: 11, name: "Bed 1", farmId: 1, cropType: "tomato" }];
       if (method === "GET" && path === "/api/farmer/farms/1/today") return TODAY;
       if (method === "GET" && path === "/api/users/farmers") return [{ id: "f1", name: "Owner A", email: "a@example.com", phone: null }];
       return undefined;
@@ -136,4 +136,58 @@ test("the wizard blocks Next until a step is valid, and Back keeps what was type
   await wiz.locator("[data-wizard-back]").click();
   await expect(wiz.locator('[data-field="farmName"]')).toHaveValue("Back And Forth Farm");
   await expect(wiz.locator('[data-field="farmSize"]')).toHaveValue("2");
+});
+
+// Part 0: each zone's watering mode, as saved, including Manual (it used to read as Automatic
+// in the app; the console did not show it at all).
+test("the farm drawer shows each zone's watering mode, Manual included", async ({ page }) => {
+  const errors = captureErrors(page);
+  await open(page, (method, path) => method === "GET" && path === "/api/farmer/reports/zones"
+    ? [
+        { zoneId: 11, name: "Bed 1", cropType: "tomato", irrigationMode: "manual" },
+        { zoneId: 12, name: "Bed 2", cropType: "spinach", irrigationMode: "automatic" },
+        { zoneId: 13, name: "Bed 3", cropType: "onion", irrigationMode: "scheduled" },
+      ]
+    : undefined);
+  await page.locator('[data-act="view-farm"][data-id="1"]').click();
+  await expect(page.locator('[data-today-zone="11"] [data-zone-mode]')).toHaveText("Manual (never by itself)", { timeout: 15000 });
+  await expect(page.locator('[data-today-zone="12"] [data-zone-mode]')).toHaveText("Automatic");
+  await expect(page.locator('[data-today-zone="13"] [data-zone-mode]')).toHaveText("Scheduled");
+  expect(errors).toEqual([]);
+});
+
+// Release oct-19: each zone's maximum run time, set by staff from the farm drawer.
+test("staff see and change a zone's maximum run time from the farm drawer", async ({ page }) => {
+  const errors = captureErrors(page);
+  const puts: string[] = [];
+  await open(page, (method, path) => {
+    if (method === "GET" && path === "/api/farmer/reports/zones") {
+      return [{ zoneId: 11, name: "Bed 1", cropType: "tomato", irrigationMode: "automatic", maxRunMinutes: 5 }];
+    }
+    if (method === "PUT" && path === "/api/admin/zones/11/max-run") {
+      puts.push(path);
+      return { zoneId: 11, maxRunMinutes: 30, message: "Runs on this zone now stop after 30 min at most. The kit gets the new limit with its next command." };
+    }
+    return undefined;
+  });
+  await page.locator('[data-act="view-farm"][data-id="1"]').click();
+  const cell = page.locator('[data-today-zone="11"] [data-zone-max-run]');
+  await expect(cell).toContainText("5 min", { timeout: 15000 });
+
+  await cell.getByRole("link", { name: "Change" }).click();
+  await expect(page.getByText("Maximum run time: Bed 1")).toBeVisible();
+  const box = page.locator('input[data-field="minutes"]');
+  await expect(box).toHaveValue("5");
+
+  // Out of range: caught before anything is sent.
+  await box.fill("500");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator(".toast")).toContainText("from 1 to 120");
+  expect(puts).toEqual([]);
+
+  await box.fill("30");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator(".toast.toast-success")).toContainText("now stop after 30 min at most");
+  expect(puts).toEqual(["/api/admin/zones/11/max-run"]);
+  expect(errors).toEqual([]);
 });

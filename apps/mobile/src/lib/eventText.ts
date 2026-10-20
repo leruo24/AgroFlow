@@ -21,9 +21,14 @@ export function describeEvent(event: EventTextInput): { action: string; descript
     };
   }
 
+  // A row here is the kit's own report of a run that has ended, so it says "finished".
+  // "Started" is a different thing: the kit's acknowledgement of a command (zone screen).
+  const length = event.runtime_seconds == null ? null
+    : Number(event.runtime_seconds) < 60 ? `${Math.round(Number(event.runtime_seconds))} seconds`
+    : `${minutes} minute${minutes === 1 ? '' : 's'}`;
   return {
-    action: 'Irrigation recorded',
-    description: minutes == null ? 'An irrigation event was recorded.' : `Irrigation ran for ${minutes} minutes.`,
+    action: 'Watering finished',
+    description: length == null ? 'The kit reported a finished run.' : `The kit watered for ${length} and stopped.`,
     source: event.trigger_source || 'Irrigation',
   };
 }

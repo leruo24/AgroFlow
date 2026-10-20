@@ -17,7 +17,9 @@ import { useTheme } from '@/context/ThemeContext';
 import { createSettingsStyles } from '@/styles/settingsStyles';
 import { HelpButton } from '@/components/HelpButton';
 import { useAppPreferences } from '@/hooks/useAppPreferences';
-import { fetchTelegramLinkStatus } from '@/services/agroFlowApi';
+import { disconnectTelegram, fetchTelegramLinkStatus } from '@/services/agroFlowApi';
+import { AppAlert as Alert } from '@/components/AppAlert';
+import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
 
 const NOTIFICATION_PREFERENCES_KEY =
   'agroflow_notification_preferences';
@@ -30,39 +32,23 @@ type NotificationPreferences = {
 };
 
 const appearanceOptions: {
-  title: string;
+  title: TranslationKey;
   value: ThemePreference;
 }[] = [
-  { title: 'Light', value: 'light' },
-  { title: 'Dark', value: 'dark' },
-  { title: 'System Default', value: 'system' },
+  { title: 'settings.light', value: 'light' },
+  { title: 'settings.dark', value: 'dark' },
+  { title: 'settings.system', value: 'system' },
 ];
 
 const notificationOptions: {
   key: keyof NotificationPreferences;
-  title: string;
-  description: string;
+  title: TranslationKey;
+  description: TranslationKey;
 }[] = [
-  {
-    key: 'irrigation',
-    title: 'Irrigation',
-    description: 'Start, stop and schedule updates',
-  },
-  {
-    key: 'moisture',
-    title: 'Moisture Alerts',
-    description: 'Warnings when soil moisture needs attention',
-  },
-  {
-    key: 'weather',
-    title: 'Weather Alerts',
-    description: 'Rain and weather-related irrigation updates',
-  },
-  {
-    key: 'device',
-    title: 'Device Alerts',
-    description: 'Sensor, relay and water pump warnings',
-  },
+  { key: 'irrigation', title: 'settings.notifIrrigation', description: 'settings.notifIrrigationBody' },
+  { key: 'moisture', title: 'settings.notifMoisture', description: 'settings.notifMoistureBody' },
+  { key: 'weather', title: 'settings.notifWeather', description: 'settings.notifWeatherBody' },
+  { key: 'device', title: 'settings.notifDevice', description: 'settings.notifDeviceBody' },
 ];
 
 export default function SettingsScreen() {
@@ -77,6 +63,10 @@ export default function SettingsScreen() {
     () => createSettingsStyles(colors),
     [colors]
   );
+
+  const { t, lang, setLanguage } = useI18n();
+  const [unlinking, setUnlinking] = useState(false);
+  const [telegramMessage, setTelegramMessage] = useState<string | null>(null);
 
   const [notificationPreferences, setNotificationPreferences] =
     useState<NotificationPreferences>({
@@ -175,6 +165,35 @@ export default function SettingsScreen() {
     });
   }, [notificationPreferences, preferencesLoaded]);
 
+  // Unlink Telegram (lost or changed phone): asks first, then clears the link on the server,
+  // which also cancels any unused code. Connecting again is on the Profile screen.
+  function confirmUnlinkTelegram() {
+    Alert.alert(
+      t('settings.unlinkTitle'),
+      t('settings.unlinkBody'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('settings.unlinkConfirm'),
+          style: 'destructive',
+          onPress: () => {
+            setUnlinking(true);
+            setTelegramMessage(null);
+            disconnectTelegram()
+              .then(() => {
+                setTelegramLinked(false);
+                setTelegramMessage(t('settings.unlinked'));
+              })
+              .catch((error: unknown) => {
+                setTelegramMessage(error instanceof Error && error.message ? error.message : t('settings.unlinkFailed'));
+              })
+              .finally(() => setUnlinking(false));
+          },
+        },
+      ]
+    );
+  }
+
   function updateNotificationPreference(
     key: keyof NotificationPreferences,
     value: boolean
@@ -196,9 +215,38 @@ export default function SettingsScreen() {
         stickyHeaderIndices={[]}
         contentContainerStyle={styles.scrollContent}
       >
-          <ScreenHeader title="Settings" subtitle="Manage your AgroFlow preferences." help="settings" />
+          <ScreenHeader title={t('settings.title')} subtitle={t('settings.subtitle')} help="settings" />
 
-          <Text style={styles.sectionTitle}>Appearance</Text>
+          <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
+
+          <View style={styles.sectionCard}>
+            {LANGUAGES.map((option) => {
+              const selected = lang === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                  accessibilityLabel={option.beta ? `${option.name} ${t('settings.beta')}` : option.name}
+                  testID={`language-${option.value}`}
+                  style={[styles.settingRow, selected && styles.selectedRow]}
+                  onPress={() => { void setLanguage(option.value); }}
+                  activeOpacity={0.75}
+                >
+                  <Text style={styles.settingTitle}>
+                    {option.name}{option.beta ? ` ${t('settings.beta')}` : ''}
+                  </Text>
+                  <View style={[styles.radio, selected && styles.radioSelected]}>
+                    {selected ? <View style={styles.radioInner} /> : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.note}>{t('settings.languageNote')}</Text>
+
+          <Text style={styles.sectionTitle}>{t('settings.appearance')}</Text>
 
           <View style={styles.sectionCard}>
             {appearanceOptions.map((option) => {
@@ -220,7 +268,7 @@ export default function SettingsScreen() {
                   activeOpacity={0.75}
                 >
                   <Text style={styles.settingTitle}>
-                    {option.title}
+                    {t(option.title)}
                   </Text>
 
                   <View
@@ -239,10 +287,10 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.currentTheme}>
-            Currently using {resolvedTheme} mode
+            {t('settings.currentTheme', { mode: resolvedTheme === 'dark' ? t('settings.themeDark') : t('settings.themeLight') })}
           </Text>
 
-          <Text style={styles.sectionTitle}>Notifications</Text>
+          <Text style={styles.sectionTitle}>{t('settings.notifications')}</Text>
 
           <View style={styles.sectionCard}>
             {notificationOptions.map((option) => (
@@ -252,15 +300,15 @@ export default function SettingsScreen() {
               >
                 <View style={styles.notificationText}>
                   <Text style={styles.settingTitle}>
-                    {option.title}
+                    {t(option.title)}
                   </Text>
                   <Text style={styles.settingDescription}>
-                    {option.description}
+                    {t(option.description)}
                   </Text>
                 </View>
 
                 <Switch
-                  accessibilityLabel={option.title}
+                  accessibilityLabel={t(option.title)}
                   disabled={!preferencesLoaded}
                   value={notificationPreferences[option.key]}
                   onValueChange={(value) =>
@@ -280,24 +328,24 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.note}>
-            Notification preferences are currently saved on this device.
+            {t('settings.notifNote')}
           </Text>
 
-          <Text style={styles.sectionTitle}>Help</Text>
+          <Text style={styles.sectionTitle}>{t('settings.help')}</Text>
 
           <View style={styles.sectionCard}>
             <View style={styles.notificationRow}>
               <View style={styles.notificationText}>
                 <Text style={styles.settingTitle}>
-                  Show page help
+                  {t('settings.pageHelp')}
                 </Text>
                 <Text style={styles.settingDescription}>
-                  Shows a &quot;?&quot; button on each page that explains what it does.
+                  {t('settings.pageHelpBody')}
                 </Text>
               </View>
 
               <Switch
-                accessibilityLabel="Show page help"
+                accessibilityLabel={t('settings.pageHelp')}
                 disabled={!appPreferencesReady}
                 value={appPreferences.showPageHelp}
                 onValueChange={(value) =>
@@ -314,16 +362,15 @@ export default function SettingsScreen() {
             <View style={styles.notificationRow}>
               <View style={styles.notificationText}>
                 <Text style={styles.settingTitle}>
-                  Raindrop helper
+                  {t('settings.raindrop')}
                 </Text>
                 <Text style={styles.settingDescription}>
-                  A friendly raindrop that greets you and points out the one thing
-                  that needs you most.
+                  {t('settings.raindropBody')}
                 </Text>
               </View>
 
               <Switch
-                accessibilityLabel="Raindrop helper"
+                accessibilityLabel={t('settings.raindrop')}
                 disabled={!appPreferencesReady}
                 value={appPreferences.showRaindropHelper}
                 onValueChange={(value) =>
@@ -339,17 +386,17 @@ export default function SettingsScreen() {
           </View>
 
           <Text style={styles.note}>
-            Help settings are saved on this device.
+            {t('settings.helpNote')}
           </Text>
 
-          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
 
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => router.push('/request')}
             activeOpacity={0.75}
           >
-            <Text style={styles.profileText}>Farm Requests</Text>
+            <Text style={styles.profileText}>{t('settings.farmRequests')}</Text>
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
 
@@ -358,9 +405,9 @@ export default function SettingsScreen() {
             onPress={() => router.push('/reports')}
             activeOpacity={0.75}
             accessibilityRole="button"
-            accessibilityLabel="Reports"
+            accessibilityLabel={t('settings.reports')}
           >
-            <Text style={styles.profileText}>Reports</Text>
+            <Text style={styles.profileText}>{t('settings.reports')}</Text>
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
 
@@ -375,13 +422,11 @@ export default function SettingsScreen() {
             accessibilityRole="button"
             accessibilityLabel={
               telegramLinked === null
-                ? 'Connect Telegram'
-                : telegramLinked
-                  ? 'Connect Telegram. Connected.'
-                  : 'Connect Telegram. Not connected.'
+                ? t('settings.connectTelegram')
+                : `${t('settings.connectTelegram')}. ${telegramLinked ? t('common.connected') : t('common.notConnected')}.`
             }
           >
-            <Text style={styles.profileText}>Connect Telegram</Text>
+            <Text style={styles.profileText}>{t('settings.connectTelegram')}</Text>
 
             <View style={styles.rowTrailing}>
               {telegramLinked !== null && (
@@ -392,7 +437,7 @@ export default function SettingsScreen() {
                       : styles.statusNotConnected
                   }
                 >
-                  {telegramLinked ? 'Connected' : 'Not connected'}
+                  {telegramLinked ? t('common.connected') : t('common.notConnected')}
                 </Text>
               )}
 
@@ -400,12 +445,43 @@ export default function SettingsScreen() {
             </View>
           </TouchableOpacity>
 
+          {telegramLinked ? (
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={confirmUnlinkTelegram}
+              disabled={unlinking}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.unlinkTelegram')}
+              testID="unlink-telegram"
+            >
+              <Text style={styles.dangerText}>{unlinking ? t('common.saving') : t('settings.unlinkTelegram')}</Text>
+              <Text style={styles.arrow}>›</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {telegramMessage ? (
+            <Text style={styles.note} accessibilityLiveRegion="polite">{telegramMessage}</Text>
+          ) : null}
+
+          {/* Every step of the setup wizard again, from the start (app/setup.tsx). */}
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push('/setup?redo=1' as never)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            testID="redo-setup"
+          >
+            <Text style={styles.profileText}>{t('settings.redoSetup')}</Text>
+            <Text style={styles.arrow}>›</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => router.push('/profile')}
             activeOpacity={0.75}
           >
-            <Text style={styles.profileText}>Profile</Text>
+            <Text style={styles.profileText}>{t('settings.profile')}</Text>
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
       </ScrollView>

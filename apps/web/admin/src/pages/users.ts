@@ -7,6 +7,7 @@ import {
 } from "@/ui/components";
 import { Icon } from "@/lib/icons";
 import type { User } from "@/types/models";
+import { isStaffRole } from "@/lib/staff";
 
 /** One label per farmer, used by the column, the filter and the CSV so the
     three can never disagree about what "connected" means. */
@@ -19,6 +20,8 @@ export function telegramState(u: User): string {
  * equipment failure or password reset), and someone has to fix that, so it gets the same red
  * as other faults. */
 function telegramCell(u: User): string {
+  // Telegram is for farmers only.
+  if (isStaffRole(u.role)) return `<span class="muted">Staff do not use Telegram</span>`;
   if (!u.telegramLinked) {
     return `<span class="badge bad" title="This farmer receives no alerts at all until they connect Telegram.">Not connected</span>`;
   }
@@ -101,7 +104,7 @@ export async function usersPage(): Promise<string> {
           ? `<a href="#" data-act="enable-user" data-id="${u.id}">Enable</a>`
           : `<a href="#" data-act="disable-user" data-id="${u.id}">Disable</a>`}
         <a href="#" data-act="reset-password" data-id="${u.id}">Reset</a>
-        ${u.telegramLinked
+        ${u.telegramLinked || isStaffRole(u.role)
           ? ""
           : `<a href="#" data-act="send-link-code" data-id="${u.id}">Connect</a>`}
         <a href="#" class="danger" data-act="delete-user" data-id="${u.id}">Delete</a>
