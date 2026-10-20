@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Radius, Spacing, Type, cardStyle, type AppColors } from '@/constants/colors';
+import { Layout, Radius, Space, Spacing, Type, cardStyle, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Home's one card per zone, the "I watered" / soil-feel sheet and the Finish setup
@@ -47,7 +47,11 @@ export function createTodayStyles(colors: AppColors) {
     busy: { opacity: 0.6 },
 
     // Sheet
-    sheet: { gap: Spacing.three },
+    // The sheet's body: the 16 px gutter and room above the bottom edge.
+    sheet: { gap: Spacing.three, paddingHorizontal: Layout.gutter, paddingTop: Space.lg },
+    // Dry / Moist / Wet: three equal, full-width buttons, one under the other.
+    feelChoices: { gap: Space.md },
+    feelChoice: { width: '100%', minHeight: 64, justifyContent: 'center', alignItems: 'center', gap: 2, paddingVertical: Space.md, paddingHorizontal: Space.lg, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
     intro: { fontSize: Type.body, lineHeight: 23, color: colors.textSecondary },
     choices: { ...sharedLayout.inlineRow, flexWrap: 'wrap', gap: Spacing.two },
     choice: {

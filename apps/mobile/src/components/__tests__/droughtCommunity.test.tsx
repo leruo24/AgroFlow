@@ -75,6 +75,15 @@ const unverified = 'This is a community report and has not been independently ve
 const serve = (reports: api.NearbyReport[], limit = allowed) =>
   (api.fetchCommunity as jest.Mock).mockResolvedValue({ reports, limit, unverified, emergency: 'your local emergency number (112 from a mobile phone)' });
 
+// Warm the renderer once outside any test's 5 s limit: the first render of the community
+// screen on a cold, busy machine can take longer than that (see todayCard.test.tsx).
+beforeAll(async () => {
+  serve([]);
+  (api.fetchDrought as jest.Mock).mockResolvedValue(droughtOn);
+  await render(<CommunityScreen />);
+  await render(<DroughtCard />);
+}, 60000);
+
 beforeEach(() => {
   jest.clearAllMocks();
   resetLanguageForTests();

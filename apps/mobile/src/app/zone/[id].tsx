@@ -15,8 +15,7 @@ import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
 import { useRunStatus, type RunState } from '@/hooks/useRunStatus';
 import { ApiHttpError } from '@/services/agroFlowApi';
 import { t, useI18n, type TranslationKey } from '@/i18n';
-import { Card } from '@/components/ui/Card';
-import { InfoGrid, type InfoItem } from '@/components/ui/InfoGrid';
+import { SensorReadingsCard, WaterUsageCard, ZoneDetailsCard } from '@/components/ZoneOverviewCards';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { cropLabel, healthLabel, modeLabel, placeLabel, sensorLabel, tidy } from '@/lib/labels';
 import { dayLabel } from '@/lib/setupHelpers';
@@ -453,124 +452,52 @@ export default function ZoneControlScreen() {
   const hasKit = soil.status === 'Online' || environment.status === 'Online';
   // The kit does not report its valve yet, so "Unknown" would be the only answer.
   const relayText = !hasKit ? t('empty.noKit') : selectedZone.relay.status === 'Unknown' ? t('zone.relayNotReported') : tidy(selectedZone.relay.status);
-  const liveMetrics: InfoItem[] = [
-    {
-      label: t('zone.soilMoisture'),
-      value: hasKit ? soilReadingText(soil, t('empty.noReading')) : t('empty.noKit'),
-      muted: soil.status !== 'Online',
-      note: soil.status !== 'Online' ? undefined
-        : soil.simulated ? t('zone.simulatedReading')
-        : soil.calibrated ? t(`zone.moisture.${soil.moistureStatus}` as TranslationKey)
-        : t('zone.doWetDry'),
-    },
-    {
-      label: t('irrigation.temperature'),
-      value: environment.status === 'Online' ? `${environment.temperature}${environment.temperatureUnit}` : hasKit ? t('empty.noReading') : '—',
-      muted: environment.status !== 'Online',
-    },
-    {
-      label: t('zone.humidity'),
-      value: environment.status === 'Online' ? `${environment.humidity}${environment.humidityUnit}` : hasKit ? t('empty.noReading') : '—',
-      muted: environment.status !== 'Online',
-    },
-    {
-      // "(est.)" matters: there is no flow meter, so this is runtime x the zone's flow_rate_lpm.
-      // A bare litre figure would look like a measurement.
-      label: t('irrigation.waterToday'),
-      value: selectedZone.water.usedTodayLitres != null ? `${selectedZone.water.usedTodayLitres} L (est.)` : t('empty.noWaterToday'),
-      muted: selectedZone.water.usedTodayLitres == null,
-    },
-    {
-      label: t('zone.waterSaved'),
-      value: selectedZone.waterSavedLitres != null ? `${selectedZone.waterSavedLitres} L (est.)` : t('empty.noWatering'),
-      muted: selectedZone.waterSavedLitres == null,
-    },
-    {
-      label: t('irrigation.lastWatering'),
-      value: /^\d{4}-\d{2}-\d{2}$/.test(selectedZone.irrigation.lastIrrigation.date) ? dayLabel(selectedZone.irrigation.lastIrrigation.date) : t('empty.noWatering'),
-      muted: !/^\d{4}/.test(selectedZone.irrigation.lastIrrigation.date),
-    },
-  ];
-
   // The saved mode (Manual included); a one-off Water now run does not change it.
   const displayedBaseMode =
     selectedMode;
 
-  const zoneSummaryRows = [
-    [
-      {
-        label: 'Zone',
-        value: selectedZone.name,
-      },
-      {
-        label: 'Location',
-        value: placeLabel(selectedZone.location) || t('empty.notSet'),
-      },
-    ],
-    [
-      {
-        label: 'Crop',
-        value: cropLabel(t, selectedZone.crop),
-      },
-      {
-        label: 'Start At',
-        value: `${automation.moistureThreshold}%`,
-      },
-    ],
-    [
-      {
-        label: 'Stop At',
-        value: `${automation.desiredMoisture}%`,
-      },
-      {
-        label: 'Base Mode',
-        value: modeLabel(t, displayedBaseMode),
-      },
-    ],
-  ];
-
   const scheduleWeatherRows = [
     [
       {
-        label: 'Start Time',
+        label: t('zone.row.startTime'),
         value: schedule.startTime || t('empty.notSet'),
       },
       {
-        label: 'Days',
+        label: t('zone.row.days'),
         value: schedule.days.length ? schedule.days.join(' ') : t('empty.notSet'),
       },
       {
-        label: 'Duration',
+        label: t('zone.row.duration'),
         value: schedule.durationMinutes > 0 ? `${schedule.durationMinutes} min` : t('empty.notSet'),
       },
     ],
     [
       {
-        label: 'Forecast',
-        value: selectedZone.weather.rainExpected ? 'Rain' : 'Clear',
+        label: t('zone.row.forecast'),
+        value: selectedZone.weather.rainExpected ? t('zone.val.rain') : t('zone.val.clear'),
       },
       {
-        label: 'Rain',
-        value: selectedZone.weather.rainExpected ? 'Yes' : 'No',
+        label: t('zone.row.rain'),
+        value: selectedZone.weather.rainExpected ? t('zone.val.yes') : t('zone.val.no'),
       },
       {
-        label: 'Adjustment',
-        value: automation.weatherAdjustment ? 'Enabled' : 'Disabled',
+        label: t('zone.row.adjustment'),
+        value: automation.weatherAdjustment ? t('zone.val.on') : t('zone.val.off'),
       },
     ],
   ];
 
   const systemStatusItems = [
     {
-      label: 'Soil Sensor',
+      label: t('zone.row.soilSensor'),
       value: hasKit ? sensorLabel(t, soil.status) : t('empty.noKit'),
     },
     {
-      label: 'Temp/Humidity',
+      label: t('zone.row.tempHumidity'),
       value: hasKit ? sensorLabel(t, environment.status) : t('empty.noKit'),
     },
     {
-      label: 'Relay',
+      label: t('zone.row.relay'),
       value: relayText,
     },
   ];
@@ -1229,31 +1156,9 @@ export default function ZoneControlScreen() {
             styles.content
           }
         >
-          <View
-            style={
-              styles.sectionHeading
-            }
-          >
-            <Text
-              style={
-                styles.sectionTitle
-              }
-            >
-              {t('zone.liveTitle')}
-            </Text>
-
-            <Text
-              style={
-                styles.sectionCaption
-              }
-            >
-              {t('zone.liveCaption')}
-            </Text>
-          </View>
-
-          <Card testID="zone-live">
-            <InfoGrid items={liveMetrics} />
-          </Card>
+          <SensorReadingsCard zone={selectedZone} />
+          <WaterUsageCard zone={selectedZone} />
+          <ZoneDetailsCard zone={selectedZone} onEdit={beginZoneEditing} />
 
           {/* ------------------------------------------------------------
               THE ENGINE'S FARMER-FACING SURFACE
@@ -1786,61 +1691,23 @@ export default function ZoneControlScreen() {
             </View>
           </View>
 
-          <View
-            style={
-              styles.panel
-            }
-          >
-            <View
-              style={
-                styles.panelHeader
-              }
-            >
-              <Text
-                style={
-                  styles.panelTitle
-                }
-              >
-                Zone &amp; Automation
-              </Text>
-
-              <TouchableOpacity
-                style={styles.textAction}
-                onPress={beginZoneEditing}
-                accessibilityRole="button"
-                accessibilityLabel="Edit zone and automation"
-              >
-                <Text style={styles.textActionLabel}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.detailRows}>
-              {zoneSummaryRows.flat().map((item) => (
-                <View key={item.label} style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>{item.label}</Text>
-                  <Text style={styles.detailValue}>{item.value}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
           <View style={styles.panel}>
             <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>Schedule &amp; Weather</Text>
+              <Text style={styles.panelTitle}>{t('zone.scheduleTitle')}</Text>
               <View style={styles.headerActions}>
                 <Text style={styles.panelStatus}>
                   {displayedBaseMode === 'scheduled'
-                    ? 'Active'
-                    : 'Saved'}
+                    ? t('zone.scheduleActive')
+                    : t('zone.scheduleSaved')}
                 </Text>
 
                 <TouchableOpacity
                   style={styles.textAction}
                   onPress={beginScheduleEditing}
                   accessibilityRole="button"
-                  accessibilityLabel="Edit regular irrigation schedule"
+                  accessibilityLabel={t('zone.scheduleEditA11y')}
                 >
-                  <Text style={styles.textActionLabel}>Edit</Text>
+                  <Text style={styles.textActionLabel}>{t('details.edit')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1857,7 +1724,7 @@ export default function ZoneControlScreen() {
 
           <View style={styles.panel}>
             <View style={styles.panelHeader}>
-              <Text style={styles.panelTitle}>System Status</Text>
+              <Text style={styles.panelTitle}>{t('zone.systemTitle')}</Text>
             </View>
 
             <View style={styles.detailRows}>
@@ -1873,7 +1740,7 @@ export default function ZoneControlScreen() {
           {selectedZone.alerts.length > 0 && (
             <View style={[styles.panel, styles.alertPanel]}>
               <View style={styles.alertHeader}>
-                <Text style={styles.panelTitle}>Zone Alerts</Text>
+                <Text style={styles.panelTitle}>{t('zone.alertsTitle')}</Text>
 
                 <View style={styles.alertCountBadge}>
                   <Text style={styles.alertCountText}>
@@ -1893,8 +1760,8 @@ export default function ZoneControlScreen() {
                 >
                   <Text style={styles.alertType}>
                     {zoneAlert.type === 'warning'
-                      ? 'ATTENTION'
-                      : zoneAlert.type.toUpperCase()}
+                      ? t('zone.alertAttention')
+                      : tidy(zoneAlert.type)}
                   </Text>
 
                   <Text style={styles.alertMessage}>
