@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { loadLanguage } from '@/i18n';
 import { onReconnect } from '@/lib/connectivity';
 import { flushQueue } from '@/lib/offlineQueue';
@@ -196,14 +197,33 @@ function RootNavigator() {//decides which screens the user is permitted to acces
 // above the provider that supplies them.
 function RootShell() {
   const { isLoading } = useAuth();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { width } = useWindowDimensions();
+
+  // The area behind the status bar matches the screen. On web, index.html paints the body in
+  // the loading video's colour for the first frame; once the app is up, the body and the
+  // browser's theme colour (Android Chrome's bar, an installed iPhone app's status bar) take
+  // the screen background, so no grey band shows above the page.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || isLoading || typeof document === 'undefined') return;
+    document.body.style.backgroundColor = colors.background;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]:not([media])');
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'theme-color';
+      document.head.appendChild(meta);
+    }
+    meta.content = colors.background;
+  }, [isLoading, colors.background]);
 
   return (
     <>
       {/* On a computer the app stays phone width in the middle of the window, on a neutral
           background, instead of stretching edge to edge. Phones are narrower than the column,
           so they see no difference; Android uses the plain frame. */}
+      {/* Dark icons on the light theme, light on the dark. The app is edge to edge, so the
+          screen's own background shows behind the bar (no grey haze on Android). */}
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {Platform.OS === 'web' ? (
         <View style={[styles.webOuter, { backgroundColor: colors.surfaceSecondary }]}>
           <View style={[styles.webFrame, { backgroundColor: colors.background }, width > 480 && { borderColor: colors.border, borderLeftWidth: StyleSheet.hairlineWidth, borderRightWidth: StyleSheet.hairlineWidth }]}>

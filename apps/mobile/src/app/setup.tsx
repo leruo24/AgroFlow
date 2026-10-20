@@ -14,7 +14,7 @@ import { router } from '@/lib/router';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { useAgroFlow } from '@/context/AgroFlowContext';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, type AppColors, Space, Layout } from '@/constants/colors';
 import { supabase } from '@/lib/supabase';
 import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
 import { TelegramSection } from '@/components/TelegramSection';
@@ -38,6 +38,7 @@ import {
   type SetupStep,
   type SetupZone,
 } from '@/lib/setupProgress';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
@@ -46,6 +47,8 @@ function isStep(value: unknown): value is SetupStep {
 }
 
 export default function SetupScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
   const { t } = useI18n();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -104,7 +107,7 @@ export default function SetupScreen() {
         <Text style={styles.progressText} testID="setup-progress">{t('setup.progress', { n, of })}</Text>
         <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${(n / of) * 100}%` }]} /></View>
       </View>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" testID={`setup-step-${step}`}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled" testID={`setup-step-${step}`}>
         {body}
       </ScrollView>
       <View style={styles.footer}>
@@ -485,11 +488,11 @@ function createStyles(colors: AppColors) {
     page: { flex: 1, backgroundColor: colors.background },
     // 320-430 px phones use the full width; wider screens (web, tablets) get a centred column.
     frame: { flex: 1, width: '100%', maxWidth: 560, alignSelf: 'center' },
-    progressHead: { paddingHorizontal: Spacing.four, paddingTop: Spacing.three, gap: Spacing.two },
+    progressHead: { paddingHorizontal: Layout.gutter, paddingTop: Spacing.three, gap: Spacing.two },
     progressText: { color: colors.textSecondary, fontSize: Type.caption, fontWeight: '600' },
     progressTrack: { height: 8, borderRadius: 4, backgroundColor: colors.divider, overflow: 'hidden' },
     progressFill: { height: 8, borderRadius: 4, backgroundColor: colors.primaryDark },
-    content: { padding: Spacing.four, gap: Spacing.three, paddingBottom: 40 },
+    content: { padding: Layout.gutter, gap: Spacing.three },
     title: { color: colors.text, fontSize: 26, lineHeight: 32, fontWeight: '700' },
     why: { color: colors.textSecondary, fontSize: Type.body, lineHeight: 23 },
     label: { color: colors.text, fontSize: Type.body, fontWeight: '600', marginTop: Spacing.one },
@@ -509,7 +512,7 @@ function createStyles(colors: AppColors) {
     card: { gap: Spacing.two, padding: Spacing.three, borderRadius: Radius.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.divider, backgroundColor: colors.surface },
     cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, flexWrap: 'wrap' },
     cardTitle: { color: colors.text, fontSize: Type.title, fontWeight: '600', flexShrink: 1 },
-    badge: { fontSize: Type.caption, fontWeight: '700', paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: 999, overflow: 'hidden' },
+    badge: { fontSize: Type.caption, fontWeight: '700', paddingHorizontal: Spacing.two, paddingVertical: Space.xs, borderRadius: 999, overflow: 'hidden' },
     badgeOn: { color: colors.white, backgroundColor: colors.success },
     badgeOff: { color: colors.text, backgroundColor: colors.warningBackground },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
@@ -534,7 +537,7 @@ function createStyles(colors: AppColors) {
     summaryOk: { color: colors.success },
     summaryTodo: { color: colors.warning },
     doneHead: { alignItems: 'center' },
-    footer: { flexDirection: 'row', gap: Spacing.two, padding: Spacing.four, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider, backgroundColor: colors.background },
+    footer: { flexDirection: 'row', gap: Spacing.two, padding: Layout.gutter, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider, backgroundColor: colors.background },
     primary: { flex: 2, minHeight: 52, borderRadius: Radius.sm, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
     primaryText: { color: colors.white, fontSize: Type.body, fontWeight: '700' },
     secondary: { flex: 1, minHeight: 52, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },

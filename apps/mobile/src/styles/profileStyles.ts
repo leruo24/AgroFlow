@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Type, Radius, Spacing, type AppColors } from '@/constants/colors';
+import { Type, Radius, Spacing, type AppColors, Space, Layout } from '@/constants/colors';
 
 export function createProfileStyles(
   colors: AppColors
@@ -18,14 +18,14 @@ export function createProfileStyles(
     },
 
     scrollContent: {
-      paddingHorizontal: Spacing.four,
+      paddingHorizontal: Layout.gutter,
       paddingBottom: 140,
     },
 
     topBar: {
       minHeight: 54,
-      marginBottom: 16,
-      paddingTop: 16,
+      marginBottom: Space.lg,
+      paddingTop: Space.lg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -34,9 +34,9 @@ export function createProfileStyles(
     },
 
     profileErrorBox: {
-      marginTop: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      marginTop: Space.sm,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.sm,
       backgroundColor:
         colors.errorBackground,
       borderRadius: Radius.sm,
@@ -55,7 +55,7 @@ export function createProfileStyles(
     },
 
     backArrow: {
-      marginRight: 5,
+      marginRight: Space.xs,
       fontSize: Type.display,
       lineHeight: 30,
       color:
@@ -71,7 +71,7 @@ export function createProfileStyles(
 
     editButton: {
       height: 48,
-      paddingHorizontal: 13,
+      paddingHorizontal: Space.md,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
@@ -88,7 +88,7 @@ export function createProfileStyles(
 
     cancelTopButton: {
       height: 48,
-      paddingHorizontal: 13,
+      paddingHorizontal: Space.md,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
@@ -107,9 +107,9 @@ export function createProfileStyles(
     },
 
     header: {
-      marginTop: 16,
-      marginBottom: 24,
-      padding: 14,
+      marginTop: Space.lg,
+      marginBottom: Space.xl,
+      padding: Space.md,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor:
@@ -139,7 +139,7 @@ export function createProfileStyles(
 
     headerText: {
       flex: 1,
-      marginLeft: 13,
+      marginLeft: Space.md,
     },
 
     name: {
@@ -150,15 +150,15 @@ export function createProfileStyles(
     },
 
     role: {
-      marginTop: 4,
+      marginTop: Space.xs,
       fontSize: Type.caption,
       color:
         colors.textSecondary,
     },
 
     sectionTitle: {
-      marginTop: 6,
-      marginBottom: 10,
+      marginTop: Space.xs,
+      marginBottom: Space.sm,
       fontSize: Type.body,
       fontWeight: '700',
       color:
@@ -166,7 +166,7 @@ export function createProfileStyles(
     },
 
     sectionCard: {
-      marginBottom: 22,
+      marginBottom: Space.xl,
       backgroundColor:
         colors.surface,
       borderWidth: 0,
@@ -178,12 +178,12 @@ export function createProfileStyles(
 
     infoRow: {
       minHeight: 50,
-      paddingHorizontal: 13,
-      paddingVertical: 10,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 15,
+      gap: Space.lg,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor:
         colors.border,
@@ -210,8 +210,8 @@ export function createProfileStyles(
     },
 
     formCard: {
-      padding: 14,
-      marginBottom: 10,
+      padding: Space.md,
+      marginBottom: Space.sm,
       backgroundColor:
         colors.surface,
       borderWidth: 0,
@@ -221,7 +221,7 @@ export function createProfileStyles(
     },
 
     inputGroup: {
-      marginBottom: 15,
+      marginBottom: Space.lg,
     },
 
     lastInputGroup: {
@@ -229,7 +229,7 @@ export function createProfileStyles(
     },
 
     inputLabel: {
-      marginBottom: 6,
+      marginBottom: Space.xs,
       fontSize: Type.caption,
       fontWeight: '600',
       color:
@@ -238,7 +238,7 @@ export function createProfileStyles(
 
     input: {
       height: 48,
-      paddingHorizontal: 12,
+      paddingHorizontal: Space.md,
       backgroundColor:
         colors.background,
       borderWidth: 1,
@@ -258,7 +258,7 @@ export function createProfileStyles(
 
     saveButton: {
       height: 48,
-      marginBottom: 22,
+      marginBottom: Space.xl,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
@@ -279,7 +279,7 @@ export function createProfileStyles(
 
     logoutButton: {
       height: 48,
-      marginTop: 8,
+      marginTop: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
@@ -292,7 +292,7 @@ export function createProfileStyles(
 
     changePasswordButton: {
       height: 48,
-      marginTop: 8,
+      marginTop: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:

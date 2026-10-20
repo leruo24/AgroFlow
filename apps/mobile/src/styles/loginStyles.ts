@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Type, Radius, Spacing, type AppColors } from '@/constants/colors';
+import { Type, Radius, Spacing, type AppColors, Space } from '@/constants/colors';
 
 export function createLoginStyles(
   colors: AppColors
@@ -24,9 +24,9 @@ export function createLoginStyles(
     container: {
       flex: 1,
       minHeight: 650,
-      paddingHorizontal: 20,
-      paddingTop: 24,
-      paddingBottom: 24,
+      paddingHorizontal: Space.lg,
+      paddingTop: Space.xl,
+      paddingBottom: Space.xl,
       backgroundColor:
         colors.background,
     },
@@ -40,7 +40,7 @@ export function createLoginStyles(
     brandMark: {
       width: 13,
       height: 28,
-      marginRight: 9,
+      marginRight: Space.sm,
       backgroundColor:
         colors.primary,
     },
@@ -60,7 +60,7 @@ export function createLoginStyles(
     },
 
     heading: {
-      marginBottom: 22,
+      marginBottom: Space.xl,
     },
 
     title: {
@@ -71,7 +71,7 @@ export function createLoginStyles(
     },
 
     description: {
-      marginTop: 5,
+      marginTop: Space.xs,
       fontSize: Type.body,
       color:
         colors.text,
@@ -79,9 +79,9 @@ export function createLoginStyles(
 
     // A tint without an outline, so the error does not rely on colour alone without a heavy box.
     errorBox: {
-      marginBottom: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
+      marginBottom: Space.md,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.md,
       backgroundColor:
         colors.errorBackground,
       borderRadius: Radius.sm,
@@ -100,11 +100,11 @@ export function createLoginStyles(
     },
 
     inputGroup: {
-      marginBottom: 18,
+      marginBottom: Space.lg,
     },
 
     inputLabel: {
-      marginBottom: 7,
+      marginBottom: Space.sm,
       fontSize: Type.caption,
       fontWeight: '600',
       color:
@@ -118,7 +118,7 @@ export function createLoginStyles(
     },
 
     forgotText: {
-      marginBottom: 7,
+      marginBottom: Space.sm,
       fontSize: Type.caption,
       fontWeight: '600',
       color:
@@ -127,7 +127,7 @@ export function createLoginStyles(
 
     input: {
       height: 52,
-      paddingHorizontal: 12,
+      paddingHorizontal: Space.md,
       backgroundColor:
         colors.background,
       borderWidth: 1,
@@ -154,7 +154,7 @@ export function createLoginStyles(
     passwordTextInput: {
       flex: 1,
       height: '100%',
-      paddingHorizontal: 12,
+      paddingHorizontal: Space.md,
       fontSize: Type.body,
       color:
         colors.text,
@@ -162,7 +162,7 @@ export function createLoginStyles(
 
     showButton: {
       height: '100%',
-      paddingHorizontal: 12,
+      paddingHorizontal: Space.md,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -199,7 +199,7 @@ export function createLoginStyles(
 
     footer: {
       marginTop: 'auto',
-      paddingTop: 30,
+      paddingTop: Space.xxl,
       textAlign: 'center',
       fontSize: Type.caption,
       color:

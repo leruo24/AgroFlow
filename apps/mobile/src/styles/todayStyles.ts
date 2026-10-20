@@ -1,17 +1,13 @@
 import { StyleSheet } from 'react-native';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, cardStyle, type AppColors } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Home's one card per zone, the "I watered" / soil-feel sheet and the Finish setup
 // checklist. Same text sizes and hairlines as the insights card, so they look like one family.
 export function createTodayStyles(colors: AppColors) {
   return StyleSheet.create({
-    card: {
-      paddingVertical: Spacing.three,
-      gap: Spacing.two,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.divider,
-    },
+    // The one card look (constants/colors.ts cardStyle).
+    card: cardStyle(colors),
     zoneName: { fontSize: Type.label, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' },
     action: { fontSize: Type.title, lineHeight: 25, fontWeight: '600', color: colors.text },
     actionWater: { color: colors.primaryDark },

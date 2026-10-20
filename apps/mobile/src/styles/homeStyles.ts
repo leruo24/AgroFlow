@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, cardStyle, type AppColors } from '@/constants/colors';
 
 // Home-only styles. Shared row/section/summary styles are in screenStyles.ts; these two
 // are only used here (the filled button and its secondary nav rows).
@@ -13,7 +13,7 @@ export function createHomeStyles(colors: AppColors) {
     // fill, border or radius.
     actionRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: Spacing.three, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider },
     actionText: { flex: 1, color: colors.text, fontSize: Type.body, fontWeight: '500' },
-    tankCard: { paddingVertical: Spacing.three, gap: Spacing.one, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.divider },
+    tankCard: { ...cardStyle(colors), gap: Spacing.one },
     tankEstimate: { color: colors.text, fontSize: Type.title, lineHeight: 25, fontWeight: '600' },
     tankLink: { color: colors.primaryDark, fontSize: Type.body, fontWeight: '600', paddingVertical: Spacing.two },
     // A 48 pt target, not just the words: easier to hit with a thumb in the field.

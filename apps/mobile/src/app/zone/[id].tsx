@@ -15,6 +15,11 @@ import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
 import { useRunStatus, type RunState } from '@/hooks/useRunStatus';
 import { ApiHttpError } from '@/services/agroFlowApi';
 import { t, useI18n, type TranslationKey } from '@/i18n';
+import { Card } from '@/components/ui/Card';
+import { InfoGrid, type InfoItem } from '@/components/ui/InfoGrid';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { cropLabel, healthLabel, modeLabel, placeLabel, sensorLabel, tidy } from '@/lib/labels';
+import { dayLabel } from '@/lib/setupHelpers';
 // Dynamic Expo route: one screen for every irrigation zone, by route ID.
 import {
   ArrowLeft,
@@ -133,6 +138,8 @@ export default function ZoneControlScreen() {
 
   // Re-renders this screen in the farmer's language; t() below reads the same choice.
   useI18n();
+  // No tab bar on this screen: the bottom inset + 16.
+  const bottomPad = useBottomPadding(false);
 
   // Watering needs the kit to hear the command now, so it is off while offline (never queued).
   const { online } = useConnectivity();
@@ -442,58 +449,46 @@ export default function ZoneControlScreen() {
   const isOverrideActive =
     override.active;
 
-  const liveMetrics: {
-    label: string;
-    value: string;
-    note?: string;
-  }[] = [
+  // A zone has (or had) a kit when any sensor has reported; with none, every reading says so.
+  const hasKit = soil.status === 'Online' || environment.status === 'Online';
+  // The kit does not report its valve yet, so "Unknown" would be the only answer.
+  const relayText = !hasKit ? t('empty.noKit') : selectedZone.relay.status === 'Unknown' ? t('zone.relayNotReported') : tidy(selectedZone.relay.status);
+  const liveMetrics: InfoItem[] = [
     {
-      label:
-        'Soil Moisture',
-      value:
-        soilReadingText(soil, 'Unavailable'),
-      note:
-        soil.simulated
-          ? 'Simulated reading'
-          : soil.calibrated
-          ? soil.moistureStatus
-          : 'Do the wet/dry setup to read this as moisture',
+      label: t('zone.soilMoisture'),
+      value: hasKit ? soilReadingText(soil, t('empty.noReading')) : t('empty.noKit'),
+      muted: soil.status !== 'Online',
+      note: soil.status !== 'Online' ? undefined
+        : soil.simulated ? t('zone.simulatedReading')
+        : soil.calibrated ? soil.moistureStatus
+        : t('zone.doWetDry'),
     },
     {
-      label:
-        'Temperature',
-      value:
-        environment.status === 'Online' ? `${environment.temperature}${environment.temperatureUnit}` : 'Unavailable',
+      label: t('irrigation.temperature'),
+      value: environment.status === 'Online' ? `${environment.temperature}${environment.temperatureUnit}` : hasKit ? t('empty.noReading') : '—',
+      muted: environment.status !== 'Online',
     },
     {
-      label:
-        'Humidity',
-      value:
-        environment.status === 'Online' ? `${environment.humidity}${environment.humidityUnit}` : 'Unavailable',
+      label: t('zone.humidity'),
+      value: environment.status === 'Online' ? `${environment.humidity}${environment.humidityUnit}` : hasKit ? t('empty.noReading') : '—',
+      muted: environment.status !== 'Online',
     },
     {
       // "(est.)" matters: there is no flow meter, so this is runtime x the zone's flow_rate_lpm.
       // A bare litre figure would look like a measurement.
-      label:
-        'Used Today',
-      value:
-        selectedZone.water.usedTodayLitres != null
-          ? `${selectedZone.water.usedTodayLitres} L (est.)`
-          : 'No data',
+      label: t('irrigation.waterToday'),
+      value: selectedZone.water.usedTodayLitres != null ? `${selectedZone.water.usedTodayLitres} L (est.)` : t('empty.noWaterToday'),
+      muted: selectedZone.water.usedTodayLitres == null,
     },
     {
-      label:
-        'Water Saved',
-      value:
-        selectedZone.waterSavedLitres != null
-          ? `${selectedZone.waterSavedLitres} L (est.)`
-          : 'No data',
+      label: t('zone.waterSaved'),
+      value: selectedZone.waterSavedLitres != null ? `${selectedZone.waterSavedLitres} L (est.)` : t('empty.noWatering'),
+      muted: selectedZone.waterSavedLitres == null,
     },
     {
-      label:
-        'Flow Rate',
-      value:
-        'Unavailable',
+      label: t('irrigation.lastWatering'),
+      value: /^\d{4}-\d{2}-\d{2}$/.test(selectedZone.irrigation.lastIrrigation.date) ? dayLabel(selectedZone.irrigation.lastIrrigation.date) : t('empty.noWatering'),
+      muted: !/^\d{4}/.test(selectedZone.irrigation.lastIrrigation.date),
     },
   ];
 
@@ -509,13 +504,13 @@ export default function ZoneControlScreen() {
       },
       {
         label: 'Location',
-        value: selectedZone.location,
+        value: placeLabel(selectedZone.location) || t('empty.notSet'),
       },
     ],
     [
       {
         label: 'Crop',
-        value: selectedZone.crop,
+        value: cropLabel(t, selectedZone.crop),
       },
       {
         label: 'Start At',
@@ -529,11 +524,7 @@ export default function ZoneControlScreen() {
       },
       {
         label: 'Base Mode',
-        value:
-          displayedBaseMode ===
-          'automatic'
-            ? 'Automatic'
-            : 'Scheduled',
+        value: modeLabel(t, displayedBaseMode),
       },
     ],
   ];
@@ -542,15 +533,15 @@ export default function ZoneControlScreen() {
     [
       {
         label: 'Start Time',
-        value: schedule.startTime,
+        value: schedule.startTime || t('empty.notSet'),
       },
       {
         label: 'Days',
-        value: schedule.days.join(' '),
+        value: schedule.days.length ? schedule.days.join(' ') : t('empty.notSet'),
       },
       {
         label: 'Duration',
-        value: `${schedule.durationMinutes} min`,
+        value: schedule.durationMinutes > 0 ? `${schedule.durationMinutes} min` : t('empty.notSet'),
       },
     ],
     [
@@ -572,15 +563,15 @@ export default function ZoneControlScreen() {
   const systemStatusItems = [
     {
       label: 'Soil Sensor',
-      value: soil.status,
+      value: hasKit ? sensorLabel(t, soil.status) : t('empty.noKit'),
     },
     {
       label: 'Temp/Humidity',
-      value: environment.status,
+      value: hasKit ? sensorLabel(t, environment.status) : t('empty.noKit'),
     },
     {
       label: 'Relay',
-      value: selectedZone.relay.status,
+      value: relayText,
     },
   ];
 
@@ -1141,9 +1132,10 @@ export default function ZoneControlScreen() {
           false
         }
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={
-          styles.scrollContent
-        }
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: bottomPad },
+        ]}
       >
       <View
         style={
@@ -1185,7 +1177,7 @@ export default function ZoneControlScreen() {
                 styles.zoneName
               }
               numberOfLines={
-                1
+                2
               }
             >
               {
@@ -1198,10 +1190,10 @@ export default function ZoneControlScreen() {
                 styles.zoneSubtitle
               }
               numberOfLines={
-                1
+                2
               }
             >
-              {selectedZone.location} · {selectedZone.crop} · {selectedZone.size.value} {selectedZone.size.unit}
+              {[placeLabel(selectedZone.location), cropLabel(t, selectedZone.crop), selectedZone.size.value ? `${selectedZone.size.value} ${selectedZone.size.unit}` : ''].filter(Boolean).join(' · ')}
             </Text>
           </View>
 
@@ -1226,12 +1218,7 @@ export default function ZoneControlScreen() {
                 styles.statusBadgeText
               }
             >
-              {
-                selectedZone
-                  .irrigation
-                  .status
-                  .toUpperCase()
-              }
+              {tidy(selectedZone.irrigation.status)}
             </Text>
           </View>
         </View>
@@ -1252,7 +1239,7 @@ export default function ZoneControlScreen() {
                 styles.sectionTitle
               }
             >
-              Live Overview
+              {t('zone.liveTitle')}
             </Text>
 
             <Text
@@ -1260,70 +1247,13 @@ export default function ZoneControlScreen() {
                 styles.sectionCaption
               }
             >
-              Sensor and water readings
+              {t('zone.liveCaption')}
             </Text>
           </View>
 
-          <View
-            style={
-              styles.metricGrid
-            }
-          >
-            {liveMetrics.map(
-              (
-                metric
-              ) => (
-                <View
-                  key={
-                    metric.label
-                  }
-                  style={
-                    styles.metricCard
-                  }
-                >
-                  <Text
-                    style={
-                      styles.metricValue
-                    }
-                    numberOfLines={
-                      1
-                    }
-                  >
-                    {
-                      metric.value
-                    }
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.metricLabel
-                    }
-                    numberOfLines={
-                      2
-                    }
-                  >
-                    {
-                      metric.label
-                    }
-                  </Text>
-
-                  <Text
-                    style={
-                      styles.metricNote
-                    }
-                    numberOfLines={
-                      1
-                    }
-                  >
-                    {
-                      metric.note ??
-                      ' '
-                    }
-                  </Text>
-                </View>
-              )
-            )}
-          </View>
+          <Card testID="zone-live">
+            <InfoGrid items={liveMetrics} />
+          </Card>
 
           {/* ------------------------------------------------------------
               THE ENGINE'S FARMER-FACING SURFACE
@@ -1674,11 +1604,7 @@ export default function ZoneControlScreen() {
                     styles.controlValue
                   }
                 >
-                  {
-                    selectedZone
-                      .relay
-                      .status
-                  }
+                  {relayText}
                 </Text>
               </View>
 
@@ -1703,9 +1629,7 @@ export default function ZoneControlScreen() {
                     1
                   }
                 >
-                  {
-                    selectedZone.healthStatus
-                  }
+                  {healthLabel(t, selectedZone.healthStatus)}
                 </Text>
               </View>
             </View>

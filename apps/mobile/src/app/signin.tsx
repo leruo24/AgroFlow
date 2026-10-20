@@ -14,6 +14,7 @@ import { router } from '@/lib/router';
 import { tokenFromParams } from '@/lib/signInHelp';
 import { supabase } from '@/lib/supabase';
 import { redeemOneTap } from '@/services/agroFlowApi';
+import { Space } from '@/constants/colors';
 
 export default function OneTapSignInScreen() {
   const { colors } = useTheme();
@@ -41,7 +42,7 @@ export default function OneTapSignInScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top', 'bottom']}>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: Space.xl, gap: Space.lg }}>
         {failed ? (
           <>
             <Text testID="onetap-failed" style={{ color: colors.text, fontSize: 17, textAlign: 'center', lineHeight: 24 }}>
@@ -51,7 +52,7 @@ export default function OneTapSignInScreen() {
               testID="onetap-login"
               accessibilityRole="button"
               onPress={() => router.replace('/login')}
-              style={{ backgroundColor: colors.primaryDark, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 24, minHeight: 48 }}
+              style={{ backgroundColor: colors.primaryDark, borderRadius: 12, paddingVertical: Space.md, paddingHorizontal: Space.xl, minHeight: 48 }}
             >
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>{t('onetap.toLogin')}</Text>
             </TouchableOpacity>

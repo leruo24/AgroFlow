@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
+import { Radius, Spacing, Type, type AppColors, Layout } from '@/constants/colors';
 import { sharedLayout } from './shared';
 
 // Styles for the Kit screen.
@@ -11,7 +11,7 @@ import { sharedLayout } from './shared';
 export function createZoneHardwareStyles(colors: AppColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
-    content: { padding: Spacing.three, gap: Spacing.four, paddingBottom: Spacing.six },
+    content: { padding: Layout.gutter, gap: Spacing.four },
 
     // Status
     statusCard: {

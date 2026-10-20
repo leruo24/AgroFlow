@@ -20,6 +20,7 @@ import { useAppPreferences } from '@/hooks/useAppPreferences';
 import { disconnectTelegram, fetchTelegramLinkStatus } from '@/services/agroFlowApi';
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
+import { useBottomPadding } from '@/hooks/useScreenPadding';
 
 const NOTIFICATION_PREFERENCES_KEY =
   'agroflow_notification_preferences';
@@ -52,6 +53,8 @@ const notificationOptions: {
 ];
 
 export default function SettingsScreen() {
+  // The floating tab bar (if any), the bottom safe area and 16 below the last control.
+  const bottomPad = useBottomPadding(true);
   const {
     themePreference,
     resolvedTheme,
@@ -213,7 +216,7 @@ export default function SettingsScreen() {
         style={styles.page}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[]}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad }]}
       >
           <ScreenHeader title={t('settings.title')} subtitle={t('settings.subtitle')} help="settings" />
 

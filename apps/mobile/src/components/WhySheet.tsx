@@ -6,6 +6,7 @@ import { BlurSheet } from '@/components/BlurSheet';
 import type { AppColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeContext';
 import type { Explanation } from '@/services/agroFlowApi';
+import { Space } from '@/constants/colors';
 
 // "Why am I seeing this?" under every piece of advice, alert, badge and Drip message.
 // The words come from the server (built by the same rule as the message) and are shown as
@@ -111,19 +112,19 @@ function createStyles(colors: AppColors) {
     link: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
-      marginTop: 6,
+      gap: Space.xs,
+      marginTop: Space.xs,
       minHeight: 32,
       alignSelf: 'flex-start',
     },
     linkCompact: { marginTop: 2, minHeight: 28 },
     linkText: { color: colors.primaryDark, fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' },
-    body: { paddingHorizontal: 20, paddingBottom: 8, gap: 14 },
+    body: { paddingHorizontal: Space.lg, paddingBottom: Space.sm, gap: Space.md },
     summary: { color: colors.text, fontSize: 16, fontWeight: '600', lineHeight: 22 },
-    section: { gap: 6 },
+    section: { gap: Space.xs },
     heading: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
     text: { color: colors.text, fontSize: 15, lineHeight: 21 },
-    fact: { paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+    fact: { paddingVertical: Space.xs, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
     factLabel: { color: colors.textSecondary, fontSize: 13 },
     factValue: { color: colors.text, fontSize: 15, fontWeight: '600' },
     factSource: { color: colors.textSecondary, fontSize: 12 },

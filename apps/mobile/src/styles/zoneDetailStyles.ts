@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Type, Radius, Spacing, type AppColors } from '@/constants/colors';
+import { Type, Radius, Spacing, type AppColors, Space, Layout } from '@/constants/colors';
 
 export function createZoneDetailStyles(
   colors: AppColors
@@ -14,7 +14,7 @@ export function createZoneDetailStyles(
       backgroundColor: colors.background,
     },
     topBar: {
-  marginBottom: 16,
+  marginBottom: Space.lg,
   backgroundColor:
     colors.background,
 },
@@ -24,20 +24,20 @@ topBarContent: {
   maxWidth: 720,
   alignSelf: 'center',
 
-  paddingHorizontal: 18,
-  paddingTop: 4,
-  paddingBottom: 6,
+  paddingHorizontal: Layout.gutter,
+  paddingTop: Space.xs,
+  paddingBottom: Space.xs,
 
   flexDirection: 'row',
   alignItems: 'center',
-  gap: Spacing.four,
+  gap: Space.md,
 },
 
 content: {
   width: '100%',
   maxWidth: 720,
   alignSelf: 'center',
-  paddingHorizontal: Spacing.four,
+  paddingHorizontal: Layout.gutter,
   paddingTop: 0,
   gap: Spacing.four,
 },
@@ -78,11 +78,10 @@ content: {
       paddingBottom: 38,
     },
     
+    // A heading with its caption underneath, then 12 down to the card.
     sectionHeading: {
-      flexDirection: 'row',
-      alignItems: 'flex-end',
-      justifyContent: 'space-between',
-      gap: 10,
+      gap: Space.xs,
+      marginBottom: Layout.headingToCard,
     },
     sectionTitle: {
       fontSize: Type.body,
@@ -91,19 +90,18 @@ content: {
     },
     sectionCaption: {
       fontSize: Type.caption,
-      fontWeight: '500',
-      color: colors.text,
+      color: colors.textSecondary,
     },
     metricGrid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 7,
+      gap: Space.sm,
     },
     metricCard: {
       width: '31.8%',
       minHeight: 98,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
+      paddingHorizontal: Space.sm,
+      paddingVertical: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surface,
@@ -148,19 +146,19 @@ content: {
     },
     panelHeader: {
       minHeight: 48,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: Space.md,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.divider,
     },
     headerActions: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: Space.xs,
     },
     panelTitle: {
       flex: 1,
@@ -174,17 +172,17 @@ content: {
       color: colors.text,
     },
     controlSummary: {
-      paddingHorizontal: 12,
-      paddingVertical: 12,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.md,
       flexDirection: 'row',
       alignItems: 'stretch',
-      gap: 8,
+      gap: Space.sm,
     },
     controlSummaryItem: {
       flex: 1,
       minHeight: 76,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
+      paddingHorizontal: Space.sm,
+      paddingVertical: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surface,
@@ -213,26 +211,26 @@ content: {
       color: colors.text,
     },
     controlActions: {
-      paddingHorizontal: 12,
-      paddingBottom: 12,
+      paddingHorizontal: Space.md,
+      paddingBottom: Space.md,
     },
     modeSelectorLabel: {
-      marginBottom: 7,
+      marginBottom: Space.sm,
       fontSize: Type.caption,
       fontWeight: '700',
       color: colors.text,
     },
     modeSelector: {
-      marginBottom: 12,
+      marginBottom: Space.md,
       flexDirection: 'row',
-      gap: 6,
+      gap: Space.xs,
     },
     modeButton: {
       flex: 1,
       flexBasis: 0,
       minWidth: 48,
       minHeight: 48,
-      paddingHorizontal: 6,
+      paddingHorizontal: Space.xs,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surfaceSecondary,
@@ -284,16 +282,16 @@ content: {
       color: colors.warning,
     },
     buttonRow: {
-      marginTop: 8,
+      marginTop: Space.sm,
       flexDirection: 'row',
-      gap: 8,
+      gap: Space.sm,
     },
     halfButton: {
       flex: 1,
     },
     secondaryButton: {
       minHeight: 48,
-      paddingHorizontal: 8,
+      paddingHorizontal: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surface,
@@ -308,7 +306,7 @@ content: {
     },
     warningButton: {
       minHeight: 48,
-      paddingHorizontal: 8,
+      paddingHorizontal: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.warningBackground,
@@ -323,8 +321,8 @@ content: {
     },
     textAction: {
       minHeight: 48, justifyContent: 'center',
-      paddingHorizontal: 8,
-      paddingVertical: 5,
+      paddingHorizontal: Space.sm,
+      paddingVertical: Space.xs,
     },
     textActionLabel: {
       fontSize: Type.caption,
@@ -333,12 +331,12 @@ content: {
     },
     infoRow: {
       minHeight: 48,
-      paddingHorizontal: 12,
-      paddingVertical: 9,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 14,
+      gap: Space.md,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.divider,
     },
@@ -358,18 +356,18 @@ content: {
       color: colors.text,
     },
     inlineForm: {
-      padding: 12,
+      padding: Space.md,
     },
     inputLabel: {
-      marginBottom: 5,
+      marginBottom: Space.xs,
       fontSize: Type.caption,
       fontWeight: '700',
       color: colors.text,
     },
     input: {
       height: 48,
-      marginBottom: 12,
-      paddingHorizontal: 10,
+      marginBottom: Space.md,
+      paddingHorizontal: Space.sm,
       backgroundColor: colors.background,
       borderWidth: 1,
       borderColor: colors.border,
@@ -379,7 +377,7 @@ content: {
     },
     inputRow: {
       flexDirection: 'row',
-      gap: 10,
+      gap: Space.sm,
     },
     inputColumn: {
       flex: 1,
@@ -388,13 +386,13 @@ content: {
     // switchRow below, but with a chevron, because each opens another screen.
     linkRow: {
       minHeight: 56,
-      marginBottom: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
+      marginBottom: Space.sm,
+      paddingHorizontal: Space.sm,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 10,
+      gap: Space.sm,
       backgroundColor: colors.background,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.divider,
@@ -416,12 +414,12 @@ content: {
 
     switchRow: {
       minHeight: 56,
-      marginBottom: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 7,
+      marginBottom: Space.sm,
+      paddingHorizontal: Space.sm,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: Space.sm,
       backgroundColor: colors.background,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.divider,
@@ -441,9 +439,9 @@ content: {
       color: colors.text,
     },
     scheduleDayRow: {
-      marginBottom: 12,
+      marginBottom: Space.md,
       flexDirection: 'row',
-      gap: 4, flexWrap: 'wrap',
+      gap: Space.xs, flexWrap: 'wrap',
     },
     scheduleDayButton: {
       flex: 1,
@@ -474,7 +472,7 @@ content: {
     },
     outlineButton: {
       minHeight: 48,
-      marginTop: 8,
+      marginTop: Space.sm,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.surface,
@@ -515,9 +513,9 @@ content: {
       color: colors.text,
     },
     standalonePanelTitle: {
-      paddingHorizontal: 12,
-      paddingTop: 11,
-      paddingBottom: 8,
+      paddingHorizontal: Space.md,
+      paddingTop: Space.md,
+      paddingBottom: Space.sm,
     },
     overridePanel: {
       backgroundColor: colors.warningBackground,
@@ -528,19 +526,19 @@ content: {
     },
     alertHeader: {
       minHeight: 48,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: Space.md,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.divider,
     },
     alertCountBadge: {
       minWidth: 24,
       minHeight: 20,
-      paddingHorizontal: 6,
+      paddingHorizontal: Space.xs,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.warningBackground,
@@ -553,8 +551,8 @@ content: {
       color: colors.warning,
     },
     alertRow: {
-      paddingHorizontal: 12,
-      paddingVertical: 11,
+      paddingHorizontal: Space.md,
+      paddingVertical: Space.md,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.divider,
     },
@@ -574,7 +572,7 @@ content: {
     },
     modalOverlay: {
       flex: 1,
-      paddingHorizontal: 20,
+      paddingHorizontal: Space.lg,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: 'rgba(0, 0, 0, 0.38)',
@@ -582,17 +580,17 @@ content: {
     modalCard: {
       width: '100%',
       maxWidth: 520,
-      padding: 16,
+      padding: Space.lg,
       backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
     },
     modalHeader: {
-      marginBottom: 16,
+      marginBottom: Space.lg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: Space.md,
     },
     modalTitle: {
       flex: 1,
@@ -606,14 +604,14 @@ content: {
       color: colors.primaryDark,
     },
     modalNote: {
-      marginBottom: 14,
+      marginBottom: Space.md,
       fontSize: Type.caption,
       lineHeight: 16,
       color: colors.text,
     },
     notFound: {
       flex: 1,
-      paddingHorizontal: 25,
+      paddingHorizontal: Space.xl,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.background,
@@ -624,8 +622,8 @@ content: {
       color: colors.text,
     },
     notFoundText: {
-      marginTop: 6,
-      marginBottom: 20,
+      marginTop: Space.xs,
+      marginBottom: Space.lg,
       textAlign: 'center',
       fontSize: Type.caption,
       color: colors.text,

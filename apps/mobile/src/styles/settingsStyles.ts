@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Type, Radius, Spacing, type AppColors } from '@/constants/colors';
+import { Type, Radius, Spacing, type AppColors, Space, Layout } from '@/constants/colors';
 
 export function createSettingsStyles(colors: AppColors) {
   return StyleSheet.create({
@@ -12,10 +12,10 @@ export function createSettingsStyles(colors: AppColors) {
       backgroundColor: colors.background,
     },
     header: {
-      marginBottom: 22,
-      paddingHorizontal: 18,
-      paddingTop: 24,
-      paddingBottom: 6,
+      marginBottom: Space.xl,
+      paddingHorizontal: Space.lg,
+      paddingTop: Space.xl,
+      paddingBottom: Space.xs,
       backgroundColor: colors.background,
     },
     title: {
@@ -30,12 +30,12 @@ export function createSettingsStyles(colors: AppColors) {
       color: colors.textSecondary,
     },
     scrollContent: {
-      paddingHorizontal: Spacing.four,
+      paddingHorizontal: Layout.gutter,
       paddingBottom: 140,
     },
     sectionTitle: {
-      marginTop: 6,
-      marginBottom: 10,
+      marginTop: Space.xs,
+      marginBottom: Space.sm,
       fontSize: Type.body,
       fontWeight: '700',
       color: colors.text,
@@ -57,7 +57,7 @@ export function createSettingsStyles(colors: AppColors) {
       color: colors.text,
     },
     currentTheme: {
-      marginBottom: 18,
+      marginBottom: Space.lg,
       fontSize: Type.caption,
       color: colors.secondaryDark,
     },
@@ -83,11 +83,11 @@ export function createSettingsStyles(colors: AppColors) {
     notificationRow: {
       minHeight: 70,
       paddingHorizontal: 0,
-      paddingVertical: 10,
+      paddingVertical: Space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 14,
+      gap: Space.md,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.divider,
     },
@@ -95,14 +95,14 @@ export function createSettingsStyles(colors: AppColors) {
       flex: 1,
     },
     settingDescription: {
-      marginTop: 4,
+      marginTop: Space.xs,
       fontSize: Type.caption,
       lineHeight: 16,
       color: colors.text,
     },
     note: {
       marginTop: 2,
-      marginBottom: 18,
+      marginBottom: Space.lg,
       fontSize: Type.caption,
       lineHeight: 16,
       color: colors.textSecondary,

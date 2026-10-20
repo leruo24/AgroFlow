@@ -27,7 +27,7 @@ import type {
   AppColors,
 } from '@/constants/colors';
 
-import { Type } from '@/constants/colors';
+import { Type, Space } from '@/constants/colors';
 
 import {
   useTheme,
@@ -135,13 +135,13 @@ function createStyles(colors: AppColors) {
       width: '100%',
       maxWidth: 480,
       alignSelf: 'center',
-      paddingBottom: 24,
+      paddingBottom: Space.xl,
       overflow: 'hidden',
     },
 
     header: {
       minHeight: 56,
-      paddingHorizontal: 18,
+      paddingHorizontal: Space.lg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -158,7 +158,7 @@ function createStyles(colors: AppColors) {
 
     row: {
       minHeight: 52,
-      paddingHorizontal: 18,
+      paddingHorizontal: Space.lg,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
