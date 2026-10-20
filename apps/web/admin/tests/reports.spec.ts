@@ -8,19 +8,19 @@ const FARMS = [
   { farm_id: 2, name: "Bravo Farm", owner_name: "Owner B" },
 ];
 
-const ZONES = [{ zoneId: 21, name: "Tub 1", cropType: "Tomato" }];
+const ZONES = [{ zoneId: 21, name: "Bed 1", cropType: "Tomato" }];
 
 const today = new Date(Date.now() + 2 * 3600_000).toISOString().slice(0, 10);
 
 const INSIGHTS = [
   {
-    insight_type: "overwatering", message: "Tub 1 got about 2x more water than needed this week.", valid_for: today,
+    insight_type: "overwatering", message: "Bed 1 got about 2x more water than needed this week.", valid_for: today,
     data: { explanation: { summary: "This week the zone got about 2 times the water tomato used.", facts: [], rule: "More than 1.2 times what the crop used counts as too much.", confidence: "Medium", whatWouldChangeIt: "Shorter waterings." } },
-    zone: { name: "Tub 1", farm: { farm_id: 2, name: "Bravo Farm", status: "Active" } },
+    zone: { name: "Bed 1", farm: { farm_id: 2, name: "Bravo Farm", status: "Active" } },
   },
   {
-    insight_type: "zone_offline", message: "No data from Tub 3 since 08:00 on 6 Oct.", valid_for: today, data: null,
-    zone: { name: "Tub 3", farm: { farm_id: 1, name: "Alpha Farm", status: "Active" } },
+    insight_type: "zone_offline", message: "No data from Bed 3 since 08:00 on 6 Oct.", valid_for: today, data: null,
+    zone: { name: "Bed 3", farm: { farm_id: 1, name: "Alpha Farm", status: "Active" } },
   },
 ];
 
@@ -50,7 +50,7 @@ test("Reports leads with farm reports, pre-filled, and has no hollow report type
 
   // The newest farm is pre-filled when none was picked before.
   await expect(page.locator("#liveFarm")).toHaveValue("2");
-  await expect(page.locator("#liveZone option", { hasText: "Tub 1" })).toHaveCount(1);
+  await expect(page.locator("#liveZone option", { hasText: "Bed 1" })).toHaveCount(1);
 
   for (const gone of ["Device Performance", "Support Performance", "Hardware Downtime", "Platform Availability", "Device uptime"]) {
     await expect(page.locator("body")).not.toContainText(gone);
@@ -70,7 +70,7 @@ test("Farms needing attention this week comes from the farmers' advice and opens
 
   await over.click();
   const drawer = page.locator("#drawerPanel");
-  await expect(drawer).toContainText("Bravo Farm · Tub 1");
+  await expect(drawer).toContainText("Bravo Farm · Bed 1");
   await expect(drawer.getByRole("button", { name: "Why am I seeing this?" })).toHaveCount(1);
 });
 

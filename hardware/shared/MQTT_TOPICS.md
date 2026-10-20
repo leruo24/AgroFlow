@@ -79,7 +79,7 @@ so they survive reboots.
 | Direction | Topic | Payload |
 |---|---|---|
 | Device → backend | `agroflow/farm/{farmId}/device/{deviceId}/sensors` | `{"sensorType":"SoilMoisture","value":42.5}` |
-| Backend → device | `agroflow/farm/{farmId}/device/{deviceId}/commands` | `{"id":"<uuid>","command":"start","durationSeconds":300,"source":"auto"}` |
+| Backend → device | `agroflow/farm/{farmId}/device/{deviceId}/commands` | `{"id":"<uuid>","command":"start","durationSeconds":300,"source":"auto","maxRunSeconds":300}` |
 
 ### Sensor payloads
 
@@ -106,11 +106,35 @@ screen's "sensor working / not responding" readout. A DHT11 that fails to read
 simply sends nothing, which is what the app reports as "Not responding: using
 weather app data".
 
+### Readings kept while offline (v1.5.0)
+
+While MQTT is down a v1.5.0 board keeps one soil + temperature + humidity sample
+every 10 minutes in a bounded ring in its flash (180 readings, about 10 hours;
+the oldest is dropped first). When it reconnects it publishes them **oldest
+first** on the same topic, with two extra fields:
+
+```json
+{"sensorType":"SoilMoisture","value":31.5,"recordedAt":"2026-10-19T07:00:00Z","seq":4211}
+```
+
+| Field | Meaning |
+|---|---|
+| `recordedAt` | when the board took the reading (UTC, from NTP). Absent on a live reading. |
+| `seq` | the board's own counter, increasing by one per kept reading |
+
+The API (`ReadingAge`, `SensorReadingProcessor`) stores a kept reading with its
+own time. If it is more than **10 minutes** old it is stored only: it never
+changes the zone's health, raises an alert or sends a pump command. Older than
+7 days, or more than 5 minutes in the future, it is dropped. The same zone,
+type and `recordedAt` twice is stored once, so a resend after a power cut does
+not duplicate. While anything is still waiting, new readings join the back of
+the queue, so the server receives them in the order they were taken.
+
 ### Commands
 
 | `command` | Meaning |
 |---|---|
-| `start` | run the pump, for `durationSeconds` if present |
+| `start` | run the pump for min(`durationSeconds`, `maxRunSeconds`), never over 120 minutes; `maxRunSeconds` is the zone's maximum run time (5 minutes when missing, from an older server). Firmware 1.6.0 also stops a run after 3 minutes with no MQTT contact. |
 | `stop` | stop the pump |
 | `open_setup` | open the board's setup page, **keeping** the saved WiFi |
 | `change_wifi` | forget the saved WiFi and open the setup page, keeping farm/zone/token |

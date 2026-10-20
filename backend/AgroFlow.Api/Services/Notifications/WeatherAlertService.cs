@@ -4,7 +4,9 @@ using Npgsql;
 namespace AgroFlow.Api.Services.Notifications;
 
 // Warns farmers about weather that could damage the crop, using the forecast rows
-// already in weather_daily (nothing is fetched here).
+// already in weather_daily (nothing is fetched here). Every warning is saved in the app
+// (a farm-wide alert row, like the tank alert) and also sent on Telegram to linked chats.
+// Before, it was Telegram only, so a farmer without Telegram never saw a frost warning.
 // The forecast refreshes every 6 hours with 8 days, so a storm four days out is seen
 // about 20 times. Every send goes through NotificationLedger keyed on the forecast
 // date, so a storm on Friday is one message however often Friday's forecast updates.
@@ -77,13 +79,15 @@ public sealed class WeatherAlertService : BackgroundService
         }
     }
 
-    private async Task SweepAsync(CancellationToken cancellationToken)
+    // internal: the sim database tests run one sweep (SimDatabaseTests).
+    internal async Task SweepAsync(CancellationToken cancellationToken)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(2));
         var horizon = today.AddDays(Math.Max(1, _options.ForecastDays));
 
-        // Only farms where someone is listening are checked. is_forecast leaves out the
-        // historical backfill rows, which would otherwise raise alerts about last winter.
+        // Every farm with an owner or member: the in-app alert does not need Telegram.
+        // is_forecast leaves out the historical backfill rows, which would otherwise raise
+        // alerts about last winter.
         const string sql =
             """
             select w.farm_id, f.name, w.date, w.precipitation_mm, w.tmin_c, w.tmax_c
@@ -92,16 +96,8 @@ public sealed class WeatherAlertService : BackgroundService
              where w.is_forecast
                and w.date >= $1
                and w.date <= $2
-               and exists (
-                   select 1 from profile p
-                    where p.telegram_chat_id is not null
-                      and p.telegram_alerts_enabled
-                      and (
-                            f.owner_id = p.id
-                         or exists (select 1 from farm_member fm
-                                     where fm.farm_id = f.farm_id and fm.profile_id = p.id)
-                      )
-               )
+               and (f.owner_id is not null
+                    or exists (select 1 from farm_member fm where fm.farm_id = f.farm_id))
              order by w.farm_id, w.date
             """;
 
@@ -173,7 +169,11 @@ public sealed class WeatherAlertService : BackgroundService
             return 0;
         }
 
+        // In the app first, for everyone on the farm whether or not they use Telegram.
+        await SaveInAppAsync(farmId, InAppMessage(kind, date, value), cancellationToken);
+
         // INotificationService never throws, so one unreachable farmer cannot stop the sweep.
+        // It only messages linked chats with alerts on.
         await _notifications.NotifyWeatherAsync(
             farmId,
             new WeatherAlertNotification(kind, date, value, farmName),
@@ -184,5 +184,42 @@ public sealed class WeatherAlertService : BackgroundService
             kind, farmId, date, value);
 
         return 1;
+    }
+
+    // The in-app alert's text, in English like the other stored alerts: the title, the day
+    // (a date, because the alert stays in the list), the forecast figure and what to do.
+    internal static string InAppMessage(WeatherAlertKind kind, DateOnly date, double value)
+    {
+        var prefix = kind switch
+        {
+            WeatherAlertKind.HeavyRain => "rain",
+            WeatherAlertKind.Frost => "frost",
+            _ => "heat",
+        };
+        var figure = value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+        var day = date.ToString("dddd d MMMM", System.Globalization.CultureInfo.InvariantCulture);
+        return $"{BotText.Get("en", prefix + ".title")} on {day}. " +
+               $"{BotText.Get("en", prefix + ".value", ("value", figure))}. " +
+               BotText.Get("en", prefix + ".action");
+    }
+
+    // A farm-wide alert (zone_id null, farm_id set; migration 0046), which the app's Alerts
+    // list and the admin console already show. A failure is logged, never fatal: Telegram
+    // still goes out.
+    private async Task SaveInAppAsync(long farmId, string message, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var cmd = new NpgsqlCommand(
+                "insert into alert (zone_id, farm_id, severity, message) values (null, $1, 'Warning', $2)", connection);
+            cmd.Parameters.AddWithValue(farmId);
+            cmd.Parameters.AddWithValue(message);
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Could not save the in-app weather alert for farm {FarmId}.", farmId);
+        }
     }
 }

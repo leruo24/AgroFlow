@@ -56,6 +56,18 @@ async function postAuthorized<T = void>(path: string, body: unknown): Promise<T>
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
+/* For the signed-out routes (Forgot password): no token, same error handling. */
+export async function postPublic<T>(path: string, body: unknown): Promise<T> {
+  const response = await navigationAwareFetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(errorMessage(text, response.status));
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 async function getAuthorized<T>(path: string): Promise<T> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -179,28 +191,17 @@ export async function issueLinkCodeForFarmer(
   );
 }
 
-/* Sends a new temporary password to the farmer's own Telegram chat, like "Forgot password?"
- * in the app, started by an admin for a farmer who phones in. Unlike resetTemporaryPassword
- * below, the admin never sees the password. It fails if the farmer has no Telegram; then the
- * read-it-out version below is the right one. */
-export async function sendTemporaryPasswordViaTelegram(
-  profileId: string,
-): Promise<{ message: string }> {
-  return postAuthorized<{ message: string }>(
-    `/api/telegram/admin/password/${profileId}/send`,
-    {},
-  );
-}
+/* "Reset password" for a farmer: a new easy temporary password ("KX7P 4MRT", 72 hours,
+ * changed at first sign-in). Sent to the farmer's Telegram if linked, and then the admin
+ * never sees it; otherwise returned once to read out. AgroFlow never stores it. Audited. */
+export type FarmerPasswordReset = {
+  sentByTelegram: boolean;
+  temporaryPassword: string | null;
+  message: string;
+};
 
-/* The fallback for a farmer with no Telegram, and the only answer to "what was their
- * password again?": AgroFlow never stored it, so this makes a new one and returns it once. */
-export async function resetTemporaryPassword(
-  profileId: string,
-): Promise<{ temporaryPassword: string; notice: string }> {
-  return postAuthorized<{ temporaryPassword: string; notice: string }>(
-    `/api/telegram/admin/password/${profileId}`,
-    {},
-  );
+export async function resetFarmerPassword(profileId: string): Promise<FarmerPasswordReset> {
+  return postAuthorized<FarmerPasswordReset>(`/api/admin/farmers/${profileId}/reset-password`, {});
 }
 export async function registerFarm(input: {
   ownerId: string;
@@ -344,7 +345,15 @@ async function reportFetch(path: string): Promise<Response> {
 }
 
 export type ReportFarm = { farm_id: number; name: string; owner_name: string | null };
-export type ReportZone = { zoneId: number; name: string; cropType: string | null };
+// irrigationMode: automatic | scheduled | manual (the API's IrrigationMode.Canonical).
+// maxRunMinutes: the longest single pump run (migration 0052), 1-120, 5 by default.
+export type ReportZone = { zoneId: number; name: string; cropType: string | null; irrigationMode?: "automatic" | "scheduled" | "manual"; maxRunMinutes?: number };
+
+export const IRRIGATION_MODE_LABEL: Record<string, string> = {
+  automatic: "Automatic",
+  scheduled: "Scheduled",
+  manual: "Manual (never by itself)",
+};
 
 export async function getReportFarms(): Promise<ReportFarm[]> {
   return (await reportFetch("/api/farms")).json() as Promise<ReportFarm[]>;
@@ -354,6 +363,22 @@ export async function getReportFarms(): Promise<ReportFarm[]> {
    the PDF button downloads, so the two cannot differ. */
 export async function fetchReportPdfBlob(path: string): Promise<Blob> {
   return (await reportFetch(`/api/farmer/reports/${path}`)).blob();
+}
+
+/* A zone's maximum run time, staff only (PUT /api/admin/zones/{id}/max-run). The API refuses
+ * a Water now longer than this and sends it to the kit, which stops every run there. */
+export async function setZoneMaxRun(zoneId: number, maxRunMinutes: number): Promise<{ message: string; maxRunMinutes: number }> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const response = await navigationAwareFetch(`${API_BASE}/api/admin/zones/${zoneId}/max-run`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ maxRunMinutes }),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(errorMessage(text, response.status));
+  return JSON.parse(text) as { message: string; maxRunMinutes: number };
 }
 
 export async function getReportZones(farmId: number): Promise<ReportZone[]> {
@@ -447,6 +472,12 @@ export type EnrollmentCodeLikeTelegram = {
 
 export function disconnectMyTelegram(): Promise<void> {
   return authorizedJson<void>("/api/telegram/me", "DELETE");
+}
+
+/** Disconnects a farmer's Telegram (lost or changed phone) so they can link again with a new
+ *  code. The API also cancels their unused codes and records it in the activity log. */
+export function unlinkFarmerTelegram(profileId: string): Promise<{ message: string; wasLinked: boolean }> {
+  return authorizedJson(`/api/telegram/admin/link/${encodeURIComponent(profileId)}`, "DELETE");
 }
 
 /* Hardware
@@ -734,6 +765,34 @@ export type FarmTodayZone = {
 
 export function getFarmToday(farmId: number): Promise<{ farmId: number; day: string; zones: FarmTodayZone[] }> {
   return authorizedJson(`/api/farmer/farms/${farmId}/today`, "GET");
+}
+
+export type AdminTankPh = {
+  tank: {
+    farmId: number;
+    farmName: string;
+    capacityLitres: number | null;
+    lastRefillLitres: number | null;
+    lastRefilledAt: string | null;
+    latestWaterPh: number | null;
+    estimatedUsedLitres: number;
+    estimatedRemainingLitres: number | null;
+    isLow: boolean;
+    waterPhWarning: string | null;
+  };
+  zones: Array<{
+    zoneId: number;
+    zoneName: string;
+    latest: { ph: number; measuredAt: string; note: string | null } | null;
+  }>;
+};
+
+export function getAdminTankPh(farmId: number): Promise<AdminTankPh> {
+  return authorizedJson(`/api/admin/farms/${farmId}/tank-ph`, "GET");
+}
+
+export function setFarmTankCapacity(farmId: number, litres: number): Promise<AdminTankPh["tank"]> {
+  return authorizedJson(`/api/farmer/farms/${farmId}/tank`, "PUT", { litres });
 }
 
 /* "Recommended for you". */

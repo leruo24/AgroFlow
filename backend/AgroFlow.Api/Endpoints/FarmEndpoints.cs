@@ -496,7 +496,8 @@ private static async Task<IResult> RegisterFarmAsync(
                 f.status,
                 f.updated_at,
                 f.latitude,
-                f.longitude
+                f.longitude,
+                f.is_simulated
             from farm f
             left join profile p
                 on p.id = f.owner_id
@@ -546,7 +547,8 @@ private static async Task<IResult> RegisterFarmAsync(
                     ? (DateTime?)null
                     : reader.GetDateTime(7),
                 latitude = reader.IsDBNull(8) ? (double?)null : reader.GetDouble(8),
-                longitude = reader.IsDBNull(9) ? (double?)null : reader.GetDouble(9)
+                longitude = reader.IsDBNull(9) ? (double?)null : reader.GetDouble(9),
+                is_simulated = !reader.IsDBNull(10) && reader.GetBoolean(10)
             });
         }
 

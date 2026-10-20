@@ -60,6 +60,11 @@
        swallow clicks. */
     #agroflow-splash.is-leaving { opacity: 0; }
 
+    /* While the splash is up there is nothing to scroll, and a scrollbar (or the gutter that
+       main.css reserves for one) would make the full-screen splash narrower than the window,
+       so the video would sit off-centre. */
+    html:has(#agroflow-splash) { overflow: hidden; scrollbar-gutter: auto; }
+
     #agroflow-splash video,
     #agroflow-splash img {
       /* contain, not cover: the video is 1080x1920 portrait and the logo

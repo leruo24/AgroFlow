@@ -4,7 +4,13 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-public record SensorReadingResult(string HealthStatus, string? CommandIssued);
+// Timing says whether the reading was acted on (Live) or only stored (Late, from a kit's
+// offline buffer); Duplicate is a buffered reading the server already had.
+public record SensorReadingResult(
+    string HealthStatus,
+    string? CommandIssued,
+    ReadingTiming Timing = ReadingTiming.Live,
+    bool Duplicate = false);
 
 // The sensor insert, health status and auto-irrigation decision, shared by the HTTP
 // endpoint (POST /api/sensor-readings) and the MQTT handler
@@ -18,11 +24,39 @@ public static class SensorReadingProcessor
     // notifications is optional so callers (and tests) can leave it out; when null
     // nothing is sent and the decision logic is the same. It never throws (see
     // INotificationService), so a Telegram outage can never block a pump.
+    //
+    // recordedAt is the kit's own time for a reading it kept while offline (firmware
+    // v1.5.0). ReadingAge decides what it may do: a late reading is stored with its own
+    // time and goes no further, so no pump is ever started from an old reading.
     public static async Task<SensorReadingResult> ProcessAsync(
         NpgsqlConnection connection, long zoneId, string sensorType, float value,
-        INotificationService? notifications = null, CancellationToken cancellationToken = default)
+        INotificationService? notifications = null, CancellationToken cancellationToken = default,
+        DateTimeOffset? recordedAt = null, DateTimeOffset? receivedAt = null)
     {
-        await InsertSensorReadingAsync(connection, zoneId, sensorType, value);
+        var arrived = receivedAt ?? DateTimeOffset.UtcNow;
+        var timing = ReadingAge.Classify(recordedAt, arrived);
+
+        if (timing == ReadingTiming.Rejected)
+        {
+            return new SensorReadingResult(await FetchZoneHealthStatusAsync(connection, zoneId) ?? "Unknown", null, timing);
+        }
+
+        if (recordedAt is not null)
+        {
+            // A kit may resend a buffered reading (power cut after sending, before it was
+            // removed from flash). Same zone, type and time is the same reading: kept once.
+            var stored = await InsertTimedReadingOnceAsync(
+                connection, zoneId, sensorType, value, ReadingAge.StoredTime(recordedAt, arrived));
+            if (!stored || !ReadingAge.MayDriveLiveDecisions(timing))
+            {
+                return new SensorReadingResult(
+                    await FetchZoneHealthStatusAsync(connection, zoneId) ?? "Unknown", null, timing, Duplicate: !stored);
+            }
+        }
+        else
+        {
+            await InsertSensorReadingAsync(connection, zoneId, sensorType, value);
+        }
 
         var (moisture, temperature, humidity, moistureThreshold, desiredMoisture) =
             await FetchZoneLatestReadingAsync(connection, zoneId);
@@ -82,28 +116,21 @@ public static class SensorReadingProcessor
                 return new SensorReadingResult(healthStatus, null);
             }
 
-            var zone = new Zone
-            {
-                MoistureThreshold = moistureThreshold,
-                DesiredMoisture = desiredMoisture,
-            };
+            // The rule is AutoIrrigationDecision (pure, unit-tested): Automatic zones only,
+            // thresholds, a manual run takes priority, and only a change of instruction (every
+            // ~30 s reading while still dry must not queue another 'start'). It checks the mode
+            // again, so a Manual zone gets no command even if the check above were removed.
+            // Uses the value just received rather than re-reading zone_latest_reading, so it
+            // does not depend on read-your-writes ordering.
+            var desired = AutoIrrigationDecision.Decide(
+                irrigationMode, value, moistureThreshold, desiredMoisture,
+                manualRunActive: await HasActiveManualOverrideAsync(connection, zoneId),
+                lastCommand: await FetchLastCommandAsync(connection, zoneId));
 
-            // Use the value we just received for the decision instead of re-reading
-            // zone_latest_reading, so we do not depend on read-your-writes ordering.
-            string? desired = null;
-            if (zone.ShouldStartIrrigation(value)) desired = "start";
-            else if (zone.ShouldStopIrrigation(value)) desired = "stop";
-
-            if (desired is not null && !await HasActiveManualOverrideAsync(connection, zoneId))
+            if (desired is not null)
             {
-                // Only insert if this changes the last instruction; otherwise every ~30 s reading
-                // while still dry would queue another 'start'.
-                var lastCommand = await FetchLastCommandAsync(connection, zoneId);
-                if (lastCommand != desired)
-                {
-                    await InsertAutoCommandAsync(connection, zoneId, desired);
-                    commandIssued = desired;
-                }
+                await InsertAutoCommandAsync(connection, zoneId, desired);
+                commandIssued = desired;
             }
         }
 
@@ -152,6 +179,25 @@ public static class SensorReadingProcessor
         cmd.Parameters.AddWithValue(zoneId);
 
         return (bool)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    // False when this zone already has this sensor type at exactly this time.
+    private static async Task<bool> InsertTimedReadingOnceAsync(
+        NpgsqlConnection connection, long zoneId, string sensorType, float value, DateTimeOffset recordedAt)
+    {
+        await using var cmd = new NpgsqlCommand(
+            """
+            insert into sensor_reading (zone_id, sensor_type, value, recorded_at)
+            select $1, $2, $3, $4
+             where not exists (
+                select 1 from sensor_reading
+                 where zone_id = $1 and sensor_type = $2 and recorded_at = $4)
+            """, connection);
+        cmd.Parameters.AddWithValue(zoneId);
+        cmd.Parameters.AddWithValue(sensorType);
+        cmd.Parameters.AddWithValue(value);
+        cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.TimestampTz, recordedAt.ToUniversalTime());
+        return await cmd.ExecuteNonQueryAsync() == 1;
     }
 
     private static async Task InsertSensorReadingAsync(

@@ -15,8 +15,7 @@ import {
   regenerateTelegramCode,
   registerFarm,
   updateFarmLocation,
-  sendTemporaryPasswordViaTelegram,
-  resetTemporaryPassword,
+  resetFarmerPassword,
   deviceChangeWifi,
   deviceOpenSetup,
   deviceRevoke,
@@ -42,10 +41,15 @@ import {
   getMyTelegramStatus,
   requestMyTelegramCode,
   disconnectMyTelegram,
+  unlinkFarmerTelegram,
   type AuditRow,
+  getAdminTankPh,
+  setFarmTankCapacity,
+  IRRIGATION_MODE_LABEL,
 } from "@/services/agroFlowApi";
 import QRCode from "qrcode";
 import { showErrorModal } from "@/lib/errorModal";
+import { confirmDialog } from "@/lib/confirmDialog";
 import { showQrModal } from "@/lib/qrModal";
 import { picker, detailList, wizard, errorState, handlingCell } from "@/ui/patterns";
 import { exportActivityWorkbook, exportSummaryWorkbook, downloadExcelSafeCsv } from "@/lib/workbook";
@@ -68,7 +72,9 @@ import { formatDecimal, formatDms, validCoordinates } from "@/lib/coordinates";
 import { telegramState } from "@/pages/users";
 import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
-import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
+import { initBell } from "@/app/bell";
+import { isStaffRole } from "@/lib/staff";
+import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile } from "@/services/agroFlowApi";
 import { getWhy, whyHtml, whyLink, asExplanation, WHY_LINK_TEXT } from "@/lib/why";
 
 
@@ -530,6 +536,17 @@ async function openUserProfile(id: string): Promise<void> {
           <div class="detail-row"><span>Last active</span><b>${esc(u.lastActive)}</b></div>
         </div>`),
       section("Assigned farm", `<p><b>${esc(u.farm)}</b></p>`),
+      section("Telegram", isStaffRole(u.role)
+        ? `<p class="muted">Staff do not use Telegram. Their notices are on Home and under the bell.</p>`
+        : u.telegramLinked
+        ? `<p>${esc(telegramState(u))}. Lost or changed phone? Disconnect it, then send a new code.</p>
+           <p><button type="button" class="btn ghost" data-act="unlink-telegram" data-id="${esc(u.id)}">Unlink Telegram</button></p>`
+        : `<p>Not connected. This farmer gets no alerts until they connect.</p>
+           <p><button type="button" class="btn ghost" data-act="send-link-code" data-id="${esc(u.id)}">Send a link code</button></p>`),
+      section("Account", `<p class="muted">Forgot their password? Reset password gives them a new temporary one: by Telegram if connected, otherwise you read it out.</p>
+        <p><button type="button" class="btn ghost" data-act="reset-password" data-id="${esc(u.id)}">Reset password</button></p>
+        <p class="muted">Removing the account stops sign-in. Their farms, zones and history are kept.</p>
+        <p><button type="button" class="btn danger" data-act="delete-user" data-id="${esc(u.id)}">Remove account</button></p>`),
       section("Registered hardware", list(u.hardware.map((h) => `<span class="mono">${esc(h)}</span>`))),
       section("Irrigation schedules", list(userSchedules.map((s) =>
         `${esc(s.zone)} — ${esc(s.cadence)} <span class="muted">(${fmtPct(s.compliancePct)} compliance)</span>`))),
@@ -548,7 +565,7 @@ async function openFarmDetail(id: number): Promise<void> {
   const intent = currentPanelIntent();
   const f = api.findFarm(id);
   if (!f) return;
-  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones, today] = await Promise.all([
+  const [users, hardware, alerts, maintenance, schedules, alertHistory, autoReports, farmZones, today, tankPh] = await Promise.all([
     api.getUsers(), api.getHardware(), api.getAlerts(), api.getMaintenance(), api.getSchedules(),
     // Read-only and allowed to fail: the drawer must still open if 0033 is not applied or the
     // query is refused.
@@ -571,6 +588,10 @@ async function openFarmDetail(id: number): Promise<void> {
     // What the farmer is told today, per zone. Allowed to fail too.
     getFarmToday(id).catch((e: unknown) => {
       console.warn("Could not load today's advice for farm", id, e);
+      return null;
+    }),
+    getAdminTankPh(id).catch((e: unknown) => {
+      console.warn("Could not load tank and pH for farm", id, e);
       return null;
     }),
   ]);
@@ -598,7 +619,7 @@ async function openFarmDetail(id: number): Promise<void> {
     // Not healthDot(f.health): openDrawer's title is HTML-escaped (see escapeText in
     // lib/drawer.ts), so it cannot carry the dot's markup. Health is shown in "Farm summary" below.
     title: f.name,
-    subtitle: `${f.owner} · ${f.province} · ${f.region}`,
+    subtitle: `${f.owner} · ${f.province} · ${f.region}${f.isSimulated ? " · Simulated" : ""}`,
     wide: true,
     bodyHtml: [
       section("Farm summary", `
@@ -615,6 +636,16 @@ async function openFarmDetail(id: number): Promise<void> {
           <div class="detail-row"><span>Sensor availability</span><b>${fmtPct(f.healthFactors.sensorsAvailable)}</b></div>
         </div>
         <button class="btn ghost sm" data-act="edit-farm-location" data-id="${f.id}">View / adjust on map</button>`),
+      section("Tank and pH", tankPh ? `
+        <div class="detail-list">
+          <div class="detail-row"><span>Tank size</span><b>${tankPh.tank.capacityLitres == null ? "Not set" : `${fmtInt(tankPh.tank.capacityLitres)} L`}</b></div>
+          <div class="detail-row"><span>Tank level</span><b>${tankPh.tank.estimatedRemainingLitres == null ? "No refill logged" : `About ${fmtInt(tankPh.tank.estimatedRemainingLitres)} L — estimate`}</b></div>
+          <div class="detail-row"><span>Latest water pH</span><b>${tankPh.tank.latestWaterPh == null ? "Not logged" : Number(tankPh.tank.latestWaterPh).toFixed(1)}</b></div>
+          ${tankPh.zones.map((z) => `<div class="detail-row"><span>${esc(z.zoneName)} soil pH</span><b>${z.latest ? `${Number(z.latest.ph).toFixed(1)} · ${esc(fmtDate(z.latest.measuredAt))}` : "Not logged"}</b></div>`).join("")}
+        </div>
+        ${tankPh.tank.waterPhWarning ? `<p class="muted">${esc(tankPh.tank.waterPhWarning)}</p>` : ""}
+        <button class="btn ghost sm" data-act="edit-tank-capacity" data-id="${f.id}">Set tank size</button>`
+        : `<p class="muted">Tank and pH details are unavailable.</p>`),
       section(`Users (${farmUsers.length})`, list(farmUsers.map((u) =>
         `${esc(u.name)} <span class="muted">${esc(u.email)}</span> — <b>${esc(u.status)}</b>`))),
       section(`Installed hardware (${farmHw.length})`, list(farmHw.map((h) =>
@@ -661,13 +692,16 @@ async function openFarmDetail(id: number): Promise<void> {
       section(`Zones (${farmZones.length})`,
         farmZones.length
           ? `<div class="table-wrap"><table>
-               <thead><tr><th>Zone</th><th>Crop</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
+               <thead><tr><th>Zone</th><th>Crop</th><th>Watering</th><th>Max run</th><th>Today</th><th>Confidence</th><th>Next step</th><th>Advice</th></tr></thead>
                <tbody>${farmZones.map((z) => {
                  const t = todayByZone.get(z.zoneId);
                  return `
                  <tr data-today-zone="${z.zoneId}">
-                   <td>${esc(z.name)}</td>
+                   <td>${esc(z.name)} ${f.isSimulated ? `<span class="badge warn">Simulated</span>` : ""}</td>
                    <td>${esc(z.cropType ?? "Not set")}</td>
+                   <td data-zone-mode="${esc(z.irrigationMode ?? "")}">${esc(z.irrigationMode ? IRRIGATION_MODE_LABEL[z.irrigationMode] ?? z.irrigationMode : "—")}</td>
+                   <td data-zone-max-run="${z.maxRunMinutes ?? 5}">${z.maxRunMinutes ?? 5} min
+                     <a href="#" class="row-act" data-act="zone-max-run" data-id="${z.zoneId}" data-max="${z.maxRunMinutes ?? 5}" data-name="${esc(z.name)}">Change</a></td>
                    <td>${t ? `${esc(t.action.text)} ${whyLink(asExplanation(t.why))}` : `<span class="muted">Not available</span>`}</td>
                    <td>${t?.confidence
                      ? `<b>${levelLabel[t.confidence.level]}</b> ${whyLink(asExplanation(t.confidenceExplanation))}`
@@ -775,6 +809,28 @@ function openFarmLocationEditor(id: number): void {
   });
 }
 
+function openTankCapacityEditor(id: number): void {
+  const farm = api.findFarm(id);
+  if (!farm) return;
+  openDrawer({
+    title: `Tank size · ${farm.name}`,
+    subtitle: "This is the maximum refill amount and the basis for the low-tank threshold.",
+    fields: [{ label: "Capacity (litres)", value: "", editable: true, name: "tankCapacity" }],
+    confirmLabel: "Save tank size",
+    onConfirm: (values) => {
+      const litres = Number((values["tankCapacity"] ?? "").replace(",", "."));
+      if (!Number.isFinite(litres) || litres <= 0) {
+        toast("Tank size must be greater than 0 litres.", "warn");
+        return false;
+      }
+      void setFarmTankCapacity(id, Math.round(litres * 10) / 10)
+        .then(() => { toast("Tank size saved.", "success"); void openFarmDetail(id); })
+        .catch((error: unknown) => showErrorModal(
+          "Could not save the tank size", plainError(error, "The tank size was not changed.")));
+    },
+  });
+}
+
 /* Action router */
 
 /* An alert's history as a timeline, built from the alert's own fields and notes (like
@@ -875,12 +931,30 @@ async function handleAction(el: HTMLElement): Promise<void> {
       }
     }
     case "reset-password": {
-      /* The bot sends a new temporary password to the farmer's own Telegram, and the app forces a
-       * change at their next sign-in. */
+      /* A new easy temporary password. By Telegram if linked (the admin never sees it), otherwise
+       * shown once here to read out. Either way it works for 72 hours and must be changed at first
+       * sign-in, and the old password stops working now, so this asks first. */
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "this farmer";
+      const ok = await confirmDialog({
+        title: `Reset ${name}'s password?`,
+        body: u?.telegramLinked
+          ? `Their current password stops working. A new temporary password goes to their Telegram.`
+          : `Their current password stops working. You will see a new temporary password once, to read out to them.`,
+        confirmLabel: "Reset password",
+      });
+      if (!ok) return;
       try {
-        const result = await sendTemporaryPasswordViaTelegram(idAttr);
-
-        return toast(result.message, "success");
+        const result = await resetFarmerPassword(idAttr);
+        if (result.sentByTelegram || !result.temporaryPassword) return toast(result.message, "success", 6000);
+        await confirmDialog({
+          title: `New temporary password for ${name}`,
+          code: result.temporaryPassword,
+          body: result.message,
+          confirmLabel: "Done",
+          noCancel: true,
+        });
+        return;
       } catch (e) {
         showErrorModal(
           e instanceof Error
@@ -892,30 +966,57 @@ async function handleAction(el: HTMLElement): Promise<void> {
         return;
       }
     }
-    
-case "delete-user": {
-  const u = api.findUser(idAttr);
+    case "delete-user": {
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "This farmer";
+      // Says before and after exactly what is kept, because "delete" reads as "lose the farm".
+      const ok = await confirmDialog({
+        title: `Remove ${name}'s account?`,
+        body: `${name} will no longer be able to sign in. Their farms, zones and history will be kept.`,
+        confirmLabel: "Remove account",
+        danger: true,
+      });
+      if (!ok) return;
 
-  try {
-    await deleteFarmerUser(idAttr);
+      try {
+        await deleteFarmerUser(idAttr);
+        closeDrawer();
+        toast(`${name}'s account was removed. Their farms, zones and history were kept.`, "success", 6000);
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error ? e.message : "The account could not be removed.",
+          "The account could not be removed",
+        );
+        return;
+      }
+    }
 
-    toast(
-      `Deleted ${u?.name ?? "user"}. Farm data was retained.`,
-      "warn",
-    );
+    case "unlink-telegram": {
+      const u = api.findUser(idAttr);
+      const name = u?.name?.trim() || "this farmer";
+      const ok = await confirmDialog({
+        title: `Disconnect ${name}'s Telegram?`,
+        body: `AgroFlow will stop sending messages to the Telegram chat ${name} has now. ` +
+          "They can connect again with a new code, from the app or from here.",
+        confirmLabel: "Disconnect Telegram",
+        danger: true,
+      });
+      if (!ok) return;
 
-    return void refresh();
-  } catch (e) {
-    showErrorModal(
-      e instanceof Error
-        ? e.message
-        : "Unable to delete farmer.",
-      "Unable to delete farmer",
-    );
-
-    return;
-  }
-}
+      try {
+        const result = await unlinkFarmerTelegram(idAttr);
+        closeDrawer();
+        toast(result.message, "success", 6000);
+        return void refresh();
+      } catch (e) {
+        showErrorModal(
+          e instanceof Error ? e.message : "Telegram could not be disconnected.",
+          "Telegram could not be disconnected",
+        );
+        return;
+      }
+    }
 
     case "delete-farm": {
       const farm = api.findFarm(numId);
@@ -1055,6 +1156,7 @@ case "delete-user": {
     /* Farms */
     case "view-farm": return openFarmDetail(numId);
     case "edit-farm-location": return openFarmLocationEditor(numId);
+    case "edit-tank-capacity": return openTankCapacityEditor(numId);
     /* Register a kit in five steps instead of typing a zone id from memory. The claim attaches
      * the kit to this zone, so a wrong zone would put a farmer's readings against someone
      * else's crop.
@@ -1371,13 +1473,15 @@ case "delete-user": {
       if (!handoverProfileId) return;
 
       try {
-        const reset = await resetTemporaryPassword(handoverProfileId);
+        const reset = await resetFarmerPassword(handoverProfileId);
 
         const field = document.getElementById("handoverPassword");
-        if (field) field.textContent = reset.temporaryPassword;
+        if (field && reset.temporaryPassword) field.textContent = reset.temporaryPassword;
 
         showHandoverNotice(
-          "A new temporary password was issued. The previous one no longer works.",
+          reset.sentByTelegram
+            ? "A new temporary password was sent to the farmer's Telegram. The previous one no longer works."
+            : "A new temporary password was issued. The previous one no longer works.",
         );
       } catch (e) {
         showHandoverNotice(
@@ -1773,6 +1877,30 @@ case "delete-user": {
      * name when it cannot answer. */
     /* The zone's "Recommended for you", with Use these settings (Reset to recommended) or
      * Keep my own. */
+    case "zone-max-run": {
+      /* The longest single pump run on this zone (1-120 min). Water now is refused above it and
+       * the kit stops there, so it must match the pump and the zone, not a wish. */
+      const zoneId = Number(idAttr);
+      const link = el;
+      const current = link?.dataset["max"] ?? "5";
+      const name = link?.dataset["name"] ?? `Zone ${zoneId}`;
+      return openDrawer({
+        title: `Maximum run time: ${name}`,
+        subtitle: "The longest the pump may run in one go. Water now longer than this is refused, and the kit stops every run here.",
+        fields: [{ label: "Minutes (1 to 120)", value: current, editable: true, name: "minutes" }],
+        confirmLabel: "Save",
+        onConfirm: (v) => {
+          const minutes = Number(v["minutes"]);
+          if (!Number.isInteger(minutes) || minutes < 1 || minutes > 120) {
+            toast("Enter a whole number of minutes from 1 to 120.", "warn");
+            return false;   // keep the drawer open to fix it
+          }
+          void setZoneMaxRun(zoneId, minutes)
+            .then((r) => { toast(r.message, "success", 6000); void refresh(); })
+            .catch((e: unknown) => showErrorModal(e instanceof Error ? e.message : "The maximum run time could not be saved.", "Could not save"));
+        },
+      });
+    }
     case "zone-recommend": {
       const zoneId = Number(idAttr);
       if (!zoneId) return void toast("No zone selected.", "warn");
@@ -2630,6 +2758,17 @@ case "delete-user": {
       return;
     }
 
+    case "open-change-password": {
+      // From the account menu: Settings, My account, with the new-password box focused.
+      document.getElementById("avatarMenu")?.classList.remove("open");
+      navigate("settings");
+      window.setTimeout(() => {
+        const box = document.querySelector<HTMLInputElement>('[data-field="newPassword"]');
+        box?.scrollIntoView({ block: "center" });
+        box?.focus();
+      }, 400);
+      return;
+    }
     case "change-my-password": {
       const v = collectFields();
       const password = v["newPassword"] ?? "";
@@ -2783,6 +2922,14 @@ async function runComparison(): Promise<void> {
  * here, because a tab body is a plain string and both need the network. Each handles its
  * own failure, so a Telegram status that cannot load does not break the page. */
 export async function refreshMyTelegramStatus(): Promise<void> {
+  const host = document.getElementById("myTelegramStatus");
+  if (!host) return;
+  // Telegram is for farmers only (docs/telegram-farmers-only.md): staff have nothing to link.
+  host.innerHTML = `<p class="muted">Telegram is for farmers only. You get every notice on Home and under the bell at the top of the page.</p>`;
+}
+
+/* The old staff Telegram panel, kept for reference only; never called. */
+export async function refreshMyTelegramStatusOld(): Promise<void> {
   const host = document.getElementById("myTelegramStatus");
   if (!host) return;
 
@@ -3879,6 +4026,7 @@ export function wirePageInteractions(): void {
 let outsideClickBound = false;
 
 export function initHeader(): void {
+  initBell();
   const btn = document.getElementById("avatarBtn");
   const menu = document.getElementById("avatarMenu");
   if (!btn || !menu) return;

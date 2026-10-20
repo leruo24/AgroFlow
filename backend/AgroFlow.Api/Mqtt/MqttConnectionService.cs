@@ -7,7 +7,8 @@ using Npgsql;
 
 namespace AgroFlow.Api.Mqtt;
 
-public record SensorMqttPayload(string SensorType, float Value);
+// RecordedAt and Seq come only with a reading the kit kept while offline (v1.5.0).
+public record SensorMqttPayload(string SensorType, float Value, DateTimeOffset? RecordedAt = null, long? Seq = null);
 
 public interface IMqttPublisher
 {
@@ -75,9 +76,20 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         var password = _configuration["Mqtt:Password"]
             ?? throw new InvalidOperationException("Missing Mqtt:Password in configuration - see appsettings.json.");
 
-        _options = new MqttClientOptionsBuilder()
+        var builder = new MqttClientOptionsBuilder();
+
+        // Mqtt:ProtocolVersion is unset in production (MQTTnet's default, MQTT 5, which HiveMQ
+        // speaks). "311" selects MQTT 3.1.1 for a test broker that has only that, like the
+        // simulation's (hardware/sim). The kits themselves speak 3.1.1 (PubSubClient).
+        if (_configuration["Mqtt:ProtocolVersion"] == "311")
+        {
+            builder = builder.WithProtocolVersion(MQTTnet.Formatter.MqttProtocolVersion.V311);
+        }
+
+        _options = builder
             .WithTcpServer(host, port)
-            .WithTlsOptions(o => o.UseTls())
+            // Mqtt:UseTls defaults to true (HiveMQ Cloud). Only a local test broker turns it off.
+            .WithTlsOptions(o => o.UseTls(!string.Equals(_configuration["Mqtt:UseTls"], "false", StringComparison.OrdinalIgnoreCase)))
             .WithCredentials(username, password)
             .WithClientId($"agroflow-api-{Guid.NewGuid():N}")
             .WithCleanSession()
@@ -187,8 +199,16 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
             // it updates last_seen. DeviceStatusMonitorService uses that to spot quiet devices.
             await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId);
 
-            await SensorReadingProcessor.ProcessAsync(
-                connection, device.Value.ZoneId, payload.SensorType, payload.Value, _notifications);
+            var result = await SensorReadingProcessor.ProcessAsync(
+                connection, device.Value.ZoneId, payload.SensorType, payload.Value, _notifications,
+                recordedAt: payload.RecordedAt);
+
+            if (result.Timing == ReadingTiming.Rejected)
+            {
+                _logger.LogWarning(
+                    "Ignoring a {SensorType} reading from {DeviceId} recorded at {RecordedAt}: older than {Days} days or in the future",
+                    payload.SensorType, deviceId, payload.RecordedAt, ReadingAge.MaxBackfillAge.TotalDays);
+            }
         }
         catch (Exception ex)
         {

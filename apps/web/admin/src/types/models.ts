@@ -209,6 +209,7 @@ export interface Farm {
   location: string;
   latitude: number | null;
   longitude: number | null;
+  isSimulated?: boolean;
   province: string;
   region: string;
   health: FarmHealth;

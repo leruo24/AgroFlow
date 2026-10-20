@@ -3,6 +3,7 @@
 import {//creates stack navigation
   router,
   Stack,
+  useSegments,
 } from 'expo-router';
 
 import {
@@ -18,6 +19,9 @@ import {
 } from 'react-native';
 
 import * as SplashScreen from 'expo-splash-screen';
+import { loadLanguage } from '@/i18n';
+import { onReconnect } from '@/lib/connectivity';
+import { flushQueue } from '@/lib/offlineQueue';
 
 import {
   AgroFlowProvider,
@@ -57,15 +61,22 @@ function RootNavigator() {//decides which screens the user is permitted to acces
   // screen. That password was read off an admin's screen or sent over Telegram, so it must
   // not keep guarding the account. The guard on the tab routes below enforces this; this
   // effect only does the navigation.
+  // Already in the wizard (any step, e.g. a link to /setup?step=password): stay there.
+  // (A string compare: Expo's generated route types only learn of /setup when the dev server runs.)
+  const inSetup = (useSegments()[0] as string | undefined) === 'setup';
+
   useEffect(
     () => {
       if (
         !isLoading &&
         isAuthenticated &&
-        mustChangePassword
+        mustChangePassword &&
+        !inSetup
       ) {
+        // The forced change is step 2 of the setup wizard (app/setup.tsx), which cannot be
+        // stepped past until the farmer has set their own password.
         router.replace(
-          '/update-password?source=first-login'
+          '/setup' as never
         );
       }
     },
@@ -73,6 +84,7 @@ function RootNavigator() {//decides which screens the user is permitted to acces
       isLoading,
       isAuthenticated,
       mustChangePassword,
+      inSetup,
     ]
   );
 
@@ -147,11 +159,33 @@ function RootNavigator() {//decides which screens the user is permitted to acces
         <Stack.Screen
           name="zone/[id]"
         />
+
+        <Stack.Screen
+          name="tank"
+        />
+      </Stack.Protected>
+
+      {/* The setup wizard. Open to any signed-in farmer, including one who must still change
+          the temporary password: that is the wizard's second step. */}
+      <Stack.Protected
+        guard={
+          isAuthenticated
+        }
+      >
+        <Stack.Screen
+          name="setup"
+        />
       </Stack.Protected>
 
 {/* The recovery route stays registered while Supabase changes the temporary auth state. It comes after the protected routes so it is never the default screen. */}
       <Stack.Screen
         name="update-password"
+      />
+
+      {/* One-tap sign-in from the Telegram welcome (/signin?token=...). Outside the guards like
+          update-password: it is signed out when it opens and signed in a moment later. */}
+      <Stack.Screen
+        name="signin"
       />
     </Stack>
   );
@@ -195,6 +229,11 @@ function RootShell() {
     </>
   );
 }
+
+// Once per app start: the saved language, and when the connection comes back, send the
+// refills, pH readings and soil checks saved on the phone (lib/offlineQueue.ts).
+void loadLanguage();
+onReconnect(() => { void flushQueue(); });
 
 export default function RootLayout() {/*wraps the application with ThemeProvider, AuthProvider, and AgroFlowProvider to provide theme, authentication, and farm state contexts throughout the app. It renders the RootNavigator component, which defines the main navigation structure of the app using Expo Router's Stack navigator.*/
   return (

@@ -1,6 +1,6 @@
 /* The arithmetic behind "Finish setup" and "I watered". */
 
-/** The bottle used for the flow-rate test: a 500 mL cooldrink bottle. */
+/** The marked bottle supplied for the flow-rate test. */
 export const BOTTLE_LITRES = 0.5;
 
 /** Litres per minute from how many seconds the tap took to fill the bottle. */

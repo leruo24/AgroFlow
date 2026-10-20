@@ -1,11 +1,12 @@
 /* Admin session state, like apps/mobile/src/context/AuthContext.tsx but in plain
  * TypeScript: getSession on boot, onAuthStateChange to stay in sync, and a signIn() that
  * also sets state directly, using module-level state and listeners instead of React context.
- * Security: access depends on profile.role === 'admin', never on a session alone (see the
- * rejection path in signIn()). */
+ * Security: access depends on profile.role being a staff role, never on a session alone (see
+ * the rejection path in signIn()). The API checks the same list (AgroFlow.Api/Auth/StaffRoles.cs). */
 
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { postPublic } from "@/services/agroFlowApi";
 
 export interface AdminProfile {
   id: string;
@@ -65,9 +66,33 @@ export async function changeMyPassword(password: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-/** True only for a signed-in session whose profile.role is 'admin'. */
+/* Who may use the console. "field_officer" is here so the role needs no code change, but the
+ * database only allows 'admin' and 'farm_user' today (0001) and RLS grants console reads to
+ * 'admin' only, so in practice staff means admin. Keep in step with StaffRoles.cs. */
+import { isStaffRole } from "@/lib/staff";
+export { STAFF_ROLES, isStaffRole } from "@/lib/staff";
+
+export const STAFF_ONLY_MESSAGE =
+  "This console is for AgroFlow staff. Farmers, please use the AgroFlow app.";
+
+/** Thrown by signIn() for a real login that is not a staff account, so the login screen can
+ *  show the farmer where the app is instead of a bare error. */
+export class StaffOnlyError extends Error {
+  constructor() {
+    super(STAFF_ONLY_MESSAGE);
+    this.name = "StaffOnlyError";
+  }
+}
+
+/** True only for a signed-in session whose profile.role is a staff role. */
 export function isAdminAuthenticated(): boolean {
-  return profile?.role === "admin";
+  return isStaffRole(profile?.role);
+}
+
+/** A session this browser already holds that is not staff (a farmer who signed in to the web
+ *  app on the same site). Not signed out here: that would sign them out of the app too. */
+export function hasNonStaffSession(): boolean {
+  return session !== null && !isAdminAuthenticated();
 }
 
 async function loadProfile(userId: string): Promise<AdminProfile | null> {
@@ -111,17 +136,58 @@ export async function signIn(email: string, password: string): Promise<void> {
   if (!data.session) throw new Error("Supabase did not return a valid session.");
 
   const signedInProfile = await loadProfile(data.session.user.id);
-  if (!signedInProfile || signedInProfile.role !== "admin") {
+  if (!signedInProfile || !isStaffRole(signedInProfile.role)) {
     // Security: sign straight back out, because a valid Supabase login (farmer or otherwise)
-    // is not admin access by itself. Module state is not set before this check, so
+    // is not console access by itself. Module state is not set before this check, so
     // isAdminAuthenticated() never reports true for the rejected session, even for an instant.
-    await supabase.auth.signOut();
-    throw new Error("This account is not an administrator.");
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+    session = null;
+    profile = null;
+    throw new StaffOnlyError();
   }
 
   session = data.session;
   profile = signedInProfile;
   notify();
+}
+
+/* Forgot password (docs/password-reset.md). The API sends a 6-digit code to the Telegram chat
+ * linked to the account; the code and a new password then go to /api/auth/reset-password.
+ * Staff with no Telegram get Supabase's email instead: a link back to this page with ?reset=1,
+ * where supabase-js reads the recovery tokens and main.ts shows the new-password form. That
+ * redirect URL must be in Supabase's allow list (Authentication -> URL Configuration ->
+ * Redirect URLs), or Supabase sends people to the Site URL instead. */
+export const RESET_QUERY = "reset";
+
+export function passwordResetRedirectUrl(): string {
+  return `${window.location.origin}${window.location.pathname}?${RESET_QUERY}=1`;
+}
+
+/** The same reply whatever the email, so the form cannot find out who has an account. */
+export async function requestPasswordReset(email: string): Promise<string> {
+  const res = await postPublic<{ message: string }>("/api/auth/forgot-password", {
+    email,
+    redirectTo: passwordResetRedirectUrl(),
+  });
+  return res.message;
+}
+
+/** The code from Telegram and the new password. Other sessions are signed out. */
+export async function resetPasswordWithCode(email: string, code: string, newPassword: string): Promise<string> {
+  const res = await postPublic<{ message: string }>("/api/auth/reset-password", { email, code, newPassword });
+  return res.message;
+}
+
+/** True while the session came from a recovery link, so a new password can be set. */
+export function hasRecoverySession(): boolean {
+  return session !== null;
+}
+
+/** Sets the new password from the reset page. The recovery session is a normal session, so
+ *  Supabase Auth accepts the change without the old password. */
+export async function setNewPassword(password: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw new Error(error.message);
 }
 
 /* Log out. supabase-js keeps the stored session when its server call fails (offline,

@@ -44,6 +44,11 @@ export const SHELL_HTML = `
         <div class="header-r">
           <input id="headerSearch" class="search" type="text" placeholder="Search this page…" />
           <div class="status-chip status-chip-unknown" id="headerStatusChip">Checking…</div>
+          <!-- Staff notices live here, not on Telegram (app/bell.ts). -->
+          <button id="bellBtn" class="bell" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
+            ${Icon.bell}<span id="bellCount" class="bell-count" hidden></span>
+          </button>
+          <div id="bellMenu" class="menu bell-menu" role="menu"></div>
           <button id="avatarBtn" class="avatar" title="Account menu" aria-label="Account menu">··</button>
           <div id="avatarMenu" class="menu">
             <div class="menu-head">
@@ -51,6 +56,7 @@ export const SHELL_HTML = `
               <span>Platform Administrator</span>
             </div>
             <a href="#settings">Profile</a>
+            <a href="#" data-act="open-change-password">Change password</a>
             <a href="#settings">Settings</a>
             <button id="logoutBtn" data-logout type="button">Log out</button>
           </div>

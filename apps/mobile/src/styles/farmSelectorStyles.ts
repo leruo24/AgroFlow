@@ -13,6 +13,7 @@ export function createFarmSelectorStyles(colors: AppColors) {
     optionName: { color: colors.text, fontSize: Type.body, fontWeight: '600' },
     optionNameSelected: { color: colors.primaryDark },
     optionLocation: { color: colors.textSecondary, fontSize: Type.caption, marginTop: Spacing.one },
+    simulatedBadge: { color: colors.warning, fontSize: Type.label, fontWeight: '700', textTransform: 'uppercase' },
     cancel: { minHeight: 52, justifyContent: 'center', alignItems: 'center' },
     cancelText: { color: colors.text, fontSize: Type.body },
   });

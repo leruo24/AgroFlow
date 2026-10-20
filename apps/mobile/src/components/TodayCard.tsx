@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
-import { router } from '@/lib/router';
 import { createTodayStyles } from '@/styles/todayStyles';
 import { WhyLink } from '@/components/WhySheet';
 import { ManualLogSheet } from '@/components/ManualLogSheet';
 import type { TodayZone } from '@/services/agroFlowApi';
+import { useI18n, type TranslationKey } from '@/i18n';
+import { adviceOverLimit, zoneMaxRunMinutes } from '@/lib/runLimit';
 
-const LEVEL_LABEL = { high: 'High', medium: 'Medium', low: 'Low' } as const;
+const LEVEL_LABEL: Record<'high' | 'medium' | 'low', TranslationKey> = {
+  high: 'today.confHigh', medium: 'today.confMedium', low: 'today.confLow',
+};
 
 type Props = {
   zone: TodayZone;
@@ -18,6 +21,7 @@ type Props = {
 // The wording comes from the server; nothing is calculated on the phone.
 export function TodayCard({ zone, onLogged }: Props) {
   const { colors } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
   const [sheet, setSheet] = useState<'water' | 'feel' | null>(null);
 
@@ -28,35 +32,33 @@ export function TodayCard({ zone, onLogged }: Props) {
     <View style={styles.card} testID={`today-${zone.zoneId}`}>
       <Text style={styles.zoneName}>{zone.name}</Text>
       <Text style={[styles.action, actionStyle]}>{zone.action.text}</Text>
+      {/* Longer than one run can be: say so instead of cutting the advice short. */}
+      {adviceOverLimit(zone.recommendedMinutes, zone.maxRunMinutes) ? (
+        <Text style={styles.overLimit} testID={`today-over-limit-${zone.zoneId}`}>
+          {t('today.overLimit', { recommended: zone.recommendedMinutes ?? 0, max: zoneMaxRunMinutes(zone.maxRunMinutes) })}
+        </Text>
+      ) : null}
       <WhyLink explanation={zone.why} compact />
 
       {zone.confidence && (
         <View
           style={styles.badgeRow}
-          accessibilityLabel={`Advice confidence: ${LEVEL_LABEL[zone.confidence.level]}. ${zone.confidence.reason}`}
+          accessibilityLabel={t('today.confidenceA11y', { level: t(LEVEL_LABEL[zone.confidence.level]), reason: zone.confidence.reason })}
         >
-          <Text style={styles.badge}>{LEVEL_LABEL[zone.confidence.level]} confidence</Text>
+          <Text style={styles.badge}>{t(LEVEL_LABEL[zone.confidence.level])}</Text>
           <WhyLink explanation={zone.confidenceExplanation} compact />
         </View>
       )}
 
       <View style={styles.buttons}>
         <Pressable accessibilityRole="button" onPress={() => setSheet('water')} style={styles.button}>
-          <Text style={styles.buttonText}>I watered</Text>
+          <Text style={styles.buttonText}>{t('today.iWatered')}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={() => setSheet('feel')} style={styles.ghost}>
-          <Text style={styles.ghostText}>How does the soil feel?</Text>
+          <Text style={styles.ghostText}>{t('today.soilFeel')}</Text>
         </Pressable>
-        {zone.nextStep && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Finish setup for ${zone.name}`}
-            onPress={() => router.push({ pathname: '/zone-setup', params: { zoneId: String(zone.zoneId) } })}
-            style={styles.ghost}
-          >
-            <Text style={styles.ghostText}>Finish setup</Text>
-          </Pressable>
-        )}
+        {/* What a zone's advice still lacks is now the setup wizard's job: Home shows one
+            "Setup 4/6 done — Continue" card instead of a Finish setup button on each zone. */}
       </View>
 
       <ManualLogSheet

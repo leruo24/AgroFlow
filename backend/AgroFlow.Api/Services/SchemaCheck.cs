@@ -119,6 +119,35 @@ public sealed class SchemaCheck
             "select to_regclass('public.dismissal')",
             "Notifications cannot be dismissed or restored, and there is no notification history."),
 
+        new("0046", "table", "tank_refill",
+            "select to_regclass('public.tank_refill')",
+            "Tank estimates, refill logging and pH records are unavailable."),
+
+        new("0047", "constraint", "zone_irrigation_mode_check allows manual",
+            "select 1 where exists (select 1 from pg_constraint where conname = 'zone_irrigation_mode_check' " +
+            "and pg_get_constraintdef(oid) like '%manual%') and to_regprocedure('public.auto_irrigation_check()') is null",
+            "Zones cannot be set to manual watering, and an old Postgres trigger may still decide to water a zone."),
+
+        new("0048", "column", "sensor_reading.simulated",
+            "select 1 from information_schema.columns where table_name = 'sensor_reading' and column_name = 'simulated'",
+            "Generated demonstration readings cannot be labelled or kept separate from real readings."),
+
+        new("0049", "column", "profile.language",
+            "select 1 from information_schema.columns where table_name = 'profile' and column_name = 'language'",
+            "The app's language choice is not saved, so every Telegram message is sent in English."),
+
+        new("0050", "table", "password_reset_code",
+            "select to_regclass('public.password_reset_code')",
+            "Forgot password over Telegram, the one-tap sign-in link and the 72-hour limit on temporary passwords do not work."),
+
+        new("0051", "column", "irrigation_commands.finished_at",
+            "select 1 from information_schema.columns where table_name = 'irrigation_commands' and column_name = 'finished_at'",
+            "After Irrigate the app can show that the kit started watering, but never that it finished."),
+
+        new("0052", "column", "zone.max_run_minutes",
+            "select 1 from information_schema.columns where table_name = 'zone' and column_name = 'max_run_minutes'",
+            "Every zone stays at a 5-minute maximum run, and staff cannot change it."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

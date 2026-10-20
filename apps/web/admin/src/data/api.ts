@@ -13,6 +13,7 @@
  * - Some mutations (setUserStatus, restartDevice, assignTechnician, ...) have no column or RLS
  * grant behind them. They change the in-memory copy for feedback but do not save to Postgres. */
 
+import { isStaffRole } from "@/lib/staff";
 import { navigationAwareFetch } from "@/lib/navigation";
 import { supabase } from "@/lib/supabase";
 import { asExplanation, type Explanation } from "@/lib/why";
@@ -270,7 +271,9 @@ export const api = {
   /* Farmers only. /api/users also returns administrators for the Assign pickers, but the
    * Farmers page and farmer counts must not include staff. getAdministrators() is the other half. */
   async getFarmerAccounts(): Promise<User[]> {
-    return (await api.getUsers()).filter((u) => u.role !== "admin");
+    // Farmers only: staff (admins and field officers) are not farmer accounts, and never use
+    // Telegram (docs/telegram-farmers-only.md).
+    return (await api.getUsers()).filter((u) => !isStaffRole(u.role));
   },
 
   /* The people a request or an alert can be assigned to. */
@@ -337,6 +340,7 @@ export const api = {
     updated_at: string | null;
     latitude: number | null;
     longitude: number | null;
+    is_simulated: boolean;
   };
 
   // The API leaves out archived farms unless asked. The toggle is module state, not a filter,
@@ -356,6 +360,7 @@ export const api = {
       location: f.location,
       latitude: Number.isFinite(f.latitude) ? f.latitude : null,
       longitude: Number.isFinite(f.longitude) ? f.longitude : null,
+      isSimulated: f.is_simulated === true,
       province,
       region,
       health: "Attention Required",
@@ -555,6 +560,12 @@ export const api = {
       message: string;
       status: string | null;
       created_at: string;
+      farm: {
+        farm_id: number;
+        name: string;
+        status: string | null;
+        owner: { name: string | null; email: string | null } | null;
+      } | null;
       zone: {
         id: number;
         name: string | null;
@@ -570,7 +581,7 @@ export const api = {
     // One string literal: supabase-js infers the row shape from the select text.
     const { data, error } = await supabase
       .from("alert")
-      .select("id, severity, message, status, created_at, zone:zone_id(id, name, farm:farm_id(farm_id, name, status, owner:owner_id(name, email)))")
+      .select("id, severity, message, status, created_at, farm:farm_id(farm_id, name, status, owner:owner_id(name, email)), zone:zone_id(id, name, farm:farm_id(farm_id, name, status, owner:owner_id(name, email)))")
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -578,9 +589,9 @@ export const api = {
     alerts = ((data as unknown as EmbeddedAlertRow[] | null) ?? [])
       // An archived farm's alerts are archived with it, so retired test farms do not raise the
       // Critical and Unassigned counts.
-      .filter((a) => !isArchived(a.zone?.farm?.status))
+      .filter((a) => !isArchived((a.farm ?? a.zone?.farm)?.status))
       .map((a) => {
-        const farm = a.zone?.farm ?? null;
+        const farm = a.farm ?? a.zone?.farm ?? null;
         const owner = farm?.owner ?? null;
 
         return {

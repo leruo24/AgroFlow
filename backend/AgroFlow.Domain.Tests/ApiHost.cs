@@ -25,13 +25,14 @@ namespace AgroFlow.Domain.Tests;
 // database, JWKS and broker are unroutable local addresses, every background
 // service is removed, and sign-in is a header the test sets. Nothing here can
 // reach the live database, Supabase, Telegram, HiveMQ or Storage.
-public sealed class ApiHost : WebApplicationFactory<Program>
+public class ApiHost : WebApplicationFactory<Program>
 {
     public const string DeadDb = "Host=127.0.0.1;Port=9;Database=none;Username=none;Password=none;Timeout=1;Command Timeout=1;Pooling=false";
     public const string ApiKey = "test-api-key";
 
     public static readonly Guid Admin = Guid.Parse("00000000-0000-4000-8000-0000000000ad");
     public static readonly Guid Farmer = Guid.Parse("00000000-0000-4000-8000-0000000000fa");
+    public static readonly Guid FieldOfficer = Guid.Parse("00000000-0000-4000-8000-0000000000f0");
 
     private static readonly Dictionary<string, string> Settings = new()
     {
@@ -74,14 +75,21 @@ public sealed class ApiHost : WebApplicationFactory<Program>
                     o.DefaultForbidScheme = TestAuth.Scheme;
                 })
                 .AddScheme<AuthenticationSchemeOptions, TestAuth>(TestAuth.Scheme, _ => { });
+
+            ConfigureDatabase(services);
         });
     }
 
-    /// The admin is an admin; everyone else is a farmer.
+    /// SimDbHost points the API at the simulation's local Postgres; everywhere else the
+    /// database stays the dead address above.
+    protected virtual void ConfigureDatabase(IServiceCollection services) { }
+
+    /// The admin is an admin, the field officer a field officer; everyone else is a farmer.
     private sealed class FakeRoles : IProfileRoles
     {
         public Task<string?> RoleOfAsync(Guid profileId, CancellationToken ct) =>
-            Task.FromResult<string?>(profileId == Admin ? "admin" : "farm_user");
+            Task.FromResult<string?>(
+                profileId == Admin ? "admin" : profileId == FieldOfficer ? "field_officer" : "farm_user");
     }
 
     /// "X-Test-User: {guid}" signs in as that profile; no header, not signed in.

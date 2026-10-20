@@ -38,7 +38,7 @@ export default function IrrigationScreen() {
           <Droplets size={23} color={colors.textSecondary} strokeWidth={1.7} /><Text style={styles.title}>{zone.name}</Text><ChevronRight size={20} color={colors.textSecondary} />
         </TouchableOpacity>
         <Text style={styles.caption}>{zone.location} · {zone.crop}</Text>
-        <Text style={styles.body}>{zone.irrigation.override.active ? 'Manual command accepted — device confirmation unavailable' : zone.irrigation.mode === 'scheduled' ? (zone.irrigation.schedule.enabled ? 'Schedule enabled' : 'Schedule disabled') : 'Automatic mode'} · Health: {zone.healthStatus}</Text>
+        <Text style={styles.body}>{zone.irrigation.override.active ? 'Manual command accepted — device confirmation unavailable' : zone.irrigation.mode === 'scheduled' ? (zone.irrigation.schedule.enabled ? 'Schedule enabled' : 'Schedule disabled') : zone.irrigation.mode === 'manual' ? 'Manual: waters only when you start it' : 'Automatic mode'} · Health: {zone.healthStatus}</Text>
         <View style={styles.metrics}>
           {[
             ['Soil moisture', soilReadingText(zone.sensors.soilMoisture, 'No reading')],

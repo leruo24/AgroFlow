@@ -1,4 +1,4 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.4.0).
+// AgroFlow irrigation node - ESP32 firmware (v1.6.0).
 //
 // WiFiManager setup portal + one-time enrollment code -> /api/devices/claim.
 // MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors as
@@ -25,6 +25,29 @@
 //   6. The broker address can come from the server: if mqtt-credentials returns
 //      mqttHost/mqttPort the board uses them, otherwise the compiled-in
 //      MQTT_HOST/MQTT_PORT. Moving brokers is a Railway setting, not a reflash.
+//   7. Offline buffer (v1.5.0): while MQTT is down the board keeps a reading every
+//      OFFLINE_SAMPLE_INTERVAL_MS in a bounded ring in flash (oldest dropped first,
+//      each with its time), and publishes them in order with "recordedAt" when it is
+//      back. The API stores them but never starts automatic watering from an old
+//      reading. Pump runs the server has not heard about are kept the same way and
+//      uploaded as irrigation events. The ring logic is OfflineBuffer.h (unit-tested
+//      natively in hardware/esp32/tests).
+//   8. Local page (v1.5.0): while the setup network is open, http://192.168.4.1/local
+//      shows the latest readings and Start/Stop pump buttons. Only on the kit's own
+//      WiFi, and it asks for the kit's local password (user "agroflow", the same
+//      password as the setup network). Runs are capped at 5 minutes like every run,
+//      and logged as manual irrigation events (uploaded on reconnect if offline).
+//   9. The zone's mode (v1.5.1, from v1.4.1): GET /api/devices/config on boot and every
+//      10 minutes while online says whether the zone is Automatic. The offline fallback only waters
+//      when the last answer said so, kept in flash; a Manual or Scheduled zone, or a kit
+//      that has never had an answer, is never watered by the kit on its own.
+//  10. Run limits (v1.6.0): each zone has a maximum run time (1 to 120 minutes, set by staff),
+//      sent with every command as "maxRunSeconds". A run lasts min(requested, that maximum),
+//      never more than ABSOLUTE_MAX_RUN_MS, and 5 minutes when a command has no maximum
+//      (an older server). RunLimits.h holds the rule (unit-tested natively).
+//  11. Lost-connection failsafe (v1.6.0): a run the server started stops when the kit has had
+//      no MQTT contact with the server for LOST_CONTACT_STOP_MS (3 minutes). The offline
+//      fallback and the local page are meant to run offline and keep their own limits.
 //
 // Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
 // DHT sensor library for ESPx (beegee_tokyo).
@@ -40,6 +63,8 @@
 #include <time.h>
 #include <string.h>
 #include "DHTesp.h"
+#include "OfflineBuffer.h"
+#include "RunLimits.h"
 #include "secrets.h"
 
 // Config
@@ -56,7 +81,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Update this and Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json each release.
-const char *FIRMWARE_VERSION = "1.4.0";
+const char *FIRMWARE_VERSION = "1.6.0";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -78,16 +103,33 @@ const int SOIL_MIN_VALID = 200;   // below = shorted / faulty probe
 const unsigned long SENSOR_REPORT_INTERVAL_MS = 30000;
 const unsigned long CONNECTIVITY_CHECK_INTERVAL_MS = 2000;
 const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
-const int OFFLINE_BUFFER_CAPACITY = 10;
 const time_t MIN_VALID_EPOCH = 1700000000;
 
-// Safety cap and offline fallback.
-const unsigned long SAFETY_MAX_RUN_MS        = 5UL * 60UL * 1000UL;   // no run longer than 5 min, ever
+// Offline buffer (OfflineBuffer.h). Sized to fit the board's settings flash (NVS)
+// next to the WiFi details: 180 readings x 20 bytes, one soil + temperature +
+// humidity sample every 10 minutes = about 10 hours offline before the oldest is
+// dropped. 32 pump runs x 16 bytes.
+const size_t READING_BUFFER_CAPACITY = 180;
+const size_t RUN_BUFFER_CAPACITY = 32;
+const unsigned long OFFLINE_SAMPLE_INTERVAL_MS = 10UL * 60UL * 1000UL;
+const size_t REPLAY_BATCH = 5;            // per loop pass, so sensors and the safety cap keep running
+
+// Local page on the setup network (see 8. above).
+const char *LOCAL_PAGE_USER = "agroflow";
+
+
+// Run limits (see 10. and 11. above) and offline fallback.
+const unsigned long ABSOLUTE_MAX_RUN_MS      = 120UL * 60UL * 1000UL; // no run longer than 120 min, ever
+const unsigned long DEFAULT_MAX_RUN_MS       = 5UL * 60UL * 1000UL;   // a command with no maxRunSeconds
+const unsigned long LOST_CONTACT_STOP_MS     = 3UL * 60UL * 1000UL;   // server run, no MQTT this long -> stop
+const unsigned long LOCAL_MAX_RUN_MS         = 5UL * 60UL * 1000UL;   // the local page's own limit
+const unsigned long LOCAL_MAX_RUN_MINUTES    = LOCAL_MAX_RUN_MS / 60000UL; // the local page offers 1..5
 const unsigned long OFFLINE_FALLBACK_AFTER_MS = 10UL * 60UL * 1000UL; // MQTT down this long -> water locally
 const int FALLBACK_START_RAW = 2600;     // raw at/above = dry enough to water (previously tested values)
 const int FALLBACK_STOP_RAW  = 2300;     // raw at/below = wet enough to stop
 const unsigned long FALLBACK_MAX_RUN_MS  = 60000UL;           // ~1.5 L at 1.5 L/min
 const unsigned long FALLBACK_MIN_REST_MS = 5UL * 60UL * 1000UL; // let water soak down to the probe
+const unsigned long ZONE_CONFIG_INTERVAL_MS = 10UL * 60UL * 1000UL; // re-ask the zone's mode while online
 
 // State
 
@@ -127,6 +169,15 @@ unsigned long pumpStopMillis = 0;
 time_t cycleStartEpoch = 0;
 String currentCycleSource = "";
 bool fallbackCycle = false;   // true when the current run was started by the offline fallback
+bool serverRun = false;       // true when the current run came from a server command (failsafe applies)
+unsigned long runLimitMs = DEFAULT_MAX_RUN_MS;   // this run's own cap (checkSafetyCap)
+unsigned long lastServerContactMillis = 0;       // last loop pass with MQTT connected
+
+// Whether the zone is Automatic, from GET /api/devices/config (kept in flash as "autoOk").
+// False until the server has said yes: a Manual zone must never be watered by the kit itself.
+bool autoWateringAllowed = false;
+unsigned long lastZoneConfigMillis = 0;
+bool zoneConfigFetched = false;
 
 bool hasDurationDeadline = false;
 unsigned long cycleDeadlineMillis = 0;
@@ -137,15 +188,21 @@ unsigned long lastWifiReconnectAttemptMillis = 0;
 unsigned long lastFirmwareCheckMillis = 0;
 unsigned long lastFallbackCheckMillis = 0;
 
-struct PendingEvent {
-  long zoneId;
-  unsigned long runtimeSeconds;
-  String triggerSource;
-  time_t startedAtEpoch;
-};
-PendingEvent offlineBuffer[OFFLINE_BUFFER_CAPACITY];
-int offlineHead = 0;
-int offlineCount = 0;
+// Kept in flash (NVS keys "readbuf" / "runbuf") so a power cut does not lose them.
+agroflow::RingBuffer<agroflow::BufferedReading, READING_BUFFER_CAPACITY> readingBuffer;
+agroflow::RingBuffer<agroflow::BufferedRun, RUN_BUFFER_CAPACITY> runBuffer;
+uint32_t nextReadingSeq = 1;
+uint32_t nextRunSeq = 1;
+uint16_t bootId = 0;
+unsigned long lastOfflineSampleMillis = 0;
+bool offlineSampleTaken = false;
+
+// The latest values, for the local page.
+int lastSoilRaw = -1;
+float lastSoilPercent = -1.0f;
+float lastTemperature = NAN;
+float lastHumidity = NAN;
+bool localRoutesWanted = false;
 
 void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch);
 void markCommandExecuted(const char *commandId);
@@ -174,6 +231,8 @@ void relayWrite(bool energise) {
   digitalWrite(RELAY_PIN, level ? HIGH : LOW);
 }
 
+void saveRunBuffer();
+
 void startPumpCycle(const String &source, bool isFallback) {
   if (pumpRunning) return;
   relayWrite(true);
@@ -191,6 +250,8 @@ void stopPumpCycle() {
   pumpRunning = false;
   hasDurationDeadline = false;
   fallbackCycle = false;
+  serverRun = false;
+  runLimitMs = DEFAULT_MAX_RUN_MS;
   pumpStopMillis = millis();
 
   unsigned long runtimeSeconds = (millis() - pumpStartMillis) / 1000;
@@ -209,11 +270,25 @@ void checkDurationDeadline() {
   }
 }
 
-// Safety: applies to every pump run, so a lost "stop" command can't flood the zone.
+// Safety: applies to every pump run, so a lost "stop" command can't flood the zone. Each
+// run's cap is its own (the zone maximum, the local page's 5 minutes), and never more than
+// ABSOLUTE_MAX_RUN_MS.
 void checkSafetyCap() {
-  if (pumpRunning && millis() - pumpStartMillis >= SAFETY_MAX_RUN_MS) {
+  unsigned long cap = runLimitMs < ABSOLUTE_MAX_RUN_MS ? runLimitMs : ABSOLUTE_MAX_RUN_MS;
+  if (pumpRunning && millis() - pumpStartMillis >= cap) {
     Serial.println("SAFETY: max run time reached, stopping pump");
     stopPumpCycle();
+  }
+}
+
+// Lost-connection failsafe (11. above): a run the server started stops after 3 minutes with
+// no MQTT contact, so a kit that lost the server mid-run never keeps watering unattended.
+void checkLostContact() {
+  unsigned long nowMs = millis();
+  if (mqttClient.connected()) { lastServerContactMillis = nowMs; return; }
+  if (agroflow::lostContactShouldStop(serverRun, pumpRunning, nowMs, lastServerContactMillis, LOST_CONTACT_STOP_MS)) {
+    Serial.println("SAFETY: no contact with the server for 3 minutes during a run, stopping pump");
+    stopPumpCycle();   // the run is kept and uploaded on reconnect, like any offline run
   }
 }
 
@@ -377,6 +452,31 @@ bool fetchMqttCredentials() {
   return true;
 }
 
+// Zone config: may this kit water by itself while offline?
+
+void fetchZoneConfig() {
+  if (WiFi.status() != WL_CONNECTED || deviceToken.length() == 0) return;
+  lastZoneConfigMillis = millis();
+  zoneConfigFetched = true;
+  WiFiClientSecure client;
+  HTTPClient http;
+  if (!beginApiRequest(client, http, String(API_BASE_URL) + "/api/devices/config")) return;
+  int httpCode = http.GET();
+  noteAuthResult(httpCode);
+  if (httpCode != 200) { http.end(); Serial.printf("WARN: zone config fetch failed, http=%d\n", httpCode); return; }
+  String payload = http.getString();
+  http.end();
+  JsonDocument r;
+  if (deserializeJson(r, payload)) return;
+  bool allowed = r["autoWateringAllowed"] | false;
+  const char *mode = r["irrigationMode"] | "unknown";
+  if (allowed != autoWateringAllowed) {
+    autoWateringAllowed = allowed;
+    preferences.putBool("autoOk", allowed);
+  }
+  Serial.printf("Zone mode: %s (offline watering %s)\n", mode, allowed ? "allowed" : "off");
+}
+
 // OTA
 
 void checkFirmwareUpdate() {
@@ -420,38 +520,142 @@ void checkFirmwareUpdate() {
 
 // MQTT
 
-bool postSensorReading(const char *sensorType, float value) {
+// recordedAt is only sent for a buffered reading (epoch > 0): a live reading is
+// timed by the server when it arrives, as before.
+bool postSensorReading(const char *sensorType, float value, uint32_t recordedEpoch = 0, uint32_t seq = 0) {
   if (!mqttClient.connected()) return false;
   JsonDocument doc;
   doc["sensorType"] = sensorType;
   doc["value"] = value;
+  if (recordedEpoch > 0) {
+    doc["recordedAt"] = isoFromEpoch((time_t)recordedEpoch);
+    doc["seq"] = seq;
+  }
   String body;
   serializeJson(doc, body);
   return mqttClient.publish(mqttSensorsTopic.c_str(), body.c_str());
 }
 
+// Offline buffer persistence. One blob per ring; a failed write is logged and the
+// ring is still kept in memory.
+void saveReadingBuffer() {
+  static uint8_t blob[decltype(readingBuffer)::blobSize()];
+  size_t len = readingBuffer.toBytes(blob, sizeof(blob));
+  if (readingBuffer.empty()) preferences.remove("readbuf");
+  else if (preferences.putBytes("readbuf", blob, len) != len) Serial.println("WARN: could not save offline readings to flash");
+  preferences.putULong("rseq", nextReadingSeq);
+}
+
+void saveRunBuffer() {
+  static uint8_t blob[decltype(runBuffer)::blobSize()];
+  size_t len = runBuffer.toBytes(blob, sizeof(blob));
+  if (runBuffer.empty()) preferences.remove("runbuf");
+  else if (preferences.putBytes("runbuf", blob, len) != len) Serial.println("WARN: could not save offline pump runs to flash");
+  preferences.putULong("runseq", nextRunSeq);
+}
+
+void loadOfflineBuffers() {
+  static uint8_t blob[decltype(readingBuffer)::blobSize()];
+  size_t len = preferences.getBytesLength("readbuf");
+  if (len > 0 && len <= sizeof(blob) && preferences.getBytes("readbuf", blob, len) == len) readingBuffer.fromBytes(blob, len);
+  static uint8_t runBlob[decltype(runBuffer)::blobSize()];
+  len = preferences.getBytesLength("runbuf");
+  if (len > 0 && len <= sizeof(runBlob) && preferences.getBytes("runbuf", runBlob, len) == len) runBuffer.fromBytes(runBlob, len);
+  nextReadingSeq = preferences.getULong("rseq", 1);
+  nextRunSeq = preferences.getULong("runseq", 1);
+  if (!readingBuffer.empty() || !runBuffer.empty()) {
+    Serial.printf("Offline buffer restored: %u readings, %u pump runs waiting to upload\n",
+                  (unsigned)readingBuffer.size(), (unsigned)runBuffer.size());
+  }
+}
+
+void bufferReading(uint8_t kind, float value) {
+  agroflow::BufferedReading r{};
+  r.seq = nextReadingSeq++;
+  r.epoch = hasValidTime() ? (uint32_t)time(nullptr) : 0;
+  r.uptimeSec = millis() / 1000UL;
+  r.value = value;
+  r.bootId = bootId;
+  r.kind = kind;
+  if (readingBuffer.push(r)) Serial.println("WARN: offline reading buffer full, dropped the oldest reading");
+}
+
+// Sends buffered readings oldest first while MQTT is up. Stops at the first failed
+// publish so the order holds; a reading leaves the buffer only once it was sent.
+void replayBufferedReadings() {
+  if (readingBuffer.empty() || !mqttClient.connected()) return;
+  uint32_t nowEpoch = hasValidTime() ? (uint32_t)time(nullptr) : 0;
+  uint32_t nowUptime = millis() / 1000UL;
+  size_t sent = readingBuffer.replay([&](const agroflow::BufferedReading &r) {
+    const char *type = agroflow::sensorKindName(r.kind);
+    uint32_t when = agroflow::resolveEpoch(r, bootId, nowEpoch, nowUptime);
+    if (type == nullptr || when == 0) return true;   // cannot be placed in time: drop it
+    return postSensorReading(type, r.value, when, r.seq);
+  }, REPLAY_BATCH);
+  if (sent > 0) {
+    saveReadingBuffer();
+    if (readingBuffer.empty()) Serial.println("Offline readings uploaded - buffer empty");
+  }
+}
+
+// Live while MQTT is up and nothing is waiting; otherwise into the buffer, so the
+// readings reach the server in the order they were taken.
+void sendOrBuffer(uint8_t kind, float value) {
+  if (readingBuffer.empty() && postSensorReading(agroflow::sensorKindName(kind), value)) return;
+  bufferReading(kind, value);
+}
+
 // Called on a timer: read the soil probe and the DHT11, and publish each value
-// to this board's MQTT sensors topic.
+// to this board's MQTT sensors topic. While MQTT is down, keep one sample every
+// OFFLINE_SAMPLE_INTERVAL_MS in the offline buffer instead.
 void reportSensorReadings() {
+  bool online = mqttClient.connected();
+  bool sampleOffline = !online &&
+      (!offlineSampleTaken || millis() - lastOfflineSampleMillis >= OFFLINE_SAMPLE_INTERVAL_MS);
+  if (sampleOffline) {
+    lastOfflineSampleMillis = millis();
+    offlineSampleTaken = true;
+  }
+  size_t bufferedBefore = readingBuffer.size();
+  uint32_t droppedBefore = readingBuffer.dropped();
+
   int raw = readMoistureRaw();
+  lastSoilRaw = raw;
   if (moistureValid(raw)) {
     float pct = rawToPercent(raw);
-    if (!postSensorReading("SoilMoisture", pct)) Serial.println("WARN: SoilMoisture publish failed");
+    lastSoilPercent = pct;
+    if (online) sendOrBuffer(agroflow::kSoilMoisture, pct);
+    else if (sampleOffline) bufferReading(agroflow::kSoilMoisture, pct);
     Serial.printf("Soil raw=%d (%.0f%%)\n", raw, pct);
   } else {
+    lastSoilPercent = -1.0f;
     Serial.printf("WARN: soil reading %d out of range - not sent (probe fault?)\n", raw);
   }
 
   TempAndHumidity v = dht.getTempAndHumidity();
   if (dht.getStatus() == DHTesp::ERROR_NONE &&
       v.temperature > -10 && v.temperature < 60 && v.humidity >= 0 && v.humidity <= 100) {
-    postSensorReading("Temperature", v.temperature);
-    postSensorReading("Humidity", v.humidity);
+    lastTemperature = v.temperature;
+    lastHumidity = v.humidity;
+    if (online) {
+      sendOrBuffer(agroflow::kTemperature, v.temperature);
+      sendOrBuffer(agroflow::kHumidity, v.humidity);
+    } else if (sampleOffline) {
+      bufferReading(agroflow::kTemperature, v.temperature);
+      bufferReading(agroflow::kHumidity, v.humidity);
+    }
     Serial.printf("DHT11 %.1f C %.0f %%\n", v.temperature, v.humidity);
   } else {
+    lastTemperature = NAN;
+    lastHumidity = NAN;
     // Send nothing: the server notices the gap (dht_offline), uses weather-app data,
     // and alerts the farmer and the team.
     Serial.printf("WARN: DHT11 %s - temperature/humidity not sent\n", dht.getStatusString());
+  }
+
+  if (readingBuffer.size() != bufferedBefore || readingBuffer.dropped() != droppedBefore) {
+    saveReadingBuffer();
+    if (!online) Serial.printf("Offline: %u readings kept for upload\n", (unsigned)readingBuffer.size());
   }
 }
 
@@ -466,13 +670,25 @@ void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
   if (!commandId || !command) return;
 
   if (strcmp(command, "start") == 0) {
-    hasDurationDeadline = !doc["durationSeconds"].isNull();
-    if (hasDurationDeadline) {
-      long durationSeconds = doc["durationSeconds"].as<long>();
-      cycleDeadlineMillis = millis() + (unsigned long)durationSeconds * 1000UL;
+    // One run at a time: a second start while watering changes nothing (it is still ACKed).
+    if (!pumpRunning) {
+      JsonVariantConst cmd = doc.as<JsonVariantConst>();
+      long durationSeconds = cmd["durationSeconds"].isNull() ? 0 : cmd["durationSeconds"].as<long>();
+      long maxRunSeconds = cmd["maxRunSeconds"].isNull() ? 0 : cmd["maxRunSeconds"].as<long>();
+      if (durationSeconds < 0) durationSeconds = 0;
+      if (maxRunSeconds < 0) maxRunSeconds = 0;
+      // min(requested, zone maximum), never more than ABSOLUTE_MAX_RUN_MS (RunLimits.h).
+      runLimitMs = agroflow::effectiveRunMs((unsigned long)durationSeconds * 1000UL,
+                                            (unsigned long)maxRunSeconds * 1000UL,
+                                            DEFAULT_MAX_RUN_MS, ABSOLUTE_MAX_RUN_MS);
+      hasDurationDeadline = true;
+      cycleDeadlineMillis = millis() + runLimitMs;
+      const char *source = doc["source"] | "unknown";
+      startPumpCycle(String(source), false);
+      serverRun = true;
+      lastServerContactMillis = millis();   // the command just came over MQTT
+      Serial.printf("Run limit %lu s (asked %ld s, zone maximum %ld s)\n", runLimitMs / 1000UL, durationSeconds, maxRunSeconds);
     }
-    const char *source = doc["source"] | "unknown";
-    startPumpCycle(String(source), false);
   } else if (strcmp(command, "stop") == 0) {
     stopPumpCycle();
   } else if (strcmp(command, "open_setup") == 0) {
@@ -523,6 +739,11 @@ void reconnectMqtt() {
 
 void runOfflineFallback() {
   if (mqttClient.connected()) return;
+  // Only an Automatic zone (last answer from /api/devices/config). Manual means never by itself.
+  if (!autoWateringAllowed) {
+    if (pumpRunning && fallbackCycle) stopPumpCycle();
+    return;
+  }
   unsigned long nowMs = millis();
   if (nowMs - lastMqttConnectedMillis < OFFLINE_FALLBACK_AFTER_MS) return;
   if (nowMs - lastFallbackCheckMillis < 1000) return;
@@ -585,15 +806,23 @@ bool postIrrigationEvent(long zoneId, unsigned long runtimeSeconds,
   return httpCode >= 200 && httpCode < 300;
 }
 
+uint8_t runSourceCode(const String &source) {
+  if (source == "auto") return agroflow::kRunAuto;
+  if (source == "manual") return agroflow::kRunManual;
+  if (source == "scheduled") return agroflow::kRunScheduled;
+  return agroflow::kRunUnknown;
+}
+
 void bufferOfflineEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch) {
-  if (offlineCount == OFFLINE_BUFFER_CAPACITY) {
-    Serial.println("WARN: offline event buffer full, dropping oldest");
-    offlineHead = (offlineHead + 1) % OFFLINE_BUFFER_CAPACITY;
-    offlineCount--;
-  }
-  int insertIndex = (offlineHead + offlineCount) % OFFLINE_BUFFER_CAPACITY;
-  offlineBuffer[insertIndex] = { zoneId, runtimeSeconds, source, startedAtEpoch };
-  offlineCount++;
+  (void)zoneId;   // always this board's zone; ZONE_ID is used when it is uploaded
+  agroflow::BufferedRun run{};
+  run.seq = nextRunSeq++;
+  run.startedEpoch = startedAtEpoch > MIN_VALID_EPOCH ? (uint32_t)startedAtEpoch : 0;
+  run.runtimeSec = (uint32_t)runtimeSeconds;
+  run.source = runSourceCode(source);
+  if (runBuffer.push(run)) Serial.println("WARN: offline pump-run buffer full, dropped the oldest run");
+  saveRunBuffer();
+  Serial.printf("Pump run kept for upload (%u waiting)\n", (unsigned)runBuffer.size());
 }
 
 void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch) {
@@ -603,13 +832,144 @@ void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, const String 
   }
 }
 
+// Uploads kept pump runs oldest first, as offline_queued irrigation events. The API
+// ignores a repeat of the same run (same zone, start time, runtime and source).
 void flushOfflineBuffer() {
-  while (offlineCount > 0 && WiFi.status() == WL_CONNECTED) {
-    PendingEvent &ev = offlineBuffer[offlineHead];
-    if (!postIrrigationEvent(ev.zoneId, ev.runtimeSeconds, ev.triggerSource, "offline_queued", ev.startedAtEpoch)) break;
-    offlineHead = (offlineHead + 1) % OFFLINE_BUFFER_CAPACITY;
-    offlineCount--;
+  if (runBuffer.empty() || WiFi.status() != WL_CONNECTED) return;
+  size_t sent = runBuffer.replay([&](const agroflow::BufferedRun &run) {
+    return postIrrigationEvent(ZONE_ID, run.runtimeSec, String(agroflow::runSourceName(run.source)),
+                               "offline_queued", (time_t)run.startedEpoch);
+  }, REPLAY_BATCH);
+  if (sent > 0) {
+    saveRunBuffer();
+    Serial.printf("Uploaded %u kept pump run(s), %u still waiting\n", (unsigned)sent, (unsigned)runBuffer.size());
   }
+}
+
+// Local page (on the setup network only)
+
+// The page itself: plain HTML and a little script that asks /local/status every 5 s.
+// Kept small; the board has about 100 KB of program space to spare.
+const char LOCAL_PAGE_HTML[] PROGMEM = R"HTML(<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>AgroFlow kit</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#f5f6f5;color:#253126}
+h1{font-size:20px;margin:0 0 4px}p{margin:6px 0}.card{background:#fff;border-radius:12px;padding:14px;margin:12px 0;box-shadow:0 1px 3px #0002}
+.row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee}.row:last-child{border:0}
+button,select{font-size:18px;min-height:48px;border-radius:10px;border:0;padding:0 16px}
+.go{background:#168f99;color:#fff;width:100%;margin-top:10px}.stop{background:#d65a50;color:#fff;width:100%;margin-top:10px}
+select{width:100%;border:1px solid #9fb799;background:#fff}.muted{color:#637064;font-size:14px}</style></head><body>
+<h1>AgroFlow kit</h1><p class="muted">On this kit's own WiFi. Changes here do not need the internet.</p>
+<div class="card"><div class="row"><span>Soil moisture</span><b id="soil">...</b></div>
+<div class="row"><span>Temperature</span><b id="temp">...</b></div><div class="row"><span>Humidity</span><b id="hum">...</b></div>
+<div class="row"><span>Pump</span><b id="pump">...</b></div><div class="row"><span>Internet</span><b id="net">...</b></div>
+<div class="row"><span>Waiting to upload</span><b id="wait">...</b></div></div>
+<div class="card"><label for="min">Run the pump for</label><select id="min"></select>
+<button class="go" onclick="pump('start')">Start pump</button><button class="stop" onclick="pump('stop')">Stop pump</button>
+<p class="muted" id="cap"></p><p id="msg" role="status"></p></div>
+<p><a href="/">Back to WiFi setup</a></p>
+<script>
+var max=5;function q(i){return document.getElementById(i)}
+function load(){fetch('/local/status').then(function(r){return r.json()}).then(function(s){
+q('soil').textContent=s.soilPercent<0?'Probe not reading':Math.round(s.soilPercent)+'% (raw '+s.soilRaw+')';
+q('temp').textContent=s.temperature==null?'Not reading':s.temperature.toFixed(1)+' C';
+q('hum').textContent=s.humidity==null?'Not reading':Math.round(s.humidity)+'%';
+q('pump').textContent=s.pumpRunning?'Running, '+Math.ceil(s.secondsLeft/60)+' min left at most':'Off';
+q('net').textContent=s.online?'Connected':'Offline';q('wait').textContent=s.pendingReadings+' readings, '+s.pendingRuns+' pump runs';
+if(s.maxMinutes!==max||!q('min').options.length){max=s.maxMinutes;q('min').innerHTML='';
+for(var m=1;m<=max;m++){var o=document.createElement('option');o.value=m;o.textContent=m+(m==1?' minute':' minutes');q('min').appendChild(o)}}
+q('cap').textContent='Every run stops by itself after '+max+' minutes at most.'}).catch(function(){q('msg').textContent='The kit did not answer. Are you still on its WiFi?'})}
+function pump(a){q('msg').textContent='...';fetch('/local/pump?action='+a+'&minutes='+q('min').value,{method:'POST'})
+.then(function(r){return r.text()}).then(function(t){q('msg').textContent=t;load()})
+.catch(function(){q('msg').textContent='The kit did not answer.'})}
+load();setInterval(load,5000);
+</script></body></html>)HTML";
+
+// Security: only on the kit's own WiFi (a phone on the farm's router never reaches
+// it), and only with the kit's local password, which is also the setup network's.
+bool localRequestAllowed() {
+  WebServer &server = *wm.server;
+  if (server.client().localIP() != WiFi.softAPIP()) {
+    server.send(403, "text/plain", "The local page only works on the kit's own WiFi (AgroFlow-Setup-...).");
+    return false;
+  }
+  if (!server.authenticate(LOCAL_PAGE_USER, apPassword().c_str())) {
+    server.requestAuthentication(BASIC_AUTH, "AgroFlow kit");
+    return false;
+  }
+  portalStartedMs = millis();   // someone is using it: keep the setup network open
+  return true;
+}
+
+void handleLocalPage() {
+  if (!localRequestAllowed()) return;
+  wm.server->send_P(200, "text/html", LOCAL_PAGE_HTML);
+}
+
+void handleLocalStatus() {
+  if (!localRequestAllowed()) return;
+  JsonDocument doc;
+  int raw = readMoistureRaw();
+  doc["soilRaw"] = raw;
+  doc["soilPercent"] = moistureValid(raw) ? rawToPercent(raw) : -1.0f;
+  if (isnan(lastTemperature)) doc["temperature"] = nullptr; else doc["temperature"] = lastTemperature;
+  if (isnan(lastHumidity)) doc["humidity"] = nullptr; else doc["humidity"] = lastHumidity;
+  doc["pumpRunning"] = pumpRunning;
+  unsigned long ranMs = pumpRunning ? millis() - pumpStartMillis : 0;
+  unsigned long leftMs = 0;
+  if (pumpRunning) {
+    leftMs = ranMs < runLimitMs ? runLimitMs - ranMs : 0;
+    if (hasDurationDeadline) {
+      long toDeadline = (long)(cycleDeadlineMillis - millis());
+      if (toDeadline < 0) toDeadline = 0;
+      if ((unsigned long)toDeadline < leftMs) leftMs = (unsigned long)toDeadline;
+    }
+  }
+  doc["secondsLeft"] = leftMs / 1000UL;
+  doc["online"] = mqttClient.connected();
+  doc["pendingReadings"] = (unsigned)readingBuffer.size();
+  doc["pendingRuns"] = (unsigned)runBuffer.size();
+  doc["maxMinutes"] = LOCAL_MAX_RUN_MINUTES;
+  String body;
+  serializeJson(doc, body);
+  wm.server->send(200, "application/json", body);
+}
+
+// Start/Stop from the local page. The same rules as a command from the server: one
+// run at a time, a duration, and the local page's 5-minute cap (checkSafetyCap) on top.
+void handleLocalPump() {
+  if (!localRequestAllowed()) return;
+  WebServer &server = *wm.server;
+  if (server.method() != HTTP_POST) { server.send(405, "text/plain", "Use the buttons on the page."); return; }
+  String action = server.arg("action");
+  if (action == "stop") {
+    if (!pumpRunning) { server.send(200, "text/plain", "The pump is already off."); return; }
+    stopPumpCycle();
+    server.send(200, "text/plain", "Pump stopped. The run is logged.");
+    return;
+  }
+  if (action != "start") { server.send(400, "text/plain", "Unknown action."); return; }
+  long minutes = server.arg("minutes").toInt();
+  if (minutes < 1) minutes = 1;
+  if (minutes > (long)LOCAL_MAX_RUN_MINUTES) minutes = (long)LOCAL_MAX_RUN_MINUTES;
+  if (pumpRunning) { server.send(409, "text/plain", "The pump is already running. Stop it first."); return; }
+  if (!moistureValid(readMoistureRaw())) {
+    // Watering is still allowed (the probe may be the fault), but say so.
+    Serial.println("Local page: starting with the soil probe not reading");
+  }
+  hasDurationDeadline = true;
+  cycleDeadlineMillis = millis() + (unsigned long)minutes * 60000UL;
+  startPumpCycle("manual", false);
+  runLimitMs = LOCAL_MAX_RUN_MS;   // not a server run: no lost-contact stop on the kit's own network
+  Serial.printf("Local page: pump started for %ld min\n", minutes);
+  server.send(200, "text/plain", "Pump started for " + String(minutes) + (minutes == 1 ? " minute." : " minutes."));
+}
+
+// Called by WiFiManager each time it (re)starts its web server, before its own pages.
+void bindLocalRoutes() {
+  if (!localRoutesWanted || !wm.server) return;
+  wm.server->on("/local", HTTP_GET, handleLocalPage);
+  wm.server->on("/local/status", HTTP_GET, handleLocalStatus);
+  wm.server->on("/local/pump", handleLocalPump);
 }
 
 // WiFi
@@ -647,6 +1007,7 @@ void servicePortal() {
     preferences.putBool("wifiForgot", false);
     return;
   }
+  if (WiFi.softAPgetStationNum() > 0) portalStartedMs = millis();   // someone is on the kit's WiFi
   if (millis() - portalStartedMs > (unsigned long)CONFIG_PORTAL_TIMEOUT_SECONDS * 1000UL + 5000UL) {
     wm.stopConfigPortal();
     portalActive = false;
@@ -730,7 +1091,14 @@ void setup() {
   int boots = bumpBootCounter();
   if (boots >= BOOTS_FOR_FACTORY_RESET) factoryReset("5 quick power cycles");
 
+  // Which boot this is, so a buffered reading taken before the clock was set can
+  // still be timed within the same boot (OfflineBuffer.h resolveEpoch).
+  bootId = (uint16_t)(preferences.getUShort("bootId", 0) + 1);
+  preferences.putUShort("bootId", bootId);
+  loadOfflineBuffers();
+
   deviceToken = preferences.getString("token", "");
+  autoWateringAllowed = preferences.getBool("autoOk", false);
   preferences.remove("mqttUser");             // v1.2.0 stored these; v1.3.0 keeps them in RAM only
   preferences.remove("mqttPass");
   wifiForgotten = preferences.getBool("wifiForgot", false);
@@ -770,6 +1138,15 @@ void setup() {
     buildMqttTopics();
     Serial.printf("Claimed: zoneId=%ld farmId=%ld\n", ZONE_ID, FARM_ID);
 
+    // The setup network also serves the local page (readings, Start/Stop pump).
+    // Its menu leaves out WiFiManager's firmware-upload page: firmware arrives by OTA.
+    localRoutesWanted = true;
+    wm.setWebServerCallback(bindLocalRoutes);
+    wm.setCustomMenuHTML("<form action='/local' method='get'><button>Kit readings and pump</button></form><br/>");
+    static const char *menu[] = {"wifi", "custom", "info", "exit"};
+    wm.setMenu(menu, 4);
+    wm.setAPClientCheck(true);   // do not time out while a phone is connected
+
     // Connect to the saved WiFi without blocking, so watering starts even if the network
     // is down. maintainWiFi() handles reconnects and the 15-minute setup offer.
     WiFi.mode(WIFI_STA);
@@ -791,6 +1168,7 @@ void setup() {
 
   pumpStopMillis = millis() - FALLBACK_MIN_REST_MS;
   lastMqttConnectedMillis = millis();   // offline-fallback timer starts from boot
+  fetchZoneConfig();
   reconnectMqtt();
   checkFirmwareUpdate();
 }
@@ -806,12 +1184,18 @@ void loop() {
 
   if (nowMs - lastConnectivityCheckMillis >= CONNECTIVITY_CHECK_INTERVAL_MS) {
     lastConnectivityCheckMillis = nowMs;
-    if (WiFi.status() == WL_CONNECTED && offlineCount > 0) flushOfflineBuffer();
+    if (WiFi.status() == WL_CONNECTED && !runBuffer.empty()) flushOfflineBuffer();
+    replayBufferedReadings();
   }
 
   if (nowMs - lastSensorReportMillis >= SENSOR_REPORT_INTERVAL_MS) {
     lastSensorReportMillis = nowMs;
     reportSensorReadings();
+  }
+
+  if (WiFi.status() == WL_CONNECTED &&
+      (!zoneConfigFetched || nowMs - lastZoneConfigMillis >= ZONE_CONFIG_INTERVAL_MS)) {
+    fetchZoneConfig();
   }
 
   if (nowMs - lastFirmwareCheckMillis >= FIRMWARE_CHECK_INTERVAL_MS) {
@@ -821,5 +1205,6 @@ void loop() {
 
   checkDurationDeadline();
   checkSafetyCap();
+  checkLostContact();
   runOfflineFallback();
 }

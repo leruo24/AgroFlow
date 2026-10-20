@@ -130,10 +130,10 @@ test("Add the zone adds it to the farm, prefilled, and completes the request", a
   await expect(box.locator('[data-field="zone_crop_0"]')).toHaveValue("tomato");
 
   // A missing size keeps the drawer open with what was typed.
-  await box.locator('[data-field="zone_name_0"]').fill("Tub 2");
+  await box.locator('[data-field="zone_name_0"]').fill("Bed 2");
   await page.locator("[data-drawer-confirm]").click();
   await expect(page.locator("body")).toContainText("Choose how big zone 1 is.");
-  await expect(box.locator('[data-field="zone_name_0"]')).toHaveValue("Tub 2");
+  await expect(box.locator('[data-field="zone_name_0"]')).toHaveValue("Bed 2");
 
   await box.locator('[data-field="zone_area_preset_0"]').selectOption("small");
   await page.locator("[data-drawer-confirm]").click();
@@ -142,6 +142,6 @@ test("Add the zone adds it to the farm, prefilled, and completes the request", a
     "POST /api/farms/5/zones",
     "PUT /api/admin/requests/2/status",
   ]);
-  expect((writes[0].body as { zones: Record<string, unknown>[] }).zones[0]).toMatchObject({ name: "Tub 2", cropType: "tomato", areaM2: 0.2 });
-  expect(writes[1].body).toMatchObject({ status: "completed", note: "Completed by adding Tub 2." });
+  expect((writes[0].body as { zones: Record<string, unknown>[] }).zones[0]).toMatchObject({ name: "Bed 2", cropType: "tomato", areaM2: 0.2 });
+  expect(writes[1].body).toMatchObject({ status: "completed", note: "Completed by adding Bed 2." });
 });

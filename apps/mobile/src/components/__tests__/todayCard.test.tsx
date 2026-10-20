@@ -51,18 +51,16 @@ beforeAll(async () => {
 beforeEach(() => jest.clearAllMocks());
 
 describe('TodayCard', () => {
-  it('shows the one action, the confidence badge and Finish setup', async () => {
+  it('shows the one action and the confidence badge', async () => {
     await render(<TodayCard zone={zone} onLogged={jest.fn()} />);
     expect(screen.getByText('Water about 12 min this morning (about 24 L)')).toBeTruthy();
     expect(screen.getByText('Medium confidence')).toBeTruthy();
-
-    await fireEvent.press(screen.getByRole('button', { name: 'Finish setup for Bed 1' }));
-    expect(mockPush).toHaveBeenCalledWith({ pathname: '/zone-setup', params: { zoneId: '7' } });
   });
 
-  it('has no Finish setup when nothing is missing', async () => {
-    await render(<TodayCard zone={{ ...zone, nextStep: null }} onLogged={jest.fn()} />);
+  it('no longer has its own Finish setup: Home has one setup card instead', async () => {
+    await render(<TodayCard zone={zone} onLogged={jest.fn()} />);
     expect(screen.queryByRole('button', { name: 'Finish setup for Bed 1' })).toBeNull();
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   it('logs a watering by hand and refreshes the card', async () => {
@@ -83,5 +81,16 @@ describe('TodayCard', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'How does the soil feel?' }));
     await fireEvent.press(screen.getByRole('button', { name: 'The soil feels dry' }));
     await waitFor(() => expect(api.logSoilFeel).toHaveBeenCalledWith(7, 'dry'));
+  });
+
+  it('says when the advice is longer than one run of this pump, instead of cutting it short', async () => {
+    await render(<TodayCard zone={{ ...zone, action: { kind: 'water', text: 'Water about 66 min this morning (about 99 L)' }, recommendedMinutes: 66, maxRunMinutes: 5 }} onLogged={jest.fn()} />);
+    expect(screen.getByTestId('today-over-limit-7').props.children)
+      .toBe('Recommended 66 min — your pump is limited to 5 min per run; run it again after it finishes');
+  });
+
+  it('says nothing extra when one run is enough', async () => {
+    await render(<TodayCard zone={{ ...zone, recommendedMinutes: 12, maxRunMinutes: 30 }} onLogged={jest.fn()} />);
+    expect(screen.queryByTestId('today-over-limit-7')).toBeNull();
   });
 });

@@ -1,189 +1,100 @@
--- Which migrations have actually been applied?
+-- Which migrations have actually taken effect?
 --
--- ONE QUERY. ONE ROW. ONE COLUMN PER MIGRATION. READ-ONLY.
+-- ONE QUERY. ONE ROW PER MIGRATION. READ-ONLY.
 --
 -- WHY THIS EXISTS
 -- Migrations are applied by hand in the Supabase SQL editor, so "the code is
 -- deployed" and "the schema is migrated" are two separate events and nothing
--- reconciles them. 0033 to 0036 were missed, nothing said so, and the first
--- anybody knew was a farmer's report failing with a bare 500 - the real cause,
--- `relation "report_request" does not exist`, being four layers down in a log
--- nobody was reading.
+-- reconciles them. 0033 to 0036 were once missed and only showed up as a failing
+-- report. In October 2026 a subtler drift was found: some files had RUN but part
+-- of them had not taken effect. 0010's `add column if not exists ... check (...)`
+-- skipped its 'manual' check because the column already existed, its view rename
+-- failed, 0007's auto_irrigation_check() survived and 0013's phone copy was
+-- missing. So each row checks the thing that file was FOR, not just that it ran,
+-- and checks several things where one file did several jobs.
 --
 -- HOW TO READ THE RESULT
--- Every column should be 1. A 0 means that migration has not been applied, or
--- was applied partially. Columns are named for the migration and the thing
--- being checked, so a 0 tells you which file to run.
---
--- Each check is one cheap existence test, not a full verification. These files
--- are single statement batches: if one ran at all, it ran to the end. So one
--- well-chosen object per file catches a SKIPPED FILE, which is the failure
--- that actually happened.
+-- applied = false means that migration's effect is missing. A false among trues
+-- means part of a file did not take effect: the detail column says what was
+-- checked (and for 0010, which part failed and the column types involved).
 --
 -- Paste the whole thing into the Supabase SQL editor and run it. It writes
--- nothing. The API reports the same information for 0027 onwards under
--- "Database schema" in GET /api/admin/health, which is the easier place to
--- look day to day; this is the one that covers the whole history.
+-- nothing. GET /api/admin/health ("Database schema") reports 0027 onwards day to
+-- day; this covers the whole history.
 --
--- Note the gaps: 0014, 0015, 0022 and 0023 do not exist. They were never
--- written - the numbering has holes, which is not the same as a missing file.
+-- Gaps: 0014, 0015, 0022 and 0023 were never written.
+-- Not a migration, but applied by hand too: the private 'reports' storage bucket
+-- has its own row at the end.
 
-select
-    -- 0001: the foundation. profile, farm and zone.
-    (select count(*) from pg_class where relname = 'profile' and relkind = 'r')          as m0001_profile,
-
-    -- 0002: the relationships. sensor_reading, irrigation_event, farm_member.
-    (select count(*) from pg_class where relname = 'sensor_reading' and relkind = 'r')   as m0002_sensor_reading,
-
-    -- 0003: the C# domain tables. hardware, alert, maintenance, report.
-    (select count(*) from pg_class where relname = 'hardware' and relkind = 'r')         as m0003_hardware,
-
-    -- 0004: irrigation_commands, the queue the kits poll.
-    (select count(*) from pg_class where relname = 'irrigation_commands' and relkind = 'r') as m0004_irrigation_commands,
-
-    -- 0005: irrigation_commands.duration_seconds - how long a start runs for.
-    (select count(*) from information_schema.columns
-      where table_name = 'irrigation_commands' and column_name = 'duration_seconds')     as m0005_command_duration,
-
-    -- 0006: the zone moisture thresholds the engine reads.
-    (select count(*) from information_schema.columns
-      where table_name = 'zone' and column_name = 'moisture_threshold')                  as m0006_moisture_threshold,
-
-    -- 0007: moved the irrigation decision out of Postgres into the API. The
-    -- check is INVERTED - this one passes when the trigger is GONE. A trigger
-    -- still firing here would mean two things deciding to water the same zone.
-    (select count(*) = 0 from pg_trigger
-      where tgname = 'trg_sensor_reading_auto_irrigation')::int                          as m0007_trigger_removed,
-
-    -- 0008: device enrollment. hardware.zone_id and the enrollment columns.
-    (select count(*) from information_schema.columns
-      where table_name = 'hardware' and column_name = 'enrollment_status')               as m0008_enrollment_status,
-
-    -- 0009: the LISTEN/NOTIFY bridge the command dispatcher depends on.
-    (select count(*) from pg_proc where proname = 'notify_irrigation_command')           as m0009_notify_function,
-
-    -- 0010: the zone realignment - zone.name, and the schedule columns.
-    (select count(*) from information_schema.columns
-      where table_name = 'zone' and column_name = 'name')                                as m0010_zone_name,
-
-    -- 0011: row-level security. app_is_admin() is what every admin policy calls.
-    (select count(*) from pg_proc where proname = 'app_is_admin')                        as m0011_app_is_admin,
-
-    -- 0012: profile.phone, which onboarding writes.
-    (select count(*) from information_schema.columns
-      where table_name = 'profile' and column_name = 'phone')                            as m0012_profile_phone,
-
-    -- 0013: the trigger that creates a profile row for a new auth user.
-    -- Without it, signing up produces an account with no profile at all.
-    (select count(*) from pg_proc where proname = 'handle_new_auth_user')                as m0013_new_auth_user,
-
-    -- 0016: weather_daily, which the FAO-56 engine and every forecast read.
-    (select count(*) from pg_class where relname = 'weather_daily' and relkind = 'r')    as m0016_weather_daily,
-
-    -- 0017: zone.planting_date. No planting date, no growth stage, no advice.
-    (select count(*) from information_schema.columns
-      where table_name = 'zone' and column_name = 'planting_date')                       as m0017_planting_date,
-
-    -- 0018: zone.flow_rate_lpm. The only way litres are ever estimated.
-    (select count(*) from information_schema.columns
-      where table_name = 'zone' and column_name = 'flow_rate_lpm')                       as m0018_flow_rate,
-
-    -- 0019: the partial index the command poller runs on every few seconds.
-    (select count(*) from pg_class
-      where relname = 'idx_irrigation_commands_pending_created' and relkind = 'i')       as m0019_pending_index,
-
-    -- 0020: irrigation_event.estimated_litres made nullable, so an event with
-    -- no flow rate records no volume rather than a false zero.
-    (select count(*) from information_schema.columns
-      where table_name = 'irrigation_event'
-        and column_name = 'estimated_litres'
-        and is_nullable = 'YES')                                                         as m0020_litres_nullable,
-
-    -- 0021: service_request - the farmer's "please add a farm/zone".
-    (select count(*) from pg_class where relname = 'service_request' and relkind = 'r')  as m0021_service_request,
-
-    -- 0024: Telegram. No chat id, and a farmer receives nothing at all.
-    (select count(*) from information_schema.columns
-      where table_name = 'profile' and column_name = 'telegram_chat_id')                 as m0024_telegram_chat_id,
-
-    -- 0025: what a Telegram code is for (link, password, onboarding).
-    (select count(*) from information_schema.columns
-      where table_name = 'telegram_onboarding_code' and column_name = 'purpose')         as m0025_code_purpose,
-
-    -- 0026: notification_sent, the send-once ledger. Without it farmers get
-    -- the same alert repeatedly.
-    (select count(*) from pg_class where relname = 'notification_sent' and relkind = 'r') as m0026_notification_sent,
-
-    -- 0027: the FAO-56 engine's stored water balance.
-    (select count(*) from pg_class where relname = 'zone_water_balance' and relkind = 'r') as m0027_zone_water_balance,
-
-    -- 0028: per-device tokens. Without this every kit shares the fleet key.
-    (select count(*) from information_schema.columns
-      where table_name = 'hardware' and column_name = 'device_token_hash')               as m0028_device_token,
-
-    -- 0029: the MQTT credential pool new kits draw from.
-    (select count(*) from pg_class where relname = 'mqtt_credential_pool' and relkind = 'r') as m0029_mqtt_pool,
-
-    -- 0030: the setup commands. Not a table - a widened CHECK on
-    -- irrigation_commands.command, so the probe reads the constraint itself.
-    (select count(*) from pg_constraint
-      where conname = 'irrigation_commands_command_check'
-        and pg_get_constraintdef(oid) like '%change_wifi%')                              as m0030_setup_commands,
-
-    -- 0031: admin-only select on the engine's water balance.
-    (select count(*) from pg_policies
-      where tablename = 'zone_water_balance'
-        and policyname = 'zone_water_balance_all_admin')                                 as m0031_balance_policy,
-
-    -- 0032: the per-request send-once ledger for farm request messages.
-    (select count(*) from pg_class
-      where relname = 'service_request_notification' and relkind = 'r')                   as m0032_request_notification,
-
-    -- 0033: whether a farmer ever read an alert.
-    (select count(*) from information_schema.columns
-      where table_name = 'alert' and column_name = 'read_at')                            as m0033_alert_read_at,
-
-    -- 0034: report_request. THIS IS THE ONE THAT CAUSED THE 500 - "Make me
-    -- this report" in the app fails outright without it.
-    (select count(*) from pg_class where relname = 'report_request' and relkind = 'r')   as m0034_report_request,
-
-    -- 0035: report_schedule - the automatic weekly and monthly reports.
-    (select count(*) from pg_class where relname = 'report_schedule' and relkind = 'r')  as m0035_report_schedule,
-
-    -- 0036: archive_farm(). Archiving hides a farm and keeps every row.
-    (select count(*) from pg_proc where proname = 'archive_farm')                        as m0036_archive_farm,
-
-    -- 0037: admin_audit_log - who did what.
-    (select count(*) from pg_class where relname = 'admin_audit_log' and relkind = 'r')  as m0037_audit_log,
-
-    -- 0038: the grant that lets the API actually write those rows. Without
-    -- it every admin action succeeds and the Activity page stays empty.
-    (select has_table_privilege('service_role', 'public.admin_audit_log', 'INSERT'))::int as m0038_audit_insert_grant,
-
-    -- 0039: explanation - what a Telegram "Why am I seeing this?" button
-    -- points at. Without it messages go out with no button.
-    (select count(*) from pg_class where relname = 'explanation' and relkind = 'r')      as m0039_explanation,
-
-    -- 0040: report_schedule - daily, chosen weekday, per-zone PDFs, recipients.
-    (select count(*) from information_schema.columns
-      where table_name = 'report_schedule' and column_name = 'per_zone_pdf')               as m0040_report_schedule_extend,
-
-    -- 0041: accountability - who is handling, and who resolved, each item.
-    (select count(*) from information_schema.columns
-      where table_name = 'alert' and column_name = 'handled_by_profile_id')               as m0041_accountability,
-
-    -- 0042: manual logging - "I watered" and "How does the soil feel?".
-    (select count(*) from pg_class where relname = 'soil_feel_check' and relkind = 'r')   as m0042_manual_logging,
-
-    -- 0043: a farmer may change only crop, planting date, soil and size of a zone.
-    (select count(*) from pg_trigger where tgname = 'zone_farmer_edit_guard')              as m0043_zone_farmer_edit_guard,
-
-    -- 0044: public enquiries and the append-only call log.
-    (select count(*) from pg_class where relname = 'enquiry_call' and relkind = 'r')       as m0044_enquiry,
-
-    -- 0045: dismiss and history for notifications.
-    (select count(*) from pg_class where relname = 'dismissal' and relkind = 'r')          as m0045_dismissal,
-
-    -- Not a migration, but applied by hand the same way and just as invisible
-    -- when missed: the private bucket generated report PDFs are stored in.
-    (select count(*) from storage.buckets where id = 'reports')                           as storage_reports_bucket;
+with
+c   as (select table_name t, column_name col, data_type dt, is_nullable nul
+          from information_schema.columns where table_schema = 'public'),
+rel as (select k.relname, k.relkind from pg_class k
+          join pg_namespace n on n.oid = k.relnamespace where n.nspname = 'public'),
+fn  as (select p.proname, p.oid from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public'),
+m0010 as (
+  select
+    exists (select 1 from c where t = 'zone' and col = 'name') as zone_name,
+    exists (select 1 from pg_constraint
+             where conrelid = 'public.zone'::regclass and contype = 'c'
+               and pg_get_constraintdef(oid) like '%irrigation_mode%'
+               and pg_get_constraintdef(oid) like '%manual%') as mode_allows_manual,
+    exists (select 1 from c where t = 'zone_latest_reading' and col = 'moisture_threshold') as view_renamed,
+    (select dt from c where t = 'zone' and col = 'moisture_threshold') as zone_type,
+    (select dt from c where t = 'zone_latest_reading' and col in ('moisture_threshold', 'moisture_dry_threshold')) as view_type
+)
+select num, name, applied, detail from (values
+ ('0001','foundation', exists(select 1 from rel where relname='profile' and relkind='r') and exists(select 1 from rel where relname='farm' and relkind='r') and exists(select 1 from rel where relname='zone' and relkind='r'), 'profile, farm, zone'),
+ ('0002','relationships', exists(select 1 from rel where relname='farm_member') and exists(select 1 from rel where relname='sensor_reading') and exists(select 1 from rel where relname='irrigation_event'), 'farm_member, sensor_reading, irrigation_event'),
+ ('0003','csharp_domain', exists(select 1 from rel where relname='hardware') and exists(select 1 from rel where relname='alert') and exists(select 1 from rel where relname='zone_latest_reading' and relkind='v'), 'hardware, alert, zone_latest_reading view'),
+ ('0004','irrigation_commands', exists(select 1 from rel where relname='irrigation_commands' and relkind='r'), 'irrigation_commands'),
+ ('0005','irrigation_commands_duration', exists(select 1 from c where t='irrigation_commands' and col='duration_seconds'), 'irrigation_commands.duration_seconds'),
+ ('0006','backend_irrigation_logic', exists(select 1 from c where t='irrigation_commands' and col='source') and exists(select 1 from rel where relname='zone_daily_water_usage' and relkind='v'), 'irrigation_commands.source, zone_daily_water_usage view'),
+ ('0007','move_irrigation_logic_to_api', not exists(select 1 from fn where proname='auto_irrigation_check') and exists(select 1 from c where t='zone_latest_reading' and col in ('moisture_threshold','moisture_dry_threshold')), 'auto_irrigation_check() gone (0047 repairs); view carries thresholds'),
+ ('0008','device_enrollment_and_onboarding', exists(select 1 from c where t='hardware' and col='enrollment_status'), 'hardware.enrollment_status'),
+ ('0009','mqtt_and_device_identity', exists(select 1 from fn where proname='notify_irrigation_command'), 'notify_irrigation_command()'),
+ ('0010','zone_schema_realignment', (select zone_name and mode_allows_manual and view_renamed from m0010),
+        (select format('zone.name=%s, irrigation_mode allows manual=%s (0047 repairs), view renamed=%s, zone.moisture_threshold=%s, view column=%s',
+                       zone_name, mode_allows_manual, view_renamed, zone_type, view_type) from m0010)),
+ ('0011','row_level_security', exists(select 1 from fn where proname='app_is_admin'), 'app_is_admin()'),
+ ('0012','profile_api_requirements', exists(select 1 from c where t='profile' and col='phone'), 'profile.phone'),
+ ('0013','update_auth_profile_phone', exists(select 1 from fn where proname='handle_new_auth_user' and pg_get_functiondef(oid) like '%''phone''%'), 'handle_new_auth_user() copies phone (0047 repairs)'),
+ ('0016','weather_daily', exists(select 1 from rel where relname='weather_daily' and relkind='r'), 'weather_daily'),
+ ('0017','zone_planting_date', exists(select 1 from c where t='zone' and col='planting_date'), 'zone.planting_date'),
+ ('0018','zone_flow_rate', exists(select 1 from c where t='zone' and col='flow_rate_lpm'), 'zone.flow_rate_lpm'),
+ ('0019','irrigation_commands_pending_index', exists(select 1 from rel where relname='idx_irrigation_commands_pending_created' and relkind='i'), 'idx_irrigation_commands_pending_created'),
+ ('0020','flow_rate_default_and_nullable_litres', exists(select 1 from c where t='irrigation_event' and col='estimated_litres' and nul='YES'), 'irrigation_event.estimated_litres nullable'),
+ ('0021','service_requests', exists(select 1 from rel where relname='service_request' and relkind='r'), 'service_request'),
+ ('0024','telegram_onboarding', exists(select 1 from c where t='profile' and col='telegram_chat_id'), 'profile.telegram_chat_id'),
+ ('0025','telegram_code_purpose', exists(select 1 from c where t='telegram_onboarding_code' and col='purpose'), 'telegram_onboarding_code.purpose'),
+ ('0026','notification_dedupe', exists(select 1 from rel where relname='notification_sent' and relkind='r'), 'notification_sent'),
+ ('0027','fao56_engine', exists(select 1 from rel where relname='zone_water_balance' and relkind='r'), 'zone_water_balance'),
+ ('0028','device_token', exists(select 1 from c where t='hardware' and col='device_token_hash'), 'hardware.device_token_hash'),
+ ('0029','mqtt_credential_pool', exists(select 1 from rel where relname='mqtt_credential_pool' and relkind='r'), 'mqtt_credential_pool'),
+ ('0030','device_setup_commands', exists(select 1 from pg_constraint where conname='irrigation_commands_command_check' and pg_get_constraintdef(oid) like '%change_wifi%'), 'command check allows change_wifi'),
+ ('0031','zone_water_balance_admin_select_only', exists(select 1 from pg_policies where tablename='zone_water_balance' and policyname='zone_water_balance_all_admin'), 'policy zone_water_balance_all_admin'),
+ ('0032','service_request_notification', exists(select 1 from rel where relname='service_request_notification' and relkind='r'), 'service_request_notification'),
+ ('0033','alert_read_at', exists(select 1 from c where t='alert' and col='read_at'), 'alert.read_at'),
+ ('0034','report_request', exists(select 1 from rel where relname='report_request' and relkind='r'), 'report_request'),
+ ('0035','report_schedule', exists(select 1 from rel where relname='report_schedule' and relkind='r'), 'report_schedule'),
+ ('0036','archive_farm', exists(select 1 from fn where proname='archive_farm'), 'archive_farm()'),
+ ('0037','admin_audit_log', exists(select 1 from rel where relname='admin_audit_log' and relkind='r'), 'admin_audit_log'),
+ ('0038','audit_log_insert_grant', case when to_regclass('public.admin_audit_log') is null then false else has_table_privilege('service_role','public.admin_audit_log','INSERT') end, 'service_role INSERT on admin_audit_log'),
+ ('0039','explanation', exists(select 1 from rel where relname='explanation' and relkind='r'), 'explanation'),
+ ('0040','report_schedule_extend', exists(select 1 from c where t='report_schedule' and col='per_zone_pdf'), 'report_schedule.per_zone_pdf'),
+ ('0041','accountability', exists(select 1 from c where t='alert' and col='handled_by_profile_id'), 'alert.handled_by_profile_id'),
+ ('0042','manual_logging', exists(select 1 from rel where relname='soil_feel_check' and relkind='r'), 'soil_feel_check'),
+ ('0043','zone_farmer_edit_guard', exists(select 1 from pg_trigger where tgname='zone_farmer_edit_guard'), 'trigger zone_farmer_edit_guard'),
+ ('0044','enquiry', exists(select 1 from rel where relname='enquiry_call' and relkind='r'), 'enquiry_call'),
+ ('0045','dismissal', exists(select 1 from rel where relname='dismissal' and relkind='r'), 'dismissal'),
+ ('0046','tank_and_ph', exists(select 1 from rel where relname='tank_refill') and exists(select 1 from rel where relname='soil_ph_log') and exists(select 1 from c where t='alert' and col='farm_id') and exists(select 1 from c where t='farm' and col='tank_capacity_litres'), 'tank_refill, soil_ph_log, alert.farm_id, farm.tank_capacity_litres'),
+ ('0047','repair_live_drift', not exists(select 1 from fn where proname='auto_irrigation_check') and (select mode_allows_manual from m0010) and exists(select 1 from fn where proname='handle_new_auth_user' and pg_get_functiondef(oid) like '%''phone''%'), 'auto_irrigation_check() gone, irrigation_mode allows manual, handle_new_auth_user() copies phone'),
+ ('0048','simulated_farms', exists(select 1 from c where t='farm' and col='is_simulated') and exists(select 1 from c where t='sensor_reading' and col='simulated') and exists(select 1 from c where t='zone_latest_reading' and col='moisture_simulated') and (select count(*) from farm where name like '%(Simulated)') = 2, 'farm.is_simulated, sensor_reading.simulated, view.moisture_simulated, 2 simulated farms'),
+ ('0049','profile_language', exists(select 1 from c where t='profile' and col='language') and exists(select 1 from pg_constraint where conname='profile_language_check'), 'profile.language + profile_language_check'),
+ ('0050','password_reset_and_sign_in', exists(select 1 from rel where relname='password_reset_code') and exists(select 1 from rel where relname='sign_in_link') and exists(select 1 from c where t='profile' and col='temp_password_expires_at'), 'password_reset_code, sign_in_link, profile.temp_password_expires_at'),
+ ('0052','zone_max_run', exists(select 1 from c where t='zone' and col='max_run_minutes') and exists(select 1 from pg_constraint where conname='zone_max_run_minutes_check'), 'zone.max_run_minutes with its 1-120 check'),
+ ('0051','command_finished', exists(select 1 from c where t='irrigation_commands' and col='finished_at') and exists(select 1 from c where t='irrigation_event' and col='command_id'), 'irrigation_commands.finished_at, irrigation_event.command_id'),
+ ('storage','reports bucket (not a migration)', exists(select 1 from storage.buckets where id = 'reports'), 'storage.buckets id = reports')
+) as v(num, name, applied, detail)
+order by num;

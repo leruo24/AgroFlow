@@ -14,7 +14,7 @@ function farmCard(f: Farm): string {
   return `<article class="farm-card reveal" data-act="view-farm" data-id="${f.id}">
     <div class="farm-card-top">
       <div>
-        <h5>${esc(f.name)}</h5>
+        <h5>${esc(f.name)} ${f.isSimulated ? badge("Simulated", "warn") : ""}</h5>
         <div class="farm-owner">${esc(f.owner)}</div>
       </div>
       <div class="farm-health">${healthDot(f.health)} ${badge(f.health, healthTone(f.health))}</div>

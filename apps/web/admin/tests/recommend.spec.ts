@@ -26,7 +26,7 @@ async function open(page: Page, extra?: (method: string, path: string) => unknow
       const custom = extra?.(method, path);
       if (custom !== undefined) return custom;
       if (method === "GET" && path === "/api/farms") return FARMS;
-      if (method === "GET" && path === "/api/farmer/reports/zones") return [{ zoneId: 11, name: "Tub 1", farmId: 1, cropType: "potato" }];
+      if (method === "GET" && path === "/api/farmer/reports/zones") return [{ zoneId: 11, name: "Bed 1", farmId: 1, cropType: "potato" }];
       if (method === "GET" && path === "/api/farmer/farms/1/today") return { farmId: 1, day: "2026-10-06", zones: [] };
       if (method === "GET" && path === "/api/farmer/zones/11/recommended-settings") return REC;
       if (method === "GET" && path === "/api/users/farmers") return [{ id: "f1", name: "Owner A", email: "a@example.com", phone: null }];

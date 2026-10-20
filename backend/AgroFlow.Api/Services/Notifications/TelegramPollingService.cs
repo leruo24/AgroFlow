@@ -19,6 +19,8 @@ public sealed class TelegramPollingService : BackgroundService
     private readonly TelegramWhyHandler _why;
     private readonly TelegramOptions _options;
     private readonly ILogger<TelegramPollingService> _logger;
+    private readonly PasswordResetFlow? _passwords;
+    private readonly ApkOptions _apk;
 
     // We acknowledge updates by asking for the next id (lastUpdateId + 1). Kept in
     // memory only; after a restart Telegram resends anything unacknowledged from the
@@ -41,8 +43,13 @@ public sealed class TelegramPollingService : BackgroundService
         NpgsqlDataSource dataSource,
         TelegramWhyHandler why,
         IOptions<TelegramOptions> options,
-        ILogger<TelegramPollingService> logger)
+        ILogger<TelegramPollingService> logger,
+        PasswordResetFlow? passwords = null,
+        IOptions<ApkOptions>? apk = null)
     {
+        // Optional only so tests that do not reach onboarding can leave them out.
+        _passwords = passwords;
+        _apk = apk?.Value ?? new ApkOptions();
         _why = why;
         _client = client;
         _onboarding = onboarding;
@@ -235,7 +242,17 @@ public sealed class TelegramPollingService : BackgroundService
             return;
         }
 
-        var redemption = await _onboarding.RedeemCodeAsync(code, chatId, cancellationToken);
+        TelegramRedemption? redemption;
+        try
+        {
+            redemption = await _onboarding.RedeemCodeAsync(code, chatId, cancellationToken);
+        }
+        catch (StaffTelegramRefusedException)
+        {
+            // Telegram is for farmers only.
+            await _client.SendMessageAsync(chatId, StaffTelegram.RefusedMessage, cancellationToken);
+            return;
+        }
 
         if (redemption is null)
         {
@@ -293,10 +310,16 @@ public sealed class TelegramPollingService : BackgroundService
 
         // We create a new temporary password here because AgroFlow never stores the one
         // the admin saw. The admin screen explains that once the farmer links Telegram, the
-        // onboarding password stops working and this one replaces it.
-        var temporaryPassword = await _supabaseAdmin.ResetTemporaryPasswordAsync(profileId, cancellationToken);
+        // onboarding password stops working and this one replaces it. The welcome also carries
+        // a one-tap "Sign in to AgroFlow" link (SignIn:LinkBaseUrl), in the farmer's language.
+        var sent = _passwords is not null && await _passwords.SendWelcomeAsync(
+            profileId,
+            string.IsNullOrWhiteSpace(farmer.FarmName) ? "your farm" : farmer.FarmName,
+            string.IsNullOrWhiteSpace(farmer.FarmLocation) ? "not set" : farmer.FarmLocation,
+            string.IsNullOrWhiteSpace(_apk.DownloadUrl) ? null : _apk.DownloadUrl,
+            cancellationToken);
 
-        if (temporaryPassword is null)
+        if (!sent)
         {
             await _client.SendMessageAsync(
                 chatId,
@@ -304,21 +327,7 @@ public sealed class TelegramPollingService : BackgroundService
                 "We could not issue your password just now. Please ask your AgroFlow installer " +
                 "for it - your account itself is fine.",
                 cancellationToken);
-
-            return;
         }
-
-        await _onboarding.SetMustChangePasswordAsync(profileId, true, cancellationToken);
-
-        await _notifications.NotifyFarmerWelcomeAsync(
-            profileId,
-            new FarmerWelcomeNotification(
-                farmer.Name,
-                farmer.Email,
-                temporaryPassword,
-                string.IsNullOrWhiteSpace(farmer.FarmName) ? "your farm" : farmer.FarmName,
-                string.IsNullOrWhiteSpace(farmer.FarmLocation) ? "not set" : farmer.FarmLocation),
-            cancellationToken);
     }
 
     // /status: request tracking

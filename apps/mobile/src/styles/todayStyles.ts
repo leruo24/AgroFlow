@@ -16,6 +16,8 @@ export function createTodayStyles(colors: AppColors) {
     action: { fontSize: Type.title, lineHeight: 25, fontWeight: '600', color: colors.text },
     actionWater: { color: colors.primaryDark },
     actionKit: { color: colors.error },
+    // Advice longer than one run (lib/runLimit.ts).
+    overLimit: { fontSize: Type.body, lineHeight: 22, color: colors.warning, fontWeight: '600' },
     badgeRow: { ...sharedLayout.inlineRow, flexWrap: 'wrap', gap: Spacing.two },
     badge: {
       fontSize: Type.label,

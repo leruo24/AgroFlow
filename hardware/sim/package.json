@@ -1,0 +1,15 @@
+{
+  "name": "agroflow-kit-simulation",
+  "private": true,
+  "version": "1.0.0",
+  "description": "End-to-end simulation of an AgroFlow kit against a local Postgres, a local MQTT broker and the real AgroFlow.Api. No hardware, no live system.",
+  "type": "module",
+  "scripts": {
+    "e2e": "node run-e2e.mjs"
+  },
+  "devDependencies": {
+    "aedes": "0.51.3",
+    "embedded-postgres": "17.5.0-beta.15",
+    "mqtt": "5.10.4"
+  }
+}

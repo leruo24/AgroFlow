@@ -111,7 +111,7 @@ test("a refused registration shows the server's own sentence, not 'Request faile
   await wiz.locator('[data-field="location"]').fill("Ceres, Western Cape");
   await wiz.locator('[data-field="farmSize"]').fill("1");
   await wiz.locator("[data-wizard-next]").click();
-  await wiz.locator('[data-field="zone_name_0"]').fill("Tub 1");
+  await wiz.locator('[data-field="zone_name_0"]').fill("Bed 1");
   await wiz.locator('[data-field="zone_crop_0"]').selectOption("maize");
   await wiz.locator('[data-field="zone_area_preset_0"]').selectOption("small");
   await wiz.locator("[data-wizard-next]").click();

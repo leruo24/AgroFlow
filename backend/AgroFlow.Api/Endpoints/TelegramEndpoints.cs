@@ -44,6 +44,7 @@ public static class TelegramEndpoints
         admin.MapPost("/codes/{profileId:guid}/link", IssueLinkCodeForFarmerAsync);
         admin.MapPost("/password/{profileId:guid}", ResetTemporaryPasswordAsync);
         admin.MapPost("/password/{profileId:guid}/send", SendTemporaryPasswordAsync);
+        admin.MapDelete("/link/{profileId:guid}", UnlinkFarmerAsync);
 
         var me = app.MapGroup("/api/telegram/me")
             .RequireAuthorization();
@@ -69,6 +70,13 @@ public static class TelegramEndpoints
             return Results.NotFound(new { error = "No such farmer." });
         }
 
+        // Telegram is for farmers only: no code for a staff account.
+        await using (var roleConnection = await dataSource.OpenConnectionAsync(cancellationToken))
+        {
+            if (await StaffTelegram.IsStaffAsync(roleConnection, profileId, cancellationToken))
+                return Results.Json(new { error = StaffTelegram.RefusedMessage }, statusCode: StatusCodes.Status409Conflict);
+        }
+
         // Admin-issued, so redeeming it creates a new temporary password and forces a
         // change: the farmer has no password of their own yet.
         var issued = await onboarding.IssueCodeAsync(
@@ -92,6 +100,13 @@ public static class TelegramEndpoints
             return Results.NotFound(new { error = "No such farmer." });
         }
 
+        // Telegram is for farmers only: no code for a staff account.
+        await using (var roleConnection = await dataSource.OpenConnectionAsync(cancellationToken))
+        {
+            if (await StaffTelegram.IsStaffAsync(roleConnection, profileId, cancellationToken))
+                return Results.Json(new { error = StaffTelegram.RefusedMessage }, statusCode: StatusCodes.Status409Conflict);
+        }
+
         var issued = await onboarding.IssueCodeAsync(
             profileId, TelegramCodePurpose.Link, cancellationToken);
 
@@ -106,70 +121,25 @@ public static class TelegramEndpoints
         return Results.Ok(new TelegramCodeResponse(issued.Code, issued.DeepLink, issued.ExpiresAt));
     }
 
-    // For a farmer with no Telegram, or one who forgot the password (we never store
-    // it). Creates a new one and returns it once.
-    private static async Task<IResult> ResetTemporaryPasswordAsync(
+    // The two older admin routes, kept so old links work. Both now do the same as
+    // POST /api/admin/farmers/{id}/reset-password: a new easy temporary password (72 hours,
+    // changed at first sign-in), sent by Telegram if linked, otherwise shown once. Audited.
+    private static Task<IResult> ResetTemporaryPasswordAsync(
+        Guid profileId, ClaimsPrincipal user, PasswordResetFlow flow, CancellationToken cancellationToken) =>
+        PasswordResetEndpoints.AdminResetAsync(profileId, user, flow, cancellationToken);
+
+    private static Task<IResult> SendTemporaryPasswordAsync(
+        Guid profileId, ClaimsPrincipal user, PasswordResetFlow flow, CancellationToken cancellationToken) =>
+        PasswordResetEndpoints.AdminResetAsync(profileId, user, flow, cancellationToken);
+
+    // "Unlink Telegram" on a farmer's profile: lost or changed phone. Clears the chat and
+    // any unused codes, so they re-link with a new code. Audited.
+    private static async Task<IResult> UnlinkFarmerAsync(
         Guid profileId,
-        SupabaseAdminService supabaseAdmin,
-        TelegramOnboardingService onboarding,
-        NpgsqlDataSource dataSource,
-        CancellationToken cancellationToken)
-    {
-        if (!await ProfileExistsAsync(dataSource, profileId, cancellationToken))
-        {
-            return Results.NotFound(new { error = "No such farmer." });
-        }
-
-        var password = await supabaseAdmin.ResetTemporaryPasswordAsync(profileId, cancellationToken);
-
-        if (password is null)
-        {
-            return Results.Problem(
-                title: "Could not reset the temporary password.",
-                detail: "Supabase refused the password change. The farmer's existing password still works.",
-                statusCode: StatusCodes.Status502BadGateway);
-        }
-
-        // Security: every temporary password must be changed at first sign-in.
-        await onboarding.SetMustChangePasswordAsync(profileId, true, cancellationToken);
-
-        return Results.Ok(new TemporaryPasswordResponse(
-            password,
-            "This password is shown once and is not stored. The farmer must change it when they sign in."));
-    }
-
-    // Same as "Forgot password?" in the app, but started by an admin, e.g. for a
-    // farmer who phones in.
-    // Security: unlike ResetTemporaryPasswordAsync, this sends the password to the
-    // farmer's own chat and never shows it to the admin.
-    private static async Task<IResult> SendTemporaryPasswordAsync(
-        Guid profileId,
-        PasswordResetService passwordReset,
-        NpgsqlDataSource dataSource,
-        CancellationToken cancellationToken)
-    {
-        if (!await ProfileExistsAsync(dataSource, profileId, cancellationToken))
-        {
-            return Results.NotFound(new { error = "No such farmer." });
-        }
-
-        var sent = await passwordReset.ResetForProfileAsync(profileId, cancellationToken);
-
-        if (!sent)
-        {
-            return Results.BadRequest(new
-            {
-                error =
-                    "This farmer has no Telegram connected, so a password cannot be sent to them. " +
-                    "Use Reset password instead and read the new one out to them.",
-            });
-        }
-
-        return Results.Ok(new
-        {
-            message = "A new temporary password has been sent to the farmer's Telegram.",
-        });
-    }
+        ClaimsPrincipal user,
+        TelegramUnlinkService unlink,
+        CancellationToken cancellationToken) =>
+        (await unlink.UnlinkAsync(user, profileId, cancellationToken)).ToResult();
 
     // Farmer, acting on themselves
 
@@ -200,9 +170,17 @@ public static class TelegramEndpoints
     private static async Task<IResult> IssueMyCodeAsync(
         ClaimsPrincipal user,
         TelegramOnboardingService onboarding,
+        NpgsqlDataSource dataSource,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+
+        // Telegram is for farmers only: a staff member signed in to the app cannot link it.
+        await using (var roleConnection = await dataSource.OpenConnectionAsync(cancellationToken))
+        {
+            if (await StaffTelegram.IsStaffAsync(roleConnection, userId, cancellationToken))
+                return Results.Json(new { error = StaffTelegram.RefusedMessage }, statusCode: StatusCodes.Status409Conflict);
+        }
 
         // Farmer-issued: they already have a password, so redeeming only links the chat.
         var issued = await onboarding.IssueCodeAsync(
@@ -233,23 +211,17 @@ public static class TelegramEndpoints
     }
 
     // Unlinking clears the chat id only, so re-linking later keeps the farmer's
-    // alerts preference.
+    // alerts preference. The same service as the admin's Unlink Telegram: it also expires
+    // the farmer's unused codes and records it in the activity log.
     private static async Task<IResult> UnlinkMeAsync(
         ClaimsPrincipal user,
-        NpgsqlDataSource dataSource,
+        TelegramUnlinkService unlink,
         CancellationToken cancellationToken)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-
-        await using var command = new NpgsqlCommand(
-            "update profile set telegram_chat_id = null where id = $1", connection);
-
-        command.Parameters.AddWithValue(userId);
-        await command.ExecuteNonQueryAsync(cancellationToken);
-
-        return Results.NoContent();
+        var outcome = await unlink.UnlinkAsync(user, userId, cancellationToken);
+        return outcome.Status == StatusCodes.Status200OK ? Results.NoContent() : outcome.ToResult();
     }
 
     // ------------------------------------------------------------------

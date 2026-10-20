@@ -110,6 +110,15 @@ public sealed class TelegramOnboardingService
             await reader.CloseAsync();
         }
 
+        // Telegram is for farmers only. A code for a staff account links nothing, and the code
+        // is not spent either (rolled back).
+        if (await StaffTelegram.IsStaffAsync(connection, profileId, cancellationToken, transaction))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogWarning("Refused to link Telegram to staff profile {ProfileId}: Telegram is for farmers only.", profileId);
+            throw new StaffTelegramRefusedException();
+        }
+
         // profile.telegram_chat_id is unique, so re-linking the same Telegram account (or a
         // phone passed to someone else) would collide. We detach the chat from its old
         // owner first, then attach it here.
@@ -185,6 +194,25 @@ public sealed class TelegramOnboardingService
         CancellationToken cancellationToken)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        // A temporary password works for 72 hours (EasyPassword.Lifetime); setting the flag
+        // starts that clock and clearing it stops it. Before migration 0050 there is no clock.
+        await using (var has = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'profile' and column_name = 'temp_password_expires_at')",
+            connection))
+        {
+            if (await has.ExecuteScalarAsync(cancellationToken) is true)
+            {
+                await using var timed = new NpgsqlCommand(
+                    "update profile set must_change_password = $1, " +
+                    "temp_password_expires_at = case when $1 then now() + interval '72 hours' else null end where id = $2",
+                    connection);
+                timed.Parameters.AddWithValue(mustChange);
+                timed.Parameters.AddWithValue(profileId);
+                await timed.ExecuteNonQueryAsync(cancellationToken);
+                return;
+            }
+        }
 
         await using var command = new NpgsqlCommand(
             "update profile set must_change_password = $1 where id = $2",

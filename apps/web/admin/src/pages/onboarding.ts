@@ -109,7 +109,7 @@ export function zoneRow(index: number): string {
     <label class="drawer-field">
       <span>Zone ${n} flow rate, litres a minute (optional)</span>
       <input type="number" min="0.1" step="0.1" data-field="zone_flow_${index}"
-        placeholder="Or time a 500 mL bottle in the app later" />
+        placeholder="Or use the marked flow-rate test bottle in the app later" />
     </label>
 
     <label class="drawer-field">

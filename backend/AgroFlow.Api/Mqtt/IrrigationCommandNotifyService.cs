@@ -1,11 +1,14 @@
 using System.Text.Json;
 using AgroFlow.Business;
+using AgroFlow.Api.Services;
 using Npgsql;
 
 namespace AgroFlow.Api.Mqtt;
 
+// MaxRunSeconds is the zone's maximum run time (zone.max_run_minutes, migration 0052), added
+// when the command is published. The kit stops a start at min(durationSeconds, maxRunSeconds).
 public record IrrigationCommandNotification(
-    Guid Id, long ZoneId, string Command, int? DurationSeconds, string Source);
+    Guid Id, long ZoneId, string Command, int? DurationSeconds, string Source, int? MaxRunSeconds = null);
 
 // Sends each new irrigation_commands row to the device's MQTT commands topic.
 // The notify_irrigation_command() trigger (migration 0009) raises a Postgres
@@ -254,7 +257,8 @@ public class IrrigationCommandNotifyService : BackgroundService
             return false;
         }
 
-        var payload = JsonSerializer.Serialize(notification, JsonOptions);
+        var maxRunMinutes = await ZoneRunLimit.ForZoneAsync(connection, notification.ZoneId);
+        var payload = JsonSerializer.Serialize(notification with { MaxRunSeconds = maxRunMinutes * 60 }, JsonOptions);
 
         // Publish to every active device on the zone, since a zone can have more than
         // one board (e.g. a separate pump controller).

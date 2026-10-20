@@ -96,9 +96,10 @@ public class FirmwareContractTests
             Assert.Contains(f, Fields(typeof(SensorMqttPayload)));
         }
         // The command the server publishes (camelCase) has every field the board reads.
-        foreach (var f in new[] { "id", "command", "durationSeconds", "source" })
+        // (firmware 1.6.0 reads the run fields through a JsonVariantConst named cmd)
+        foreach (var f in new[] { "id", "command", "durationSeconds", "source", "maxRunSeconds" })
         {
-            Assert.Contains($"doc[\"{f}\"]", sketch);
+            Assert.True(sketch.Contains($"doc[\"{f}\"]") || sketch.Contains($"cmd[\"{f}\"]"), f);
             Assert.Contains(f, Fields(typeof(IrrigationCommandNotification)));
         }
     }

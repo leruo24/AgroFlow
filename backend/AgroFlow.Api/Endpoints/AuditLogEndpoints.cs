@@ -304,8 +304,11 @@ public static class AuditLogEndpoints
             AuditActions.UserInvited => $"{actor} invited a farmer",
             AuditActions.UserDeleted => $"{actor} deleted a farmer account",
             AuditActions.UserPasswordReset => $"{actor} reset a farmer's password",
+            AuditActions.TelegramStaffUnlinked => $"Telegram was unlinked from staff account {entityId}: Telegram is for farmers only",
+            AuditActions.UserPasswordResetSelf => $"{actor} reset their own password with a Telegram code",
 
             AuditActions.ZoneUpdated => $"{actor} updated zone {entityId}{where}",
+            AuditActions.ZoneMaxRunChanged => $"{actor} changed the maximum run time of zone {entityId}{where}",
             // Public enquiries.
             "enquiry.claimed" => $"{actor} took on enquiry {entityId}",
             "enquiry.taken_over" => $"{actor} took over enquiry {entityId}",
@@ -320,6 +323,7 @@ public static class AuditLogEndpoints
             AuditActions.MqttPoolAdded => $"{actor} added MQTT logins to the pool",
             AuditActions.ReportScheduleChanged => $"{actor} changed automatic reports{where}",
             AuditActions.TelegramCodeIssued => $"{actor} issued a Telegram link code",
+            AuditActions.TelegramUnlinked => $"{actor} disconnected a farmer's Telegram",
 
             // Handling, and the actions that close an item.
             "handling.claimed" => $"{actor} took on {Thing(entityType)} {entityId}{where}",

@@ -48,6 +48,19 @@ public static class TodayEndpoints
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Today");
         var cards = new List<object>();
 
+        // Each zone's maximum run time (0052), so the app can say when the advice is longer
+        // than one run ("Recommended 66 min — your pump is limited to 5 min per run").
+        var maxRun = new Dictionary<long, int>();
+        await using (var connection = await dataSource.OpenConnectionAsync(ct))
+        {
+            var maxExpr = await AgroFlow.Api.Services.ZoneRunLimit.ExpressionAsync(connection, "z", ct);
+            await using var limits = new NpgsqlCommand($"select z.id, {maxExpr} from zone z where z.farm_id = $1", connection);
+            limits.Parameters.AddWithValue(farmId);
+            await using var lr = await limits.ExecuteReaderAsync(ct);
+            while (await lr.ReadAsync(ct))
+                maxRun[lr.GetInt64(0)] = IrrigationRunRules.ZoneMaxOrDefault(lr.IsDBNull(1) ? null : lr.GetInt32(1));
+        }
+
         // 2. Run the engine for each zone: the XDB loads the rows, the
         //    controller builds the input, and Fao56Engine works out the advice.
         foreach (var zone in engine.Data.GetZonesForFarm(farmId))
@@ -66,6 +79,11 @@ public static class TodayEndpoints
                     zoneId = zone.ZoneId,
                     name = zone.ZoneName,
                     action = new { kind = action.Kind, text = action.Text },
+                    // The engine's own runtime, read as it is (the engine is not changed): only
+                    // for a "water" card, in whole minutes, null when it has no runtime.
+                    recommendedMinutes = action.Kind == "water" && result.RecommendedRuntimeSeconds is { } secs
+                        ? (int?)Math.Ceiling(secs / 60.0) : null,
+                    maxRunMinutes = maxRun.TryGetValue(zone.ZoneId, out var limit) ? limit : IrrigationRunRules.DefaultMaxRunMinutes,
                     why = action.Why is null ? null : Plain(action.Why, isAdmin),
                     confidence = new { level = result.Confidence.Key, reason = result.Confidence.Reason },
                     confidenceExplanation = Plain(Explanations.Confidence(result), isAdmin),
