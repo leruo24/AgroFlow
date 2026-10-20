@@ -2194,6 +2194,9 @@ html{ scrollbar-gutter: stable; }
 
 /* While a page is loading, the outgoing page's buttons must not take a click. */
 #content[aria-busy="true"]{ pointer-events: none; }
+/* ...except the slow-loading Retry, which must be pressable while the page is still busy. */
+#content[aria-busy="true"] [data-loading-retry]{ pointer-events: auto; }
+.loading-indicator [data-loading-retry]{ margin-left: 8px; }
 
 /* A KPI tile or Needs-attention card with its controls (dismiss) below it. */
 .kpi-item, .attn-item{ display:flex; flex-direction:column; gap:4px; min-width:0; }

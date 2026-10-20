@@ -107,7 +107,7 @@ export async function usersPage(): Promise<string> {
         ${u.telegramLinked || isStaffRole(u.role)
           ? ""
           : `<a href="#" data-act="send-link-code" data-id="${u.id}">Connect</a>`}
-        <a href="#" class="danger" data-act="delete-user" data-id="${u.id}">Delete</a>
+        <a href="#" data-act="delete-user" data-id="${u.id}">Remove account</a>
       </span>`,
     ], "No users match the current filters."))}
   `;

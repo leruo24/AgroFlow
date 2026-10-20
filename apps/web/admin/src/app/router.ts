@@ -120,7 +120,8 @@ export async function go(pageId: string, opts: PageOptions = {}): Promise<void> 
 
   content.setAttribute("aria-busy", "true");
   content.innerHTML = skeletonPage();
-  watchSlowLoading(content);
+  // Retry loads this page again (a new navigation, so the slow one is dropped).
+  watchSlowLoading(content, () => void go(id, opts));
 
   /* A page that throws gets an error state with a Retry, never an endless skeleton or a
    * content area left busy (unclickable). Most pages catch their own failures through

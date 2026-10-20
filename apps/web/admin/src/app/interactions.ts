@@ -546,7 +546,7 @@ async function openUserProfile(id: string): Promise<void> {
       section("Account", `<p class="muted">Forgot their password? Reset password gives them a new temporary one: by Telegram if connected, otherwise you read it out.</p>
         <p><button type="button" class="btn ghost" data-act="reset-password" data-id="${esc(u.id)}">Reset password</button></p>
         <p class="muted">Removing the account stops sign-in. Their farms, zones and history are kept.</p>
-        <p><button type="button" class="btn danger" data-act="delete-user" data-id="${esc(u.id)}">Remove account</button></p>`),
+        <p><button type="button" class="btn ghost" data-act="delete-user" data-id="${esc(u.id)}">Remove account</button></p>`),
       section("Registered hardware", list(u.hardware.map((h) => `<span class="mono">${esc(h)}</span>`))),
       section("Irrigation schedules", list(userSchedules.map((s) =>
         `${esc(s.zone)} — ${esc(s.cadence)} <span class="muted">(${fmtPct(s.compliancePct)} compliance)</span>`))),
@@ -1004,18 +1004,19 @@ async function handleAction(el: HTMLElement): Promise<void> {
       const u = api.findUser(idAttr);
       const name = u?.name?.trim() || "This farmer";
       // Says before and after exactly what is kept, because "delete" reads as "lose the farm".
+      // A plain confirm, not the warning style: that is kept for something that went wrong.
       const ok = await confirmDialog({
         title: `Remove ${name}'s account?`,
-        body: `${name} will no longer be able to sign in. Their farms, zones and history will be kept.`,
+        body: `Their farm, zones and readings stay on record. ${name} will no longer be able to sign in.`,
         confirmLabel: "Remove account",
-        danger: true,
       });
       if (!ok) return;
 
       try {
         await deleteFarmerUser(idAttr);
         closeDrawer();
-        toast(`${name}'s account was removed. Their farms, zones and history were kept.`, "success", 6000);
+        // The success toast carries the tick.
+        toast(`${name}'s account was removed. Farm records were kept.`, "success", 6000);
         return void refresh();
       } catch (e) {
         showErrorModal(

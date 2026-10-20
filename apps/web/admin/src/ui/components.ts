@@ -305,9 +305,9 @@ export function filterBar(opts: FilterBarOptions): string {
 /* Grey blocks alone look the same whether a page is a second away or never coming, so every
  * skeleton also says Loading… with a spinner, and after SLOW_LOADING_MS says why it might be
  * slow (watchSlowLoading). */
-export const SLOW_LOADING_MS = 8000;
+export const SLOW_LOADING_MS = 10_000;
 export const LOADING_TEXT = "Loading…";
-export const SLOW_LOADING_TEXT = "Still loading — check your connection";
+export const SLOW_LOADING_TEXT = "Taking longer than usual";
 
 export function loadingIndicator(): string {
   return `<div class="loading-indicator" role="status" aria-live="polite" data-loading-indicator>
@@ -316,9 +316,10 @@ export function loadingIndicator(): string {
     </div>`;
 }
 
-/** Changes the indicator's words once loading has gone on too long. Does nothing if the
- *  skeleton has already been replaced by the page. */
-export function watchSlowLoading(scope: HTMLElement, ms = SLOW_LOADING_MS): void {
+/** Once loading has gone on too long (10 s): "Taking longer than usual" and a Retry button,
+ *  which loads the page again. Does nothing if the skeleton has already been replaced by the
+ *  page. A page that fails shows the router's error state instead (with its own Retry). */
+export function watchSlowLoading(scope: HTMLElement, onRetry?: () => void, ms = SLOW_LOADING_MS): void {
   const indicator = scope.querySelector<HTMLElement>("[data-loading-indicator]");
   if (!indicator) return;
   window.setTimeout(() => {
@@ -326,6 +327,15 @@ export function watchSlowLoading(scope: HTMLElement, ms = SLOW_LOADING_MS): void
     indicator.classList.add("slow");
     const text = indicator.querySelector<HTMLElement>(".loading-text");
     if (text) text.textContent = SLOW_LOADING_TEXT;
+    if (onRetry && !indicator.querySelector("[data-loading-retry]")) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "btn ghost sm";
+      retry.dataset["loadingRetry"] = "";
+      retry.textContent = "Retry";
+      retry.addEventListener("click", onRetry);
+      indicator.appendChild(retry);
+    }
   }, ms);
 }
 
