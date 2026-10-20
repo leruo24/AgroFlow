@@ -456,7 +456,7 @@ export default function ZoneControlScreen() {
         soil.simulated
           ? 'Simulated reading'
           : soil.calibrated
-          ? soil.moistureStatus
+          ? t(`zone.moisture.${soil.moistureStatus}` as TranslationKey)
           : 'Do the wet/dry setup to read this as moisture',
     },
     {

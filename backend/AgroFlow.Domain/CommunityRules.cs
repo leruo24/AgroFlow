@@ -134,11 +134,32 @@ namespace AgroFlow.Business
         public static string DistanceText(double km) =>
             km < 1.5 ? "about 1 km from your farm" : $"about {Math.Round(km):0} km from your farm";
 
-        public static string Compass(double deg)
+        // The eight directions a fire update can name, as the database stores them (0055's
+        // community_report_update.direction check). The app sends these words.
+        public static readonly IReadOnlyList<string> Directions = new[]
         {
-            var names = new[] { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" };
-            return names[(int)Math.Round(((deg % 360) + 360) % 360 / 45.0) % 8];
+            "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west",
+        };
+
+        // Older app builds sent compass codes (N, NE ... NW); they still work.
+        private static readonly IReadOnlyDictionary<string, string> CompassCodes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["N"] = "north", ["NE"] = "north-east", ["E"] = "east", ["SE"] = "south-east",
+            ["S"] = "south", ["SW"] = "south-west", ["W"] = "west", ["NW"] = "north-west",
+        };
+
+        // "north-east" or "NE" -> "north-east"; anything else -> null (refused).
+        public static string? NormaliseDirection(string? direction)
+        {
+            if (direction is null) return null;
+            var d = direction.Trim();
+            if (CompassCodes.TryGetValue(d, out var word)) return word;
+            var lower = d.ToLowerInvariant().Replace(' ', '-');
+            return Directions.Contains(lower) ? lower : null;
         }
+
+        public static string Compass(double deg) =>
+            Directions[(int)Math.Round(((deg % 360) + 360) % 360 / 45.0) % 8];
 
         public static double RadiusFor(string category, bool escalated, CommunitySettings s)
         {

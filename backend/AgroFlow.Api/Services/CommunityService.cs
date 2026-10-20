@@ -200,8 +200,13 @@ public sealed class CommunityService
         var s = await _settings.CommunityAsync(ct);
         if (kind is not ("still_burning" or "spreading" or "under_control" or "out" or "note"))
             return new(400, new { error = "Choose an update." });
-        if (direction is not null && !new[] { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" }.Contains(direction))
-            return new(400, new { error = "Choose a direction." });
+        // The words ("north-east"), or the compass codes older app builds send ("NE").
+        if (direction is not null)
+        {
+            var word = CommunityRules.NormaliseDirection(direction);
+            if (word is null) return new(400, new { error = "Choose a direction." });
+            direction = word;
+        }
         if (note is { Length: > 280 }) return new(400, new { error = "Keep the note under 280 characters." });
 
         await using var connection = await _dataSource.OpenConnectionAsync(ct);

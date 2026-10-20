@@ -12,7 +12,7 @@ try {
   await applyMigrations(db.client);
   code = await new Promise(resolve => {
     const p = spawn('dotnet', ['test', path.join(repoRoot, 'backend', 'AgroFlow.Domain.Tests'),
-      '--filter', 'FullyQualifiedName~SimDatabaseTests|FullyQualifiedName~DroughtCommunityDbTests', '--logger', 'console;verbosity=normal'], {
+      '--filter', 'FullyQualifiedName~SimDatabaseTests|FullyQualifiedName~DroughtCommunityDbTests|FullyQualifiedName~DroughtCommunityFixTests', '--logger', 'console;verbosity=normal'], {
       env: { ...process.env, AGROFLOW_SIM_DB: db.connectionString }, stdio: 'inherit',
     });
     p.on('close', resolve);

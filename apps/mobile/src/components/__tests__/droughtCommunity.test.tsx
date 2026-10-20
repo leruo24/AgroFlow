@@ -46,7 +46,7 @@ jest.mock('@/services/agroFlowApi', () => ({
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as api from '@/services/agroFlowApi';
 import { DroughtCard } from '@/components/DroughtCard';
-import CommunityScreen, { COMMUNITY_CATEGORIES } from '@/app/community';
+import CommunityScreen, { COMMUNITY_CATEGORIES, DIRECTION_WORDS } from '@/app/community';
 import { resetLanguageForTests } from '@/i18n';
 
 const honesty = "Worked out from your farm's own tank estimate, soil readings and weather forecast. It is not a drought prediction or an official drought declaration.";
@@ -140,7 +140,7 @@ describe('community screen', () => {
     expect(api.updateCommunityReport).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByTestId('community-fire-dir-NE-21'));
     await fireEvent.press(screen.getByTestId('community-fire-spreading-21'));
-    await waitFor(() => expect(api.updateCommunityReport).toHaveBeenCalledWith(21, 'spreading', 'NE'));
+    await waitFor(() => expect(api.updateCommunityReport).toHaveBeenCalledWith(21, 'spreading', 'north-east'));
     expect(await screen.findByText('Update sent to 3 farms nearby.')).toBeTruthy();
   });
 
@@ -218,5 +218,42 @@ describe('community screen', () => {
   it('uses the same categories and kinds as the API', () => {
     expect(COMMUNITY_CATEGORIES.map(c => c.category)).toEqual(['pest', 'disease', 'fire', 'water', 'weather']);
     expect(COMMUNITY_CATEGORIES.flatMap(c => c.subtypes)).toHaveLength(17);
+  });
+});
+
+// The direction a fire update sends must be one the API and the database accept. The list is
+// read from the backend source and the migration, not from a faked response, so a mismatch
+// (the app once sent "NE" while the API wanted "north-east") fails here.
+declare const __dirname: string;
+describe('fire update directions match the API', () => {
+  const fs = jest.requireActual('fs') as { readFileSync(file: string, encoding: 'utf8'): string };
+  const path = jest.requireActual('path') as { resolve(...parts: string[]): string; join(...parts: string[]): string };
+  const repo = path.resolve(__dirname, '../../../../..');
+  // Every quoted word in the given text: "north-east" in C#, 'north-east' in SQL.
+  const words = (text: string) => [...text.matchAll(/["']([a-z]+(?:-[a-z]+)?)["']/g)].map(m => m[1]);
+  const rules = fs.readFileSync(path.join(repo, 'backend/AgroFlow.Domain/CommunityRules.cs'), 'utf8');
+  const apiWords = new Set(words(rules.slice(rules.indexOf('IReadOnlyList<string> Directions'), rules.indexOf('};', rules.indexOf('IReadOnlyList<string> Directions')))));
+  const sql = fs.readFileSync(path.join(repo, 'supabase/migrations/0055_community_reports.sql'), 'utf8');
+  const line = sql.split(/\r?\n/).find(l => /direction\s+text check/.test(l)) ?? '';
+  const dbWords = new Set(words(line));
+
+  it('the API list and the database check are the same eight words', () => {
+    expect([...apiWords].sort()).toEqual(['east', 'north', 'north-east', 'north-west', 'south', 'south-east', 'south-west', 'west']);
+    expect([...dbWords].sort()).toEqual([...apiWords].sort());
+  });
+
+  it('every direction button sends one of those words', async () => {
+    for (const word of Object.values(DIRECTION_WORDS)) expect(apiWords.has(word)).toBe(true);
+    expect(Object.keys(DIRECTION_WORDS)).toHaveLength(8);
+    // And what the screen actually passes to the API call, for every button.
+    serve([report({ reportId: 23, category: 'fire', subtype: 'veld_fire', label: 'Veld fire', canUpdate: true })]);
+    (api.updateCommunityReport as jest.Mock).mockResolvedValue({ notifiedFarms: 1, closed: false });
+    await render(<CommunityScreen />);
+    for (const code of Object.keys(DIRECTION_WORDS)) {
+      await fireEvent.press(await screen.findByTestId(`community-fire-dir-${code}-23`));
+      await fireEvent.press(screen.getByTestId('community-fire-spreading-23'));
+    }
+    await waitFor(() => expect((api.updateCommunityReport as jest.Mock).mock.calls).toHaveLength(8));
+    for (const [, , sent] of (api.updateCommunityReport as jest.Mock).mock.calls) expect(apiWords.has(sent)).toBe(true);
   });
 });

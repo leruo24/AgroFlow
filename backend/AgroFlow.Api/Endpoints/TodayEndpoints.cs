@@ -86,8 +86,7 @@ public static class TodayEndpoints
                 var why = action.Why is null ? null : Plain(action.Why, isAdmin);
                 double? grossLitres = action.Kind == "water" && result.RecommendedLitres is { } netLitres
                     ? ApplicationEfficiency.Gross(netLitres, zoneIrrigation) : null;
-                if (why is not null && action.Kind == "water" && ApplicationEfficiency.For(zoneIrrigation) is not null)
-                    why.Facts.Add(new ExplanationFact("How the zone is watered", ApplicationEfficiency.Explain(zoneIrrigation), "FAO irrigation guidance"));
+                AddIrrigationFact(why, action.Kind, zoneIrrigation);
 
                 cards.Add(new
                 {
@@ -142,6 +141,15 @@ public static class TodayEndpoints
     }
 
     // Farmers never see the technical line; admins do.
+    // On a "water" card, the Why says how much of the water reaches the roots with this
+    // zone's irrigation (FAO field application efficiency) - the reason the amount to apply is
+    // more than the crop's need. Not for hand watering (no published value) or other cards.
+    public static void AddIrrigationFact(Explanation? why, string kind, string? irrigationType)
+    {
+        if (why is null || kind != "water" || ApplicationEfficiency.For(irrigationType) is null) return;
+        why.Facts.Add(new ExplanationFact("How the zone is watered", ApplicationEfficiency.Explain(irrigationType), "FAO irrigation guidance"));
+    }
+
     private static Explanation Plain(Explanation e, bool isAdmin)
     {
         if (!isAdmin) e.Technical = string.Empty;

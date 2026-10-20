@@ -582,3 +582,56 @@ describe('Home card', () => {
     expect(screen.queryByTestId('setup-card')).toBeNull();
   });
 });
+
+// Three tests from the 7-step wizard, kept for the 17-step one.
+describe('kept from the 7-step wizard', () => {
+  it('picks a zone for the flow even when the zones load after the step opens', async () => {
+    mockParams = { step: 'flow' };
+    mockAgro = { ...agro(), zones: [] };
+    let now = 3_000_000;
+    const spy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const view = await render(<SetupScreen />);
+    await screen.findByText('Measure your water flow');
+    mockAgro = agro();
+    await view.rerender(<SetupScreen />);
+    await fireEvent.changeText(await screen.findByTestId('setup-flow-amount'), '10');
+    await fireEvent.press(screen.getByTestId('setup-flow-stopwatch'));
+    now += 30_000;
+    await fireEvent.press(screen.getByTestId('setup-flow-stopwatch'));
+    await fireEvent.press(await screen.findByTestId('setup-flow-save'));
+    await waitFor(() => expect(api.saveZoneSetup).toHaveBeenCalledWith(7, { flowRateLpm: 20 }));
+    spy.mockRestore();
+  });
+
+  it('refuses a flow timed for 2 seconds or less, on the screen', async () => {
+    mockParams = { step: 'flow' };
+    let now = 2_000_000;
+    const spy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    await render(<SetupScreen />);
+    await screen.findByText('Measure your water flow');
+    await fireEvent.changeText(screen.getByTestId('setup-flow-amount'), '500');
+    await fireEvent.press(screen.getByTestId('setup-flow-unit-ml'));
+    await fireEvent.press(screen.getByTestId('setup-flow-stopwatch'));
+    now += 1_500;
+    await fireEvent.press(screen.getByTestId('setup-flow-stopwatch'));
+    await fireEvent.press(screen.getByTestId('setup-flow-save'));
+    expect(await screen.findByTestId('setup-flow-error')).toBeTruthy();
+    expect(api.saveZoneSetup).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("Home's card reminds about the wet reading after the dry one", async () => {
+    // Everything before the soil step done: the next thing to do is the wet reading.
+    await AsyncStorage.setItem(KEY, JSON.stringify({
+      languageConfirmed: true, telegramDeclined: true, skipped: [], unsent: [], locationFlagged: false,
+      confirmed: ['location', soilTypeKey(7)],
+    }));
+    mockAgro = agro([bed({ crop: 'tomato', plantingDate: '2026-09-01', wet: false, dry: true })]);
+    serve(farmSetup({ waterSource: 'borehole', zones: [serverZone({ crop: 'tomato', irrigationType: 'drip', areaM2: 50, flowRateLpm: 6 })] }),
+      [todayZone(7, 'Bed 1', { crop: true, plantingDate: true, flowRate: true })]);
+    await render(<SetupCard />);
+    expect(await screen.findByText('Soil: save the wet reading for Bed 1')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('setup-card-continue'));
+    expect(mockPush).toHaveBeenCalledWith('/setup?step=soil');
+  });
+});

@@ -132,6 +132,12 @@ test("moderation: list and map, the reporter for staff, repeat false reporters, 
   await expect(content.getByText("thabo@example.com").first()).toBeVisible();
   await expect(content.getByText("3 of 4 hidden")).toBeVisible();            // a repeat false reporter
   await expect(content.getByText("(widened)")).toBeVisible();                 // fire escalated at 3+ confirmations
+  // Stored values in plain words: severity, status and the fire's state.
+  const table = page.locator(".panel", { hasText: "Points are rounded" }).locator("table");
+  await expect(table.getByText("Moderate", { exact: true })).toBeVisible();
+  await expect(table.getByText("Active", { exact: true }).first()).toBeVisible();
+  await expect(table.getByText(/Spreading/)).toBeVisible();
+  for (const raw of ["moderate", "active", "spreading", "under_control"]) await expect(table.getByText(raw, { exact: true })).toHaveCount(0);
   await expect(content.locator("[data-community-map] div")).toHaveCount(4);  // two active reports: circle + dot each
   await settle(page);
   await page.locator("[data-community-map]").scrollIntoViewIfNeeded();

@@ -35,6 +35,11 @@ export const COMMUNITY_CATEGORIES: { category: CommunityCategory; subtypes: stri
 ];
 const SEVERITIES: CommunitySeverity[] = ['low', 'moderate', 'high'];
 const DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+// What the API and the database store (AgroFlow.Domain CommunityRules.Directions, 0055's check).
+// The short codes are only for the buttons and their labels; the words are what is sent.
+export const DIRECTION_WORDS: Record<(typeof DIRECTIONS)[number], string> = {
+  N: 'north', NE: 'north-east', E: 'east', SE: 'south-east', S: 'south', SW: 'south-west', W: 'west', NW: 'north-west',
+};
 const MAX_NOTE = 280;
 
 type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
@@ -108,14 +113,14 @@ export default function CommunityScreen() {
 function ReportCard({ t, styles, report: r, onConfirm, onUpdated }: {
   t: T; styles: Styles; report: NearbyReport; onConfirm: () => void; onUpdated: (message: string) => void;
 }) {
-  const [direction, setDirection] = useState<string | null>(null);
+  const [direction, setDirection] = useState<(typeof DIRECTIONS)[number] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fire = r.category === 'fire';
   const update = async (kind: 'still_burning' | 'spreading' | 'under_control' | 'out') => {
     setError(null);
     if (kind === 'spreading' && !direction) { setError(t('community.fire.pickDirection')); return; }
     try {
-      const res = await updateCommunityReport(r.reportId, kind, kind === 'spreading' ? direction! : undefined);
+      const res = await updateCommunityReport(r.reportId, kind, kind === 'spreading' ? DIRECTION_WORDS[direction!] : undefined);
       onUpdated(res.closed ? t('community.fire.closed') : t('community.fire.sent', { n: res.notifiedFarms }));
     } catch (e) {
       setError(problem(t, e));

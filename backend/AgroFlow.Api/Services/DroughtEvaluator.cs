@@ -21,6 +21,11 @@ public sealed record DroughtView(
 // writes an in-app alert and tells linked farmers on Telegram (never staff).
 public sealed class DroughtEvaluator
 {
+    // The demo dry week applies only to a Simulated farm, with the drought scenario, while
+    // Simulation:Enabled is on. A real farm never gets demo values.
+    public static bool DemoApplies(bool isSimulated, string? scenario, bool simulationEnabled) =>
+        isSimulated && scenario == "drought" && simulationEnabled;
+
     public const string Honesty =
         "Worked out from your farm's own tank estimate, soil readings and weather forecast. It is not a drought prediction or an official drought declaration.";
 
@@ -112,7 +117,7 @@ public sealed class DroughtEvaluator
 
         // Demonstration only (0056): a Simulated farm with the drought scenario gets a dry week,
         // and only while Simulation__Enabled is on. The ET figures are demo values, not data.
-        if (farm.IsSimulated && farm.Scenario == "drought" && _config.GetValue("Simulation:Enabled", false))
+        if (DemoApplies(farm.IsSimulated, farm.Scenario, _config.GetValue("Simulation:Enabled", false)))
         {
             rain = 0;
             etoUsual ??= 4.0;

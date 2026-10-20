@@ -23,6 +23,18 @@ export const REPEAT_HIDDEN = 2;
 const CATEGORY_LABEL: Record<string, string> = {
   pest: "Pests", disease: "Crop disease", fire: "Fire", water: "Water problem", weather: "Bad weather",
 };
+// Stored values in plain words (never "moderate", "active" or "under_control" as stored).
+export const SEVERITY_LABEL: Record<string, string> = { low: "Low", moderate: "Moderate", high: "High" };
+export const STATUS_LABEL: Record<string, string> = {
+  active: "Active", hidden: "Hidden", expired: "Expired", closed: "Closed (fire out)",
+};
+export const FIRE_STATE_LABEL: Record<string, string> = {
+  burning: "Still burning", spreading: "Spreading", under_control: "Under control", out: "Out",
+};
+export const OVERRIDE_LABEL: Record<string, string> = { on: "Switched on by hand", off: "Switched off by hand" };
+const plain = (labels: Record<string, string>, value: string): string =>
+  labels[value] ?? (value.charAt(0).toUpperCase() + value.slice(1)).replace(/_/g, " ");
+
 const CATEGORY_COLOUR: Record<string, string> = {
   pest: "#8a6d1f", disease: "#7a4c8c", fire: "#c0392b", water: "#1f6f8b", weather: "#4a5a6a",
 };
@@ -49,7 +61,7 @@ async function render(): Promise<string> {
       `<a href="#" data-act="view-farm" data-id="${f.farmId}">${esc(f.name)}</a> ${f.isSimulated ? badge("Simulated", "warn") : ""}`,
       f.since ? esc(fmtDateTimeSast(f.since)) : "-",
       `<span class="muted">${esc(f.reason ?? "")}</span>`,
-      f.override ? badge(`By hand: ${f.override}`, "info") : badge("Automatic", "good"),
+      f.override ? badge(plain(OVERRIDE_LABEL, f.override), "info") : badge("Automatic", "good"),
       (["auto", "on", "off"] as const).map((m) =>
         `<button class="btn ghost sm" data-act="drought-mode" data-id="${f.farmId}" data-mode="${m}"${(f.override ?? "auto") === m ? " aria-pressed=\"true\"" : ""}>${m === "auto" ? "Automatic" : m === "on" ? "On" : "Off"}</button>`).join(" "),
     ], "No farm is in drought mode."))}
@@ -65,9 +77,9 @@ async function render(): Promise<string> {
      <p class="muted" data-community-map-status hidden></p>
      ${table(["When", "What", "Severity", "Status", "Place", "Reporter (staff only)", "Seen too", "Farms told", ""], reports, (r) => [
        esc(fmtDateTimeSast(r.createdAt)),
-       `<b>${esc(r.label)}</b><br><span class="muted">${esc(CATEGORY_LABEL[r.category] ?? r.category)}${r.fireState ? ` · ${esc(r.fireState.replace("_", " "))}` : ""}${r.description ? ` · “${esc(r.description)}”` : ""}</span>`,
-       badge(r.severity, r.severity === "high" ? "bad" : r.severity === "moderate" ? "warn" : "info"),
-       r.status === "hidden" ? `${badge("Hidden", "bad")}<br><span class="muted">${esc(r.hiddenReason ?? "")}</span>` : badge(r.status, r.status === "active" ? "good" : "info"),
+       `<b>${esc(r.label)}</b><br><span class="muted">${esc(CATEGORY_LABEL[r.category] ?? r.category)}${r.fireState ? ` · ${esc(plain(FIRE_STATE_LABEL, r.fireState))}` : ""}${r.description ? ` · “${esc(r.description)}”` : ""}</span>`,
+       badge(plain(SEVERITY_LABEL, r.severity), r.severity === "high" ? "bad" : r.severity === "moderate" ? "warn" : "info"),
+       r.status === "hidden" ? `${badge(STATUS_LABEL.hidden, "bad")}<br><span class="muted">${esc(r.hiddenReason ?? "")}</span>` : badge(plain(STATUS_LABEL, r.status), r.status === "active" ? "good" : "info"),
        `${r.latitude.toFixed(2)}, ${r.longitude.toFixed(2)}<br><span class="muted">${r.radiusKm} km${r.escalated ? " (widened)" : ""}</span>`,
        `${esc(r.reporterName || "-")}<br><span class="muted">${esc(r.reporterEmail)} · ${esc(r.farmName)}</span>${
          r.reporterHiddenCount >= REPEAT_HIDDEN
