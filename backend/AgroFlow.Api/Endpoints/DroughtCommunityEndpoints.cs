@@ -204,13 +204,14 @@ public static class DroughtCommunityEndpoints
 
     // ---- Community (farmer) ------------------------------------------------------------------
 
-    private static async Task<IResult> GetCommunityAsync(long farmId, ClaimsPrincipal user, CommunityService community, NpgsqlDataSource dataSource, CancellationToken ct)
+    private static async Task<IResult> GetCommunityAsync(long farmId, ClaimsPrincipal user, CommunityService community, AppSettingsStore settings, NpgsqlDataSource dataSource, CancellationToken ct)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
         await using (var c = await dataSource.OpenConnectionAsync(ct))
             if (!await CanAccessFarmAsync(c, userId, farmId, ct)) return Results.NotFound(new { error = "Farm not found." });
         var limit = await community.LimitAsync(userId, ct);
-        return Results.Ok(new { reports = await community.ForFarmAsync(userId, farmId, ct), limit = new { limit.Allowed, limit.NextAllowedAt, limit.Message }, unverified = CommunityRules.Unverified });
+        var s = await settings.CommunityAsync(ct);
+        return Results.Ok(new { reports = await community.ForFarmAsync(userId, farmId, ct), limit = new { limit.Allowed, limit.NextAllowedAt, limit.Message }, unverified = CommunityRules.Unverified, emergency = s.EmergencyText });
     }
 
     private static async Task<IResult> GetLimitAsync(ClaimsPrincipal user, CommunityService community, CancellationToken ct)

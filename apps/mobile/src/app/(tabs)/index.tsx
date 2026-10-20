@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { router } from '@/lib/router';
-import { Bell, ChevronRight, Clock3, CloudSun, Container, Droplets, FileText, Settings2 } from 'lucide-react-native';
+import { Bell, ChevronRight, Clock3, CloudSun, Container, Droplets, FileText, Settings2, Users } from 'lucide-react-native';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAgroFlow } from '@/context/AgroFlowContext';
@@ -17,6 +17,7 @@ import { DripHelper } from '@/components/DripHelper';
 import { averageSoilText } from '@/lib/moistureDisplay';
 import { TodayCard } from '@/components/TodayCard';
 import { SetupCard } from '@/components/SetupCard';
+import { DroughtCard } from '@/components/DroughtCard';
 import { fetchFarmToday, fetchTankStatus, type TankStatus, type TodayZone } from '@/services/agroFlowApi';
 import { useI18n } from '@/i18n';
 import { onReconnect } from '@/lib/connectivity';
@@ -74,6 +75,8 @@ export default function HomeScreen() {
         : <>
           {/* Setup still to finish comes first; it is gone once setup is complete. */}
           <SetupCard />
+          {/* The water budget, and drought mode with each zone's priority when it is on. */}
+          <DroughtCard />
           {/* Today next: it is what a farmer opens the app to find out. */}
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('home.today')}</Text>
           {todayFailed ? <DataState kind="error" title={t('home.todayUnavailable')} onRetry={loadToday} />
@@ -111,6 +114,7 @@ export default function HomeScreen() {
         // app ("do I water tomorrow?").
         { label: t('home.weekAhead'), route: '/forecast' as const, Icon: CloudSun },
         { label: t('home.viewAlerts'), route: '/alerts' as const, Icon: Bell },
+        { label: t('home.community'), route: '/community' as never, Icon: Users },
         { label: t('home.logRefill'), route: '/tank?refill=1' as never, Icon: Container },
         { label: t('home.viewHistory'), route: '/history' as const, Icon: Clock3 },
         { label: t('home.reports'), route: '/reports' as const, Icon: FileText },

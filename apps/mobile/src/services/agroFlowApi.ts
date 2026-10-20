@@ -1276,7 +1276,7 @@ export type NearbyReport = {
 export type CommunityLimit = { allowed: boolean; nextAllowedAt: string | null; message: string };
 
 export function fetchCommunity(farmId: string | number) {
-  return authorizedRequest<{ reports: NearbyReport[]; limit: CommunityLimit; unverified: string }>(
+  return authorizedRequest<{ reports: NearbyReport[]; limit: CommunityLimit; unverified: string; emergency?: string }>(
     `/api/farmer/farms/${encodeURIComponent(String(farmId))}/community`);
 }
 

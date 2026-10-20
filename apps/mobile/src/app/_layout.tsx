@@ -163,6 +163,11 @@ function RootNavigator() {//decides which screens the user is permitted to acces
         <Stack.Screen
           name="tank"
         />
+
+        {/* Reports from farmers nearby (pests, disease, fire, water, weather). */}
+        <Stack.Screen
+          name="community"
+        />
       </Stack.Protected>
 
       {/* The setup wizard. Open to any signed-in farmer, including one who must still change
