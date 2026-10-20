@@ -1,12 +1,10 @@
 /* The public product page: what anyone who opens the AgroFlow link sees.
  * The link is shared with people who are not staff (a farmer, a sponsor, a lecturer, a partner
  * at the Cisco Edge Centre), so the page is for customers: what AgroFlow does, how it works,
- * request a call and get the app. Nothing from the console is on it; staff get one quiet
- * "Staff sign-in" link (#/admin, or /admin/ which forwards there).
+ * request a call and get the app. Nothing from the console is on it, not even a link to it:
+ * staff sign in at the separate /staff/ address (see main.ts).
  * It is one of the states in main.ts's render() and not a PageId in the router (see
- * app/router.ts), because like the login screen it is outside the signed-in shell. It does
- * not change signing in: "Staff sign-in" only asks main.ts to show the login screen, and a
- * visitor with a valid admin session goes straight to the dashboard. */
+ * app/router.ts): it is its own layout, outside the console's shell. */
 
 import { Icon } from "@/lib/icons";
 import { ENQUIRY_SECTION_HTML, wireEnquiry } from "@/pages/enquiry";
@@ -75,7 +73,6 @@ export const WELCOME_HTML = `
         <a href="#get-app">Get the app</a>
         <a href="#enquire">Contact</a>
       </nav>
-      <a class="landing-staff-link" href="#/admin" id="welcomeLogin">Staff sign-in</a>
     </header>
 
     <main class="landing-main">
@@ -278,19 +275,10 @@ export const WELCOME_HTML = `
     </main>
     <footer class="landing-footer">
       <span>AgroFlow</span><span>Smart irrigation for real growing areas.</span>
-      <a class="landing-staff-link" href="#/admin" id="welcomeLoginBottom">Staff sign-in</a>
     </footer>
   </div>`;
 
-/* onLogin is called by both Staff sign-in links, in the header and the footer. They are real
- * links to #/admin, so they also work opened in a new tab; the click handler only avoids a
- * second render. */
-export function wireWelcome(root: HTMLElement, onLogin: () => void): void {
-  root.querySelectorAll<HTMLAnchorElement>("#welcomeLogin, #welcomeLoginBottom")
-    .forEach((link) => link.addEventListener("click", (e) => {
-      e.preventDefault();
-      onLogin();
-    }));
+export function wireWelcome(root: HTMLElement): void {
   wireEnquiry(root);
   initHardwareShowcase(root);
   root.querySelector<HTMLButtonElement>("[data-experience-launch]")?.addEventListener("click", async (event) => {

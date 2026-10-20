@@ -47,7 +47,7 @@ test("Home: every KPI tile and the Needs-attention card explain themselves, with
     },
   });
 
-  await page.goto("/#dashboard");
+  await page.goto("/staff/#dashboard");
   await expect(page.locator(".attn-card", { hasText: "Zones missing setup" })).toBeVisible({ timeout: 15000 });
 
   // Six tiles on Home, each with its own link, plus the attention card's.
@@ -83,7 +83,7 @@ test("an alert opens with its own stored explanation", async ({ page }) => {
     },
   });
 
-  await page.goto("/#alerts");
+  await page.goto("/staff/#alerts");
   await page.locator('[data-act="view-alert"][data-id="42"]').first().click({ timeout: 15000 });
 
   const drawer = page.locator(".drawer, [role=dialog]").filter({ hasText: "Zone entered Critical" }).first();
@@ -102,7 +102,7 @@ test("an alert with no stored explanation shows no Why section - never a generic
     respond: (method, path) => (method === "GET" && path === "/rest/v1/alert" ? [ALERT_ROW] : undefined),
   });
 
-  await page.goto("/#alerts");
+  await page.goto("/staff/#alerts");
   await page.locator('[data-act="view-alert"][data-id="42"]').first().click({ timeout: 15000 });
 
   const drawer = page.locator(".drawer, [role=dialog]").filter({ hasText: "Zone entered Critical" }).first();

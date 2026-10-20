@@ -57,7 +57,7 @@ async function open(page: Page): Promise<Write[]> {
       return undefined;
     },
   });
-  await page.goto("/#requests");
+  await page.goto("/staff/#requests");
   await expect(page.locator("tr", { hasText: "noname@example.com" })).toBeVisible({ timeout: 15000 });
   return writes;
 }

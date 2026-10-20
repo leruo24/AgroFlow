@@ -39,7 +39,7 @@ test("register a farm with the keyboard only", async ({ page }) => {
       return undefined;
     },
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator('[data-act="add-farm"]')).toBeVisible({ timeout: 15000 });
 
   await tabTo(page, '[data-act="add-farm"]');

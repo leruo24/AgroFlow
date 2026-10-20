@@ -73,7 +73,7 @@ async function open(page: Page, at: string, initial: Row[] = []) {
 
 test("Home: dismiss a card, Undo, dismiss again, find it under Dismissed and restore it", async ({ page }) => {
   const errors = captureErrors(page);
-  const { rows, posts } = await open(page, "/#dashboard");
+  const { rows, posts } = await open(page, "/staff/#dashboard");
   const card = page.locator(".attn-item", { hasText: "Zones missing setup" });
   await expect(card).toBeVisible({ timeout: 15000 });
 
@@ -101,7 +101,7 @@ test("Home: dismiss a card, Undo, dismiss again, find it under Dismissed and res
 });
 
 test("a critical card asks for a note, records what it was made of, and comes back when that changes", async ({ page }) => {
-  const { rows, posts } = await open(page, "/#dashboard");
+  const { rows, posts } = await open(page, "/staff/#dashboard");
   const card = page.locator(".attn-item", { hasText: "New requests waiting" });
   await expect(card).toBeVisible({ timeout: 15000 });
 
@@ -120,7 +120,7 @@ test("a critical card asks for a note, records what it was made of, and comes ba
 });
 
 test("Alerts: dismiss one, it moves to Dismissed with its time and who, Restore brings it back", async ({ page }) => {
-  const { posts } = await open(page, "/#alerts");
+  const { posts } = await open(page, "/staff/#alerts");
   await expect(page.locator("tr", { hasText: "Telegram not linked" })).toBeVisible({ timeout: 15000 });
 
   await page.locator("tr", { hasText: "Telegram not linked" }).getByRole("button", { name: /Dismiss/ }).click();
@@ -138,7 +138,7 @@ test("Alerts: dismiss one, it moves to Dismissed with its time and who, Restore 
 });
 
 test("Health: a down check asks for a note; the warning leaves the grid and is in Dismissed", async ({ page }) => {
-  const { posts } = await open(page, "/#dashboard");
+  const { posts } = await open(page, "/staff/#dashboard");
   const mqtt = page.locator(".health-card", { hasText: "MQTT broker" });
   await expect(mqtt).toBeVisible({ timeout: 15000 });
   await expect(page.locator(".health-card", { hasText: "API" }).getByRole("button", { name: /Dismiss/ })).toHaveCount(0);   // OK checks have none

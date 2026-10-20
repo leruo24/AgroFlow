@@ -21,7 +21,7 @@ const ENQUIRIES = [
 
 type Write = { path: string; body: Record<string, unknown> };
 
-async function open(page: Page, at = "/#requests"): Promise<Write[]> {
+async function open(page: Page, at = "/staff/#requests"): Promise<Write[]> {
   const writes: Write[] = [];
   page.on("request", (r) => {
     const url = new URL(r.url());
@@ -54,7 +54,7 @@ async function enquiriesTab(page: Page): Promise<void> {
 
 test("the sidebar and Home show what needs a call, and lead to the Enquiries tab", async ({ page }) => {
   const errors = captureErrors(page);
-  await open(page, "/#dashboard");
+  await open(page, "/staff/#dashboard");
 
   await expect(page.locator('#nav button[data-page="requests"] .nav-badge')).toHaveText("2", { timeout: 15000 });
   await expect(page.locator(".attn-card", { hasText: "Call-backs due" })).toBeVisible();
@@ -159,7 +159,7 @@ test("the Enquiries & sales follow-up report downloads with its period, province
   page.on("request", (r) => {
     if (r.url().includes("/api/admin/reports/enquiries.")) asked.push(r.url());
   });
-  await open(page, "/#reports");
+  await open(page, "/staff/#reports");
   const panel = page.locator(".panel", { hasText: "Enquiries & sales follow-up" });
   await expect(panel).toBeVisible({ timeout: 15000 });
 

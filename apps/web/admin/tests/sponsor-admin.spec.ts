@@ -31,7 +31,7 @@ async function usersPage(page: Page, calls: Calls): Promise<void> {
       return undefined;
     },
   });
-  await page.goto("/#users");
+  await page.goto("/staff/#users");
   await expect(page.locator("#content")).toHaveAttribute("data-page", "users", { timeout: 15000 });
 }
 
@@ -85,7 +85,7 @@ test("a loading page shows a spinner and Loading…, then the connection hint af
     // The Farmers page's list never answers, so the skeleton stays up.
     delayFor: (method, path) => (method === "GET" && path === "/api/users" ? 30_000 : undefined),
   });
-  await page.goto("/#users");
+  await page.goto("/staff/#users");
 
   const indicator = page.locator("#content [data-loading-indicator]");
   await expect(indicator).toBeVisible({ timeout: 15000 });
@@ -99,7 +99,7 @@ test("a loading page shows a spinner and Loading…, then the connection hint af
 
 test("a page that loads quickly never shows the connection hint", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
-  await page.goto("/#users");
+  await page.goto("/staff/#users");
   await expect(page.locator("#content")).toHaveAttribute("data-page", "users", { timeout: 15000 });
   await expect(page.locator("[data-loading-indicator]")).toHaveCount(0);
   await expect(page.getByText("Still loading")).toHaveCount(0);
@@ -136,7 +136,7 @@ test("a farmer who signs in is shown the staff-only message and where the app is
     return json({});
   });
 
-  await page.goto("/#/admin");
+  await page.goto("/staff/");
   await page.locator("#loginEmail").fill("thandi@example.org");
   await page.locator("#loginPassword").fill("a-farmer-password");
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -157,7 +157,7 @@ test("a farmer who signs in is shown the staff-only message and where the app is
   expect(errors).toEqual([]);
 });
 
-test("the public page links to staff sign-in and shows no console", async ({ page }) => {
+test("the public page shows no console and no link to it; staff sign in at /staff/", async ({ page }) => {
   await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto("/");
@@ -167,19 +167,35 @@ test("the public page links to staff sign-in and shows no console", async ({ pag
   await expect(page.getByRole("heading", { name: "Get the app" })).toBeAttached();
   await expect(page.locator("#appShell, #nav, [data-act]")).toHaveCount(0);
   await expect(page.getByText(/Admin console|Open admin console/)).toHaveCount(0);
+  // Nothing on the product site links to staff sign-in.
+  await expect(page.getByRole("link", { name: /staff|admin|sign in/i })).toHaveCount(0);
+  await expect(page.locator('a[href*="staff"], a[href*="#/admin"], a[href*="#/login"]')).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Staff sign-in" }).first().click();
-  await expect(page).toHaveURL(/#\/admin$/);
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  // Staff sign in at their own address, with its own layout.
+  await page.goto("/staff/");
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toHaveCount(0);
+});
+
+test("the root address opens the product site even with a staff session; old staff links go to /staff/", async ({ page }) => {
+  await mockBackend(page, { minDelayMs: 1, maxDelayMs: 2 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("#appShell")).toHaveCount(0);
+  await page.goto("/#/admin");
+  await expect(page).toHaveURL(/\/staff\/$/);
+  await expect(page.locator("#appShell")).toBeVisible({ timeout: 15000 });
+  await page.goto("/#dashboard");
+  await expect(page.locator("#appShell")).toHaveCount(0);   // a console hash on the root is still the product site
 });
 
 // The built site serves public/admin/index.html at /admin/; the dev server's SPA fallback
 // answers /admin/ with the console itself, so the file is opened by name here.
-test("/admin/ forwards to staff sign-in", async ({ page }) => {
+test("/admin/ forwards to /staff/", async ({ page }) => {
   await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto("/admin/index.html");
-  await expect(page).toHaveURL(/\/#\/admin$/);
+  await expect(page).toHaveURL(/\/staff\/$/);
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible({ timeout: 15000 });
 });
 
@@ -202,7 +218,7 @@ test("Forgot password on the console is an email link for staff, and says to che
     return route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: "[]" });
   });
 
-  await page.goto("/#/admin");
+  await page.goto("/staff/");
   await page.getByRole("button", { name: "Forgot password?" }).click();
   await expect(page.getByRole("heading", { name: "Reset your password" })).toBeVisible();
   await expect(page.getByText("We email you a link to choose a new password.")).toBeVisible();
@@ -249,7 +265,7 @@ async function resetPage(page: Page, calls: Calls): Promise<void> {
       return undefined;
     },
   });
-  await page.goto("/#users");
+  await page.goto("/staff/#users");
   await expect(page.locator("#content")).toHaveAttribute("data-page", "users", { timeout: 15000 });
 }
 
@@ -327,8 +343,9 @@ test("the reset page renders, checks the password and saves it", async ({ page }
 
   await page.locator("#resetConfirm").fill("a-long-new-password");
   await page.getByRole("button", { name: "Save new password" }).click();
-  await expect(page.locator(".toast.toast-success")).toHaveText("Your password was changed.");
-  await expect(page.locator("#appShell")).toBeVisible();
+  // The product site's reset address continues to the console at /staff/.
+  await expect(page).toHaveURL(/\/staff\/$/);
+  await expect(page.locator("#appShell")).toBeVisible({ timeout: 15000 });
   await expect(page).not.toHaveURL(/reset=1/);
   expect(updates).toHaveLength(1);
   expect(errors).toEqual([]);
@@ -340,7 +357,8 @@ test("a used or expired reset link says so and goes to sign in", async ({ page }
   await page.goto("/?reset=1");
   await expect(page.getByRole("heading", { name: "This reset link has expired" })).toBeVisible({ timeout: 15000 });
   await page.getByRole("button", { name: "Go to sign in" }).click();
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+  await expect(page).toHaveURL(/\/staff\/$/);
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible({ timeout: 15000 });
   await expect(page).not.toHaveURL(/reset=1/);
 });
 

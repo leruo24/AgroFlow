@@ -38,7 +38,7 @@ async function open(page: Page, extra?: (method: string, path: string) => unknow
       return undefined;
     },
   });
-  await page.goto("/#farms");
+  await page.goto("/staff/#farms");
   await expect(page.locator('[data-act="view-farm"][data-id="1"]')).toBeVisible({ timeout: 15000 });
 }
 
