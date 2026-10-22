@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { Type, Radius, Spacing, type AppColors, Space, Layout } from '@/constants/colors';
+import { Type, Radius, type AppColors, Space, Layout } from '@/constants/colors';
 
 export function createProfileStyles(
   colors: AppColors

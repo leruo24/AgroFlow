@@ -217,10 +217,6 @@ type DatabaseId =
   | string
   | number;
 
-type FarmMemberRow = {
-  farm_id: DatabaseId;
-};
-
 type FarmRow = {
   farm_id: DatabaseId;
   owner_id: string;
@@ -420,7 +416,6 @@ function deriveMoistureStatus(
 // Exported for the mode-mapping tests.
 export function mapZoneRow(
   row: ZoneRow,
-  index: number,
   reading: ZoneLatestReadingRow | undefined,
   lastEvent: IrrigationEventRow | undefined,
   usedTodayLitres: number | null,
@@ -670,10 +665,9 @@ async function fetchZonesForFarm(
     monthByZone.set(key, (monthByZone.get(key) ?? 0) + Number(event.estimated_litres));
   }
 
-  const mappedZones = rows.map((row, index) =>
+  const mappedZones = rows.map((row) =>
     mapZoneRow(
       row,
-      index,
       readingByZone.get(String(row.id)),
       latestEventByZone.get(String(row.id)),
       // No zone_daily_water_usage row for today stays null, never 0, which would look like a

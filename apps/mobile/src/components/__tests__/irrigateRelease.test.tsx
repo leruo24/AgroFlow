@@ -76,7 +76,7 @@ const row = { id: 7, farm_id: 1, name: 'Bed 1', crop_type: 'spinach', irrigation
 const startManualIrrigation = jest.fn(() => Promise.resolve());
 const agro = (maxRun?: number) => ({
   farm: { id: '1', name: 'Nkosi Farm' },
-  zones: [mapZoneRow({ ...row, max_run_minutes: maxRun } as never, 0, undefined, undefined, null, null, [])],
+  zones: [mapZoneRow({ ...row, max_run_minutes: maxRun } as never, undefined, undefined, null, null, [])],
   isZonesLoading: false, zonesError: null, isFarmLoading: false, farmError: null,
   refreshZones: jest.fn(), refreshFarms: jest.fn(),
   startManualIrrigation, stopManualIrrigation: jest.fn(), updateIrrigationMode: jest.fn(),
