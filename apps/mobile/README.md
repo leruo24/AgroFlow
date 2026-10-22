@@ -1,71 +1,40 @@
-# Welcome to your Expo app 👋
+# AgroFlow farmer app
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This Expo SDK 57 app is the farmer interface. The same source builds the Android
+APK and the installable web app; Expo Router loads screens from `src/app`.
 
-## Get started
+## Run
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```powershell
+cd apps/mobile
+npm ci
+Copy-Item .env.example .env
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Use the Expo prompt to open Android or the web build. Local environment values
+are public client configuration only; do not put server secrets in them.
 
-### Other setup steps
+## Test and build
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```powershell
+npx tsc --noEmit
+npx jest
+npx expo export --platform web
+```
 
-## Web app (for iPhone users)
+The web export is written to `dist/` for Vercel. Android release builds use the
+profiles in `eas.json` through Expo Application Services.
 
-The same code builds a web app that farmers on an iPhone add to their Home Screen (Share,
-then "Add to Home Screen"). It uses the same Supabase project, accounts and API as the APK.
+## Main files
 
-- Build: `npx expo export --platform web` (output in `dist/`). `web.output` is `single`, so
-  every path loads `index.html` and the router shows the right screen; `vercel.json` rewrites
-  every path to it.
-- The HTML shell is `public/index.html`; the Home Screen name, colours and icons are in
-  `public/manifest.json` and `public/icons/` (the 180x180 `apple-touch-icon.png` is for iOS).
-- Variables: `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
-  `EXPO_PUBLIC_AGROFLOW_API_BASE`. They are built into the public bundle, so they must never
-  hold a secret.
-- The API must allow the web app's origin (Railway `Cors__AllowedOrigins__N`).
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+| Path | Purpose |
+|---|---|
+| `src/app/` | Expo Router layouts and screens; filenames are routes. |
+| `src/components/` | Reusable farmer-interface components and component tests. |
+| `src/context/` | Authentication, theme, farm, zone, and irrigation state. |
+| `src/services/` | API, authentication, alerts, and insight clients. |
+| `src/lib/` | Offline, formatting, routing, and setup helpers. |
+| `src/i18n/` | English, Afrikaans, and Setswana translations. |
+| `assets/`, `public/` | Native and web assets. |
+| `app.json`, `eas.json`, `vercel.json` | Expo, APK-build, and web-deployment configuration. |
