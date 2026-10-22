@@ -183,7 +183,8 @@ export type Zone = {
     // The sum of this month's watering events (estimated litres); null when there were none.
     monthLitres?: number | null;
   };
-  // When the kit last sent a reading (zone_latest_reading.last_reading_at); null if never.
+  // When the kit measured its latest stored reading (zone_latest_reading.last_reading_at);
+  // replayed offline readings keep the ESP32's NTP time. Null if never.
   lastReadingAt?: string | null;
   // The zone's soil type as stored (zone.soil_type: sandy / loam / clay), or null.
   soilType?: string | null;

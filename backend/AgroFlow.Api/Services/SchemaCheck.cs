@@ -164,6 +164,10 @@ public sealed class SchemaCheck
             "select 1 from information_schema.columns where table_name = 'farm' and column_name = 'sim_scenario'",
             "The Mahikeng and Ottoshoop demonstration farms for drought mode and community alerts are missing."),
 
+        new("0057", "index", "uq_sensor_reading_hardware_measured",
+            "select to_regclass('public.uq_sensor_reading_hardware_measured')",
+            "Offline reading retries can be stored twice because the per-kit uniqueness key is missing."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

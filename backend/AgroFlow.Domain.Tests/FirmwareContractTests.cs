@@ -85,6 +85,7 @@ public class FirmwareContractTests
     public void MQTT_topics_and_payloads_match()
     {
         var sketch = Sketch();
+        Assert.Contains("FIRMWARE_VERSION = \"1.7.0\"", sketch);
         Assert.Contains("\"/device/\" + deviceId + \"/sensors\"", sketch);
         Assert.Contains("\"/device/\" + deviceId + \"/commands\"", sketch);
         Assert.Equal("agroflow/farm/+/device/+/sensors", MqttTopics.SensorTopicFilter);

@@ -113,6 +113,29 @@ public class LateReadingTests
     }
 
     [Fact]
+    public void The_firmware_keeps_every_offline_report_and_exposes_the_backlog_count()
+    {
+        var sketch = Sketch();
+        Assert.DoesNotContain("OFFLINE_SAMPLE_INTERVAL_MS", sketch);
+        Assert.Contains("else bufferReading(agroflow::kSoilMoisture, pct);", sketch);
+        Assert.Contains("bufferReading(agroflow::kTemperature, v.temperature);", sketch);
+        Assert.Contains("bufferReading(agroflow::kHumidity, v.humidity);", sketch);
+        Assert.Contains("doc[\"pendingReadings\"]", sketch);
+    }
+
+    [Fact]
+    public void Migration_0057_makes_a_physical_kits_measured_reading_atomic()
+    {
+        var root = RepoRoot();
+        var migration = File.ReadAllText(Path.Combine(root, "supabase", "migrations", "0057_sensor_reading_device_dedupe.sql"));
+        var processor = File.ReadAllText(Path.Combine(root, "backend", "AgroFlow.Api", "Services", "SensorReadingProcessor.cs"));
+        Assert.Contains("add column if not exists hardware_id", migration);
+        Assert.Contains("on sensor_reading (hardware_id, sensor_type, recorded_at)", migration);
+        Assert.Contains("where hardware_id is not null", migration);
+        Assert.Contains("on conflict do nothing", processor);
+    }
+
+    [Fact]
     public void The_local_page_is_on_the_kit_wifi_only_behind_its_password_and_capped_at_five_minutes()
     {
         var sketch = Sketch();

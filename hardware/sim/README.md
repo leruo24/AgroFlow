@@ -2,7 +2,7 @@
 
 Runs the **real** `AgroFlow.Api` against a throwaway local Postgres with **every migration
 applied** and a local MQTT broker, and drives it with a pretend kit that follows firmware
-1.6.0's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
+1.7.0's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
 
 ```bash
 cd hardware/sim
@@ -21,8 +21,9 @@ prints the API's log and the broker's connections.
 | The kit enrols with a one-time code, and the code works once | `POST /api/devices/claim`, then the same code again (401) |
 | The kit shows online | `hardware.status = 'Online'`, `enrollment_status = 'active'`, `last_seen` within a minute |
 | Readings are stored | three rounds of soil, temperature and humidity over MQTT, every 2 s |
-| Late readings are accepted with their own time, once | a soil reading with `recordedAt` 3 hours ago, sent twice: one row, at that time |
-| ... and do not start automatic watering | no `irrigation_commands` row after it, on an automatic zone |
+| A 10-minute broker outage is recovered | the broker stops, twenty 30-second three-sensor samples queue, the broker restarts, and all 60 upload oldest first with their measured times |
+| Replayed readings are stored once | the oldest buffered MQTT message is retried; the per-kit/type/measured-time key still produces 60 rows, not 61 |
+| An old buffered reading does not start automatic watering | no `irrigation_commands` row after the old dry sample, on an automatic zone |
 | Control: a live reading of the same value does | the same dry value, live: an `auto` `start` reaches the kit |
 | A manual 1-minute command reaches the kit and is acknowledged | an `irrigation_commands` row (what Water now creates) → MQTT → `POST .../executed` → `executed` |
 | The run is logged | `POST /api/irrigation-events`: a `manual` event of 60 s |

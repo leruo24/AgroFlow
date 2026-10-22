@@ -1,4 +1,4 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.6.0).
+// AgroFlow irrigation node - ESP32 firmware (v1.7.0).
 //
 // WiFiManager setup portal + one-time enrollment code -> /api/devices/claim.
 // MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors as
@@ -25,9 +25,9 @@
 //   6. The broker address can come from the server: if mqtt-credentials returns
 //      mqttHost/mqttPort the board uses them, otherwise the compiled-in
 //      MQTT_HOST/MQTT_PORT. Moving brokers is a Railway setting, not a reflash.
-//   7. Offline buffer (v1.5.0): while MQTT is down the board keeps a reading every
-//      OFFLINE_SAMPLE_INTERVAL_MS in a bounded ring in flash (oldest dropped first,
-//      each with its time), and publishes them in order with "recordedAt" when it is
+//   7. Offline buffer (v1.5.0, every reading since v1.7.0): while MQTT is down the
+//      board keeps each 30-second sensor reading in a bounded ring in flash (oldest
+//      dropped first, each with its time), and publishes them in order with "recordedAt" when it is
 //      back. The API stores them but never starts automatic watering from an old
 //      reading. Pump runs the server has not heard about are kept the same way and
 //      uploaded as irrigation events. The ring logic is OfflineBuffer.h (unit-tested
@@ -81,7 +81,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Update this and Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json each release.
-const char *FIRMWARE_VERSION = "1.6.0";
+const char *FIRMWARE_VERSION = "1.7.0";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -107,11 +107,10 @@ const time_t MIN_VALID_EPOCH = 1700000000;
 
 // Offline buffer (OfflineBuffer.h). Sized to fit the board's settings flash (NVS)
 // next to the WiFi details: 180 readings x 20 bytes, one soil + temperature +
-// humidity sample every 10 minutes = about 10 hours offline before the oldest is
-// dropped. 32 pump runs x 16 bytes.
+// humidity sample every 30 seconds = about 30 minutes offline before the oldest
+// is dropped. 32 pump runs x 16 bytes.
 const size_t READING_BUFFER_CAPACITY = 180;
 const size_t RUN_BUFFER_CAPACITY = 32;
-const unsigned long OFFLINE_SAMPLE_INTERVAL_MS = 10UL * 60UL * 1000UL;
 const size_t REPLAY_BATCH = 5;            // per loop pass, so sensors and the safety cap keep running
 
 // Local page on the setup network (see 8. above).
@@ -194,8 +193,6 @@ agroflow::RingBuffer<agroflow::BufferedRun, RUN_BUFFER_CAPACITY> runBuffer;
 uint32_t nextReadingSeq = 1;
 uint32_t nextRunSeq = 1;
 uint16_t bootId = 0;
-unsigned long lastOfflineSampleMillis = 0;
-bool offlineSampleTaken = false;
 
 // The latest values, for the local page.
 int lastSoilRaw = -1;
@@ -605,17 +602,11 @@ void sendOrBuffer(uint8_t kind, float value) {
   bufferReading(kind, value);
 }
 
-// Called on a timer: read the soil probe and the DHT11, and publish each value
-// to this board's MQTT sensors topic. While MQTT is down, keep one sample every
-// OFFLINE_SAMPLE_INTERVAL_MS in the offline buffer instead.
+// Called every 30 seconds: read the soil probe and the DHT11, and publish each
+// value to this board's MQTT sensors topic. While MQTT is down, keep every value
+// in the offline buffer instead.
 void reportSensorReadings() {
   bool online = mqttClient.connected();
-  bool sampleOffline = !online &&
-      (!offlineSampleTaken || millis() - lastOfflineSampleMillis >= OFFLINE_SAMPLE_INTERVAL_MS);
-  if (sampleOffline) {
-    lastOfflineSampleMillis = millis();
-    offlineSampleTaken = true;
-  }
   size_t bufferedBefore = readingBuffer.size();
   uint32_t droppedBefore = readingBuffer.dropped();
 
@@ -625,7 +616,7 @@ void reportSensorReadings() {
     float pct = rawToPercent(raw);
     lastSoilPercent = pct;
     if (online) sendOrBuffer(agroflow::kSoilMoisture, pct);
-    else if (sampleOffline) bufferReading(agroflow::kSoilMoisture, pct);
+    else bufferReading(agroflow::kSoilMoisture, pct);
     Serial.printf("Soil raw=%d (%.0f%%)\n", raw, pct);
   } else {
     lastSoilPercent = -1.0f;
@@ -640,7 +631,7 @@ void reportSensorReadings() {
     if (online) {
       sendOrBuffer(agroflow::kTemperature, v.temperature);
       sendOrBuffer(agroflow::kHumidity, v.humidity);
-    } else if (sampleOffline) {
+    } else {
       bufferReading(agroflow::kTemperature, v.temperature);
       bufferReading(agroflow::kHumidity, v.humidity);
     }

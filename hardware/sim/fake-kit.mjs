@@ -1,4 +1,4 @@
-// A pretend AgroFlow irrigation kit (firmware 1.6.0's contract) for the simulation. It talks
+// A pretend AgroFlow irrigation kit (firmware 1.7.0's contract) for the simulation. It talks
 // to the real AgroFlow.Api exactly as the ESP32 sketch does:
 //   POST /api/devices/claim                    one-time enrollment code -> device token
 //   GET  /api/devices/mqtt-credentials         X-Device-Token -> MQTT login
@@ -8,7 +8,7 @@
 //   POST /api/irrigation-events                a finished pump run
 // The pump is pretend: a run is reported with the commanded duration straight away, so a
 // "1-minute run" does not make the test wait a minute. startRun() runs the pump for real time
-// with firmware 1.6.0's two stops (RunLimits.h): min(asked, maxRunSeconds, 120 min), and the
+// with firmware 1.7.0's two stops (RunLimits.h): min(asked, maxRunSeconds, 120 min), and the
 // lost-connection failsafe, whose 3 minutes the simulation shortens (lostContactMs).
 import mqtt from 'mqtt';
 
@@ -24,7 +24,7 @@ export function runLimitSeconds(command) {
 }
 
 export class FakeKit {
-  constructor({ apiBase, mqttUrl, deviceId, firmwareVersion = '1.5.0', log = () => {} }) {
+  constructor({ apiBase, mqttUrl, deviceId, firmwareVersion = '1.7.0', log = () => {} }) {
     Object.assign(this, { apiBase, mqttUrl, deviceId, firmwareVersion, log });
     this.commands = [];
     this.seq = 1;

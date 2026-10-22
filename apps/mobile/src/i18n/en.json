@@ -650,7 +650,7 @@
     "community.form.needSubtype": "Choose which one.",
     "community.form.needSeverity": "Choose how serious it is.",
     "sensor.title": "Sensor Readings",
-    "sensor.updated": "Updated {ago}",
+    "sensor.updated": "Last reading {ago}",
     "sensor.justNow": "just now",
     "sensor.minAgo": "{n} min ago",
     "sensor.hoursAgo": "{n} h ago",

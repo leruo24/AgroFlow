@@ -650,7 +650,7 @@
     "community.form.needSubtype": "Kies watter een.",
     "community.form.needSeverity": "Kies hoe ernstig dit is.",
     "sensor.title": "Sensorlesings",
-    "sensor.updated": "Opgedateer {ago}",
+    "sensor.updated": "Laaste lesing {ago}",
     "sensor.justNow": "netnou",
     "sensor.minAgo": "{n} min gelede",
     "sensor.hoursAgo": "{n} uur gelede",

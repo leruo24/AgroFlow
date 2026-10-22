@@ -4,8 +4,9 @@
 //   cd hardware/sim && npm install && node run-e2e.mjs
 //
 // It checks: the kit enrols with a one-time code and shows online; its readings are stored;
-// readings it kept while offline are accepted with their own time, once, without starting
-// automatic watering (and a live reading of the same value does start it, so the rule is
+// a simulated 10-minute broker outage buffers readings, then uploads them oldest first
+// with their measured times and no duplicates, without starting automatic watering from
+// an old dry reading (a live reading of the same value does start it, so the age rule is
 // what stops it); a Manual zone is never watered automatically and its kit is told not to
 // water offline; a manual 1-minute command reaches it with the zone's maximum run time, is
 // acknowledged, and its run report marks it finished in the history; a zone limited to
@@ -21,6 +22,7 @@
 import net from 'node:net';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import Aedes from 'aedes';
 import { startDatabase, applyMigrations, repoRoot } from './db.mjs';
 import { FakeKit, runLimitSeconds } from './fake-kit.mjs';
@@ -53,11 +55,34 @@ async function poll(fn, timeoutMs = 15000) {
 let db, broker, mqttServer, api, kit;
 const apiLog = [];
 const apiLogText = () => apiLog.join('');
+
+const startBroker = async () => {
+  broker = await Aedes.createBroker
+    ? await Aedes.createBroker({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) })
+    : Aedes({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) });
+  if (process.env.SIM_VERBOSE) {
+    broker.on('clientError', (c, e) => console.log('   broker: client error', c?.id, e.message));
+    broker.on('connectionError', (c, e) => console.log('   broker: connection error', c?.id, e.message));
+    broker.on('client', c => console.log('   broker: connected', c.id));
+    broker.on('clientDisconnect', c => console.log('   broker: disconnected', c.id));
+  }
+  mqttServer = net.createServer(broker.handle);
+  await new Promise(r => mqttServer.listen(MQTT_PORT, '127.0.0.1', r));
+};
+
+const stopBroker = async () => {
+  const closingBroker = broker;
+  const closingServer = mqttServer;
+  broker = null;
+  mqttServer = null;
+  if (closingBroker) await new Promise(r => closingBroker.close(r));
+  if (closingServer) await new Promise(r => closingServer.close(r));
+};
+
 const cleanup = async () => {
   await kit?.close();
   if (api && !api.killed) api.kill();
-  mqttServer?.close();
-  broker?.close();
+  await stopBroker();
   await db?.stop();
 };
 
@@ -67,6 +92,14 @@ try {
   db = await startDatabase();
   await applyMigrations(db.client, log);
   const q = (sql, params) => db.client.query(sql, params);
+  const dedupeMigration = await readFile(
+    path.join(repoRoot, 'supabase', 'migrations', '0057_sensor_reading_device_dedupe.sql'), 'utf8');
+  await q(dedupeMigration);
+  await q(dedupeMigration);
+  const dedupeSchema = (await q(`select
+    exists(select 1 from information_schema.columns where table_name = 'sensor_reading' and column_name = 'hardware_id') as has_column,
+    to_regclass('public.uq_sensor_reading_hardware_measured') is not null as has_index`)).rows[0];
+  check('migration 0057 is safe to apply twice', dedupeSchema.has_column && dedupeSchema.has_index);
 
   // 2. What an admin does in the console: farmer, farm, zone (automatic), kit + one-time code.
   //    (The admin endpoints need a Supabase login; their database effect is written here.)
@@ -84,17 +117,7 @@ try {
   log(`seeded farmer, farm ${farmId}, zone ${zoneId} (automatic), kit with a one-time code`);
 
   // 3. MQTT broker (stands in for HiveMQ), with a login like the real one.
-  broker = await Aedes.createBroker
-    ? await Aedes.createBroker({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) })
-    : Aedes({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) });
-  if (process.env.SIM_VERBOSE) {
-    broker.on('clientError', (c, e) => console.log('   broker: client error', c?.id, e.message));
-    broker.on('connectionError', (c, e) => console.log('   broker: connection error', c?.id, e.message));
-    broker.on('client', c => console.log('   broker: connected', c.id));
-    broker.on('clientDisconnect', c => console.log('   broker: disconnected', c.id));
-  }
-  mqttServer = net.createServer(broker.handle);
-  await new Promise(r => mqttServer.listen(MQTT_PORT, '127.0.0.1', r));
+  await startBroker();
   log(`MQTT broker on 127.0.0.1:${MQTT_PORT}`);
 
   // 4. The real API, pointed at both. Environment "Simulation", so no user-secrets load and no
@@ -149,22 +172,67 @@ try {
     return by.SoilMoisture >= 3 && by.Temperature >= 3 && by.Humidity >= 3 ? by : null;
   });
   check('live readings are stored', !!stored, JSON.stringify(stored));
-  const hw = (await q("select status, enrollment_status, last_seen > now() - interval '1 minute' as recent from hardware where device_id = $1", [DEVICE_ID])).rows[0];
+  const hw = (await q("select hardware_id, status, enrollment_status, last_seen > now() - interval '1 minute' as recent from hardware where device_id = $1", [DEVICE_ID])).rows[0];
   check('kit shows online', hw?.status === 'Online' && hw?.enrollment_status === 'active' && hw?.recent === true, JSON.stringify(hw));
 
-  // 7. Readings kept while offline: a dry reading from 3 hours ago, sent twice.
-  const commandsBefore = (await q('select count(*)::int n from irrigation_commands where zone_id = $1', [zoneId])).rows[0].n;
-  const threeHoursAgo = new Date(Date.now() - 3 * 3600 * 1000);
-  threeHoursAgo.setMilliseconds(0);
-  await kit.publish('SoilMoisture', 12, threeHoursAgo);
-  kit.seq--;   // the same reading again, as after a power cut mid-upload
-  await kit.publish('SoilMoisture', 12, threeHoursAgo);
-  await sleep(3000);
-  const late = (await q('select count(*)::int n from sensor_reading where zone_id = $1 and recorded_at = $2', [zoneId, threeHoursAgo])).rows[0].n;
-  check('a late reading is stored with its own time, once', late === 1, `${late} row(s) at ${threeHoursAgo.toISOString()}`);
-  const commandsAfterLate = (await q('select count(*)::int n from irrigation_commands where zone_id = $1', [zoneId])).rows[0].n;
-  check('a late dry reading does not start automatic watering', commandsAfterLate === commandsBefore,
-    `${commandsAfterLate - commandsBefore} new command(s)`);
+  // 7. The broker drops for a logical 10 minutes. Like the firmware, the fake kit keeps
+  //    every 30-second three-sensor sample with its measured time, then replays oldest first.
+  const startsBefore = (await q("select count(*)::int n from irrigation_commands where zone_id = $1 and command = 'start'", [zoneId])).rows[0].n;
+  await stopBroker();
+  const disconnected = await poll(() => !kit.connected, 5000);
+  const outageEnd = new Date(Date.now() - 30_000);
+  outageEnd.setMilliseconds(0);
+  const outageStart = new Date(outageEnd.getTime() - 10 * 60 * 1000);
+  const backlog = [];
+  for (let sample = 1; sample <= 20; sample++) {
+    const measuredAt = new Date(outageStart.getTime() + sample * 30_000);
+    backlog.push(
+      { sensorType: 'SoilMoisture', value: sample === 1 ? 12 : 65, measuredAt },
+      { sensorType: 'Temperature', value: 20.5 + sample / 100, measuredAt },
+      { sensorType: 'Humidity', value: 60, measuredAt },
+    );
+  }
+  const whileDown = (await q(
+    'select count(*)::int n from sensor_reading where hardware_id = $1 and recorded_at > $2 and recorded_at <= $3',
+    [hw.hardware_id, outageStart, outageEnd])).rows[0].n;
+  check('a 10-minute broker drop buffers every 30-second three-sensor sample',
+    disconnected && backlog.length === 60 && whileDown === 0,
+    `${backlog.length} buffered, ${whileDown} reached the database while down`);
+
+  await startBroker();
+  const apiReconnected = await poll(
+    () => Object.keys(broker?.clients ?? {}).some(id => id.startsWith('agroflow-api-')), 25000);
+  await kit.connectMqtt();
+  for (let i = 0; i < backlog.length; i++) {
+    const reading = backlog[i];
+    await kit.publish(reading.sensorType, reading.value, reading.measuredAt);
+    if (i === 0) {
+      kit.seq--; // retry the oldest entry, as after power loss between publish and flash save
+      await kit.publish(reading.sensorType, reading.value, reading.measuredAt);
+    }
+  }
+  await poll(async () => {
+    const count = (await q(
+      'select count(*)::int n from sensor_reading where hardware_id = $1 and recorded_at > $2 and recorded_at <= $3',
+      [hw.hardware_id, outageStart, outageEnd])).rows[0].n;
+    return count >= backlog.length;
+  });
+  await sleep(1000); // let a duplicate handler finish before asserting the final count
+  const replayed = (await q(
+    `select id, hardware_id, sensor_type, recorded_at
+       from sensor_reading
+      where hardware_id = $1 and recorded_at > $2 and recorded_at <= $3
+      order by id`, [hw.hardware_id, outageStart, outageEnd])).rows;
+  const replayKeys = new Set(replayed.map(r => `${r.sensor_type}|${new Date(r.recorded_at).toISOString()}`));
+  const replayInOrder = replayed.every((r, i) => i === 0 ||
+    new Date(replayed[i - 1].recorded_at).getTime() <= new Date(r.recorded_at).getTime());
+  check('after reconnect the backlog is stored once each, oldest first, with measured times',
+    apiReconnected && replayed.length === backlog.length && replayKeys.size === backlog.length && replayInOrder &&
+      replayed.every(r => String(r.hardware_id) === String(hw.hardware_id)),
+    `${replayed.length} rows, ${replayKeys.size} unique keys, ordered ${replayInOrder}`);
+  const startsAfterBacklog = (await q("select count(*)::int n from irrigation_commands where zone_id = $1 and command = 'start'", [zoneId])).rows[0].n;
+  check('the old dry reading from the backlog does not start automatic watering', startsAfterBacklog === startsBefore,
+    `${startsAfterBacklog - startsBefore} new start command(s)`);
 
   // Control: the same dry value as a live reading does start it, so the rule above is what stopped it.
   await kit.publish('SoilMoisture', 12);

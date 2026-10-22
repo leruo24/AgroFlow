@@ -201,7 +201,8 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 
             var result = await SensorReadingProcessor.ProcessAsync(
                 connection, device.Value.ZoneId, payload.SensorType, payload.Value, _notifications,
-                recordedAt: payload.RecordedAt);
+                recordedAt: payload.RecordedAt,
+                hardwareId: device.Value.HardwareId);
 
             if (result.Timing == ReadingTiming.Rejected)
             {

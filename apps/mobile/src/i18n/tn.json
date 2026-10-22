@@ -650,7 +650,7 @@
     "community.form.needSubtype": "Tlhopha efe.",
     "community.form.needSeverity": "Tlhopha gore go masisi go le kae.",
     "sensor.title": "Dipalo tsa disensara",
-    "sensor.updated": "Go ntšhwafaditswe {ago}",
+    "sensor.updated": "Go balwa ga bofelo {ago}",
     "sensor.justNow": "jaanong jaana",
     "sensor.minAgo": "metsotso e le {n} e e fetileng",
     "sensor.hoursAgo": "diura di le {n} tse di fetileng",

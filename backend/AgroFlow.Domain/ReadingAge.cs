@@ -30,8 +30,8 @@ namespace AgroFlow.Business
         // reading says, it is not the soil right now.
         public static readonly TimeSpan MaxLiveAge = TimeSpan.FromMinutes(10);
 
-        // The kit's buffer holds about 10 hours; a week leaves room for a kit that was
-        // off for a few days, and is how far back a farmer can log by hand (ManualLogEndpoints).
+        // The current ring holds about 30 minutes. A week also covers older firmware
+        // and is how far back a farmer can log by hand (ManualLogEndpoints).
         public static readonly TimeSpan MaxBackfillAge = TimeSpan.FromDays(7);
 
         // Clocks drift; a kit a minute or two ahead is still a live reading.

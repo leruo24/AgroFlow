@@ -1,8 +1,8 @@
 # Bringing up an AgroFlow kit
 
 Step by step, from a bare ESP32 to a kit that reports readings, waters on command and shows
-in the admin console. Every value here comes from the repository as it is on the
-`feat/kit-offline` branch (firmware **1.5.0**). If something on screen does not match, the
+in the admin console. Every value here comes from firmware **1.7.0** in this repository. If something
+on screen does not match, the
 repository is the source of truth: the sketch is
 [`hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino`](../hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino).
 
@@ -71,12 +71,18 @@ from enrollment instead, and are kept in the board's flash (or RAM):
 | Flash Frequency | 80 MHz |
 | Flash Mode | QIO |
 | Flash Size | 4MB (32Mb) |
-| Partition Scheme | **Default 4MB with spiffs (1.2MB APP/1.5MB SPIFFS)**. v1.6.0 uses 92% of it; if a later change does not fit, use **Minimal SPIFFS (1.9MB APP with OTA)** |
+| Partition Scheme | **Default 4MB with spiffs (1.2MB APP/1.5MB SPIFFS)**. v1.7.0 uses 92% of it; if a later change does not fit, use **Minimal SPIFFS (1.9MB APP with OTA)** |
 | Core Debug Level | None |
 | PSRAM | Disabled |
 | Erase All Flash Before Sketch Upload | Disabled (Enabled only to wipe a kit completely) |
 | Port | the board's COM port |
 | **Serial Monitor** | **115200 baud**, "Both NL & CR" |
+
+The 92% figure is program space. Offline data uses the separate NVS partition: the bounded
+ring holds **180 readings** (`180 × 20 B + 24 B header = 3,624 B`) and **32 pump runs**
+(`32 × 16 B + 24 B header = 536 B`), at most **4,160 B plus NVS overhead**. At one soil,
+temperature and humidity sample every 30 seconds, 180 readings cover about **30 minutes**;
+after that the oldest reading is dropped first.
 
 Open the sketch folder, press **Upload**. Some boards need the **BOOT** button held while
 "Connecting..." shows.
@@ -119,7 +125,7 @@ Sign in at the admin site (**Staff sign-in**).
 
 1. Power the kit (USB is fine). Open the Serial Monitor at 115200. You should see:
    ```
-   AgroFlow node v1.6.0 - device 0123456789AB
+   AgroFlow node v1.7.0 - device 0123456789AB
    Not set up yet: join WiFi "AgroFlow-Setup-89AB" to enter farm WiFi + enrollment code
    ```
 2. On the phone, join the WiFi **`AgroFlow-Setup-XXXX`** (XXXX = the last 4 characters of
@@ -166,7 +172,7 @@ The setup page stays open **5 minutes**; if it times out the kit restarts and op
 Tick each one.
 
 - [ ] **Online in the admin.** **Kits** shows the kit **Online**, on the right farm and zone,
-      firmware **1.5.0**.
+      firmware **1.7.0**.
 - [ ] **Readings every 30 s.** The Serial Monitor prints a soil and a DHT11 line every 30 s,
       and the farmer's app (zone screen) shows a recent reading.
 - [ ] **Probe reads sensibly.** On the Serial Monitor: probe in dry air reads about
