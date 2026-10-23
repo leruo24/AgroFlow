@@ -38,6 +38,48 @@ public static class CommandState
     };
 }
 
+// The words the app shows for a command, in the order they happen (docs/audit/ui-contracts.md).
+// Only the kit's own messages move a command to "confirmed": a request the server saved or sent is
+// never shown as watering. Stops have their own words, so "Stop requested" is never read as stopped.
+public static class CommandPhase
+{
+    public const string RequestSent = "request_sent";              // saved, not yet handed to the broker
+    public const string WaitingForKit = "waiting_for_kit";         // sent to the kit, no answer yet
+    public const string KitConfirmedStart = "kit_confirmed_start"; // the kit acknowledged and started
+    public const string Finished = "finished";                     // the kit reported the finished run
+    public const string StopRequested = "stop_requested";          // a stop sent, the kit has not answered
+    public const string KitConfirmedStop = "kit_confirmed_stop";   // the kit acknowledged the stop
+    public const string NoResponse = "no_response";                // nothing from the kit within the wait
+    public const string Failed = "failed";                         // given up (2 hours)
+
+    public static string Describe(string command, string status, DateTimeOffset createdAt, DateTimeOffset? publishedAt,
+        DateTimeOffset? finishedAt, DateTimeOffset now)
+    {
+        if (status == "failed") return Failed;
+        if (command == "stop")
+        {
+            if (status == "executed") return KitConfirmedStop;
+            return now - createdAt > CommandState.AckWait ? NoResponse : StopRequested;
+        }
+        if (finishedAt is not null) return Finished;
+        if (status == "executed") return KitConfirmedStart;
+        if (now - createdAt > CommandState.AckWait) return NoResponse;
+        return publishedAt is null ? RequestSent : WaitingForKit;
+    }
+
+    public static string Label(string phase) => phase switch
+    {
+        RequestSent => "Request sent",
+        WaitingForKit => "Waiting for kit",
+        KitConfirmedStart => "Kit confirmed start",
+        Finished => "Finished",
+        StopRequested => "Stop requested",
+        KitConfirmedStop => "Kit confirmed stop",
+        NoResponse => "No response",
+        _ => "Could not reach the kit",
+    };
+}
+
 // Links a pump run the kit reports (POST /api/irrigation-events) to the command it came from.
 // The firmware does not send the command id with a run, so the server matches: same zone and
 // source, the command was started (executed) and not finished yet, and its start time is the

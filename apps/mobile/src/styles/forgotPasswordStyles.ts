@@ -69,7 +69,7 @@ export function createForgotPasswordStyles(
       height: 28,
       marginRight: Space.sm,
       backgroundColor:
-        colors.primary,
+        colors.action,
     },
 
     brandName: {
@@ -158,7 +158,7 @@ export function createForgotPasswordStyles(
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
-        colors.primaryDark,
+        colors.action,
       borderRadius: Radius.sm,
     },
 

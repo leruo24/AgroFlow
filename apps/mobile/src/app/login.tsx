@@ -1,4 +1,5 @@
 import { router } from '@/lib/router';
+import { BrandMark } from '@/components/visual/BrandMark';
 
 import {
   useMemo,
@@ -253,11 +254,7 @@ export default function LoginScreen() {
                 styles.brand
               }
             >
-              <View
-                style={
-                  styles.brandMark
-                }
-              />
+              <BrandMark size={48} />
 
               <View>
                 <Text
@@ -337,6 +334,7 @@ export default function LoginScreen() {
                 </Text>
 
                 <TextInput
+                  accessibilityLabel={t('signin.email')}
                   value={
                     email
                   }
@@ -355,7 +353,7 @@ export default function LoginScreen() {
                       }
                     }
                   }
-                  placeholder="farmer@example.com"
+                  placeholder={t('login.emailExample')}
                   placeholderTextColor={
                     colors.textMuted
                   }
@@ -392,6 +390,7 @@ export default function LoginScreen() {
                   </Text>
 
                   <TouchableOpacity
+                    accessibilityRole="button"
                     onPress={
                       handleForgotPassword
                     }
@@ -415,6 +414,7 @@ export default function LoginScreen() {
                   }
                 >
                   <TextInput
+                    accessibilityLabel={t('signin.password')}
                     value={
                       password
                     }
@@ -456,6 +456,7 @@ export default function LoginScreen() {
                   />
 
                   <TouchableOpacity
+                    accessibilityRole="button"
                     style={
                       styles.showButton
                     }
@@ -485,6 +486,7 @@ export default function LoginScreen() {
               </View>
 
               <TouchableOpacity
+                accessibilityRole="button"
                 style={[
                   styles.loginButton,
 

@@ -1,4 +1,6 @@
 import type { Camera, Material, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import { ENCLOSURE_OPEN_RADIANS, stepHinge } from './enclosureHinge';
+import { text as t } from '@/pages/publicCopy';
 import {
   adaptivePixelRatio,
   createHardwareScene,
@@ -126,7 +128,8 @@ export function initHardwareShowcase(root: HTMLElement): void {
   let THREE: ThreeModule | null = null;
   let renderedLidOpen = 0;
   let lidOverride: 0 | 1 | null = null;
-  let lidAnimation: { from: number; to: 0 | 1; startedAt: number } | null = null;
+  let lidAnimation: { to: 0 | 1; lastAt: number } | null = null;
+  let lidVelocity = 0;
   let dragStart: { pointerId: number; x: number; y: number; rotation: number; horizontal: boolean } | null = null;
 
   function setActiveStory(nextStage: number): void {
@@ -209,26 +212,39 @@ export function initHardwareShowcase(root: HTMLElement): void {
     viewerElement.classList.toggle("is-open", open);
     viewerElement.dataset["enclosureState"] = open ? "open" : "closed";
     if (!toggleButton) return;
-    toggleButton.textContent = open ? "Close enclosure" : "Explore inside";
+    toggleButton.textContent = t('openEnclosure');
+    toggleButton.disabled = open;
+    const close = section?.querySelector<HTMLButtonElement>('[data-hardware-close]');
+    if (close) { close.textContent = t('closeEnclosure'); close.disabled = !open; }
+    const reset = section?.querySelector<HTMLButtonElement>('[data-hardware-reset]');
+    if (reset) { reset.textContent = t('resetView'); reset.setAttribute('aria-label', t('resetView')); }
     toggleButton.setAttribute("aria-expanded", String(open));
   }
 
   function animateLid(to: 0 | 1): void {
     lidOverride = to;
     updateOpenUi(to === 1);
-    lidAnimation = reducedMotion.matches ? null : { from: renderedLidOpen, to, startedAt: performance.now() };
-    if (reducedMotion.matches) renderedLidOpen = to;
+    lidAnimation = reducedMotion.matches ? null : { to, lastAt: performance.now() };
+    if (reducedMotion.matches) { renderedLidOpen = to; lidVelocity = 0; }
     requestRender();
   }
 
   function applyStoryState(time: number): void {
     if (!model || !camera) return;
     const state = interpolateFrame(progress);
+    if (reducedMotion.matches && lidAnimation) {
+      renderedLidOpen = lidAnimation.to;
+      lidVelocity = 0;
+      lidAnimation = null;
+    }
     if (lidAnimation) {
-      const elapsed = clamp((time - lidAnimation.startedAt) / 760, 0, 1);
-      const eased = elapsed * elapsed * (3 - 2 * elapsed);
-      renderedLidOpen = mix(lidAnimation.from, lidAnimation.to, eased);
-      if (elapsed >= 1) lidAnimation = null;
+      const step = stepHinge(renderedLidOpen, lidVelocity, lidAnimation.to, (time - lidAnimation.lastAt) / 1000);
+      lidAnimation.lastAt = time;
+      renderedLidOpen = step.value;
+      lidVelocity = step.velocity;
+      if (Math.abs(renderedLidOpen - lidAnimation.to) < 0.0001 && Math.abs(lidVelocity) < 0.001) {
+        renderedLidOpen = lidAnimation.to; lidVelocity = 0; lidAnimation = null;
+      }
     } else {
       renderedLidOpen = lidOverride ?? state.lidOpen;
     }
@@ -236,10 +252,11 @@ export function initHardwareShowcase(root: HTMLElement): void {
     if (lidOverride === null) updateOpenUi(renderedLidOpen > 0.5);
 
     model.root.rotation.y = state.rotation + userRotation;
-    model.lid.rotation.y = 2.62 * renderedLidOpen;
+    model.lid.rotation.y = ENCLOSURE_OPEN_RADIANS * renderedLidOpen;
+    viewerElement.dataset['hingeAngle'] = model.lid.rotation.y.toFixed(4);
     const manual = lidOverride !== null;
     const cameraOpen = manual ? renderedLidOpen : state.lidOpen;
-    const openCameraZ = mountElement.clientWidth < 560 ? 23.0 : 19.6;
+    const openCameraZ = mountElement.clientWidth < 560 ? 27.0 : 24.5;
     const cameraZ = manual ? mix(STORY_FRAMES[0]!.cameraZ, openCameraZ, cameraOpen) : mix(state.cameraZ, Math.max(state.cameraZ, openCameraZ), cameraOpen);
     const cameraX = manual ? mix(STORY_FRAMES[0]!.cameraX, -0.75, cameraOpen) : state.cameraX;
     const targetX = manual ? mix(0, -1.35, cameraOpen) : mix(state.targetX, Math.min(state.targetX, -1.35), cameraOpen);
@@ -314,7 +331,8 @@ export function initHardwareShowcase(root: HTMLElement): void {
     button.setAttribute("aria-pressed", "false");
     button.addEventListener("click", () => selectComponent(key), { signal: abort.signal });
   });
-  toggleButton?.addEventListener("click", () => animateLid(renderedLidOpen > 0.5 ? 0 : 1), { signal: abort.signal });
+  toggleButton?.addEventListener("click", () => animateLid(1), { signal: abort.signal });
+  section.querySelector<HTMLButtonElement>('[data-hardware-close]')?.addEventListener('click', () => animateLid(0), { signal: abort.signal });
   section.querySelector<HTMLButtonElement>("[data-hardware-rotate='left']")?.addEventListener("click", () => {
     userRotation -= 0.24;
     requestRender();

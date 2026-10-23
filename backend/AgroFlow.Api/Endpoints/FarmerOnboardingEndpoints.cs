@@ -1,8 +1,12 @@
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json.Serialization;
 using AgroFlow.Api.Auth;
 using AgroFlow.Api.Services;
 using AgroFlow.Api.Services.Notifications;
+using AgroFlow.Business;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace AgroFlow.Api.Endpoints;
 
@@ -44,12 +48,21 @@ public record FarmerOnboardingFarm(
     double SizeHectares,
     List<FarmerOnboardingZone> Zones,
     double? Latitude = null,
-    double? Longitude = null
+    double? Longitude = null,
+    // Picked by staff from the province list and town search (0053). Saved with the farm, in
+    // the same transaction; never replaced by what the town search found.
+    string? Province = null,
+    string? Town = null
 );
 
 public record FarmerOnboardingRequest(
     FarmerOnboardingFarmer Farmer,
-    FarmerOnboardingFarm Farm
+    FarmerOnboardingFarm Farm,
+    // Made by the admin site when the form opens (AF-01). The same id on a retry continues
+    // the same attempt instead of creating a second farm or account. Optional for older builds.
+    Guid? RequestId = null,
+    // The enquiry this onboarding came from (AF-24), linked once the account exists.
+    long? EnquiryId = null
 );
 
 public record FarmerOnboardingResponse(string Message);
@@ -57,26 +70,37 @@ public record FarmerOnboardingResponse(string Message);
 // What /onboard returns.
 // Security: TemporaryPassword is returned only once, here, and never stored. The
 // admin screen shows it so the installer can read it to a farmer without
-// Telegram; showing it again means a reset with a new one.
+// Telegram; showing it again means a reset with a new one. A retry of a request that
+// already completed returns no password (null).
 // TelegramDeepLink is shown as a QR code. It is null when Telegram:BotUsername is
 // not set, and onboarding still succeeds.
 public record FarmerOnboardedResponse(
     string Message,
     Guid ProfileId,
     string Email,
-    string TemporaryPassword,
+    string? TemporaryPassword,
     string? TelegramDeepLink,
     string? TelegramCode,
     DateTimeOffset? TelegramCodeExpiresAt,
     string? Warning,
-    // The new farm, so the admin site can save its province and town next (PUT /api/admin/farms/{id}/location).
-    long? FarmId = null);
+    long? FarmId = null,
+    // The onboarding operation (0057): requestId, status, and what the admin site may offer.
+    OnboardingOperationStatus? Operation = null);
+
+// The operation's state for the admin site (docs/audit/ui-contracts.md): the UI never offers an
+// unconditional "Create again"; it offers Retry with the same requestId while farmSaved is true.
+public record OnboardingOperationStatus(
+    Guid RequestId,
+    string Status,
+    string? LastStep,
+    bool FarmSaved,
+    bool AccountCreated,
+    long? FarmId,
+    Guid? ProfileId,
+    string Offer,
+    string Message);
 
 internal sealed record SupabaseAuthUserResponse(Guid Id);
-
-internal sealed record SupabaseFarmResponse(
-    [property: JsonPropertyName("farm_id")] long FarmId
-);
 
 // Open-Meteo geocoding response: turns a location like "Ceres, Western Cape"
 // into latitude and longitude for the weather service.
@@ -111,565 +135,534 @@ public static class FarmerOnboardingEndpoints
         group.MapPost("/create", CreateAsync);
         group.MapPost("/invite", InviteAsync);
         group.MapPost("/onboard", OnboardAsync);
+        group.MapGet("/onboard/{requestId:guid}", OnboardStatusAsync);
     }
 
-    // Full farmer onboarding
-
+    // Full farmer onboarding (AF-01, B3-01).
+    //
+    //   1. Validate everything first; nothing is saved when anything is wrong.
+    //   2. Location: valid manual coordinates are used as they are, whatever the town search
+    //      says (a rural pin such as Sesobe, North West). Only without coordinates is the
+    //      place name looked up, and a miss is a 400 with code "location_not_found".
+    //   3. One transaction: the onboarding_request row, the farm (with the coordinates,
+    //      province and town staff entered) and every zone. Either all of it is saved or none.
+    //   4. The farmer's account (Supabase Auth, outside the transaction), then the farm's owner.
+    //      A failure here leaves the farm saved and the request "failed" at "account"; a retry
+    //      with the same requestId continues the same farm and never creates a second one.
+    //   5. Delivery (forced password change, Telegram code, enquiry link) never undoes 1-4.
     private static async Task<IResult> OnboardAsync(
         FarmerOnboardingRequest request,
+        ClaimsPrincipal user,
         IHttpClientFactory httpClientFactory,
-        IConfiguration configuration,
+        NpgsqlDataSource dataSource,
+        IOnboardingAccounts accounts,
         ILoggerFactory loggerFactory,
         TelegramOnboardingService telegramOnboarding,
+        AuditLog audit,
         CancellationToken cancellationToken)
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Endpoints.FarmerOnboarding");
+        Guid.TryParse(user.FindFirstValue("sub"), out var staffId);
 
-        // Server-side validation
+        if (Validate(request) is { } invalid)
+            return Results.BadRequest(new { error = invalid.Message, field = invalid.Field });
 
-        if (string.IsNullOrWhiteSpace(request.Farmer.FullName))
+        var requestId = request.RequestId ?? Guid.NewGuid();
+        var email = request.Farmer.Email.Trim();
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        // One attempt at a time per request id: a double click or a second tab waits for nothing
+        // and is told the first is still running.
+        await using (var lockCmd = new NpgsqlCommand("select pg_try_advisory_lock(hashtextextended($1::text, 57))", connection))
         {
-            return Results.BadRequest(new
+            lockCmd.Parameters.AddWithValue(requestId.ToString());
+            if (await lockCmd.ExecuteScalarAsync(cancellationToken) is not true)
             {
-                error = "Farmer name is required."
-            });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Farmer.Email))
-        {
-            return Results.BadRequest(new
-            {
-                error = "Farmer email is required."
-            });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Farmer.Phone))
-        {
-            return Results.BadRequest(new
-            {
-                error = "Farmer phone number is required."
-            });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Farm.FarmName))
-        {
-            return Results.BadRequest(new
-            {
-                error = "Farm name is required."
-            });
-        }
-
-        var suppliedCoordinates = ValidCoordinates(request.Farm.Latitude, request.Farm.Longitude);
-        if ((request.Farm.Latitude.HasValue || request.Farm.Longitude.HasValue) && !suppliedCoordinates)
-        {
-            return Results.BadRequest(new { error = "Provide both latitude (-90 to 90) and longitude (-180 to 180)." });
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Farm.Location) && !suppliedCoordinates)
-            return Results.BadRequest(new { error = "Search for a farm location or provide precise coordinates." });
-
-        if (request.Farm.SizeHectares <= 0)
-        {
-            return Results.BadRequest(new
-            {
-                error = "Farm size must be greater than 0."
-            });
-        }
-
-        if (request.Farm.Zones is null ||
-            request.Farm.Zones.Count == 0)
-        {
-            return Results.BadRequest(new
-            {
-                error = "At least one zone is required."
-            });
-        }
-
-        if (request.Farm.Zones.Count > 50)
-        {
-            return Results.BadRequest(new
-            {
-                error = "A maximum of 50 zones can be created at once."
-            });
-        }
-
-        foreach (var zone in request.Farm.Zones)
-        {
-            if (string.IsNullOrWhiteSpace(zone.Name))
-            {
-                return Results.BadRequest(new
+                return Results.Json(new
                 {
-                    error = "Every zone must have a name."
-                });
-            }
-
-            if (zone.SizeHectares <= 0)
-            {
-                return Results.BadRequest(new
-                {
-                    error =
-                        $"Zone '{zone.Name}' must have a size greater than 0."
-                });
-            }
-
-            if (string.IsNullOrWhiteSpace(zone.CropType))
-            {
-                return Results.BadRequest(new
-                {
-                    error =
-                        $"Zone '{zone.Name}' must have a crop type."
-                });
-            }
-
-            if (ZoneSetupFields.Check(zone.Name, zone.SizeHectares, zone.SoilType, zone.AreaM2,
-                    zone.PlantingDate, zone.RootDepthLimitM, zone.FlowRateLpm, AgroFlow.Business.Fao56EngineController.TodayInSast()) is { } setupProblem)
-            {
-                return Results.BadRequest(new { error = setupProblem });
+                    error = "This onboarding is still being saved. Wait a moment, then check its status.",
+                    code = "in_progress",
+                    operation = await ReadOperationAsync(connection, requestId, cancellationToken),
+                }, statusCode: StatusCodes.Status409Conflict);
             }
         }
-
-        // The zones together cannot be bigger than the farm.
-
-        var totalZoneSize =
-            request.Farm.Zones.Sum(zone => zone.SizeHectares);
-
-        if (totalZoneSize > request.Farm.SizeHectares)
-        {
-            return Results.BadRequest(new
-            {
-                error =
-                    $"The total zone area ({totalZoneSize:0.##} ha) " +
-                    $"cannot exceed the farm size " +
-                    $"({request.Farm.SizeHectares:0.##} ha)."
-            });
-        }
-
-        // Geocode the farm location (e.g. "Ceres, Western Cape").
-        // Security: a separate HttpClient, so the Supabase service-role key is never sent
-        // to Open-Meteo.
-
-        var location = request.Farm.Location?.Trim() ?? "";
-
-        (string Location, double Latitude, double Longitude)? coordinates;
-
-        if (suppliedCoordinates)
-        {
-            var readable = string.IsNullOrWhiteSpace(location)
-                ? $"Coordinates: {request.Farm.Latitude:0.#####}, {request.Farm.Longitude:0.#####}"
-                : location;
-            coordinates = (readable, request.Farm.Latitude!.Value, request.Farm.Longitude!.Value);
-            location = readable;
-        }
-        else try
-        {
-            var geocodingClient =
-                httpClientFactory.CreateClient();
-
-            coordinates = await GeocodeLocationAsync(
-                geocodingClient,
-                location,
-                cancellationToken
-            );
-        }
-        catch (HttpRequestException ex)
-        {
-            logger.LogError(
-                ex,
-                "Farm location geocoding request failed for '{Location}'.",
-                location
-            );
-
-            return Results.Problem(
-                title: "Farm location could not be verified.",
-                detail:
-                    "The location service could not be reached. Please try again.",
-                statusCode: StatusCodes.Status502BadGateway
-            );
-        }
-
-        if (coordinates is null)
-        {
-            return Results.BadRequest(new
-            {
-                error =
-                    $"Farm location '{location}' could not be found. " +
-                    "Enter a town or city and province, for example " +
-                    "'Ceres, Western Cape'."
-            });
-        }
-
-        location = coordinates.Value.Location;
-
-        var (supabaseUrl, serviceRoleKey) =
-            GetSupabaseAdminConfig(configuration);
-
-        using var client =
-            BuildAdminClient(
-                httpClientFactory,
-                serviceRoleKey
-            );
-
-        // Generate a temporary password for the Supabase account. It is shown to the
-        // admin once and never stored. If the farmer links Telegram, the bot replaces it
-        // with a new one (see TelegramPollingService).
-
-        var temporaryPassword = TemporaryPasswordGenerator.Generate();
-
-        long? farmId = null;
-        Guid? userId = null;
 
         try
         {
-            // Create the farm
+            var existing = await ReadRowAsync(connection, requestId, cancellationToken);
 
-            var farmPayload = new
+            if (existing is { Status: OnboardingOperation.Completed })
             {
-                name = request.Farm.FarmName.Trim(),
-                location = location,
-                total_area = request.Farm.SizeHectares,
-
-                // Explicit coordinates win; otherwise we use Open-Meteo's geocoding of the place name.
-                latitude = coordinates.Value.Latitude,
-                longitude = coordinates.Value.Longitude,
-
-                status = "Active"
-            };
-
-            using var farmRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                $"{supabaseUrl}/rest/v1/farm")
-            {
-                Content = JsonContent.Create(farmPayload)
-            };
-
-            farmRequest.Headers.Add(
-                "Prefer",
-                "return=representation"
-            );
-
-            using var farmResponse =
-                await client.SendAsync(
-                    farmRequest,
-                    cancellationToken
-                );
-
-            if (!farmResponse.IsSuccessStatusCode)
-            {
-                var error =
-                    await farmResponse.Content.ReadAsStringAsync(
-                        cancellationToken
-                    );
-
-                return Results.Json(
-                    new
-                    {
-                        error =
-                            $"Supabase farm creation error: {error}"
-                    },
-                    statusCode: (int)farmResponse.StatusCode
-                );
+                return Results.Ok(new FarmerOnboardedResponse(
+                    "This farmer was already onboarded. Nothing new was created.",
+                    existing.ProfileId!.Value, existing.Email, null, null, null, null,
+                    "The temporary password was shown when onboarding finished. To give a new one, use Reset password.",
+                    existing.FarmId, ToStatus(existing)));
             }
 
-            var farms =
-                await farmResponse.Content
-                    .ReadFromJsonAsync<List<SupabaseFarmResponse>>(
-                        cancellationToken: cancellationToken
-                    );
+            // A different request for an email that already has an account: refuse instead of
+            // letting Supabase say so after a farm was saved.
+            if (existing is null && await EmailTakenAsync(connection, email, cancellationToken))
+            {
+                return Results.Conflict(new
+                {
+                    error = "An account with this email already exists. Use a different email, or find the farmer under Farmers.",
+                    code = "email_taken",
+                    field = "email",
+                });
+            }
 
-            farmId =
-                farms?.FirstOrDefault()?.FarmId;
-
+            // 2. Location
+            long? farmId = existing?.FarmId;
             if (farmId is null)
             {
-                throw new InvalidOperationException(
-                    "Supabase created the farm but did not return a farm_id."
-                );
-            }
-
-            // Create the Auth user
-
-            var authPayload = new
-            {
-                email = request.Farmer.Email.Trim(),
-
-                // The server-generated temporary password.
-                password = temporaryPassword,
-
-                email_confirm = true,
-
-                user_metadata = new
+                var place = await ResolveLocationAsync(request.Farm, httpClientFactory, logger, cancellationToken);
+                if (place.Error is { } locationProblem)
                 {
-                    invitedFarmId = farmId.Value,
-                    name = request.Farmer.FullName.Trim(),
-                    phone = request.Farmer.Phone.Trim()
-                }
-            };
-
-            using var authResponse =
-                await client.PostAsJsonAsync(
-                    $"{supabaseUrl}/auth/v1/admin/users",
-                    authPayload,
-                    cancellationToken
-                );
-
-            if (!authResponse.IsSuccessStatusCode)
-            {
-                var error =
-                    await authResponse.Content.ReadAsStringAsync(
-                        cancellationToken
-                    );
-
-                await TryDeleteFarmAsync(
-                    client,
-                    supabaseUrl,
-                    farmId.Value,
-                    logger
-                );
-
-                return Results.Json(
-                    new
+                    await RecordAsync(connection, requestId, email, staffId, request.EnquiryId,
+                        OnboardingOperation.Failed, OnboardingOperation.StepLocation, locationProblem.Message, cancellationToken);
+                    return Results.Json(new
                     {
-                        error =
-                            $"Supabase Auth API error: {error}"
-                    },
-                    statusCode: (int)authResponse.StatusCode
-                );
-            }
+                        error = locationProblem.Message,
+                        code = locationProblem.Code,
+                        field = "location",
+                        operation = await ReadOperationAsync(connection, requestId, cancellationToken),
+                    }, statusCode: locationProblem.StatusCode);
+                }
 
-            var authUser =
-                await authResponse.Content
-                    .ReadFromJsonAsync<SupabaseAuthUserResponse>(
-                        cancellationToken: cancellationToken
-                    );
-
-            if (authUser is null ||
-                authUser.Id == Guid.Empty)
-            {
-                throw new InvalidOperationException(
-                    "Supabase created the Auth user but did not return a user ID."
-                );
-            }
-
-            userId = authUser.Id;
-
-            // Make the farmer the farm owner
-
-            var ownerPayload = new
-            {
-                owner_id = userId.Value
-            };
-
-            using var ownerRequest = new HttpRequestMessage(
-                HttpMethod.Patch,
-                $"{supabaseUrl}/rest/v1/farm?farm_id=eq.{farmId.Value}")
-            {
-                Content = JsonContent.Create(ownerPayload)
-            };
-
-            ownerRequest.Headers.Add(
-                "Prefer",
-                "return=minimal"
-            );
-
-            using var ownerResponse =
-                await client.SendAsync(
-                    ownerRequest,
-                    cancellationToken
-                );
-
-            if (!ownerResponse.IsSuccessStatusCode)
-            {
-                var error =
-                    await ownerResponse.Content.ReadAsStringAsync(
-                        cancellationToken
-                    );
-
-                throw new InvalidOperationException(
-                    $"Unable to assign farmer as farm owner: {error}"
-                );
-            }
-
-            // Create the zones
-
-            var zonePayload = request.Farm.Zones
-                .Select(zone => new
+                // 3. Farm, zones and coordinates, together.
+                try
                 {
-                    farm_id = farmId.Value,
-                    name = zone.Name.Trim(),
-                    size_value = zone.SizeHectares,
-                    size_unit = "ha",
-                    location = coordinates.Value.Location,
-                    crop_type = zone.CropType.Trim(),
-                    // Soil defaults to loam, the same as the column default.
-                    soil_type = zone.SoilType?.Trim().ToLowerInvariant() ?? "loam",
-                    area_m2 = zone.AreaM2,
-                    planting_date = zone.PlantingDate?.ToString("yyyy-MM-dd"),
-                    root_depth_limit_m = zone.RootDepthLimitM,
-                    flow_rate_lpm = zone.FlowRateLpm,
+                    farmId = await SaveFarmAsync(connection, requestId, email, staffId, request, place.Location!, place.Latitude, place.Longitude, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Onboarding {RequestId}: saving the farm failed; nothing was saved.", requestId);
+                    await RecordAsync(connection, requestId, email, staffId, request.EnquiryId,
+                        OnboardingOperation.Failed, OnboardingOperation.StepFarm, "The farm could not be saved.", cancellationToken);
+                    return Results.Json(new
+                    {
+                        error = "The farm could not be saved, so nothing was created. Your entries are still here; try again.",
+                        code = "farm_not_saved",
+                        operation = await ReadOperationAsync(connection, requestId, cancellationToken),
+                    }, statusCode: StatusCodes.Status500InternalServerError);
+                }
+            }
+
+            // 4. The account. A retry after it was made reuses it and gives it a new password.
+            var temporaryPassword = TemporaryPasswordGenerator.Generate();
+            var profileId = existing?.ProfileId ?? await MemberWithEmailAsync(connection, farmId.Value, email, cancellationToken);
+            if (profileId is null)
+            {
+                OnboardingAccountResult created;
+                try
+                {
+                    created = await accounts.CreateAsync(email, temporaryPassword, request.Farmer.FullName.Trim(),
+                        request.Farmer.Phone.Trim(), farmId.Value, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "Onboarding {RequestId}: the account service could not be reached.", requestId);
+                    created = new OnboardingAccountResult(null,
+                        "The sign-in service could not be reached. The farm is saved; press Retry to finish.", 502);
+                }
+
+                if (created.UserId is null)
+                {
+                    await RecordAsync(connection, requestId, email, staffId, request.EnquiryId,
+                        OnboardingOperation.Failed, OnboardingOperation.StepAccount, created.Error, cancellationToken);
+                    return Results.Json(new
+                    {
+                        error = created.Error,
+                        code = "account_not_created",
+                        operation = await ReadOperationAsync(connection, requestId, cancellationToken),
+                    }, statusCode: created.StatusCode is >= 400 and < 500 ? StatusCodes.Status409Conflict : StatusCodes.Status502BadGateway);
+                }
+
+                profileId = created.UserId;
+            }
+            else if (!await accounts.SetPasswordAsync(profileId.Value, temporaryPassword, cancellationToken))
+            {
+                await RecordAsync(connection, requestId, email, staffId, request.EnquiryId,
+                    OnboardingOperation.Failed, OnboardingOperation.StepAccount,
+                    "The account exists, but a new temporary password could not be set.", cancellationToken);
+                return Results.Json(new
+                {
+                    error = "The farmer's account is saved, but a temporary password could not be set. Press Retry.",
+                    code = "password_not_set",
+                    operation = await ReadOperationAsync(connection, requestId, cancellationToken),
+                }, statusCode: StatusCodes.Status502BadGateway);
+            }
+
+            // The farmer owns the farm (only an ownerless farm, or one they already own).
+            await using (var tx = await connection.BeginTransactionAsync(cancellationToken))
+            {
+                foreach (var sql in new[]
+                {
+                    "update farm set owner_id = $2 where farm_id = $1 and (owner_id is null or owner_id = $2)",
+                    "insert into farm_member (farm_id, profile_id) values ($1, $2) on conflict do nothing",
+                    "update onboarding_request set profile_id = $2, status = 'account_created', last_step = 'account', last_error = null, updated_at = now() where farm_id = $1 and request_id = $3",
                 })
-                .ToList();
-
-            using var zoneRequest = new HttpRequestMessage(
-                HttpMethod.Post,
-                $"{supabaseUrl}/rest/v1/zone")
-            {
-                Content = JsonContent.Create(zonePayload)
-            };
-
-            zoneRequest.Headers.Add(
-                "Prefer",
-                "return=minimal"
-            );
-
-            using var zoneResponse =
-                await client.SendAsync(
-                    zoneRequest,
-                    cancellationToken
-                );
-
-            if (!zoneResponse.IsSuccessStatusCode)
-            {
-                var error =
-                    await zoneResponse.Content.ReadAsStringAsync(
-                        cancellationToken
-                    );
-
-                throw new InvalidOperationException(
-                    $"Unable to create zones: {error}"
-                );
+                {
+                    await using var step = new NpgsqlCommand(sql, connection, tx);
+                    step.Parameters.AddWithValue(farmId.Value);
+                    step.Parameters.AddWithValue(profileId.Value);
+                    if (sql.Contains("$3")) step.Parameters.AddWithValue(requestId);
+                    await step.ExecuteNonQueryAsync(cancellationToken);
+                }
+                await tx.CommitAsync(cancellationToken);
             }
 
-            // Onboarding is complete here: the farm, the Auth user and the zones stay.
-            // Everything after this is delivery, which sits outside the try block below.
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(
-                ex,
-                "Farmer onboarding failed."
-            );
+            // 5. Delivery. Nothing here undoes the onboarding; at worst a warning.
+            string? deepLink = null, code = null, warning = null;
+            DateTimeOffset? expiresAt = null;
 
-            // If the Auth user was created, remove it; the trigger-created profile and
-            // farm_member rows go with it.
-            if (userId.HasValue)
+            // Security: the temporary password is read off an admin's screen, so we always force
+            // a password change (72 hours, 0050), whether or not the farmer links Telegram.
+            try
             {
-                await TryDeleteAuthUserAsync(
-                    client,
-                    supabaseUrl,
-                    userId.Value,
-                    logger
-                );
+                await telegramOnboarding.SetMustChangePasswordAsync(profileId.Value, true, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not set must_change_password for {UserId} after onboarding.", profileId.Value);
             }
 
-            // Remove the zones and farm created in this attempt.
-            if (farmId.HasValue)
+            try
             {
-                await TryDeleteZonesAsync(
-                    client,
-                    supabaseUrl,
-                    farmId.Value,
-                    logger
-                );
-
-                await TryDeleteFarmAsync(
-                    client,
-                    supabaseUrl,
-                    farmId.Value,
-                    logger
-                );
+                var issued = await telegramOnboarding.IssueCodeAsync(profileId.Value, TelegramCodePurpose.Onboarding, cancellationToken);
+                code = issued.Code;
+                expiresAt = issued.ExpiresAt;
+                deepLink = issued.DeepLink;
+                if (deepLink is null)
+                {
+                    warning = "Telegram:BotUsername is not configured, so no QR link could be built. " +
+                              "Give the farmer the temporary password directly.";
+                }
+            }
+            catch (Exception ex)
+            {
+                warning = "The farmer was created successfully, but the Telegram onboarding code " +
+                          "could not be generated. Use Regenerate code, or give the farmer the " +
+                          "temporary password directly.";
+                logger.LogError(ex, "Onboarding for {UserId} succeeded but issuing a Telegram code failed.", profileId.Value);
             }
 
-            return Results.Problem(
-                title: "Farmer onboarding failed.",
-                detail:
-                    "The farmer could not be fully onboarded. " +
-                    "No completed onboarding was saved.",
-                statusCode: StatusCodes.Status500InternalServerError
-            );
-        }
+            if (request.EnquiryId is { } enquiryId)
+                warning = await LinkEnquiryAsync(connection, enquiryId, profileId.Value, farmId.Value, cancellationToken) ?? warning;
 
-        // Telegram onboarding code, after the commit and outside the rollback.
-        // Nothing here may undo a finished onboarding. At worst the response has a warning
-        // and no QR code, and the admin can use "Regenerate code" or read out the
-        // temporary password.
+            await RecordAsync(connection, requestId, email, staffId, request.EnquiryId,
+                OnboardingOperation.Completed, OnboardingOperation.StepHandover, null, cancellationToken);
 
-        string? deepLink = null;
-        string? code = null;
-        DateTimeOffset? expiresAt = null;
-        string? warning = null;
+            await audit.WriteAsync(user, "farmer.onboarded", "profile", profileId.Value.ToString(), farmId.Value,
+                new { requestId, enquiryId = request.EnquiryId, attempts = (existing?.Attempts ?? 0) + 1 }, cancellationToken);
 
-        // Security: the temporary password is read off an admin's screen, so we always
-        // force a password change, whether or not the farmer links Telegram.
-        // The profile row already exists: handle_new_auth_user() (0008) created it.
-        try
-        {
-            await telegramOnboarding.SetMustChangePasswordAsync(
-                userId!.Value,
-                true,
-                cancellationToken
-            );
-        }
-        catch (Exception ex)
-        {
-            // Not worth failing for: the farmer can still sign in and change the password.
-            logger.LogWarning(
-                ex,
-                "Could not set must_change_password for {UserId} after onboarding.",
-                userId!.Value
-            );
-        }
-
-        try
-        {
-            var issued = await telegramOnboarding.IssueCodeAsync(
-                userId!.Value,
-                TelegramCodePurpose.Onboarding,
-                cancellationToken
-            );
-
-            code = issued.Code;
-            expiresAt = issued.ExpiresAt;
-            deepLink = issued.DeepLink;
-
-            if (deepLink is null)
-            {
-                warning =
-                    "Telegram:BotUsername is not configured, so no QR link could be built. " +
-                    "Give the farmer the temporary password directly.";
-
-                logger.LogWarning(
-                    "Issued an onboarding code for {UserId} but Telegram:BotUsername is unset.",
-                    userId.Value
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            warning =
-                "The farmer was created successfully, but the Telegram onboarding code " +
-                "could not be generated. Use Regenerate code, or give the farmer the " +
-                "temporary password directly.";
-
-            logger.LogError(
-                ex,
-                "Onboarding for {UserId} succeeded but issuing a Telegram code failed.",
-                userId!.Value
-            );
-        }
-
-        return Results.Ok(
-            new FarmerOnboardedResponse(
+            var row = await ReadRowAsync(connection, requestId, cancellationToken);
+            return Results.Ok(new FarmerOnboardedResponse(
                 "Farmer onboarded successfully.",
-                userId!.Value,
-                request.Farmer.Email.Trim(),
-                AgroFlow.Business.EasyPassword.Display(temporaryPassword),   // "KX7P 4MRT"; set without the space
+                profileId.Value,
+                email,
+                EasyPassword.Display(temporaryPassword),   // "KX7P 4MRT"; set without the space
                 deepLink,
                 code,
                 expiresAt,
                 warning,
-                farmId
-            )
-        );
+                farmId,
+                row is null ? null : ToStatus(row)));
+        }
+        finally
+        {
+            await using var unlock = new NpgsqlCommand("select pg_advisory_unlock(hashtextextended($1::text, 57))", connection);
+            unlock.Parameters.AddWithValue(requestId.ToString());
+            await unlock.ExecuteScalarAsync(CancellationToken.None);
+        }
+    }
+
+    // GET /api/farmers/onboard/{requestId}: the operation's state, so the admin site can show
+    // what was saved after a failure or a lost connection instead of guessing.
+    private static async Task<IResult> OnboardStatusAsync(Guid requestId, NpgsqlDataSource dataSource, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        var status = await ReadOperationAsync(connection, requestId, ct);
+        return status is null
+            ? Results.NotFound(new { error = "No onboarding with this id: nothing was saved." })
+            : Results.Ok(status);
+    }
+
+    internal sealed record Problem(string Message, string? Field);
+
+    // Every check that can be done before anything is saved.
+    internal static Problem? Validate(FarmerOnboardingRequest request)
+    {
+        if (request.Farmer is null || request.Farm is null) return new Problem("Farmer and farm details are required.", null);
+        if (string.IsNullOrWhiteSpace(request.Farmer.FullName)) return new Problem("Farmer name is required.", "fullName");
+        if (string.IsNullOrWhiteSpace(request.Farmer.Email)) return new Problem("Farmer email is required.", "email");
+        if (string.IsNullOrWhiteSpace(request.Farmer.Phone)) return new Problem("Farmer phone number is required.", "phone");
+        if (PhoneRules.Check(request.Farmer.Phone) is { } phoneProblem) return new Problem(phoneProblem, "phone");
+        if (string.IsNullOrWhiteSpace(request.Farm.FarmName)) return new Problem("Farm name is required.", "farmName");
+
+        var supplied = ValidCoordinates(request.Farm.Latitude, request.Farm.Longitude);
+        if ((request.Farm.Latitude.HasValue || request.Farm.Longitude.HasValue) && !supplied)
+            return new Problem("Provide both latitude (-90 to 90) and longitude (-180 to 180).", "location");
+        if (string.IsNullOrWhiteSpace(request.Farm.Location) && !supplied)
+            return new Problem("Search for a town or village, pin the farm on the map, or enter its coordinates.", "location");
+
+        if (request.Farm.SizeHectares <= 0) return new Problem("Farm size must be greater than 0.", "farmSize");
+        if (request.Farm.Zones is null || request.Farm.Zones.Count == 0) return new Problem("At least one zone is required.", "zoneCount");
+        if (request.Farm.Zones.Count > 50) return new Problem("A maximum of 50 zones can be created at once.", "zoneCount");
+
+        foreach (var zone in request.Farm.Zones)
+        {
+            if (string.IsNullOrWhiteSpace(zone.Name)) return new Problem("Every zone must have a name.", null);
+            if (zone.SizeHectares <= 0) return new Problem($"Zone '{zone.Name}' must have a size greater than 0.", null);
+            if (string.IsNullOrWhiteSpace(zone.CropType)) return new Problem($"Zone '{zone.Name}' must have a crop type.", null);
+            if (ZoneSetupFields.Check(zone.Name, zone.SizeHectares, zone.SoilType, zone.AreaM2,
+                    zone.PlantingDate, zone.RootDepthLimitM, zone.FlowRateLpm, Fao56EngineController.TodayInSast()) is { } setupProblem)
+                return new Problem(setupProblem, null);
+        }
+
+        var totalZoneSize = request.Farm.Zones.Sum(zone => zone.SizeHectares);
+        if (totalZoneSize > request.Farm.SizeHectares * 1.0001)
+        {
+            return new Problem(
+                $"The total zone area ({AreaFormat.Hectares(totalZoneSize)}) cannot exceed the farm size ({AreaFormat.Hectares(request.Farm.SizeHectares)}).",
+                "farmSize");
+        }
+        return null;
+    }
+
+    internal sealed record LocationProblem(string Message, string Code, int StatusCode);
+    internal sealed record ResolvedLocation(string? Location, double Latitude, double Longitude, LocationProblem? Error);
+
+    // Valid coordinates win and are never replaced. The readable name is what staff typed (or
+    // "Village, Province", or the coordinates). Without coordinates the place is looked up.
+    private static async Task<ResolvedLocation> ResolveLocationAsync(
+        FarmerOnboardingFarm farm, IHttpClientFactory httpClientFactory, ILogger logger, CancellationToken ct)
+    {
+        var typed = farm.Location?.Trim() ?? "";
+        if (ValidCoordinates(farm.Latitude, farm.Longitude))
+        {
+            var readable = ReadableLocation(typed, farm.Town, farm.Province, farm.Latitude!.Value, farm.Longitude!.Value);
+            return new ResolvedLocation(readable, farm.Latitude.Value, farm.Longitude.Value, null);
+        }
+
+        try
+        {
+            // Security: a separate HttpClient, so the Supabase service-role key is never sent to Open-Meteo.
+            var found = await GeocodeLocationAsync(httpClientFactory.CreateClient(), typed, ct);
+            if (found is null)
+            {
+                return new ResolvedLocation(null, 0, 0, new LocationProblem(
+                    $"'{typed}' was not found by the town search. Nothing was saved. Pin the farm on the map or enter its " +
+                    "coordinates (a rural farm does not need a recognised town), or try a nearby town or a spelling such as Mafikeng.",
+                    "location_not_found", StatusCodes.Status400BadRequest));
+            }
+            // The town search only fills the point; the name staff typed stays the farm's name for it.
+            return new ResolvedLocation(string.IsNullOrWhiteSpace(typed) ? found.Value.Location : typed,
+                found.Value.Latitude, found.Value.Longitude, null);
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogError(ex, "Farm location geocoding request failed for '{Location}'.", typed);
+            return new ResolvedLocation(null, 0, 0, new LocationProblem(
+                "The town search could not be reached. Nothing was saved. Pin the farm on the map or enter its coordinates, or try again.",
+                "location_service_unavailable", StatusCodes.Status502BadGateway));
+        }
+    }
+
+    internal static string ReadableLocation(string typed, string? town, string? province, double latitude, double longitude)
+    {
+        if (!string.IsNullOrWhiteSpace(typed)) return typed;
+        var named = string.Join(", ", new[] { town, province }.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim()));
+        return named.Length > 0
+            ? named
+            : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Coordinates: {latitude:0.#####}, {longitude:0.#####}");
+    }
+
+    // The farm, every zone and the request row in one transaction. New zones start in Manual
+    // (decision: Automatic only after commissioning).
+    private static async Task<long> SaveFarmAsync(
+        NpgsqlConnection connection, Guid requestId, string email, Guid staffId, FarmerOnboardingRequest request,
+        string location, double latitude, double longitude, CancellationToken ct)
+    {
+        var hasPlace = await ColumnExistsAsync(connection, "farm", "province", ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+
+        await using (var row = new NpgsqlCommand("""
+            insert into onboarding_request (request_id, email, created_by, enquiry_id, status, last_step)
+            values ($1, $2, $3, $4, 'started', 'farm')
+            on conflict (request_id) do update set attempts = onboarding_request.attempts + 1, updated_at = now(),
+                status = 'started', last_step = 'farm', last_error = null
+            """, connection, tx))
+        {
+            row.Parameters.AddWithValue(requestId);
+            row.Parameters.AddWithValue(email);
+            row.Parameters.AddWithValue(NpgsqlDbType.Uuid, staffId == Guid.Empty ? DBNull.Value : staffId);
+            row.Parameters.AddWithValue(NpgsqlDbType.Bigint, (object?)request.EnquiryId ?? DBNull.Value);
+            await row.ExecuteNonQueryAsync(ct);
+        }
+
+        long farmId;
+        var farmSql = hasPlace
+            ? "insert into farm (name, location, total_area, latitude, longitude, status, province, town) values ($1, $2, $3, $4, $5, 'Active', $6, $7) returning farm_id"
+            : "insert into farm (name, location, total_area, latitude, longitude, status) values ($1, $2, $3, $4, $5, 'Active') returning farm_id";
+        await using (var farm = new NpgsqlCommand(farmSql, connection, tx))
+        {
+            farm.Parameters.AddWithValue(request.Farm.FarmName.Trim());
+            farm.Parameters.AddWithValue(location);
+            farm.Parameters.AddWithValue(request.Farm.SizeHectares);
+            farm.Parameters.AddWithValue(latitude);
+            farm.Parameters.AddWithValue(longitude);
+            if (hasPlace)
+            {
+                farm.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)Blank(request.Farm.Province) ?? DBNull.Value);
+                farm.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)Blank(request.Farm.Town) ?? DBNull.Value);
+            }
+            farmId = (long)(await farm.ExecuteScalarAsync(ct))!;
+        }
+
+        foreach (var zone in request.Farm.Zones)
+        {
+            await using var z = new NpgsqlCommand("""
+                insert into zone (farm_id, name, size_value, size_unit, location, crop_type, soil_type, area_m2,
+                                  planting_date, root_depth_limit_m, flow_rate_lpm, irrigation_mode)
+                values ($1, $2, $3, 'ha', $4, $5, $6, $7, $8, $9, $10, 'manual')
+                """, connection, tx);
+            z.Parameters.AddWithValue(farmId);
+            z.Parameters.AddWithValue(zone.Name.Trim());
+            z.Parameters.AddWithValue(zone.SizeHectares);
+            z.Parameters.AddWithValue(location);
+            z.Parameters.AddWithValue(zone.CropType.Trim());
+            z.Parameters.AddWithValue(zone.SoilType?.Trim().ToLowerInvariant() ?? "loam");
+            z.Parameters.AddWithValue(NpgsqlDbType.Double, (object?)zone.AreaM2 ?? DBNull.Value);
+            z.Parameters.AddWithValue(NpgsqlDbType.Date, (object?)zone.PlantingDate ?? DBNull.Value);
+            z.Parameters.AddWithValue(NpgsqlDbType.Double, (object?)zone.RootDepthLimitM ?? DBNull.Value);
+            z.Parameters.AddWithValue(NpgsqlDbType.Double, (object?)zone.FlowRateLpm ?? DBNull.Value);
+            await z.ExecuteNonQueryAsync(ct);
+        }
+
+        await using (var done = new NpgsqlCommand(
+            "update onboarding_request set farm_id = $2, status = 'farm_saved', last_step = 'farm', updated_at = now() where request_id = $1",
+            connection, tx))
+        {
+            done.Parameters.AddWithValue(requestId);
+            done.Parameters.AddWithValue(farmId);
+            await done.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return farmId;
+    }
+
+    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    internal sealed record Row(Guid RequestId, string Status, string? LastStep, string Email, long? FarmId, Guid? ProfileId, int Attempts);
+
+    private static async Task<Row?> ReadRowAsync(NpgsqlConnection connection, Guid requestId, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select status, last_step, email, farm_id, profile_id, attempts from onboarding_request where request_id = $1", connection);
+        cmd.Parameters.AddWithValue(requestId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return null;
+        return new Row(requestId, r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1), r.GetString(2),
+            r.IsDBNull(3) ? null : r.GetInt64(3), r.IsDBNull(4) ? null : r.GetGuid(4), r.GetInt32(5));
+    }
+
+    private static OnboardingOperationStatus ToStatus(Row row)
+    {
+        var view = OnboardingOperation.Describe(row.Status, row.LastStep, row.FarmId is not null, row.ProfileId is not null);
+        return new OnboardingOperationStatus(row.RequestId, row.Status, row.LastStep, view.FarmSaved, view.AccountCreated,
+            row.FarmId, row.ProfileId, OnboardingOperation.OfferName(view.Offer), view.Message);
+    }
+
+    private static async Task<OnboardingOperationStatus?> ReadOperationAsync(NpgsqlConnection connection, Guid requestId, CancellationToken ct)
+    {
+        try
+        {
+            return await ReadRowAsync(connection, requestId, ct) is { } row ? ToStatus(row) : null;
+        }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return null;
+        }
+    }
+
+    private static async Task RecordAsync(NpgsqlConnection connection, Guid requestId, string email, Guid staffId, long? enquiryId,
+        string status, string step, string? error, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand("""
+            insert into onboarding_request (request_id, email, created_by, enquiry_id, status, last_step, last_error)
+            values ($1, $2, $3, $4, $5, $6, $7)
+            on conflict (request_id) do update set status = excluded.status, last_step = excluded.last_step,
+                last_error = excluded.last_error, updated_at = now(),
+                attempts = case when excluded.status = 'failed' then onboarding_request.attempts + 1 else onboarding_request.attempts end
+            """, connection);
+        cmd.Parameters.AddWithValue(requestId);
+        cmd.Parameters.AddWithValue(email);
+        cmd.Parameters.AddWithValue(NpgsqlDbType.Uuid, staffId == Guid.Empty ? DBNull.Value : staffId);
+        cmd.Parameters.AddWithValue(NpgsqlDbType.Bigint, (object?)enquiryId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue(status);
+        cmd.Parameters.AddWithValue(step);
+        cmd.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)error ?? DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task<bool> EmailTakenAsync(NpgsqlConnection connection, string email, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand("select exists (select 1 from profile where lower(email) = lower($1))", connection);
+        cmd.Parameters.AddWithValue(email);
+        return await cmd.ExecuteScalarAsync(ct) is true;
+    }
+
+    // After a lost response the account may exist even though the request row does not say so:
+    // the same email, already a member of this farm (handle_new_auth_user, 0008), is that account.
+    private static async Task<Guid?> MemberWithEmailAsync(NpgsqlConnection connection, long farmId, string email, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand("""
+            select p.id from profile p
+             where lower(p.email) = lower($2)
+               and (exists (select 1 from farm_member m where m.farm_id = $1 and m.profile_id = p.id)
+                    or exists (select 1 from farm f where f.farm_id = $1 and f.owner_id = p.id))
+             limit 1
+            """, connection);
+        cmd.Parameters.AddWithValue(farmId);
+        cmd.Parameters.AddWithValue(email);
+        return await cmd.ExecuteScalarAsync(ct) as Guid?;
+    }
+
+    // AF-24: the enquiry this came from is completed and linked, once, without inventing a call.
+    private static async Task<string?> LinkEnquiryAsync(NpgsqlConnection connection, long enquiryId, Guid profileId, long farmId, CancellationToken ct)
+    {
+        try
+        {
+            await using var cmd = new NpgsqlCommand("""
+                update enquiry set status = 'won', farmer_profile_id = $2, outcome = coalesce(outcome, 'wants'),
+                       closed_at = coalesce(closed_at, now()), callback_at = null
+                 where id = $1 and (farmer_profile_id is null or farmer_profile_id = $2)
+                returning id
+                """, connection);
+            cmd.Parameters.AddWithValue(enquiryId);
+            cmd.Parameters.AddWithValue(profileId);
+            if (await cmd.ExecuteScalarAsync(ct) is null)
+                return "The farmer is onboarded, but the enquiry was not linked: it is linked to another farmer or no longer exists.";
+            await JourneyStore.LinkCaseAsync(connection, enquiryId, profileId, farmId, ct);
+            return null;
+        }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedTable)
+        {
+            return "The farmer is onboarded; linking the enquiry needs database migration 0044.";
+        }
+    }
+
+    private static async Task<bool> ColumnExistsAsync(NpgsqlConnection connection, string table, string column, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = $1 and column_name = $2)", connection);
+        cmd.Parameters.AddWithValue(table);
+        cmd.Parameters.AddWithValue(column);
+        return await cmd.ExecuteScalarAsync(ct) is true;
     }
 
     // Open-Meteo geocoding
@@ -885,110 +878,4 @@ public static class FarmerOnboardingEndpoints
         );
     }
 
-    // Cleanup helpers
-
-    private static async Task TryDeleteAuthUserAsync(
-        HttpClient client,
-        string supabaseUrl,
-        Guid userId,
-        ILogger logger)
-    {
-        try
-        {
-            using var response =
-                await client.DeleteAsync(
-                    $"{supabaseUrl}/auth/v1/admin/users/{userId}"
-                );
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var error =
-                    await response.Content.ReadAsStringAsync();
-
-                logger.LogWarning(
-                    "Unable to clean up Auth user {UserId}: {Error}",
-                    userId,
-                    error
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Exception while cleaning up Auth user {UserId}.",
-                userId
-            );
-        }
-    }
-
-    private static async Task TryDeleteZonesAsync(
-        HttpClient client,
-        string supabaseUrl,
-        long farmId,
-        ILogger logger)
-    {
-        try
-        {
-            using var response =
-                await client.DeleteAsync(
-                    $"{supabaseUrl}/rest/v1/zone?farm_id=eq.{farmId}"
-                );
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var error =
-                    await response.Content.ReadAsStringAsync();
-
-                logger.LogWarning(
-                    "Unable to clean up zones for farm {FarmId}: {Error}",
-                    farmId,
-                    error
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Exception while cleaning up zones for farm {FarmId}.",
-                farmId
-            );
-        }
-    }
-
-    private static async Task TryDeleteFarmAsync(
-        HttpClient client,
-        string supabaseUrl,
-        long farmId,
-        ILogger logger)
-    {
-        try
-        {
-            using var response =
-                await client.DeleteAsync(
-                    $"{supabaseUrl}/rest/v1/farm?farm_id=eq.{farmId}"
-                );
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var error =
-                    await response.Content.ReadAsStringAsync();
-
-                logger.LogWarning(
-                    "Unable to clean up farm {FarmId}: {Error}",
-                    farmId,
-                    error
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Exception while cleaning up farm {FarmId}.",
-                farmId
-            );
-        }
-    }
 }

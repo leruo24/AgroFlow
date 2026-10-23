@@ -4,6 +4,7 @@
  * "website" field. The checks here only give quick feedback; the server's answer is final. */
 
 import { ZONE_CROPS } from "@/data/referenceData";
+import { phoneProblem } from "@/lib/phone";
 import { isRawNetworkError, networkFailureFor, plainError } from "@/lib/plainError";
 
 const API_BASE = (import.meta.env["VITE_AGROFLOW_API_BASE"] ?? "").trim();
@@ -27,7 +28,7 @@ export const ENQUIRY_SECTION_HTML = `
 
     <form id="enquiryForm" class="enquiry-form" hidden novalidate>
       <label class="f">Full name *<input name="fullName" autocomplete="name" required /></label>
-      <label class="f">Phone number *<input name="phone" type="tel" autocomplete="tel" placeholder="082 123 4567" required /></label>
+      <label class="f">Phone number *<input name="phone" type="tel" autocomplete="tel" placeholder="082 123 4567" required aria-describedby="enquiryPhoneHint" /><small class="field-note" id="enquiryPhoneHint">A South African number, for example 082 123 4567.</small></label>
       <label class="f">Email (optional)<input name="email" type="email" autocomplete="email" /></label>
       <label class="f">Province *
         <select name="province" required>
@@ -94,9 +95,9 @@ export function readEnquiry(form: HTMLFormElement): EnquiryBody {
 /* What a person should fix before sending, in the server's words. */
 export function enquiryProblem(b: EnquiryBody): string | null {
   if (b.fullName.length < 2) return "Please give your full name.";
-  const digits = b.phone.replace(/\D/g, "");
-  if (!((digits.length === 10 && digits.startsWith("0")) || (digits.length === 11 && digits.startsWith("27"))))
-    return "Please give a South African phone number, for example 082 123 4567.";
+  // The server's own rule (AF-20): 000 000 0000 is refused here, not after sending.
+  const phone = phoneProblem(b.phone);
+  if (phone) return phone;
   if (!b.province) return "Please choose your province.";
   if (b.town.length < 2) return "Please give your town.";
   if (b.crops.length === 0) return "Please choose at least one crop.";

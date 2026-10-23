@@ -57,7 +57,7 @@ export function createZoneHardwareStyles(colors: AppColors) {
       justifyContent: 'center',
       minHeight: 48,
       borderRadius: Radius.sm,
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.action,
     },
     primaryButtonBusy: { opacity: 0.6 },
     primaryButtonText: { fontSize: Type.body, fontWeight: '600', color: colors.white },

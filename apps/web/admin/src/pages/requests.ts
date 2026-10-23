@@ -4,7 +4,7 @@ import { getHandling, getEnquiries, type Enquiry } from "@/services/agroFlowApi"
 import { enquiriesTable, isCallbackDue } from "@/pages/enquiries";
 import { api } from "@/data/api";
 import { badge, pageHeader, panel, resultCount } from "@/ui/components";
-import { esc, fmtDateTimeSast } from "@/lib/format";
+import { esc, fmtDateTimeSast, roughSizeText } from "@/lib/format";
 import type { ServiceRequest, ServiceRequestStatus } from "@/types/models";
 import { plainError } from "@/lib/plainError";
 
@@ -90,7 +90,7 @@ export function requestActions(request: ServiceRequest, myId: string | undefined
 }
 
 function requestRow(request: ServiceRequest, myId: string | undefined): string {
-  const size = request.roughSize !== null ? `${request.roughSize} ha` : null;
+  const size = request.roughSize !== null || request.roughSizeUnit === "unknown" ? roughSizeText(request.roughSize, request.roughSizeUnit) : null;
   const what = [formatCrop(request.cropType), size, request.location].filter(Boolean).join(" · ");
 
   return `

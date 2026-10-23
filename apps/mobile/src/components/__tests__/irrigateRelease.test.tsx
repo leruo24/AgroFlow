@@ -195,6 +195,20 @@ describe('after Irrigate', () => {
     }
     await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe("Kit didn't respond — check it's online"));
   });
+
+  it("with the server's phase (0057), shows it word for word: Waiting for kit, then No response", async () => {
+    hardware.mockResolvedValue(kit({}));
+    startManualIrrigation.mockResolvedValueOnce('cmd-4' as never);
+    status
+      .mockResolvedValueOnce({ ...answer('sent'), phase: 'waiting_for_kit', phaseLabel: 'Waiting for kit' })
+      .mockResolvedValue({ ...answer('no_response'), phase: 'no_response', phaseLabel: 'No response' });
+    jest.useFakeTimers();
+    await pressStart();
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe('Waiting for kit'));
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe('No response'));
+  });
 });
 
 describe("the zone's maximum run time", () => {
@@ -210,15 +224,19 @@ describe("the zone's maximum run time", () => {
     expect(adviceOverLimit(null, 5)).toBe(false);
   });
 
-  it('the duration box starts at the maximum when it is under 5 minutes, and refuses more', async () => {
+  it('the duration box starts at the maximum when it is under 5 minutes, and caps more at it (AF-05)', async () => {
     hardware.mockResolvedValue(kit({}));
     mockAgro = agro(3);
     await render(<ZoneControlScreen />);
     await waitFor(() => expect(screen.getByDisplayValue('3')).toBeTruthy());
     await fireEvent.changeText(screen.getByDisplayValue('3'), '4');
     await fireEvent.press(screen.getByTestId('irrigate-button'));
-    expect(mockAlert).toHaveBeenLastCalledWith('Check the minutes', "Enter between 1 and 3 minutes. This zone's pump is limited to 3 min per run.");
-    expect(startManualIrrigation).not.toHaveBeenCalled();
+    // Capped, not refused, and said before the farmer confirms.
+    const [title, body, buttons] = mockAlert.mock.calls[mockAlert.mock.calls.length - 1];
+    expect(title).toBe('Water Bed 1 now?');
+    expect(body).toContain("Capped to 3 min (this zone's limit)");
+    await act(async () => { await (buttons as { text: string; onPress?: () => Promise<void> }[]).find(b => b.text === 'Start')!.onPress!(); });
+    expect(startManualIrrigation).toHaveBeenCalledWith(expect.anything(), 3);
   });
 
   it('a zone allowed 60 minutes takes a 45-minute run', async () => {

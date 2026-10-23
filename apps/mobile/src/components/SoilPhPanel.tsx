@@ -14,7 +14,7 @@ export function SoilPhPanel({ zoneId }: { zoneId: number }) {
     value: { color: colors.text, fontSize: 24, fontWeight: '600' },
     help: { color: colors.textSecondary, fontSize: Type.caption, lineHeight: 20 },
     input: { minHeight: 48, borderWidth: 1, borderColor: colors.divider, borderRadius: Radius.sm, paddingHorizontal: Spacing.three, color: colors.text, backgroundColor: colors.surface },
-    button: { minHeight: 48, borderRadius: Radius.sm, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
+    button: { minHeight: 48, borderRadius: Radius.sm, backgroundColor: colors.action, alignItems: 'center', justifyContent: 'center' },
     buttonText: { color: colors.white, fontSize: Type.body, fontWeight: '600' },
     error: { color: colors.error, fontSize: Type.caption },
     success: { color: colors.primaryDark, fontSize: Type.caption },

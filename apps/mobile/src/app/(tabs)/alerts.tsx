@@ -53,6 +53,16 @@ export default function AlertsScreen() {
   const [undo, setUndo] = useState<{ id: number; message: string } | null>(null);
   const [asking, setAsking] = useState<{ key: string; title: string } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  // Alerts whose "read" could not be saved (AF-04): they stay unread and offer Try again.
+  const [unsaved, setUnsaved] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const saveRead = useCallback(async (id: string) => {
+    if (saving[id]) return;
+    setSaving(s => ({ ...s, [id]: true }));
+    const ok = await markAlertAsRead(id);
+    setSaving(s => ({ ...s, [id]: false }));
+    setUnsaved(u => ({ ...u, [id]: !ok }));
+  }, [markAlertAsRead, saving]);
 
   const loadDismissals = useCallback(() => {
     if (!farm) return;
@@ -92,7 +102,7 @@ export default function AlertsScreen() {
         const Icon = severe ? AlertCircle : Bell;
         const key = alertKey(alert.id);
         const open = () => {
-          if (!alert.read) markAlertAsRead(alert.id);
+          if (!alert.read) void saveRead(alert.id);
           if (alert.zoneId) router.push({ pathname: '/zone/[id]', params: { id: alert.zoneId } });
         };
         // The Dismiss and Why buttons sit beside the tap areas, not inside them: a button inside
@@ -107,6 +117,13 @@ export default function AlertsScreen() {
           <TouchableOpacity accessible={false} onPress={open}><Text style={styles.body}>{alert.message}</Text></TouchableOpacity>
           <WhyLink explanation={why[alert.id]} compact />
           <TouchableOpacity accessible={false} onPress={open}><Text style={styles.caption}>{[alert.zone, formatSast(alert.timestamp) ?? t('alerts.noTime')].filter(Boolean).join(' · ')}</Text></TouchableOpacity>
+          {unsaved[alert.id] && !alert.read ? <View style={styles.rowTop} testID={`alert-read-failed-${alert.id}`}>
+            <Text style={[styles.caption, { color: colors.error, flex: 1 }]} accessibilityLiveRegion="polite">{t('alerts.readFailed')}</Text>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('alerts.readRetryA11y', { title: alert.title })}
+              disabled={saving[alert.id]} onPress={() => { void saveRead(alert.id); }} testID={`alert-read-retry-${alert.id}`}>
+              <Text style={styles.buttonText}>{t('common.retry')}</Text>
+            </TouchableOpacity>
+          </View> : null}
         </Card>;
       })}</CardList>)}
     {view !== 'active' && <>

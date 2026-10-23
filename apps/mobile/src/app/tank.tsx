@@ -11,6 +11,7 @@ import { Radius, Spacing, Type, Layout } from '@/constants/colors';
 import { fetchTankStatus, logTankRefill, saveTankCapacity, type TankStatus } from '@/services/agroFlowApi';
 import { useI18n } from '@/i18n';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { TankIllustration } from '@/components/visual/TankIllustration';
 
 export default function TankScreen() {
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
@@ -31,7 +32,7 @@ export default function TankScreen() {
     help: { color: colors.textSecondary, fontSize: Type.caption, lineHeight: 20 },
     label: { color: colors.text, fontSize: Type.body, fontWeight: '600' },
     input: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: Radius.sm, paddingHorizontal: Spacing.three, color: colors.text, fontSize: Type.body },
-    button: { minHeight: 50, borderRadius: Radius.sm, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
+    button: { minHeight: 50, borderRadius: Radius.sm, backgroundColor: colors.action, alignItems: 'center', justifyContent: 'center' },
     buttonText: { color: colors.white, fontSize: Type.body, fontWeight: '600' },
     message: { color: colors.success, fontSize: Type.body, lineHeight: 22 },
     warning: { color: colors.warning, fontSize: Type.body, lineHeight: 22 },
@@ -107,6 +108,7 @@ export default function TankScreen() {
       <View style={{ flex: 1 }}><ScreenHeader title={t('tank.title')} subtitle={farm?.name} /></View>
     </View>
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]} keyboardShouldPersistTaps="handled">
+      {!loading && !error && <TankIllustration litres={status?.estimatedRemainingLitres} capacity={status?.capacityLitres} />}
       {loading ? <ActivityIndicator color={colors.primaryDark} /> : status?.estimatedRemainingLitres != null ? <View style={styles.section}>
         <Text style={styles.estimate}>{t('home.tankLeft', { litres: Math.round(status.estimatedRemainingLitres) })}</Text>
         <Text style={styles.help}>{t('tank.estimateHelp')}</Text>

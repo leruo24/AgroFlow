@@ -1,0 +1,74 @@
+{
+  "first": {
+    "fromEmpty": "all 55 applied (0001_foundation.sql .. 0059_core_tables_rls.sql)",
+    "rerun0007and0010": [
+      "0007_move_irrigation_logic_to_api.sql: ok",
+      "0010_zone_schema_realignment.sql: ok"
+    ],
+    "schemaChangedByRerun": [],
+    "rerun0057to0059": [
+      "0057_audit_trust_and_data.sql: ok",
+      "0058_service_journey.sql: ok",
+      "0059_core_tables_rls.sql: ok"
+    ],
+    "schemaChangedByAuditRerun": [],
+    "verify": {
+      "rows": 56,
+      "migrationRowsAllTrue": true,
+      "notTrue": [
+        "storage reports bucket (not a migration)"
+      ]
+    },
+    "viewColumns": "zone_id,farm_id,crop_type,water_saved,health_status,moisture_threshold,desired_moisture,moisture,temperature,humidity,last_reading_at,moisture_simulated,temperature_simulated,humidity_simulated",
+    "scheduleTableGone": true,
+    "scheduleFunctionReadsZone": true,
+    "wholeChainAgain_notRerunnable": [
+      "0001_foundation.sql",
+      "0002_relationships.sql",
+      "0003_csharp_domain.sql",
+      "0004_irrigation_commands.sql",
+      "0005_irrigation_commands_duration.sql",
+      "0006_backend_irrigation_logic.sql",
+      "0008_device_enrollment_and_onboarding.sql",
+      "0009_mqtt_and_device_identity.sql",
+      "0021_service_requests.sql",
+      "0027_fao56_engine.sql"
+    ]
+  },
+  "second": {
+    "fromEmpty": "all 55 applied (0001_foundation.sql .. 0059_core_tables_rls.sql)",
+    "rerun0007and0010": [
+      "0007_move_irrigation_logic_to_api.sql: ok",
+      "0010_zone_schema_realignment.sql: ok"
+    ],
+    "schemaChangedByRerun": [],
+    "rerun0057to0059": [
+      "0057_audit_trust_and_data.sql: ok",
+      "0058_service_journey.sql: ok",
+      "0059_core_tables_rls.sql: ok"
+    ],
+    "schemaChangedByAuditRerun": [],
+    "verify": {
+      "rows": 56,
+      "migrationRowsAllTrue": true,
+      "notTrue": [
+        "storage reports bucket (not a migration)"
+      ]
+    },
+    "viewColumns": "zone_id,farm_id,crop_type,water_saved,health_status,moisture_threshold,desired_moisture,moisture,temperature,humidity,last_reading_at,moisture_simulated,temperature_simulated,humidity_simulated",
+    "scheduleTableGone": true,
+    "scheduleFunctionReadsZone": true,
+    "wholeChainAgain_notRerunnable": [
+      "0001_foundation.sql",
+      "0002_relationships.sql",
+      "0003_csharp_domain.sql",
+      "0004_irrigation_commands.sql",
+      "0005_irrigation_commands_duration.sql",
+      "0006_backend_irrigation_logic.sql",
+      "0008_device_enrollment_and_onboarding.sql",
+      "0009_mqtt_and_device_identity.sql",
+      "0021_service_requests.sql",
+      "0027_fao56_engine.sql"
+    ]
+  }
+}

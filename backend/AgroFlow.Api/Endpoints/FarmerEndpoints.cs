@@ -30,7 +30,9 @@ public record FarmerServiceRequest(
     string? Location,
     float? RoughSize,
     string CropType,
-    string? Notes);
+    string? Notes,
+    // AF-19: "ha", "m2" or "unknown" ("I don't know - help me measure"). Older apps send none.
+    string? RoughSizeUnit = null);
 
 public static class FarmerEndpoints
 {
@@ -51,6 +53,30 @@ public static class FarmerEndpoints
         group.MapPost("/requests", CreateFarmerServiceRequestAsync);
         group.MapPut("/zones/{zoneId:long}/settings", UpdateZoneSettingsAsync);
         group.MapPost("/zones/{zoneId:long}/commands", CreateManualCommandAsync);
+        group.MapPost("/alerts/{alertId:long}/read", MarkAlertReadAsync);
+    }
+
+    // AF-04: the app shows an alert as read only after this succeeds. Only an alert on the caller's
+    // own farm (or one of its zones); the first time is kept (read_at is set once), so a retry or a
+    // second phone gets the same answer. 404 for anyone else's alert, so ids cannot be probed.
+    private static async Task<IResult> MarkAlertReadAsync(long alertId, ClaimsPrincipal user, NpgsqlDataSource dataSource, CancellationToken ct)
+    {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand("""
+            update alert a set read_at = coalesce(a.read_at, now())
+             where a.id = $2
+               and (exists (select 1 from farm f where f.farm_id = a.farm_id
+                              and (f.owner_id = $1 or exists (select 1 from farm_member fm where fm.farm_id = f.farm_id and fm.profile_id = $1)))
+                 or exists (select 1 from zone z join farm f on f.farm_id = z.farm_id where z.id = a.zone_id
+                              and (f.owner_id = $1 or exists (select 1 from farm_member fm where fm.farm_id = f.farm_id and fm.profile_id = $1))))
+            returning a.id, a.read_at
+            """, connection);
+        cmd.Parameters.AddWithValue(userId);
+        cmd.Parameters.AddWithValue(alertId);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return Results.NotFound(new { error = "No such alert." });
+        return Results.Ok(new { id = r.GetInt64(0), readAt = r.GetFieldValue<DateTimeOffset>(1) });
     }
 
     private static async Task<IResult> CreateFarmerServiceRequestAsync(
@@ -101,6 +127,19 @@ public static class FarmerEndpoints
                 error = "Rough size must be greater than 0."
             });
         }
+
+        // The size is stored in hectares with the unit the farmer chose, so staff never get a bare
+        // "2.5" (AF-19). "unknown" keeps no number: staff help measure at the visit.
+        var unit = request.RoughSizeUnit?.Trim().ToLowerInvariant();
+        if (unit is not (null or "ha" or "m2" or "unknown"))
+            return Results.BadRequest(new { error = "Choose square metres or hectares for the size, or I don't know.", field = "roughSizeUnit" });
+        float? roughSizeHa = unit switch
+        {
+            "unknown" => null,
+            "m2" => request.RoughSize / 10_000f,
+            _ => request.RoughSize,
+        };
+        var storedUnit = unit ?? (request.RoughSize.HasValue ? "unstated" : null);
 
         if (requestType == "new_farm" &&
             string.IsNullOrWhiteSpace(location))
@@ -203,7 +242,7 @@ public static class FarmerEndpoints
 
         command.Parameters.AddWithValue(
             NpgsqlDbType.Real,
-            (object?)request.RoughSize ?? DBNull.Value);
+            (object?)roughSizeHa ?? DBNull.Value);
 
         command.Parameters.AddWithValue(
             cropType);
@@ -230,10 +269,21 @@ public static class FarmerEndpoints
         var createdAt =
             reader.GetDateTime(2);
 
-        // Close the reader before the notifier opens its own connection. The insert
+        await reader.CloseAsync();
+
+        // 0057: the unit beside the size. Before it is applied the size alone is kept.
+        try
+        {
+            await using var unitCmd = new NpgsqlCommand("update service_request set rough_size_unit = $2 where id = $1", connection);
+            unitCmd.Parameters.AddWithValue(requestId);
+            unitCmd.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)storedUnit ?? DBNull.Value);
+            await unitCmd.ExecuteNonQueryAsync();
+        }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedColumn) { }
+
+        // The reader is closed before the notifier opens its own connection. The insert
         // above has already committed, so we never send a message about a request
         // that was rolled back.
-        await reader.CloseAsync();
 
         // Telegram the farmer and every admin with a linked chat. Awaited, but it can
         // never fail this request: NotifyAsync catches everything, so a Telegram outage
@@ -396,6 +446,12 @@ public static class FarmerEndpoints
                 'events', coalesce((select jsonb_agg(to_jsonb(e) order by e.started_at desc) from irrigation_event e join selected_zones z on z.id = e.zone_id), '[]'::jsonb),
                 'usage', coalesce((select jsonb_agg(to_jsonb(u)) from zone_daily_water_usage u join selected_zones z on z.id = u.zone_id), '[]'::jsonb),
                 'weather', coalesce((select jsonb_agg(to_jsonb(w) order by w.recorded_at desc) from weather w join selected_farm f on f.farm_id = w.farm_id), '[]'::jsonb),
+                -- Today's forecast row (AF-03): the app reads rain from precipitation_mm and says
+                -- "Weather unavailable" when this is null or stale, never "Dry".
+                'weatherToday', (select jsonb_build_object('date', w.date, 'precipitation_mm', w.precipitation_mm,
+                                        'fetched_at', w.fetched_at, 'is_forecast', w.is_forecast)
+                                   from weather_daily w join selected_farm f on f.farm_id = w.farm_id
+                                  where w.date = (now() at time zone 'Africa/Johannesburg')::date limit 1),
                 'alerts', coalesce((select jsonb_agg(to_jsonb(a) order by a.created_at desc)
                                       from alert a join selected_farm f
                                         on a.farm_id = f.farm_id
@@ -421,6 +477,26 @@ public static class FarmerEndpoints
         if (request.IrrigationMode is not null and not ("automatic" or "scheduled" or "manual"))
             return Results.BadRequest(new { error = "Invalid irrigation mode." });
 
+        // A new zone waits for commissioning before the farmer can make it automatic (0058); zones
+        // from before the journey (legacy) keep working as they did. Staff can always switch it.
+        if (request.IrrigationMode == "automatic" || request.AutomationEnabled == true)
+        {
+            await using var check = await dataSource.OpenConnectionAsync();
+            await using var stateCmd = new NpgsqlCommand(
+                "select commission_state from zone where id = $1", check);
+            stateCmd.Parameters.AddWithValue(zoneId);
+            string? state = null;
+            try { state = await stateCmd.ExecuteScalarAsync() as string; }
+            catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedColumn) { }
+            if (state is not null && Commissioning.FarmerMayChooseMode("automatic", state) is { } notYet)
+                return Results.Json(new { error = notYet, reason = "not_commissioned" }, statusCode: StatusCodes.Status409Conflict);
+        }
+
+        if (request.ScheduleDurationMinutes is < 1 or > 1440)
+            return Results.BadRequest(new { error = "A schedule runs for 1 to 1440 minutes." });
+
+        await using var connection = await dataSource.OpenConnectionAsync();
+        var maxExpr = await AgroFlow.Api.Services.ZoneRunLimit.ExpressionAsync(connection);
         var sql = $"""
             update zone z set name=coalesce($2, name), location=coalesce($3, location), crop_type=coalesce($4, crop_type),
               irrigation_mode=coalesce($5, irrigation_mode), automation_enabled=coalesce($6, automation_enabled),
@@ -428,9 +504,8 @@ public static class FarmerEndpoints
               weather_adjustment=coalesce($9, weather_adjustment), schedule_enabled=coalesce($10, schedule_enabled),
               schedule_days=coalesce($11, schedule_days), schedule_start_time=coalesce($12, schedule_start_time),
               schedule_duration_minutes=coalesce($13, schedule_duration_minutes)
-            where z.id=$14 and ({FarmAccessSql}) returning z.id;
+            where z.id=$14 and ({FarmAccessSql}) returning z.id, z.schedule_duration_minutes, {maxExpr};
             """;
-        await using var connection = await dataSource.OpenConnectionAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue(userId);
         command.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)request.Name ?? DBNull.Value);
@@ -446,26 +521,55 @@ public static class FarmerEndpoints
         command.Parameters.AddWithValue(NpgsqlDbType.Text, (object?)request.ScheduleStartTime ?? DBNull.Value);
         command.Parameters.AddWithValue(NpgsqlDbType.Integer, (object?)request.ScheduleDurationMinutes ?? DBNull.Value);
         command.Parameters.AddWithValue(zoneId);
-        return await command.ExecuteScalarAsync() is null ? Results.NotFound() : Results.NoContent();
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return Results.NotFound();
+        if (request.ScheduleDurationMinutes is null || reader.IsDBNull(1)) return Results.NoContent();
+
+        // The schedule keeps what the farmer chose; every run of it is capped at the zone's maximum
+        // (the 0057 trigger), and the app shows the capped length: "Capped to 5 min (this zone's limit)".
+        var scheduled = reader.GetInt32(1);
+        var zoneMax = IrrigationRunRules.ZoneMaxOrDefault(reader.IsDBNull(2) ? null : reader.GetInt32(2));
+        var effective = IrrigationRunRules.EffectiveScheduleMinutes(scheduled, zoneMax);
+        return Results.Ok(new
+        {
+            scheduleDurationMinutes = scheduled,
+            effectiveMinutes = effective,
+            maxRunMinutes = zoneMax,
+            capped = effective < scheduled,
+            capMessage = effective < scheduled ? IrrigationRunRules.CappedMessage(zoneMax) : null,
+        });
     }
 
     // The app's Irrigate button lands here. We only save the command row; a
     // database trigger wakes IrrigationCommandNotifyService, which publishes it
     // to the board over MQTT.
+    //
+    // A start longer than the zone's maximum run time is CAPPED there, not refused (AF-05): the
+    // response says "Capped to 5 min (this zone's limit)". A second start while the first is still
+    // unanswered (a double tap, a retry after a lost response) returns the first command, so only
+    // one run happens; an advisory lock on the zone makes two at the same instant safe too.
     private static async Task<IResult> CreateManualCommandAsync(
         long zoneId, ManualIrrigationRequest request, ClaimsPrincipal user, NpgsqlDataSource dataSource)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
-        // Never over the kit's 120-minute ceiling; the zone's own maximum is checked below.
+        // Never over the kit's 120-minute ceiling; the zone's own maximum caps it below.
         if (IrrigationRunRules.CheckRequest(request.Command, request.DurationSeconds) is { } problem)
             return Results.BadRequest(new { error = problem });
 
         await using var connection = await dataSource.OpenConnectionAsync();
+        await using var tx = await connection.BeginTransactionAsync();
+        await using (var zoneLock = new NpgsqlCommand("select pg_advisory_xact_lock(hashtextextended('zone-command:' || $1::text, 0))", connection, tx))
+        {
+            zoneLock.Parameters.AddWithValue(zoneId.ToString(CultureInfo.InvariantCulture));
+            await zoneLock.ExecuteNonQueryAsync();
+        }
+
+        var duration = request.DurationSeconds;
+        IrrigationRunRules.CapResult? cap = null;
 
         // A start needs a kit that is listening. Refused now (409) instead of accepted and
         // marked failed 2 hours later. "Heard from" is the same rule as the Kit screen: the
         // newer of hardware.last_seen and the zone's newest reading. A stop is always let through.
-        // A start longer than the zone's maximum run time (0052) is refused first (400).
         if (request.Command == "start")
         {
             var maxExpr = await AgroFlow.Api.Services.ZoneRunLimit.ExpressionAsync(connection);
@@ -482,15 +586,15 @@ public static class FarmerEndpoints
                     select max(x.recorded_at) as recorded_at from sensor_reading x where x.zone_id = z.id) r on true
                  where z.id = $2 and ({FarmAccessSql});
                 """;
-            await using var kitCommand = new NpgsqlCommand(kitSql, connection);
+            await using var kitCommand = new NpgsqlCommand(kitSql, connection, tx);
             kitCommand.Parameters.AddWithValue(userId);
             kitCommand.Parameters.AddWithValue(zoneId);
             await using (var reader = await kitCommand.ExecuteReaderAsync())
             {
                 if (!await reader.ReadAsync()) return Results.NotFound();
                 var zoneMax = IrrigationRunRules.ZoneMaxOrDefault(reader.IsDBNull(2) ? null : reader.GetInt32(2));
-                if (IrrigationRunRules.CheckAgainstZone(request.DurationSeconds!.Value, zoneMax) is { } tooLong)
-                    return Results.BadRequest(new { error = tooLong, maxRunMinutes = zoneMax });
+                cap = IrrigationRunRules.Cap(request.DurationSeconds!.Value, zoneMax);
+                duration = cap.Seconds;
                 var hasKit = reader.GetBoolean(0);
                 var lastContact = reader.IsDBNull(1) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(1);
                 var kit = IrrigationRunRules.Kit(hasKit, lastContact, DateTimeOffset.UtcNow);
@@ -506,22 +610,75 @@ public static class FarmerEndpoints
                     }, statusCode: StatusCodes.Status409Conflict);
                 }
             }
+
+            // The same press again: the unanswered start from the last two minutes is the answer.
+            await using var pending = new NpgsqlCommand("""
+                select c.id from irrigation_commands c
+                 where c.zone_id = $1 and c.command = 'start' and c.source = 'manual' and c.status = 'pending'
+                   and c.created_at > now() - $2
+                 order by c.created_at desc limit 1
+                """, connection, tx);
+            pending.Parameters.AddWithValue(zoneId);
+            pending.Parameters.AddWithValue(IrrigationRunRules.DuplicateStartWindow);
+            if (await pending.ExecuteScalarAsync() is Guid existing)
+            {
+                await tx.CommitAsync();
+                return Results.Accepted(value: new
+                {
+                    id = existing,
+                    duplicate = true,
+                    message = "Already sent: waiting for the kit to answer the first request.",
+                    durationSeconds = duration,
+                    capped = cap.Capped,
+                    requestedSeconds = cap.RequestedSeconds,
+                    maxRunMinutes = cap.ZoneMaxRunMinutes,
+                    capMessage = cap.Message,
+                });
+            }
         }
 
-        var sql = $"""
-            insert into irrigation_commands (zone_id, command, source, duration_seconds)
-            select z.id, $2, 'manual', $3 from zone z
-            where z.id=$4 and ({FarmAccessSql}) returning id;
-            """;
-        await using var command = new NpgsqlCommand(sql, connection);
+        // What was asked before the cap is kept with the command (0057) when the column is there.
+        var keepsRequest = cap is { Capped: true } && await RequestedColumnAsync(connection, tx);
+        var sql = keepsRequest
+            ? $"""
+              insert into irrigation_commands (zone_id, command, source, duration_seconds, requested_duration_seconds)
+              select z.id, $2, 'manual', $3, $5 from zone z
+              where z.id=$4 and ({FarmAccessSql}) returning id;
+              """
+            : $"""
+              insert into irrigation_commands (zone_id, command, source, duration_seconds)
+              select z.id, $2, 'manual', $3 from zone z
+              where z.id=$4 and ({FarmAccessSql}) returning id;
+              """;
+        await using var command = new NpgsqlCommand(sql, connection, tx);
         command.Parameters.AddWithValue(userId);
         command.Parameters.AddWithValue(request.Command);
-        command.Parameters.AddWithValue(NpgsqlDbType.Integer, (object?)request.DurationSeconds ?? DBNull.Value);
+        command.Parameters.AddWithValue(NpgsqlDbType.Integer, (object?)duration ?? DBNull.Value);
         command.Parameters.AddWithValue(zoneId);
+        if (keepsRequest) command.Parameters.AddWithValue(cap!.RequestedSeconds);
         var id = await command.ExecuteScalarAsync();
+        await tx.CommitAsync();
 
         // No notification: the farmer can see the result in the app. If the pump never
         // confirms the command, DeviceStatusMonitorService raises an equipment failure.
-        return id is null ? Results.NotFound() : Results.Accepted(value: new { id });
+        if (id is null) return Results.NotFound();
+        return Results.Accepted(value: new
+        {
+            id,
+            duplicate = false,
+            durationSeconds = duration,
+            capped = cap?.Capped ?? false,
+            requestedSeconds = cap?.RequestedSeconds ?? request.DurationSeconds,
+            maxRunMinutes = cap?.ZoneMaxRunMinutes,
+            capMessage = cap?.Message,
+        });
+    }
+
+    private static async Task<bool> RequestedColumnAsync(NpgsqlConnection connection, NpgsqlTransaction tx)
+    {
+        await using var has = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'irrigation_commands' and column_name = 'requested_duration_seconds')",
+            connection, tx);
+        return await has.ExecuteScalarAsync() is true;
     }
 }

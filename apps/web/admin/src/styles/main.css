@@ -445,7 +445,7 @@ a{color:inherit}
 .legend-row{display:flex;gap:8px;align-items:center;margin:6px 0;color:var(--text-2)}
 .legend-row b{margin-left:auto;color:var(--text);font-variant-numeric:tabular-nums}
 .dot-r{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
-.dot-good{background:var(--good)}.dot-bad{background:var(--bad)}.dot-warn{background:var(--warn)}
+.dot-good{background:var(--good)}.dot-bad{background:var(--bad)}.dot-warn{background:var(--warn)}.dot-info{background:var(--info)}
 .dot-throb{animation:throb 1.6s ease-in-out infinite}
 @keyframes throb{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.3)}}
 

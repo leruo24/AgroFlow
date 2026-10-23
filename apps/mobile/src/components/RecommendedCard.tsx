@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { createTodayStyles } from '@/styles/todayStyles';
+import { useI18n } from '@/i18n';
 import {
   fetchRecommendedSettings,
   resetZoneToRecommended,
@@ -20,6 +21,7 @@ type Props = {
 // Keep my own. Use these settings saves through "Reset to recommended", so the card and
 // the saved threshold always match.
 export function RecommendedCard({ zoneId, recommendation }: Props) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
 
@@ -58,7 +60,7 @@ export function RecommendedCard({ zoneId, recommendation }: Props) {
 
   return (
     <View style={styles.card} testID="recommended-card">
-      <Text style={styles.zoneName}>Recommended for you</Text>
+      <Text style={styles.zoneName}>{t('recommended.title')}</Text>
       <Text style={styles.help}>{rec.text}</Text>
       {rec.confidence && (
         <View style={styles.badgeRow} accessibilityLabel={`Confidence: ${LEVEL_LABEL[rec.confidence.level]}. ${rec.confidence.reason}`}>
@@ -74,10 +76,10 @@ export function RecommendedCard({ zoneId, recommendation }: Props) {
           onPress={apply}
           style={[styles.button, (busy || rec.canApply === false) && styles.busy]}
         >
-          {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Use these settings</Text>}
+          {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>{t('recommended.use')}</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" onPress={() => setHidden(true)} style={styles.ghost}>
-          <Text style={styles.ghostText}>Keep my own</Text>
+          <Text style={styles.ghostText}>{t('recommended.keep')}</Text>
         </Pressable>
       </View>
       {message ? <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text> : null}

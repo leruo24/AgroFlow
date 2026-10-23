@@ -13,7 +13,9 @@ public sealed record DroughtBudgetView(double LitresLeft, int NormalDays, int Dr
 public sealed record DroughtView(
     long FarmId, bool Active, bool Automatic, string? Override, string Reason, DateTimeOffset? Since,
     DroughtBudgetView? Budget, string? Summary, IReadOnlyList<DroughtZoneView> Zones,
-    string Honesty, string Source);
+    string Honesty, string Source,
+    // AF-06: what is known about the tank, and the one input the budget still needs.
+    TankSummary.View? Tank = null);
 
 // Works out drought mode for a farm from its own data (tank estimate, soil readings, its
 // forecast and its own past reference ET), and the zone priorities on top of the engine's
@@ -150,6 +152,7 @@ public sealed class DroughtEvaluator
 
         // Water budget: the tank's litres against recent daily use (or today's advice).
         DroughtBudgetView? budget = null;
+        double? perDayUsed = null;
         if (litresLeft is { } litres)
         {
             double normalPerDay;
@@ -164,6 +167,7 @@ public sealed class DroughtEvaluator
             var todayDrought = zones.Sum(z => z.DroughtLitres ?? 0);
             if (normalPerDay <= 0) normalPerDay = todayNormal;
             var droughtPerDay = todayNormal > 0 ? normalPerDay * (todayDrought / todayNormal) : normalPerDay;
+            perDayUsed = normalPerDay;
             if (DroughtRules.Budget(litres, normalPerDay, droughtPerDay) is { } b)
                 budget = new DroughtBudgetView(Math.Round(litres), b.NormalDays, b.DroughtDays, DroughtRules.BudgetText(litres, b));
         }
@@ -205,8 +209,9 @@ public sealed class DroughtEvaluator
             await cmd.ExecuteNonQueryAsync(ct);
         }
 
+        var tankSummary = TankSummary.Describe(farm.WaterSource, tank?.CapacityLitres is { } c ? (double)c : null, litresLeft, perDayUsed);
         return new DroughtView(farmId, decision.Active, decision.Automatic, farm.Override, decision.Reason, since,
-            budget, summary, zones, Honesty, YieldResponse.Source + "; " + ApplicationEfficiency.Source);
+            budget, summary, zones, Honesty, YieldResponse.Source + "; " + ApplicationEfficiency.Source, tankSummary);
     }
 
     // On / off by hand ("on" / "off"), or back to automatic (null). Recorded with who did it.

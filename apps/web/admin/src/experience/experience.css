@@ -1,7 +1,7 @@
 :root { --experience-teal:#168f99; --experience-deep:#092f31; --experience-ink:#173231; }
 #experienceAgroFlowRoot { position:fixed; inset:0; z-index:10000; color:var(--experience-ink); font-family:inherit; }
 .experience-shell { position:absolute; inset:0; overflow:hidden; background:#b8cec2; }
-.experience-stage { position:absolute; inset:0; overflow:hidden; background-image:linear-gradient(rgba(195,224,220,.04),rgba(47,87,52,.12)),url('/media/agroflow-field-backdrop.jpg'); background-position:center; background-size:cover; }
+.experience-stage { position:absolute; inset:0; overflow:hidden; background:#e8eee5; }
 .experience-stage::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(180deg,rgba(5,37,38,.33),transparent 25%,transparent 65%,rgba(6,32,29,.22)); }
 .experience-stage canvas { position:absolute!important; inset:0; z-index:1; width:100%!important; height:100%!important; touch-action:none; }
 .experience-skip-link { position:fixed; top:-60px; left:18px; z-index:30; padding:11px 16px; color:#fff; border-radius:8px; background:#062d2f; }

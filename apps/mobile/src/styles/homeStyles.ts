@@ -7,7 +7,7 @@ export function createHomeStyles(colors: AppColors) {
   return StyleSheet.create({
     // The one filled accent element per screen, the main action. Everything else stays neutral
     // (see docs/ui_reference).
-    primaryAction: { minHeight: 56, paddingHorizontal: Spacing.three, borderRadius: Radius.sm, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: colors.primaryDark, marginBottom: Spacing.two },
+    primaryAction: { minHeight: 56, paddingHorizontal: Spacing.three, borderRadius: Radius.sm, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, backgroundColor: colors.action, marginBottom: Spacing.two },
     primaryActionText: { flex: 1, color: colors.white, fontSize: Type.body, fontWeight: '600' },
     // Secondary navigation rows: icon, label, optional detail, chevron, hairline divider. No
     // fill, border or radius.

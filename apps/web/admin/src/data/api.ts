@@ -54,6 +54,8 @@ type ServiceRequestRow = {
   request_type: ServiceRequest["requestType"];
   location: string | null;
   rough_size: number | null;
+  /* 0057 (AF-19): what the farmer chose for the size. Undefined before the migration. */
+  rough_size_unit?: "ha" | "m2" | "unknown" | "unstated" | null;
   crop_type: ServiceRequest["cropType"];
   notes: string | null;
   status: ServiceRequestStatus;
@@ -341,6 +343,9 @@ export const api = {
     latitude: number | null;
     longitude: number | null;
     is_simulated: boolean;
+    member_ids?: string[];
+    member_count?: number;
+    kit_count?: number;
   };
 
   // The API leaves out archived farms unless asked. The toggle is module state, not a filter,
@@ -363,7 +368,8 @@ export const api = {
       isSimulated: f.is_simulated === true,
       province,
       region,
-      health: "Attention Required",
+      // AF-09: no kit yet is "Awaiting installation", not a broken farm.
+      health: (f.kit_count ?? 1) === 0 ? "Awaiting installation" : "Attention Required",
       status: (f.status as Farm["status"]) ?? "Active",
       hectares: Number(f.total_area ?? 0),
       registered: f.updated_at?.slice(0, 10) ?? "",
@@ -375,20 +381,30 @@ export const api = {
         outstandingAlerts: 0,
         openMaintenance: 0,
       },
-      users: 0,
-      devices: 0,
+      // AF-23: the same people the drawer lists (owner + farm members, from the API), never a
+      // placeholder 0.
+      users: f.member_count ?? 0,
+      memberIds: f.member_ids ?? [],
+      devices: f.kit_count ?? 0,
     };
   });
 
   return farms;
 },
   async getServiceRequests(): Promise<ServiceRequest[]> {
-    const { data, error } = await supabase
+    // One string literal each on purpose: supabase-js infers the row shape from the select text.
+    // The columns after updated_at are the who/when chain from migration 0037; rough_size_unit is
+    // 0057's, and before that migration the select without it is used (42703: no such column).
+    const withUnit = await supabase
       .from("service_request")
-      // One string literal on purpose: supabase-js infers the row shape from the select text.
-      // The columns after updated_at are the who/when chain from migration 0037.
-      .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at, assigned_to_profile_id, scheduled_by_profile_id, scheduled_at, completed_by_profile_id, completed_at")
+      .select("id, farmer_id, farm_id, request_type, location, rough_size, rough_size_unit, crop_type, notes, status, created_at, updated_at, assigned_to_profile_id, scheduled_by_profile_id, scheduled_at, completed_by_profile_id, completed_at")
       .order("created_at", { ascending: false });
+    const { data, error } = withUnit.error?.code === "42703"
+      ? await supabase
+          .from("service_request")
+          .select("id, farmer_id, farm_id, request_type, location, rough_size, crop_type, notes, status, created_at, updated_at, assigned_to_profile_id, scheduled_by_profile_id, scheduled_at, completed_by_profile_id, completed_at")
+          .order("created_at", { ascending: false })
+      : withUnit;
 
     if (error) throw error;
 
@@ -465,6 +481,7 @@ export const api = {
         requestType: row.request_type,
         location: row.location,
         roughSize: row.rough_size,
+        roughSizeUnit: row.rough_size_unit ?? null,
         cropType: row.crop_type,
         notes: row.notes,
         status: row.status,

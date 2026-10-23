@@ -1,0 +1,9 @@
+GET /api/farms as a farmer -> 403
+GET /api/admin/farms/6/case as a farmer -> 403
+POST /api/admin/farms/6/visits as a farmer -> 403
+POST /api/admin/zones/9/checklist/kit_linked as a farmer -> 403
+PUT /api/admin/zones/9/mode as a farmer -> 403
+GET /api/admin/health as a farmer -> 403
+GET /api/admin/enquiries as a farmer -> 403
+POST /api/farmers/onboard as a farmer -> 403
+GET /api/users as a farmer -> 403

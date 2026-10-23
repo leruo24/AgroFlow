@@ -1,0 +1,196 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Program Files\\nodejs\\node.exe",
+      "C:\\Users\\leruo\\AppData\\Local\\Temp\\agroflow-visual-redesign-worktree\\apps\\web\\admin\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "experience-agroflow.spec.ts",
+      "--reporter=line,json"
+    ],
+    "configFile": "C:\\Users\\leruo\\AppData\\Local\\Temp\\agroflow-visual-redesign-worktree\\apps\\web\\admin\\playwright.config.ts",
+    "rootDir": "C:/Users/leruo/AppData/Local/Temp/agroflow-visual-redesign-worktree/apps/web/admin/tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "C:/Users/leruo/AppData/Local/Temp/agroflow-visual-redesign-worktree/apps/web/admin/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "C:/Users/leruo/AppData/Local/Temp/agroflow-visual-redesign-worktree/apps/web/admin/tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "line"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": {
+      "command": "npx vite --port 5179 --strictPort",
+      "url": "http://localhost:5179",
+      "reuseExistingServer": false,
+      "timeout": 120000,
+      "env": {
+        "BROWSER": "none",
+        "VITE_SUPABASE_URL": "https://testproject.supabase.co",
+        "VITE_SUPABASE_ANON_KEY": "test-anon-key",
+        "VITE_AGROFLOW_API_BASE": "https://api.agroflow.test"
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "experience-agroflow.spec.ts",
+      "file": "experience-agroflow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "homepage demo opens, waters the field, explains the decision and exits",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9322,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T04:09:34.112Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b20507e67e2782324d2c-5866d1402cf2ff9a7e6c",
+          "file": "experience-agroflow.spec.ts",
+          "line": 16,
+          "column": 1
+        },
+        {
+          "title": "demo stays usable without horizontal page overflow at desktop, tablet and phone widths",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7567,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T04:09:43.547Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b20507e67e2782324d2c-9f0726a3bca6e2683a72",
+          "file": "experience-agroflow.spec.ts",
+          "line": 50,
+          "column": 1
+        },
+        {
+          "title": "the guided UI stays minimal while farmer options remain available secondarily",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium",
+              "projectName": "chromium",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 11173,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-23T04:09:51.127Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "b20507e67e2782324d2c-4b6e2154dad1ef56d4e4",
+          "file": "experience-agroflow.spec.ts",
+          "line": 70,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-23T04:09:31.535Z",
+    "duration": 31097.911,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

@@ -1,5 +1,5 @@
 import { api, getShowArchivedFarms, isArchived } from "@/data/api";
-import { esc, fmtInt, healthDot, healthTone, fmtPct } from "@/lib/format";
+import { esc, fmtInt, healthDot, healthTone, fmtPct, fmtArea } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
 import { PROVINCES, REGIONS } from "@/data/referenceData";
 import {
@@ -23,7 +23,7 @@ function farmCard(f: Farm): string {
     <div class="farm-meta">
       <span class="meta-ico">${Icon.mapPin}${esc(f.province)}</span>
       <span class="meta-ico">${Icon.map}${esc(f.region)}</span>
-      <span class="meta-ico">${Icon.ruler}${fmtInt(f.hectares)} ha</span>
+      <span class="meta-ico">${Icon.ruler}${esc(fmtArea(f.hectares))}</span>
     </div>
 
     <div class="farm-stats">

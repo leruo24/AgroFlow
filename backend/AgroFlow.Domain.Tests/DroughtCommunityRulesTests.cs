@@ -288,7 +288,8 @@ public class DroughtCommunityRulesTests
     {
         Assert.True(LocationRules.Similarity("Mafeking", "Mafikeng") > LocationRules.Similarity("Mafeking", "Mafatle"));
         Assert.Equal(1.0, LocationRules.Similarity("Mahik", "Mahikeng"));
-        Assert.Equal(new[] { "Mafeki", "Mafek", "Mafe", "Maf" }, LocationRules.QueriesFor("Mafeking").Skip(1));   // up to 6 letters
+        // The former name's current one first (B3-01), then prefixes up to 6 letters.
+        Assert.Equal(new[] { "Mahikeng", "Mafeki", "Mafek", "Mafe", "Maf" }, LocationRules.QueriesFor("Mafeking").Skip(1));
         Assert.Equal(1, LocationRules.Levenshtein("polokwne", "polokwane"));
     }
 }

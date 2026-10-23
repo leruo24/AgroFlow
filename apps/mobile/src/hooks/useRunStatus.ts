@@ -4,9 +4,12 @@
 // GET /api/farmer/commands/{id}; the server works out the state (CommandState).
 import { useEffect, useState } from 'react';
 
-import { fetchCommandStatus, type CommandStatus } from '@/services/agroFlowApi';
+import { fetchCommandStatus, type CommandPhase, type CommandStatus } from '@/services/agroFlowApi';
 
 export type RunState = 'sent' | 'started' | 'finished' | 'no_response' | 'failed';
+// The state, and the server's own phase (Request sent, Waiting for kit, ...) when it sends one
+// (0057 onwards). The phase is only ever the server's word: null until an answer carries it.
+export type RunStatus = { state: RunState; phase: CommandPhase | null };
 
 export const RUN_POLL_MS = 3000;
 // The server's CommandState.AckWait: no acknowledgement in this long is "didn't respond".
@@ -22,8 +25,8 @@ export function runStateFrom(status: CommandStatus | null, sentAt: number, now: 
   return ['sent', 'started', 'finished', 'no_response', 'failed'].includes(state) ? state : 'sent';
 }
 
-export function useRunStatus(commandId: string | null, durationSeconds: number): RunState | null {
-  const [state, setState] = useState<RunState | null>(null);
+export function useRunStatus(commandId: string | null, durationSeconds: number): RunStatus | null {
+  const [state, setState] = useState<RunStatus | null>(null);
 
   useEffect(() => {
     if (!commandId) { setState(null); return; }
@@ -31,14 +34,14 @@ export function useRunStatus(commandId: string | null, durationSeconds: number):
     const sentAt = Date.now();
     const giveUpAt = sentAt + durationSeconds * 1000 + FINISH_GRACE_MS;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    setState('sent');
+    setState({ state: 'sent', phase: null });
 
     const poll = async () => {
       let status: CommandStatus | null = null;
       try { status = await fetchCommandStatus(commandId); } catch { /* try again next time */ }
       if (cancelled) return;
       const next = runStateFrom(status, sentAt, Date.now());
-      setState(next);
+      setState(current => ({ state: next, phase: status?.phase ?? current?.phase ?? null }));
       // A started run that never reports back keeps saying "started"; polling stops anyway.
       if (DONE.includes(next) || Date.now() > giveUpAt) return;
       timer = setTimeout(poll, RUN_POLL_MS);
