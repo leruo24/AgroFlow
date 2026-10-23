@@ -1,3 +1,4 @@
+using AgroFlow.Business;
 using System;
 using System.Net;
 using System.Net.Http;
@@ -138,6 +139,13 @@ public class OnboardingDbTests : IClassFixture<OnboardingSimHost>
         // The farmer owns the farm and must change the temporary password.
         Assert.Equal(true, await ScalarAsync("select f.owner_id is not null from farm f where f.farm_id = $1", farmId));
         Assert.Equal(true, await ScalarAsync("select p.must_change_password from profile p join farm f on f.owner_id = p.id where f.farm_id = $1", farmId));
+        // 8 easy characters (shown "KX7P 4MRT"), working for 72 hours.
+        var shown = body.GetProperty("temporaryPassword").GetString()!;
+        Assert.Equal(EasyPassword.Length, EasyPassword.Normalise(shown).Length);
+        Assert.True(EasyPassword.LooksTemporary(shown));
+        var hoursLeft = Convert.ToDouble(await ScalarAsync(
+            "select extract(epoch from p.temp_password_expires_at - now()) / 3600 from profile p join farm f on f.owner_id = p.id where f.farm_id = $1", farmId));
+        Assert.InRange(hoursLeft, 71.9, 72.0);
 
         // The same submit again (a double click, a lost response): nothing new, no password.
         var (again, againBody) = await PostAsync(Sesobe(email, id));

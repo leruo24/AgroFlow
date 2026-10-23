@@ -294,6 +294,34 @@ public class SimDatabaseTests : IClassFixture<SimDbHost>
     }
 
     [SimDbFact]
+    public async Task With_no_acknowledgement_Irrigate_reads_No_response_after_the_wait()
+    {
+        var s = await SeedAsync();
+        var client = _host.CreateClient();
+        var start = await client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/zones/{s.OnlineZone}/commands", new { command = "start", durationSeconds = 60 }));
+        Assert.Equal(HttpStatusCode.Accepted, start.StatusCode);
+        var id = (await Json(start)).GetProperty("id").GetGuid();
+        async Task<JsonElement> Status() => await Json(await client.SendAsync(As(Farmer, HttpMethod.Get, $"/api/farmer/commands/{id}")));
+
+        // "Request sent" until handed to the broker, then "Waiting for kit". (In run-e2e.mjs the
+        // real API runs against this database too and may already have published it.)
+        Assert.Contains((await Status()).GetProperty("phase").GetString(), new[] { "request_sent", "waiting_for_kit" });
+        await ScalarAsync("update irrigation_commands set published_at = now() where id = $1", id);
+        var waiting = await Status();
+        Assert.Equal("waiting_for_kit", waiting.GetProperty("phase").GetString());
+        Assert.Equal("Waiting for kit", waiting.GetProperty("phaseLabel").GetString());
+
+        // The kit never answers: past the wait (CommandState.AckWait, 60 s) the app says so.
+        await ScalarAsync("update irrigation_commands set created_at = now() - interval '2 minutes', published_at = now() - interval '2 minutes' where id = $1", id);
+        var silent = await Status();
+        Assert.Equal("no_response", silent.GetProperty("phase").GetString());
+        Assert.Equal("No response", silent.GetProperty("phaseLabel").GetString());
+        Assert.Equal("no_response", silent.GetProperty("state").GetString());
+
+        await ScalarAsync("update irrigation_commands set status = 'failed' where id = $1", id);
+    }
+
+    [SimDbFact]
     public async Task Staff_set_a_zones_maximum_in_range_and_farmers_cannot()
     {
         var s = await SeedAsync();
