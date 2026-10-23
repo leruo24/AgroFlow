@@ -111,4 +111,47 @@ public class FirmwareContractTests
         Assert.Contains("\"X-Device-Token\"", Sketch());
         Assert.Equal("X-Device-Token", AgroFlow.Api.Services.DeviceAuthService.TokenHeader);
     }
+
+    [Fact]
+    public void The_pins_match_the_wiring_and_the_relay_is_off_before_anything_else()
+    {
+        // The real kit (2026-10-23): soil GPIO 32, relay GPIO 25 active LOW, DHT11 GPIO 27.
+        var sketch = Sketch().Replace("\r\n", "\n");
+        Assert.Contains("const int MOISTURE_PIN = 32;", sketch);
+        Assert.Contains("const int RELAY_PIN    = 25;", sketch);
+        Assert.Contains("const int DHT_PIN      = 27;", sketch);
+        Assert.Contains("const bool RELAY_ACTIVE_LOW = true;", sketch);
+        Assert.Contains("dht.setup(DHT_PIN, DHTesp::DHT11);", sketch);
+        // The first two statements of setup(): the relay pin is an output, and it is off.
+        var setup = sketch[(sketch.IndexOf("void setup() {", StringComparison.Ordinal) + "void setup() {".Length)..];
+        var statements = setup.Split(';', 3).Select(s => s.Trim()).ToArray();
+        Assert.Equal("pinMode(RELAY_PIN, OUTPUT)", statements[0]);
+        Assert.Equal("relayWrite(false)", statements[1]);
+    }
+
+    [Fact]
+    public void A_repeated_command_ID_is_acknowledged_again_and_never_carried_out_twice()
+    {
+        var sketch = Sketch().Replace("\r\n", "\n");
+        Assert.Contains("#include \"CommandIds.h\"", sketch);
+        Assert.Contains("const size_t RECENT_COMMAND_IDS = 32;", sketch);
+        var handler = sketch[sketch.IndexOf("void handleMqttCommand(", StringComparison.Ordinal)..];
+        handler = handler[..handler.IndexOf("\nvoid reconnectMqtt()", StringComparison.Ordinal)];
+        int Index(string s) { var i = handler.IndexOf(s, StringComparison.Ordinal); Assert.True(i >= 0, s); return i; }
+        // In order: look the ID up; a repeat is re-acknowledged with its first time and returns;
+        // a new ID is remembered and saved to flash; only then can the pump start.
+        Assert.True(Index("recentCommands.acknowledgedAt(commandId)") < Index("markCommandExecuted(commandId, (uint32_t)firstAck)"));
+        Assert.True(Index("markCommandExecuted(commandId, (uint32_t)firstAck)") < Index("recentCommands.remember(commandId, ackEpoch)"));
+        Assert.True(Index("recentCommands.remember(commandId, ackEpoch)") < Index("saveRecentCommands()"));
+        Assert.True(Index("saveRecentCommands()") < Index("startPumpCycle("));
+        // The IDs are loaded from flash at boot.
+        Assert.Contains("loadRecentCommands();", sketch);
+    }
+
+    [Fact]
+    public void Every_reading_carries_the_backlog_and_the_server_reads_it()
+    {
+        Assert.Contains("doc[\"backlog\"]", Sketch());
+        Assert.Contains("backlog", Fields(typeof(SensorMqttPayload)));
+    }
 }

@@ -562,6 +562,7 @@ export const api = {
         tokenStatus: extra.get(String(h.hardware_id))?.tokenStatus,
         mqttUsername: extra.get(String(h.hardware_id))?.mqttUsername ?? null,
         enrollmentStatus: extra.get(String(h.hardware_id))?.enrollmentStatus,
+        offlineBacklog: extra.get(String(h.hardware_id))?.offlineBacklog ?? null,
       };
     });
     return hardware;

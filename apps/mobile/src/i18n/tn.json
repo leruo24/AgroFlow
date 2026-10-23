@@ -1225,6 +1225,7 @@
     "legal.notAccepted": "Ga di ise di amogelwe. O di amogela mo Dikeletso tsa gago, ka fa tlase ga Pele o simolola.",
     "legal.loading": "Go laela dikwalo…",
     "legal.failed": "Dikwalo ga di a kgona go laela. Tlhatlhoba kgokagano ya gago o leke gape.",
-    "settings.helpDocs": "Thuso le dikwalo"
+    "settings.helpDocs": "Thuso le dikwalo",
+    "kit.backlog": "Dipalo di le {count} tsa fa e ne e se mo inthaneteng di sa ntse di romelwa."
   }
 }

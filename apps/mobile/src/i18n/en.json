@@ -1225,6 +1225,7 @@
     "legal.notAccepted": "Not accepted yet. You accept them in Your preferences, under Before you start.",
     "legal.loading": "Loading the documents…",
     "legal.failed": "Could not load the documents. Check your connection and try again.",
-    "settings.helpDocs": "Help and documents"
+    "settings.helpDocs": "Help and documents",
+    "kit.backlog": "{count} readings from while it was offline are still uploading."
   }
 }

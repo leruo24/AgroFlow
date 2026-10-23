@@ -8,7 +8,8 @@ using Npgsql;
 namespace AgroFlow.Api.Mqtt;
 
 // RecordedAt and Seq come only with a reading the kit kept while offline (v1.5.0).
-public record SensorMqttPayload(string SensorType, float Value, DateTimeOffset? RecordedAt = null, long? Seq = null);
+// Backlog: readings the kit still has waiting to upload, on every reading from v1.7.0.
+public record SensorMqttPayload(string SensorType, float Value, DateTimeOffset? RecordedAt = null, long? Seq = null, int? Backlog = null);
 
 public interface IMqttPublisher
 {
@@ -197,7 +198,7 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 
             // This is the only place that knows which physical device sent a reading, so
             // it updates last_seen. DeviceStatusMonitorService uses that to spot quiet devices.
-            await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId);
+            await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId, payload.Backlog);
 
             var result = await SensorReadingProcessor.ProcessAsync(
                 connection, device.Value.ZoneId, payload.SensorType, payload.Value, _notifications,
@@ -236,8 +237,28 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
         return actualFarmId == claimedFarmId ? (hardwareId, zoneId) : null;
     }
 
-    private static async Task TouchDeviceLastSeenAsync(NpgsqlConnection connection, long hardwareId)
+    // Set to false the first time the backlog columns turn out to be missing (before migration
+    // 0060), so last_seen is still updated and the backlog is simply not kept.
+    private static volatile bool _backlogColumns = true;
+
+    private static async Task TouchDeviceLastSeenAsync(NpgsqlConnection connection, long hardwareId, int? backlog)
     {
+        if (backlog is >= 0 && _backlogColumns)
+        {
+            try
+            {
+                await using var withBacklog = new NpgsqlCommand(
+                    "update hardware set last_seen = now(), offline_backlog = $2, offline_backlog_at = now() where hardware_id = $1", connection);
+                withBacklog.Parameters.AddWithValue(hardwareId);
+                withBacklog.Parameters.AddWithValue(backlog.Value);
+                await withBacklog.ExecuteNonQueryAsync();
+                return;
+            }
+            catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedColumn)
+            {
+                _backlogColumns = false;
+            }
+        }
         await using var cmd = new NpgsqlCommand(
             "update hardware set last_seen = now() where hardware_id = $1", connection);
         cmd.Parameters.AddWithValue(hardwareId);

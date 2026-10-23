@@ -961,6 +961,9 @@ export type ZoneHardware = {
   // ID (the same way the firmware does), so a naming change only needs updating in one place.
   setupNetworkName: string | null;
   setupNetworkPassword: string | null;
+  // Readings the kit still had waiting to upload at its latest reading (firmware 1.7.0+).
+  // Absent from an older API; null when the kit has not reported it.
+  offlineBacklog?: number | null;
 };
 
 export function fetchZoneHardware(zoneId: number) {

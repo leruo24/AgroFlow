@@ -1225,6 +1225,7 @@
     "legal.notAccepted": "Nog nie aanvaar nie. Jy aanvaar dit in Jou voorkeure, onder Voor jy begin.",
     "legal.loading": "Laai die dokumente…",
     "legal.failed": "Kon nie die dokumente laai nie. Kyk na jou verbinding en probeer weer.",
-    "settings.helpDocs": "Hulp en dokumente"
+    "settings.helpDocs": "Hulp en dokumente",
+    "kit.backlog": "{count} lesings van toe dit vanlyn was, word nog opgelaai."
   }
 }
