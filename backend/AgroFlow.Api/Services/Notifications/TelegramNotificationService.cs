@@ -172,6 +172,27 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
+    // A kit claimed for a zone
+
+    public async Task NotifyKitConnectedAsync(long zoneId, string deviceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var zone = await GetZoneContextAsync(zoneId, cancellationToken);
+            if (zone is null) return;
+            var network = DeviceSetupCommands.SetupNetworkName(deviceId);
+            var password = DeviceSetupCommands.SetupNetworkPassword(deviceId);
+            // alertsOnly: someone who turned Telegram alerts off is not messaged; staff never are.
+            await BroadcastToFarmAsync(zone.FarmId,
+                lang => BotText.Get(lang, "kit.connected", ("zone", zone.ZoneName), ("name", network), ("password", password)),
+                alertsOnly: true, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            LogSwallowed(ex, "kit-connected", zoneId.ToString());
+        }
+    }
+
     // A zone AgroFlow could not water itself
 
     public async Task NotifyZoneCriticalAsync(

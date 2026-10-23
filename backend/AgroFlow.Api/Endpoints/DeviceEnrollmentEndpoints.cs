@@ -139,6 +139,7 @@ public static class DeviceEnrollmentEndpoints
         MqttCredentialPoolService pool,
         ClaimRateLimiter rateLimiter,
         ILoggerFactory loggerFactory,
+        AgroFlow.Api.Services.Notifications.INotificationService notifications,
         CancellationToken cancellationToken)
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.DeviceClaim");
@@ -250,6 +251,10 @@ public static class DeviceEnrollmentEndpoints
         await transaction.CommitAsync(cancellationToken);
 
         rateLimiter.RecordSuccess(address);
+
+        // Once per claim (a code works once): the zone's farmers learn the kit is connected and
+        // its setup Wi-Fi. Never the enrollment code.
+        await notifications.NotifyKitConnectedAsync(zoneId, claimedDeviceId, cancellationToken);
 
         // Falls back to the shared login outside the transaction (it is only a config read).
         var credential = assigned;

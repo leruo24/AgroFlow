@@ -9,7 +9,9 @@ namespace AgroFlow.Api.Mqtt;
 
 // RecordedAt and Seq come only with a reading the kit kept while offline (v1.5.0).
 // Backlog: readings the kit still has waiting to upload, on every reading from v1.7.0.
-public record SensorMqttPayload(string SensorType, float Value, DateTimeOffset? RecordedAt = null, long? Seq = null, int? Backlog = null);
+// Rssi (dBm) and SoilProbeOk (its last soil sample was in range): on every reading from v1.7.1.
+public record SensorMqttPayload(string SensorType, float Value, DateTimeOffset? RecordedAt = null, long? Seq = null, int? Backlog = null,
+    int? Rssi = null, bool? SoilProbeOk = null);
 
 public interface IMqttPublisher
 {
@@ -198,7 +200,7 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
 
             // This is the only place that knows which physical device sent a reading, so
             // it updates last_seen. DeviceStatusMonitorService uses that to spot quiet devices.
-            await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId, payload.Backlog);
+            await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId, payload.Backlog, payload.Rssi, payload.SoilProbeOk);
 
             var result = await SensorReadingProcessor.ProcessAsync(
                 connection, device.Value.ZoneId, payload.SensorType, payload.Value, _notifications,
@@ -240,9 +242,32 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
     // Set to false the first time the backlog columns turn out to be missing (before migration
     // 0060), so last_seen is still updated and the backlog is simply not kept.
     private static volatile bool _backlogColumns = true;
+    // The same for the kit's own report (migration 0061).
+    private static volatile bool _kitReportColumns = true;
 
-    private static async Task TouchDeviceLastSeenAsync(NpgsqlConnection connection, long hardwareId, int? backlog)
+    private static async Task TouchDeviceLastSeenAsync(NpgsqlConnection connection, long hardwareId, int? backlog,
+        int? rssi = null, bool? soilProbeOk = null)
     {
+        // A dBm the column accepts (-127..0); anything else is not a real reading and is dropped.
+        if (rssi is < -127 or > 0) rssi = null;
+        if ((rssi is not null || soilProbeOk is not null) && _kitReportColumns)
+        {
+            try
+            {
+                await using var report = new NpgsqlCommand(
+                    "update hardware set wifi_rssi = coalesce($2, wifi_rssi), soil_probe_ok = coalesce($3, soil_probe_ok), " +
+                    "kit_report_at = now() where hardware_id = $1", connection);
+                report.Parameters.AddWithValue(hardwareId);
+                report.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Smallint, (object?)(short?)rssi ?? DBNull.Value);
+                report.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Boolean, (object?)soilProbeOk ?? DBNull.Value);
+                await report.ExecuteNonQueryAsync();
+            }
+            catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedColumn)
+            {
+                _kitReportColumns = false;
+            }
+        }
+
         if (backlog is >= 0 && _backlogColumns)
         {
             try
