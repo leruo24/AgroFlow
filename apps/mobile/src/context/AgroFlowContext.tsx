@@ -25,13 +25,10 @@ import {
 
 import {
   fetchFarmerDashboard,
+  markAlertRead,
   sendManualIrrigationCommand,
   updateZoneThroughApi,
 } from '@/services/agroFlowApi';
-
-import {
-  markAlertReadInDatabase,
-} from '@/services/alertHistoryService';
 
 import {
   relativeMoisturePercent,
@@ -39,6 +36,7 @@ import {
 
 import { isOnline, onReconnect } from '@/lib/connectivity';
 import { zoneMaxRunMinutes } from '@/lib/runLimit';
+import { weatherStatus, type WeatherAvailability, type WeatherTodayRow } from '@/lib/weatherStatus';
 import { t, type TranslationKey } from '@/i18n';
 
 // An alert's title from its stored severity (Critical / Warning / Info, any case).
@@ -187,9 +185,13 @@ export type Zone = {
   lastReadingAt?: string | null;
   // The zone's soil type as stored (zone.soil_type: sandy / loam / clay), or null.
   soilType?: string | null;
-// Weather adjustment
+// Today's weather for the farm (AF-03): available, missing or stale. rainExpected is null when
+  // the weather is not known, so unknown never reads as "Dry / No rain".
   weather: {
-    rainExpected: boolean;
+    availability: WeatherAvailability;
+    rainExpected: boolean | null;
+    precipitationMm: number | null;
+    fetchedAt: string | null;
     message: string;
   };
 
@@ -376,13 +378,10 @@ type WaterUsageRow = {
   used_today_litres: number | string | null;
 };
 
-type WeatherRow = {
-  weather_conditions: string | null;
-  recorded_at: string;
-};
-
 type AlertRow = {
   id: DatabaseId;
+  // Set once, when the farmer first opened it (0033); the saved state is what the app shows.
+  read_at?: string | null;
   zone_id: DatabaseId | null;
   farm_id?: DatabaseId | null;
   severity: string;
@@ -424,7 +423,7 @@ export function mapZoneRow(
   reading: ZoneLatestReadingRow | undefined,
   lastEvent: IrrigationEventRow | undefined,
   usedTodayLitres: number | null,
-  weather: WeatherRow | null,
+  weather: WeatherTodayRow,
   zoneAlerts: AlertRow[],
   monthLitres: number | null = null
 ): Zone {
@@ -474,14 +473,8 @@ export function mapZoneRow(
       ? lastEvent.started_at.split('T')
       : ['Never', ''];
 
-  const weatherConditions =
-    weather?.weather_conditions?.trim() ?? '';
-  const rainExpected =
-    weatherConditions.toLowerCase().includes('rain');
-  const weatherMessage =
-    weather
-      ? weatherConditions || 'No conditions recorded'
-      : 'No weather data available';
+  // From today's forecast row (precipitation in mm), never from the word "rain" (AF-03).
+  const today = weatherStatus(weather);
 
   return {
     id:
@@ -610,8 +603,11 @@ export function mapZoneRow(
     lastReadingAt: reading?.last_reading_at ?? null,
     soilType: (row as { soil_type?: string | null }).soil_type ?? null,
     weather: {
-      rainExpected,
-      message: weatherMessage,
+      availability: today.availability,
+      rainExpected: today.rainExpected,
+      precipitationMm: today.precipitationMm,
+      fetchedAt: today.fetchedAt,
+      message: today.reason,
     },
     alerts: zoneAlerts.map((a) => ({
       id: String(a.id),
@@ -631,7 +627,7 @@ async function fetchZonesForFarm(
   const readings = dashboard.readings as ZoneLatestReadingRow[];
   const events = dashboard.events as IrrigationEventRow[];
   const usage = dashboard.usage as WaterUsageRow[];
-  const weatherRows = dashboard.weather as WeatherRow[];
+  const weatherToday = (dashboard as { weatherToday?: WeatherTodayRow }).weatherToday ?? null;
   const alertRows = (dashboard.alerts as (AlertRow & { status?: string })[])
     .filter((alert) => !alert.status || alert.status === 'Open');
 
@@ -649,7 +645,6 @@ async function fetchZonesForFarm(
       String(u.zone_id), Number(u.used_today_litres ?? 0),
     ])
   );
-  const latestWeather = ((weatherRows ?? []) as WeatherRow[])[0] ?? null;
   const alertsByZone = new Map<string, AlertRow[]>();
   for (const alert of (alertRows ?? []) as AlertRow[]) {
     if (alert.zone_id === null) continue;
@@ -679,7 +674,7 @@ async function fetchZonesForFarm(
       // No zone_daily_water_usage row for today stays null, never 0, which would look like a
       // real recorded zero.
       usageByZone.get(String(row.id)) ?? null,
-      latestWeather,
+      weatherToday,
       alertsByZone.get(String(row.id)) ?? [],
       monthByZone.has(String(row.id)) ? Math.round(monthByZone.get(String(row.id))!) : null
     ));
@@ -697,7 +692,8 @@ async function fetchZonesForFarm(
       zone: alert.zone_id === null ? null : zoneNames.get(String(alert.zone_id)) ?? null,
       zoneId: alert.zone_id === null ? null : String(alert.zone_id),
       timestamp: alert.created_at ?? '',
-      read: false,
+      // The saved read state (AF-04), so a reload or a second phone agrees.
+      read: !!alert.read_at,
     }));
 
   return {
@@ -778,9 +774,11 @@ type AgroFlowContextType = {//defines the structure of the AgroFlow context, inc
     zoneId: string
   ) => Promise<void>;
 
+  // Resolves true once the server saved it (AF-04). False: it stays unread and the screen
+  // offers Try again; nothing claims a save that did not happen.
   markAlertAsRead: (
     alertId: string
-  ) => void;
+  ) => Promise<boolean>;
 };
 
 const STORAGE_KEYS = {//history and alerts remain local while zone configuration is stored in Supabase.
@@ -1113,9 +1111,11 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
               const existingById = new Map(current.map((alert) => [alert.id, alert]));
               const databaseIds = new Set(snapshot.alerts.map((alert) => alert.id));
               return [
+                // A database alert reads as read only when the server says so (AF-04); only
+                // phone-only alerts keep their local state.
                 ...snapshot.alerts.map((alert) => ({
                   ...alert,
-                  read: existingById.get(alert.id)?.read ?? alert.read,
+                  read: alert.id.startsWith('database-') ? alert.read : existingById.get(alert.id)?.read ?? alert.read,
                 })),
                 ...current.filter((alert) => !databaseIds.has(alert.id) && (alert.farmId !== farm.id || !alert.id.startsWith('database-alert-'))),
               ];
@@ -1228,7 +1228,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
             return [
               ...current.map((alert) => ({
                 ...alert,
-                read: savedById.get(alert.id)?.read ?? alert.read,
+                read: alert.id.startsWith('database-') ? alert.read : savedById.get(alert.id)?.read ?? alert.read,
               })),
               ...parsedAlerts.filter((alert) => !currentIds.has(alert.id)),
             ];
@@ -1851,36 +1851,17 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     );
   }
 
-  function markAlertAsRead(
+  async function markAlertAsRead(
     alertId: string
-  ) {
-    // Record it in the database as well as on this phone (migration 0033), so a reinstall or a
-    // second phone keeps it, and the team can see whether a farmer saw an alert.
-    // Not awaited and never shown: the row already shows as read, and a failed write must not
-    // put an error in front of someone reading their alerts.
-    void markAlertReadInDatabase(
-      alertId
-    );
-
-    setAlerts(
-      (
-        current
-      ) =>
-        current.map(
-          (
-            alert
-          ) =>
-            alert.id ===
-            alertId
-              ? {
-                  ...alert,
-
-                  read:
-                    true,
-                }
-              : alert
-        )
-    );
+  ): Promise<boolean> {
+    // Saved first, shown second (AF-04): the row turns read only after the server confirms
+    // (POST /api/farmer/alerts/{id}/read, farmer-scoped), so a reload, a reinstall or a second
+    // phone agrees. Phone-only alerts have no server row and are marked here.
+    const saved = alertId.startsWith('database-') ? await markAlertRead(alertId) : true;
+    if (!saved) return false;
+    setAlerts((current) =>
+      current.map((alert) => (alert.id === alertId ? { ...alert, read: true } : alert)));
+    return true;
   }
 
   return (

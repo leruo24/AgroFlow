@@ -160,14 +160,42 @@ export type FarmerOnboardedResult = {
   profileId: string;
   farmId?: number | null;
   email: string;
-  temporaryPassword: string;
+  /* Null when the same request had already completed: the password was shown then. */
+  temporaryPassword: string | null;
   telegramDeepLink: string | null;
   telegramCode: string | null;
   telegramCodeExpiresAt: string | null;
   warning: string | null;
+  operation?: OnboardingOperation | null;
 };
 
+/* The onboarding attempt's state (AF-01, docs/audit/ui-contracts.md). offer is what the screen may
+ * do next: "retry" (the same requestId continues the same farm), "new_form" (nothing was saved) or
+ * "done". The screen never offers an unconditional "Create again". */
+export type OnboardingOperation = {
+  requestId: string;
+  status: "started" | "farm_saved" | "account_created" | "completed" | "failed";
+  lastStep: "location" | "farm" | "account" | "handover" | null;
+  farmSaved: boolean;
+  accountCreated: boolean;
+  farmId: number | null;
+  profileId: string | null;
+  offer: "retry" | "new_form" | "done";
+  message: string;
+};
+
+/* An onboarding refusal with what the server said: which field, and what was saved. */
+export class OnboardingError extends Error {
+  constructor(message: string, readonly status: number, readonly code: string | null,
+    readonly field: string | null, readonly operation: OnboardingOperation | null) {
+    super(message);
+  }
+}
+
 export async function onboardFarmer(input: {
+  /* Made once when the form opens; the same id on a retry continues the same attempt. */
+  requestId: string;
+  enquiryId?: number | null;
   farmer: {
     fullName: string;
     email: string;
@@ -177,6 +205,11 @@ export async function onboardFarmer(input: {
     farmName: string;
     location: string;
     sizeHectares: number;
+    /* Valid manual coordinates are used as they are, even when the town search knows nothing. */
+    latitude?: number | null;
+    longitude?: number | null;
+    province?: string | null;
+    town?: string | null;
     zones: {
       name: string;
       sizeHectares: number;
@@ -190,7 +223,29 @@ export async function onboardFarmer(input: {
     }[];
   };
 }): Promise<FarmerOnboardedResult> {
-  return postAuthorized<FarmerOnboardedResult>("/api/farmers/onboard", input);
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Not signed in.");
+  const response = await navigationAwareFetch(`${API_BASE}/api/farmers/onboard`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+  });
+  const text = await response.text();
+  let body: Record<string, unknown> = {};
+  try { body = text ? JSON.parse(text) as Record<string, unknown> : {}; } catch { /* not JSON */ }
+  if (!response.ok) {
+    throw new OnboardingError(errorMessage(text, response.status), response.status,
+      typeof body["code"] === "string" ? body["code"] : null,
+      typeof body["field"] === "string" ? body["field"] : null,
+      (body["operation"] as OnboardingOperation | undefined) ?? null);
+  }
+  return body as unknown as FarmerOnboardedResult;
+}
+
+/* What was saved for an attempt, after a lost answer (GET /api/farmers/onboard/{id}). */
+export function getOnboardingOperation(requestId: string): Promise<OnboardingOperation> {
+  return getAuthorized<OnboardingOperation>(`/api/farmers/onboard/${encodeURIComponent(requestId)}`);
 }
 
 export type TelegramCodeResult = {

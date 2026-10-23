@@ -99,6 +99,7 @@ select num, name, applied, detail from (values
  ('0056','demo_mahikeng', exists(select 1 from c where t='farm' and col='sim_scenario') and (select count(*) from farm where name in ('Mahikeng (Simulated)', 'Ottoshoop (Simulated)') and is_simulated) = 2, 'farm.sim_scenario, Mahikeng and Ottoshoop simulated farms'),
  ('0052','zone_max_run', exists(select 1 from c where t='zone' and col='max_run_minutes') and exists(select 1 from pg_constraint where conname='zone_max_run_minutes_check'), 'zone.max_run_minutes with its 1-120 check'),
  ('0051','command_finished', exists(select 1 from c where t='irrigation_commands' and col='finished_at') and exists(select 1 from c where t='irrigation_event' and col='command_id'), 'irrigation_commands.finished_at, irrigation_event.command_id'),
+ ('0057','audit_trust_and_data', exists(select 1 from rel where relname='onboarding_request' and relkind='r') and exists(select 1 from c where t='irrigation_commands' and col='requested_duration_seconds') and exists(select 1 from c where t='irrigation_commands' and col='published_at') and exists(select 1 from pg_trigger where tgname='trg_irrigation_commands_cap') and exists(select 1 from c where t='service_request' and col='rough_size_unit'), 'onboarding_request, run-cap trigger, irrigation_commands.requested_duration_seconds/published_at, service_request.rough_size_unit'),
  ('storage','reports bucket (not a migration)', exists(select 1 from storage.buckets where id = 'reports'), 'storage.buckets id = reports')
 ) as v(num, name, applied, detail)
 order by num;

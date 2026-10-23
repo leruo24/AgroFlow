@@ -23,6 +23,7 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { createServiceRequestStyles } from '@/styles/serviceRequestStyles';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { useI18n, type TranslationKey } from '@/i18n';
 
 type RequestType = 'new_farm' | 'new_zone';
 
@@ -47,6 +48,7 @@ const cropOptions: {
 ];
 
 export default function ServiceRequestScreen() {
+  const { t } = useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -65,6 +67,8 @@ export default function ServiceRequestScreen() {
 
   const [location, setLocation] = useState('');
   const [roughSize, setRoughSize] = useState('');
+  // AF-19: the size always has a unit, or is honestly "I don't know".
+  const [sizeUnit, setSizeUnit] = useState<'m2' | 'ha' | 'unknown' | null>(null);
   const [cropType, setCropType] =
     useState<CropType | ''>('');
   const [notes, setNotes] = useState('');
@@ -143,6 +147,7 @@ export default function ServiceRequestScreen() {
   function resetForm() {
     setLocation('');
     setRoughSize('');
+    setSizeUnit(null);
     setCropType('');
     setNotes('');
   }
@@ -171,9 +176,14 @@ export default function ServiceRequestScreen() {
     }
 
     const parsedSize =
-      roughSize.trim() === ''
+      sizeUnit === 'unknown' || roughSize.trim() === ''
         ? undefined
-        : Number(roughSize);
+        : Number(roughSize.replace(',', '.'));
+
+    if (parsedSize !== undefined && sizeUnit === null) {
+      Alert.alert(t('request.sizeUnitTitle'), t('request.sizeUnitNeeded'));
+      return;
+    }
 
     if (
       parsedSize !== undefined &&
@@ -209,6 +219,7 @@ export default function ServiceRequestScreen() {
             ? location.trim()
             : undefined,
         roughSize: parsedSize,
+        roughSizeUnit: sizeUnit === 'unknown' ? 'unknown' : parsedSize !== undefined ? sizeUnit ?? undefined : undefined,
         cropType,
         notes:
           notes.trim() || undefined,
@@ -442,18 +453,33 @@ export default function ServiceRequestScreen() {
           </Text>
 
           <TextInput
-            style={styles.input}
-            value={roughSize}
+            style={[styles.input, sizeUnit === 'unknown' && { opacity: 0.5 }]}
+            value={sizeUnit === 'unknown' ? '' : roughSize}
             onChangeText={setRoughSize}
-            placeholder="e.g. 2.5"
+            editable={sizeUnit !== 'unknown'}
+            placeholder={t('request.sizePlaceholder')}
             placeholderTextColor={
               colors.textMuted
             }
             keyboardType="decimal-pad"
+            accessibilityLabel={t('request.sizeLabel')}
+            testID="request-size"
           />
 
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={t('request.sizeUnitLabel')}>
+            {(['m2', 'ha', 'unknown'] as const).map(unit => {
+              const on = sizeUnit === unit;
+              return <Pressable key={unit} accessibilityRole="radio" accessibilityState={{ checked: on }}
+                onPress={() => setSizeUnit(unit)} testID={`request-size-unit-${unit}`}
+                style={[styles.input, { flexGrow: 1, minWidth: 96, justifyContent: 'center', alignItems: 'center' },
+                  on && { borderColor: colors.primaryDark, borderWidth: 2 }]}>
+                <Text style={{ color: colors.text, fontWeight: on ? '700' : '400' }}>{t(`request.sizeUnit.${unit}` as TranslationKey)}</Text>
+              </Pressable>;
+            })}
+          </View>
+
           <Text style={styles.helperText}>
-            Enter an approximate size. The unit can be confirmed during installation.
+            {sizeUnit === 'unknown' ? t('request.sizeUnknownHelp') : t('request.sizeHelp')}
           </Text>
 
           <Text style={styles.sectionTitle}>

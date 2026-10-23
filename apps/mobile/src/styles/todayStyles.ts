@@ -14,6 +14,8 @@ export function createTodayStyles(colors: AppColors) {
     actionKit: { color: colors.error },
     // Advice longer than one run (lib/runLimit.ts).
     overLimit: { fontSize: Type.body, lineHeight: 22, color: colors.warning, fontWeight: '600' },
+    // AF-18: what the advice used, small and quiet under the action.
+    provenance: { fontSize: Type.caption, lineHeight: 18, color: colors.textSecondary },
     badgeRow: { ...sharedLayout.inlineRow, flexWrap: 'wrap', gap: Spacing.two },
     badge: {
       fontSize: Type.label,

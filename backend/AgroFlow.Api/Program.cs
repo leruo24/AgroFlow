@@ -154,6 +154,8 @@ builder.Services.AddSingleton(sp => new CommunityService(
     sp.GetRequiredService<FarmerMessenger>(), sp.GetRequiredService<IAuditWriter>(), sp.GetRequiredService<ILogger<CommunityService>>()));
 builder.Services.AddHostedService<CommunityExpiryService>();
 builder.Services.AddSingleton<SupabaseAdminService>();
+// Onboarding (AF-01): the farmer's sign-in, the one step outside the farm/zones transaction.
+builder.Services.AddSingleton<IOnboardingAccounts, SupabaseOnboardingAccounts>();
 
 // Stops the same event being messaged again and again. The forecast refreshes
 // every 6 hours with 8 days of data, so one storm would be announced about 20

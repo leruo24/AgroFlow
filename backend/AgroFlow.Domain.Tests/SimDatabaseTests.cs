@@ -20,7 +20,7 @@ namespace AgroFlow.Domain.Tests;
 // local database (hardware/sim/run-e2e.mjs sets AGROFLOW_SIM_DB and runs these at the end).
 // In a plain `dotnet test` there is no such database, so these report as Skipped, with the
 // reason. SAFETY: only a 127.0.0.1 / localhost connection string is ever used.
-public sealed class SimDbHost : ApiHost
+public class SimDbHost : ApiHost
 {
     public static string? ConnectionString
     {
@@ -164,21 +164,80 @@ public class SimDatabaseTests : IClassFixture<SimDbHost>
     }
 
     [SimDbFact]
-    public async Task A_run_above_the_zones_maximum_is_refused_and_one_at_it_is_accepted()
+    public async Task A_run_above_the_zones_maximum_is_capped_and_a_double_tap_is_one_run()
     {
+        // AF-05 decision: capped at the zone's maximum, not refused, and the farmer is told.
         var s = await SeedAsync();
         var client = _host.CreateClient();
         var over = await client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/zones/{s.OnlineZone}/commands", new { command = "start", durationSeconds = 240 }));
-        Assert.Equal(HttpStatusCode.BadRequest, over.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, over.StatusCode);
         var body = await Json(over);
-        Assert.StartsWith("This zone's pump is limited to 3 min per run.", body.GetProperty("error").GetString());
-        Assert.Equal(3, body.GetProperty("maxRunMinutes").GetInt32());
+        Assert.True(body.GetProperty("capped").GetBoolean());
+        Assert.Equal(180, body.GetProperty("durationSeconds").GetInt32());
+        Assert.Equal(240, body.GetProperty("requestedSeconds").GetInt32());
+        Assert.Equal("Capped to 3 min (this zone's limit)", body.GetProperty("capMessage").GetString());
+        var id = body.GetProperty("id").GetGuid();
+        Assert.Equal(180, await ScalarAsync("select duration_seconds from irrigation_commands where id = $1", id));
+        Assert.Equal(240, await ScalarAsync("select requested_duration_seconds from irrigation_commands where id = $1", id));
 
-        var at = await client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/zones/{s.OnlineZone}/commands", new { command = "start", durationSeconds = 180 }));
-        Assert.Equal(HttpStatusCode.Accepted, at.StatusCode);
+        // The same press twice, and two at the same instant: still that one command.
+        var again = await Json(await client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/zones/{s.OnlineZone}/commands", new { command = "start", durationSeconds = 120 })));
+        Assert.Equal(id, again.GetProperty("id").GetGuid());
+        Assert.True(again.GetProperty("duplicate").GetBoolean());
+        var both = await Task.WhenAll(
+            client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/zones/{s.OnlineZone}/commands", new { command = "start", durationSeconds = 60 })),
+            client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/zones/{s.OnlineZone}/commands", new { command = "start", durationSeconds = 60 })));
+        foreach (var r in both) Assert.Equal(id, (await Json(r)).GetProperty("id").GetGuid());
+        Assert.Equal(1L, await ScalarAsync(
+            "select count(*) from irrigation_commands where zone_id = $1 and command = 'start' and status = 'pending' and source = 'manual'", s.OnlineZone));
+
         // Not the farmer's farm: no such zone.
         var other = await client.SendAsync(As(OtherFarmer, HttpMethod.Post, $"/api/farmer/zones/{s.OnlineZone}/commands", new { command = "start", durationSeconds = 60 }));
         Assert.Equal(HttpStatusCode.NotFound, other.StatusCode);
+
+        // Leave the zone free for the other tests.
+        await ScalarAsync("update irrigation_commands set status = 'failed' where id = $1", id);
+    }
+
+    [SimDbFact]
+    public async Task Every_insert_path_is_capped_by_the_database_too()
+    {
+        // A schedule (pg_cron) and automatic watering insert directly: the 0057 trigger caps them.
+        var s = await SeedAsync();
+        var id = (Guid)(await ScalarAsync(
+            "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'scheduled', 1200) returning id", s.OnlineZone))!;
+        Assert.Equal(180, await ScalarAsync("select duration_seconds from irrigation_commands where id = $1", id));
+        Assert.Equal(1200, await ScalarAsync("select requested_duration_seconds from irrigation_commands where id = $1", id));
+        var within = (Guid)(await ScalarAsync(
+            "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'scheduled', 120) returning id", s.OnlineZone))!;
+        Assert.Equal(120, await ScalarAsync("select duration_seconds from irrigation_commands where id = $1", within));
+        Assert.Equal(DBNull.Value, await ScalarAsync("select requested_duration_seconds from irrigation_commands where id = $1", within));
+        await ScalarAsync("update irrigation_commands set status = 'failed' where zone_id = $1 and source = 'scheduled'", s.OnlineZone);
+
+        // A saved schedule longer than the maximum keeps its value and says the capped length.
+        var client = _host.CreateClient();
+        var save = await client.SendAsync(As(Farmer, HttpMethod.Put, $"/api/farmer/zones/{s.OnlineZone}/settings",
+            new { scheduleDurationMinutes = 20, scheduleEnabled = false }));
+        Assert.Equal(HttpStatusCode.OK, save.StatusCode);
+        var saved = await Json(save);
+        Assert.Equal(3, saved.GetProperty("effectiveMinutes").GetInt32());
+        Assert.Equal("Capped to 3 min (this zone's limit)", saved.GetProperty("capMessage").GetString());
+    }
+
+    [SimDbFact]
+    public async Task An_alert_reads_as_read_only_once_saved_and_only_for_its_own_farm()
+    {
+        var s = await SeedAsync();
+        var alertId = (long)(await ScalarAsync(
+            "insert into alert (zone_id, farm_id, severity, message) values ($1, $2, 'warning', 'Test alert') returning id", s.OnlineZone, s.FarmId))!;
+        var client = _host.CreateClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.SendAsync(As(OtherFarmer, HttpMethod.Post, $"/api/farmer/alerts/{alertId}/read"))).StatusCode);
+        Assert.Equal(DBNull.Value, await ScalarAsync("select read_at from alert where id = $1", alertId));
+
+        var first = await Json(await client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/alerts/{alertId}/read")));
+        var second = await Json(await client.SendAsync(As(Farmer, HttpMethod.Post, $"/api/farmer/alerts/{alertId}/read")));
+        Assert.Equal(first.GetProperty("readAt").GetDateTimeOffset(), second.GetProperty("readAt").GetDateTimeOffset());
+        Assert.IsType<DateTime>(await ScalarAsync("select read_at from alert where id = $1", alertId));
     }
 
     [SimDbFact]

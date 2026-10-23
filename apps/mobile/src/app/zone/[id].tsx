@@ -12,6 +12,7 @@ import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
 import { useConnectivity } from '@/lib/connectivity';
 import { useZoneKit } from '@/hooks/useZoneKit';
 import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
+import { effectiveRunMinutes, scheduleState } from '@/lib/schedule';
 import { useRunStatus, type RunState } from '@/hooks/useRunStatus';
 import { ApiHttpError } from '@/services/agroFlowApi';
 import { t, useI18n, type TranslationKey } from '@/i18n';
@@ -456,6 +457,11 @@ export default function ZoneControlScreen() {
   const displayedBaseMode =
     selectedMode;
 
+  // The saved schedule's state and real run length (AF-05). The mode is the SAVED one, not a
+  // preview, so a schedule saved under another mode reads as Inactive.
+  const scheduleStateNow = scheduleState(selectedZone.irrigation.mode, schedule);
+  const scheduleRun = effectiveRunMinutes(schedule.durationMinutes, selectedZone.maxRunMinutes);
+
   const scheduleWeatherRows = [
     [
       {
@@ -468,17 +474,33 @@ export default function ZoneControlScreen() {
       },
       {
         label: t('zone.row.duration'),
-        value: schedule.durationMinutes > 0 ? `${schedule.durationMinutes} min` : t('empty.notSet'),
+        // The length each run really gets (AF-05): capped at the zone's maximum, and said so.
+        value: schedule.durationMinutes > 0
+          ? scheduleRun.capped
+            ? t('zone.val.scheduleCapped', { minutes: scheduleRun.minutes, saved: schedule.durationMinutes, max: scheduleRun.max })
+            : t('zone.val.minutes', { n: schedule.durationMinutes })
+          : t('empty.notSet'),
+      },
+      {
+        label: t('zone.row.scheduleState'),
+        value: t(`zone.val.schedule.${scheduleStateNow}` as TranslationKey),
       },
     ],
     [
+      // Unknown weather is never "Dry / No" (AF-03): missing or old forecasts say so.
       {
         label: t('zone.row.forecast'),
-        value: selectedZone.weather.rainExpected ? t('zone.val.rain') : t('zone.val.clear'),
+        value: selectedZone.weather.availability === 'available'
+          ? (selectedZone.weather.rainExpected ? t('zone.val.rain') : t('zone.val.clear'))
+          : selectedZone.weather.availability === 'stale' ? t('weather.stale') : t('weather.unavailable'),
       },
       {
         label: t('zone.row.rain'),
-        value: selectedZone.weather.rainExpected ? t('zone.val.yes') : t('zone.val.no'),
+        value: selectedZone.weather.availability === 'available'
+          ? (selectedZone.weather.rainExpected
+              ? t('zone.val.rainMm', { mm: Math.round((selectedZone.weather.precipitationMm ?? 0) * 10) / 10 })
+              : t('zone.val.no'))
+          : t('weather.unknownShort'),
       },
       {
         label: t('zone.row.adjustment'),
@@ -557,19 +579,17 @@ export default function ZoneControlScreen() {
   }
 
   function handleStartManualRun() {
-    const duration =
+    const requested =
       Number(
         manualDuration
       );
 
     if (
       !Number.isFinite(
-        duration
+        requested
       ) ||
-      duration <
-        1 ||
-      duration >
-        zoneMaxRunMinutes(selectedZone.maxRunMinutes)
+      requested <
+        1
     ) {
       Alert.alert(
         t('zone.invalidDurationTitle'),
@@ -579,9 +599,17 @@ export default function ZoneControlScreen() {
       return;
     }
 
+    // Longer than the zone's maximum is capped there, not refused (AF-05), and the farmer is
+    // told before confirming: "Capped to 5 min (this zone's limit)". The server caps the same way.
+    const run = effectiveRunMinutes(requested, selectedZone.maxRunMinutes);
+    const duration = run.minutes;
+
     Alert.alert(
       t('zone.startConfirmTitle', { zone: selectedZone.name }),
-      t('zone.startConfirmBody', { minutes: duration }),
+      run.capped
+        ? `${t('zone.startConfirmBody', { minutes: duration })}
+${t('run.capped', { max: run.max })}`
+        : t('zone.startConfirmBody', { minutes: duration }),
       [
         {
           text:

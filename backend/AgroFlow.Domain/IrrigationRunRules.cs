@@ -29,11 +29,35 @@ public static class IrrigationRunRules
         return null;
     }
 
-    // A start longer than this zone's maximum run time.
+    // A start longer than this zone's maximum run time. Kept for older callers; the API now caps
+    // instead of refusing (Cap below), the decision of the 22 October audit fixes (AF-05).
     public static string? CheckAgainstZone(int durationSeconds, int zoneMaxRunMinutes) =>
         durationSeconds > zoneMaxRunMinutes * 60
             ? $"This zone's pump is limited to {zoneMaxRunMinutes} min per run. Choose {zoneMaxRunMinutes} minutes or less, and run it again after it finishes."
             : null;
+
+    // Every manual, scheduled and automatic run is capped at the zone's maximum (AF-05): the API
+    // here, the database trigger for every insert path (0057), and the firmware on its own.
+    public sealed record CapResult(int Seconds, bool Capped, int RequestedSeconds, int ZoneMaxRunMinutes, string? Message);
+
+    public static CapResult Cap(int requestedSeconds, int zoneMaxRunMinutes)
+    {
+        var max = ZoneMaxOrDefault(zoneMaxRunMinutes) * 60;
+        return requestedSeconds > max
+            ? new CapResult(max, true, requestedSeconds, max / 60, CappedMessage(max / 60))
+            : new CapResult(requestedSeconds, false, requestedSeconds, max / 60, null);
+    }
+
+    // The words the farmer sees, the same for a run and for a saved schedule.
+    public static string CappedMessage(int zoneMaxRunMinutes) => $"Capped to {zoneMaxRunMinutes} min (this zone's limit)";
+
+    // A saved schedule's effective length in minutes.
+    public static int EffectiveScheduleMinutes(int scheduledMinutes, int? zoneMaxRunMinutes) =>
+        Math.Min(scheduledMinutes, ZoneMaxOrDefault(zoneMaxRunMinutes));
+
+    // A second Water now for a zone that already has an unanswered manual start is the same press
+    // (a double tap, a retry after a lost response): the first command is returned, no new run.
+    public static readonly TimeSpan DuplicateStartWindow = TimeSpan.FromMinutes(2);
 
     // What staff may set in the admin site.
     public static string? CheckMaxRunMinutes(int? minutes) =>

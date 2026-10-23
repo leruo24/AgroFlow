@@ -246,7 +246,7 @@ test("Forgot password on the console is an email link for staff, and says to che
   await page.getByRole("button", { name: "Send reset link" }).click();
   await expect(page.locator("#forgotSent")).toHaveText(
     "If admin@agroflow.test is an AgroFlow staff account, a reset link is on its way. Check your inbox and your spam folder. The link works once.");
-  expect(posts).toEqual([{ path: "/api/auth/forgot-password", body: { email: "admin@agroflow.test", redirectTo: "http://localhost:5179/?reset=1" } }]);
+  expect(posts).toEqual([{ path: "/api/auth/forgot-password", body: { email: "admin@agroflow.test", redirectTo: `http://localhost:${process.env["PW_PORT"] ?? 5179}/?reset=1` } }]);
 
   await page.getByRole("button", { name: "Back to sign in" }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

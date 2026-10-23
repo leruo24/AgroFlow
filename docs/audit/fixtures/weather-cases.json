@@ -1,0 +1,14 @@
+{
+  "_about": "AF-03: the same cases for WeatherAvailability (C#) and weatherStatus (app). ageHours = now - fetched_at. null = not present.",
+  "cases": [
+    { "name": "no forecast row", "hasRow": false, "precipitationMm": null, "ageHours": null, "availability": "missing", "rainExpected": null, "reason": "no_forecast" },
+    { "name": "row without a fetch time", "hasRow": true, "precipitationMm": 4, "ageHours": null, "availability": "missing", "rainExpected": null, "reason": "no_forecast" },
+    { "name": "row without precipitation", "hasRow": true, "precipitationMm": null, "ageHours": 1, "availability": "missing", "rainExpected": null, "reason": "no_precipitation" },
+    { "name": "negative precipitation is unreadable", "hasRow": true, "precipitationMm": -1, "ageHours": 1, "availability": "missing", "rainExpected": null, "reason": "no_precipitation" },
+    { "name": "stale forecast", "hasRow": true, "precipitationMm": 6, "ageHours": 13, "availability": "stale", "rainExpected": null, "reason": "forecast_old" },
+    { "name": "genuine zero precipitation", "hasRow": true, "precipitationMm": 0, "ageHours": 2, "availability": "available", "rainExpected": false, "reason": "dry_forecast" },
+    { "name": "a trace below 1 mm", "hasRow": true, "precipitationMm": 0.4, "ageHours": 2, "availability": "available", "rainExpected": false, "reason": "dry_forecast" },
+    { "name": "rain at the threshold", "hasRow": true, "precipitationMm": 1, "ageHours": 2, "availability": "available", "rainExpected": true, "reason": "rain_forecast" },
+    { "name": "heavy rain", "hasRow": true, "precipitationMm": 18.5, "ageHours": 11.9, "availability": "available", "rainExpected": true, "reason": "rain_forecast" }
+  ]
+}

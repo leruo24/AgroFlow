@@ -295,9 +295,7 @@ export function sendManualIrrigationCommand(
   command: 'start' | 'stop',
   durationSeconds?: number
 ) {
-  return authorizedRequest<{
-    id: string;
-  }>(
+  return authorizedRequest<ManualCommandResult>(
     `/api/farmer/zones/${encodeURIComponent(zoneId)}/commands`,
     {
       method: 'POST',
@@ -307,6 +305,33 @@ export function sendManualIrrigationCommand(
       }),
     }
   );
+}
+
+// What Water now answers (AF-05): the command, and whether its length was capped at the zone's
+// maximum ("Capped to 5 min (this zone's limit)"). duplicate: the same press again (a double tap
+// or a retry) returned the first command, so only one run happens.
+export type ManualCommandResult = {
+  id: string;
+  duplicate?: boolean;
+  durationSeconds?: number | null;
+  capped?: boolean;
+  requestedSeconds?: number | null;
+  maxRunMinutes?: number | null;
+  capMessage?: string | null;
+  message?: string;
+};
+
+// AF-04: an alert is shown as read only once this resolves true (farmer-scoped on the server,
+// set once). False on any failure, so the screen can offer Try again instead of pretending.
+export async function markAlertRead(alertId: string): Promise<boolean> {
+  const numeric = Number(String(alertId).replace(/^(database-|alert-)/, ''));
+  if (!Number.isFinite(numeric)) return false;
+  try {
+    await sendAuthorizedRequest<{ id: number; readAt: string }>(`/api/farmer/alerts/${numeric}/read`, { method: 'POST', body: '{}' });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // What the kit did with a command (GET /api/farmer/commands/{id}). state is the server's word:
@@ -322,7 +347,17 @@ export type CommandStatus = {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  // The audit's words (docs/audit/ui-contracts.md); absent from an API older than 0057.
+  phase?: CommandPhase;
+  phaseLabel?: string;
+  publishedAt?: string | null;
+  requestedDurationSeconds?: number | null;
+  capped?: boolean;
 };
+
+export type CommandPhase =
+  | 'request_sent' | 'waiting_for_kit' | 'kit_confirmed_start' | 'finished'
+  | 'stop_requested' | 'kit_confirmed_stop' | 'no_response' | 'failed';
 
 export function fetchCommandStatus(commandId: string) {
   return authorizedRequest<CommandStatus>(`/api/farmer/commands/${encodeURIComponent(commandId)}`);
@@ -544,6 +579,8 @@ export type FarmerServiceRequestInput = {
   farmId?: number;
   location?: string;
   roughSize?: number;
+  // AF-19: the unit of roughSize, or 'unknown' ("I don't know - help me measure").
+  roughSizeUnit?: 'm2' | 'ha' | 'unknown';
   cropType:
     | 'potato'
     | 'tomato'
@@ -641,10 +678,37 @@ export type TodayZone = {
   confidenceExplanation: Explanation | null;
   nextStep: { field: string; ask: string } | null;
   setup?: ZoneSetupFacts | null;
+  // AF-18: what the advice was worked out from (AdviceProvenance on the server).
+  provenance?: AdviceProvenance | null;
+};
+
+export type AdviceProvenance = {
+  cropType: string | null;          // the crop the zone is SET to, never read from its name
+  cropModelKey: string | null;
+  cropModelLabel: string | null;    // the engine's model, e.g. "leafy veg (lettuce)"
+  cropModelIsDefault: boolean;      // the model is a stand-in for the saved crop
+  plantingDate: string | null;
+  stageAssumed: boolean;
+  soilModel: string;
+  soilDefaulted: boolean;
+  weatherFrom: string | null;       // the observed weather used, first and last day
+  weatherTo: string | null;
+  forecastDays: number;
+  missingWeatherDays: string[];     // recent days with no weather row
+  calculatedAt: string;
+};
+
+export type FarmToday = {
+  farmId: number;
+  day: string;
+  calculatedAt?: string;
+  // AF-03: today's weather, available / missing / stale; unknown is never "dry".
+  weather?: { availability: 'available' | 'missing' | 'stale'; rainExpected: boolean | null; precipitationMm: number | null; fetchedAt: string | null; reason: string } | null;
+  zones: TodayZone[];
 };
 
 export function fetchFarmToday(farmId: string | number) {
-  return authorizedRequest<{ farmId: number; day: string; zones: TodayZone[] }>(
+  return authorizedRequest<FarmToday>(
     `/api/farmer/farms/${encodeURIComponent(String(farmId))}/today`
   );
 }
@@ -1252,6 +1316,17 @@ export type DroughtView = {
   farmId: number; active: boolean; automatic: boolean; override: 'on' | 'off' | null; reason: string; since: string | null;
   budget: { litresLeft: number; normalDays: number; droughtDays: number; text: string } | null;
   summary: string | null; zones: DroughtZone[]; honesty: string; source: string;
+  // AF-06: the one tank summary (TankSummary on the server); absent from an older API.
+  tank?: TankSummaryView | null;
+};
+
+// What is known about the farm's tank, for every screen. missing names the one input lacking.
+export type TankSummaryView = {
+  state: 'not_a_tank_farm' | 'no_tank' | 'level_unknown' | 'use_unknown' | 'complete';
+  hasTank: boolean;
+  capacityLitres: number | null;
+  remainingLitres: number | null;
+  missing: 'capacity' | 'level' | 'daily_use' | null;
 };
 
 export function fetchDrought(farmId: string | number) {
