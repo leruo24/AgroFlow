@@ -1,0 +1,23 @@
+GET /api/farmer/dashboard?farmId=5 as another farmer -> 200
+GET /api/farmer/farms/5/today as another farmer -> 404
+GET /api/farmer/farms/5/journey as another farmer -> 404
+GET /api/farmer/farms/5/tank as another farmer -> 404
+GET /api/farmer/farms/5/setup as another farmer -> 404
+GET /api/farmer/farms/5/drought as another farmer -> 404
+GET /api/farmer/forecast?zoneId=8 as another farmer -> 404
+GET /api/farmer/zones/8/commands as another farmer -> 200
+GET /api/farmer/commands/0f9b952c-fd98-49e4-99eb-b6b9232bd819 as another farmer -> 404
+GET /api/farmer/zones/8/hardware as another farmer -> 404
+GET /api/farmer/zones/8/soil-ph as another farmer -> 404
+GET /api/farmer/reports/water-usage?farmId=5&from=2026-10-23&to=2026-10-23 as another farmer -> 404
+GET /api/farmer/reports/water-usage/pdf?farmId=5&from=2026-10-23&to=2026-10-23 as another farmer -> 404
+GET /api/farmer/service?farmId=5 as another farmer -> 404
+PUT /api/farmer/zones/8/settings as another farmer -> 404
+POST /api/farmer/zones/8/commands as another farmer -> 404
+POST /api/farmer/alerts/1/read as another farmer -> 404
+POST /api/farmer/farms/5/tasks/water as another farmer -> 404
+POST /api/farmer/farms/5/help as another farmer -> 404
+PUT /api/farmer/farms/5/tank as another farmer -> 404
+POST /api/farmer/zones/8/automatic-offer as another farmer -> 404
+POST /api/farmer/requests as another farmer -> 400
+200 answers (allowed only without the other farmer's data, checked): /api/farmer/dashboard?farmId=5, /api/farmer/zones/8/commands
