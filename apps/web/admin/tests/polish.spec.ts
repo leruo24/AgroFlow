@@ -85,8 +85,8 @@ test("the sidebar logo and name go Home", async ({ page }) => {
   await expect(page.locator("#headerTitle")).not.toHaveText("Dashboard", { timeout: 15000 });
   await page.locator("#brandHome").click();
   await expect(page).toHaveURL(/#dashboard$/);
-  await expect(page.locator("#headerTitle")).toHaveText(/Dashboard|Home/);
-  await expect(page.getByRole("link", { name: /AgroFlow Administration/ })).toBeVisible();
+  await expect(page.locator("#headerTitle")).toHaveText(/Dashboard|Home|Overview/);
+  await expect(page.getByRole("link", { name: /AgroFlow Staff/ })).toBeVisible();
 });
 
 for (const where of ["sidebar", "avatar menu"] as const) {

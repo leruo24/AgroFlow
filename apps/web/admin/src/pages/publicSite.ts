@@ -84,7 +84,8 @@ export function renderPublicSite(original: string): string {
     case "/about":
       body =
         hero("aboutTitle", "purposeBody") +
-        `<section class="visual-grid about-grid">${card("purpose", "purposeBody")}${card("who", "whoBody")}${card("roles", "rolesBody")}${card("project", "projectBody")}${card("receive", "receiveBody", "/service-pricing")}${card("start", "journey", "/how-it-works")}</section>`;
+        `<section class="visual-grid about-grid">${card("purpose", "purposeBody")}${card("who", "whoBody")}${card("roles", "rolesBody")}${card("project", "projectBody")}${card("team", "teamBody")}${card("sponsor", "sponsorBody")}${card("receive", "receiveBody", "/service-pricing")}${card("start", "journey", "/how-it-works")}</section>` +
+        `<section class="visual-band" data-about-contact><h2>${t("reach")}</h2><p>${t("reachBody")}</p>${cta()}</section>`;
       break;
     case "/experience":
       body =
