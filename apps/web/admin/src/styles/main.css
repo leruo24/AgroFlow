@@ -266,6 +266,10 @@ a{color:inherit}
 }
 /* Neutral, not a green "all good": we only show green when health is known. */
 .status-chip-unknown{color:var(--muted);background:var(--surface-2)}
+/* A problem is never green: without these the base (green) style showed "N need attention"
+   and "Server unreachable" as if all were well. */
+.status-chip-warn{color:var(--warn);background:var(--surface-2)}
+.status-chip-bad{color:var(--bad);background:var(--surface-2)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--good)}
 .dot.pulse-dot{animation:pulse 2s infinite}
 @keyframes pulse{

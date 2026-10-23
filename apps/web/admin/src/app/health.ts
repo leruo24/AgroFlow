@@ -8,6 +8,7 @@ import { clearedConditions, dismissButton, hiddenBy, historyList, viewOf, viewTo
 import { getAdminDismissals, clearDismissalCondition } from "@/services/agroFlowApi";
 import { esc, fmtAgo } from "@/lib/format";
 import { getPlatformHealth, type HealthResponse, type HealthCheck } from "@/services/agroFlowApi";
+import { BLOCKED_BY_EXTENSION, NetworkFailure, SERVER_UNREACHABLE, serverAnswersPing } from "@/lib/plainError";
 
 let cached: HealthResponse | null = null;
 let timer: number | undefined;
@@ -16,6 +17,25 @@ const TONE: Record<string, { cls: string; word: string }> = {
   ok: { cls: "good", word: "All systems normal" },
   warning: { cls: "warn", word: "Needs attention" },
   down: { cls: "bad", word: "Problem" },
+};
+
+/* Why the health check gave no answer. Only a failed /api/public/ping is an outage: the
+ * health route can fail on its own (a broken diagnostic, a slow query) while the server and
+ * every farm keep working, and that must never read as "the server can't be reached". */
+type Unavailable = "server-down" | "blocked" | "check-failed";
+
+async function whyUnavailable(error: unknown): Promise<Unavailable> {
+  if (error instanceof NetworkFailure) return error.blocked ? "blocked" : "server-down";
+  return (await serverAnswersPing()) ? "check-failed" : "server-down";
+}
+
+const UNAVAILABLE: Record<Unavailable, { panel: string; short: string }> = {
+  "server-down": { panel: SERVER_UNREACHABLE, short: "Server unreachable" },
+  blocked: { panel: BLOCKED_BY_EXTENSION, short: "Status blocked" },
+  "check-failed": {
+    panel: "The server is up, but its health check did not answer, so the services below are unknown. This is a problem with the check, not an outage.",
+    short: "Status check failed",
+  },
 };
 
 /* The card on Home */
@@ -28,10 +48,11 @@ export async function healthPanelHtml(): Promise<string> {
     cached = await getPlatformHealth();
   } catch (error) {
     console.warn("[admin] health check unavailable:", error);
+    const why = await whyUnavailable(error);
 
     return panelShell(`
-      <div class="health-unavailable">
-        <p>The health check could not be reached, so the services below are unknown.</p>
+      <div class="health-unavailable" data-health-unavailable="${why}">
+        <p>${esc(UNAVAILABLE[why].panel)}</p>
         <button class="btn ghost" data-act="refresh-health">Retry</button>
       </div>`);
   }
@@ -109,15 +130,16 @@ export async function refreshHealthIndicators(): Promise<void> {
 
   try {
     cached = await getPlatformHealth();
-  } catch {
+  } catch (error) {
     // Unknown is shown as unknown; showing the last good state would be wrong exactly when it
-    // matters.
+    // matters. Whether the server itself is down is the ping's answer, not this check's.
+    const why = await whyUnavailable(error);
     if (sidebar) {
-      sidebar.innerHTML = `<i class="dot dot-unknown"></i>Status unavailable`;
+      sidebar.innerHTML = `<i class="dot dot-unknown"></i>${esc(UNAVAILABLE[why].short)}`;
     }
     if (chip) {
-      chip.className = "status-chip status-chip-unknown";
-      chip.textContent = "Status unavailable";
+      chip.className = `status-chip status-chip-${why === "server-down" ? "bad" : "unknown"}`;
+      chip.textContent = UNAVAILABLE[why].short;
     }
     return;
   }

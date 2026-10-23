@@ -270,15 +270,17 @@ public static class HealthEndpoints
                 // weather_daily has fetched_at (0016), not updated_at: the old query failed with 42703.
                 "select max(fetched_at) from weather_daily", connection);
 
-            var value = await cmd.ExecuteScalarAsync(ct);
-
-            if (value is null || value is DBNull)
+            // fetched_at is timestamptz. ExecuteScalar hands it back as a DateTime (Kind Utc),
+            // which cannot be unboxed to DateTimeOffset (the InvalidCastException in production);
+            // reading the field as DateTimeOffset gives the same instant with offset 0.
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct) || reader.IsDBNull(0))
             {
                 return new HealthCheck("weather", "Weather", Warning,
                     "No weather has been collected yet. Farms need coordinates before it can run.");
             }
 
-            var last = (DateTimeOffset)value;
+            var last = reader.GetFieldValue<DateTimeOffset>(0);
             var age = DateTimeOffset.UtcNow - last;
 
             // Collection runs every 6 hours; 12 hours is two missed runs.
