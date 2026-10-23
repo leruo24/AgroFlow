@@ -1,6 +1,7 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
 import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms, findAttentionGroup } from "@/data/api";
+import { openCaseDrawer, handleCaseAction } from "@/app/caseView";
 import { toast, toastWithUndo } from "@/lib/toast";
 import { setView as setDismissView } from "@/lib/dismiss";
 import { openDrawer, closeDrawer, beginPanelIntent, currentPanelIntent } from "@/lib/drawer";
@@ -11,6 +12,7 @@ import {
   getFarmers,
   inviteFarmer,
   onboardFarmer,
+  linkEnquiryToFarmer,
   getOnboardingOperation,
   OnboardingError,
   type OnboardingOperation,
@@ -69,7 +71,7 @@ import {
 import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast, fmtArea, hectaresText, roughSizeText } from "@/lib/format";
 import { phoneProblem } from "@/lib/phone";
 import { ZONE_CROPS } from "@/data/referenceData";
-import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
+import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest, User } from "@/types/models";
 import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { changedSettings, mountCommunityMap } from "@/pages/droughtCommunity";
@@ -639,10 +641,14 @@ async function openFarmDetail(id: number): Promise<void> {
           <div class="detail-row"><span>Farm location</span><b>${preciseLocation}</b></div>
           <div class="detail-row"><span>Registered</span><b>${esc(fmtDate(f.registered))}</b></div>
           <div class="detail-row"><span>Last activity</span><b>${esc(f.lastActivity)}</b></div>
-          <div class="detail-row"><span>Device connectivity</span><b>${fmtPct(f.healthFactors.deviceConnectivity)}</b></div>
-          <div class="detail-row"><span>Gateway</span><b>${f.healthFactors.gatewayOnline ? "Online" : "Offline"}</b></div>
-          <div class="detail-row"><span>Sensor availability</span><b>${fmtPct(f.healthFactors.sensorsAvailable)}</b></div>
+          ${f.devices === 0
+            // AF-09: a farm with no kit yet is waiting for installation, not offline.
+            ? `<div class="detail-row"><span>Kit</span><b>Not installed yet</b></div>`
+            : `<div class="detail-row"><span>Device connectivity</span><b>${fmtPct(f.healthFactors.deviceConnectivity)}</b></div>
+               <div class="detail-row"><span>Gateway</span><b>${f.healthFactors.gatewayOnline ? "Online" : "Offline"}</b></div>
+               <div class="detail-row"><span>Sensor availability</span><b>${fmtPct(f.healthFactors.sensorsAvailable)}</b></div>`}
         </div>
+        <button class="btn sm" data-act="open-case" data-id="${f.id}">Open installation case</button>
         <button class="btn ghost sm" data-act="edit-farm-location" data-id="${f.id}">View / adjust on map</button>`),
       section("Tank and pH", tankPh ? `
         <div class="detail-list">
@@ -907,6 +913,13 @@ async function handleAction(el: HTMLElement): Promise<void> {
   const act = el.dataset["act"];
   const idAttr = el.dataset["id"] ?? "";
   const numId = Number(idAttr);
+
+  // The installation case (Part B): its own module.
+  if (act === "open-case") {
+    const staff = await api.getUsers().catch(() => []);
+    return void openCaseDrawer(numId, staff.filter((u) => isStaffRole(u.role)).map((u) => ({ id: u.id, name: u.name })));
+  }
+  if (act?.startsWith("case-")) return void handleCaseAction(act, el);
 
   switch (act) {
     /* Filters */
@@ -2431,6 +2444,41 @@ async function handleAction(el: HTMLElement): Promise<void> {
       onboardingFromEnquiry = enquiry;
       onboardingPrefilled = false;
       return void navigate("onboarding");
+    }
+
+    // AF-24: an enquiry whose farmer was onboarded another way is linked, not duplicated. Possible
+    // matches (same phone or email) are listed first, but staff choose: nothing links by itself,
+    // and no call is logged.
+    case "enquiry-link": {
+      const enquiry = (await getEnquiries()).find((e) => String(e.id) === idAttr);
+      if (!enquiry) return void toast("That enquiry could not be found.", "warn");
+      const farmers = await api.getFarmerAccounts().catch(() => [] as User[]);
+      const digits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "").slice(-9);
+      const match = (u: User) => (enquiry.phone && digits(u.phone) && digits(u.phone) === digits(enquiry.phone))
+        || (enquiry.email && u.email && u.email.toLowerCase() === enquiry.email.toLowerCase());
+      const ordered = [...farmers.filter(match), ...farmers.filter((u) => !match(u))];
+      return void openDrawer({
+        title: `Link enquiry #${enquiry.id} to a farmer`,
+        subtitle: "For a farmer who already has an account. The enquiry is completed; no call is logged.",
+        bodyHtml: `
+          <label class="f">Farmer
+            <select data-field="linkFarmer">
+              <option value="">Choose the farmer…</option>
+              ${ordered.map((u) => `<option value="${esc(u.id)}">${match(u) ? "Possible match: " : ""}${esc(u.name)} · ${esc(u.farm)} · ${esc(u.phone || u.email)}</option>`).join("")}
+            </select>
+          </label>
+          <p class="muted">Enquiry: ${esc(enquiry.fullName ?? "")} · ${esc(enquiry.phone ?? "")} · ${esc(enquiry.town ?? "")}, ${esc(enquiry.province)}.
+            A possible match only means the phone or email is the same; check it is the same person.</p>`,
+        confirmLabel: "Link and complete the enquiry",
+        onConfirm: (values) => {
+          const farmer = values["linkFarmer"];
+          if (!farmer) { toast("Choose the farmer first.", "warn"); return false; }
+          void linkEnquiryToFarmer(enquiry.id, farmer)
+            .then(async (r) => { toast(r.message, "success"); await refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not link the enquiry", plainError(e, "Nothing was changed.")));
+          return true;
+        },
+      });
     }
 
     case "view-enquiry": {

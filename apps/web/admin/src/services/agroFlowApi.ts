@@ -1235,3 +1235,71 @@ export function getDroughtCommunitySettings(): Promise<AppSetting[]> {
 export function saveDroughtCommunitySettings(settings: { key: string; value: number | string | boolean }[]): Promise<{ message: string; settings: AppSetting[] }> {
   return authorizedJson("/api/admin/settings/drought-community", "PUT", { settings });
 }
+
+/* The installation case and the journey (Part B; docs/audit/ui-contracts.md). */
+export type JourneyCheck = {
+  item: "kit_linked" | "calibration" | "flow_measured" | "run_limit" | "test_start_stop";
+  label: string; done: boolean; required: boolean; whoCompletes: string;
+  doneBy: string | null; doneAt: string | null; provenance: string | null; value: string | null; notes: string | null;
+};
+export type JourneyZone = {
+  zoneId: number; name: string; commissionState: "legacy" | "pending" | "commissioned"; commissionedAt: string | null;
+  irrigationMode: string; offerAutomatic: boolean; autoOfferAnswer: string | null; installerChecks: JourneyCheck[];
+};
+export type HelpRequest = {
+  id: number; topic: string; zoneId: number | null; note: string | null; status: "open" | "resolved";
+  createdAt: string; resolvedAt: string | null; resolution: string | null; ownerName: string | null;
+};
+export type JourneyView = {
+  farmId: number;
+  setupProgress: { done: number; total: number; label: string; tasks: { key: string; done: boolean; doneAt: string | null }[] };
+  installation: { stage: string; label: string; text: string; live: boolean };
+  whereYouAreNow: {
+    stage: string; stageLabel: string; stageNumber: number; stageCount: number;
+    steps: { key: string; label: string; done: boolean }[]; done: string[]; stillToDo: string[];
+    nextAction: string; whoActsNext: "you" | "agroflow_staff" | "installer"; whoActsNextLabel: string;
+    knownDate: string | null; dateLabel: string;
+  };
+  zones: JourneyZone[];
+  helpRequests: HelpRequest[];
+  terms: { accepted: { all: boolean; termsAcceptedAt: string | null; privacyAcceptedAt: string | null } };
+};
+export type CaseVisit = {
+  id: number; kind: string; scheduledFor: string; installerName: string; installerProfileId: string | null;
+  status: "booked" | "in_progress" | "done" | "cancelled"; notes: string | null; createdAt: string; startedAt: string | null; completedAt: string | null;
+};
+export type ServiceCase = {
+  caseId: number; farmId: number; farmName: string;
+  owner: { id: string; name: string | null } | null; nextAction: string | null; followUpAt: string | null;
+  service: { status: string; statusLabel: string; agreedAt: string | null; payer: string | null; planDescription: string | null };
+  enquiry: { id: number; name: string | null; status: string | null } | null;
+  farmer: { id: string; name: string | null; passwordChanged: boolean } | null;
+  visits: CaseVisit[];
+  journey: JourneyView;
+};
+
+export function getCase(farmId: number): Promise<ServiceCase> {
+  return authorizedJson<ServiceCase>(`/api/admin/farms/${farmId}/case`, "GET");
+}
+export function updateCase(farmId: number, body: Record<string, unknown>): Promise<ServiceCase> {
+  return authorizedJson<ServiceCase>(`/api/admin/farms/${farmId}/case`, "PUT", body);
+}
+export function bookVisit(farmId: number, body: { scheduledFor: string; installerName: string; kind?: string; notes?: string | null }): Promise<{ id: number }> {
+  return authorizedJson(`/api/admin/farms/${farmId}/visits`, "POST", body);
+}
+export function updateVisit(visitId: number, status: "in_progress" | "done" | "cancelled"): Promise<{ id: number; status: string }> {
+  return authorizedJson(`/api/admin/visits/${visitId}`, "PUT", { status });
+}
+export function recordCheck(zoneId: number, item: string, body: { provenance?: string; valueText?: string | null; notes?: string | null; flowRateLpm?: number; maxRunMinutes?: number }):
+  Promise<{ commissionedNow: boolean; value: string | null }> {
+  return authorizedJson(`/api/admin/zones/${zoneId}/checklist/${item}`, "POST", body);
+}
+export function resolveHelpRequest(id: number, resolution: string | null): Promise<{ id: number }> {
+  return authorizedJson(`/api/admin/help-requests/${id}/resolve`, "POST", { resolution });
+}
+export function linkEnquiryToFarmer(enquiryId: number, farmerProfileId: string, farmId?: number | null): Promise<{ message: string; farmId: number | null }> {
+  return authorizedJson(`/api/admin/enquiries/${enquiryId}/link`, "POST", { farmerProfileId, farmId: farmId ?? null });
+}
+export function setZoneModeAsStaff(zoneId: number, mode: "automatic" | "scheduled" | "manual"): Promise<{ irrigationMode: string }> {
+  return authorizedJson(`/api/admin/zones/${zoneId}/mode`, "PUT", { answer: mode });
+}

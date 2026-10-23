@@ -181,7 +181,7 @@ export interface ServiceRequest extends Handling {
 
 /* farms */
 
-export type FarmHealth = "Healthy" | "Attention Required" | "Critical";
+export type FarmHealth = "Healthy" | "Attention Required" | "Critical" | "Awaiting installation";
 export type FarmStatus = "Active" | "Inactive" | "Pending Approval";
 
 export interface FarmHealthFactors {

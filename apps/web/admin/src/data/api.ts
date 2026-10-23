@@ -368,7 +368,8 @@ export const api = {
       isSimulated: f.is_simulated === true,
       province,
       region,
-      health: "Attention Required",
+      // AF-09: no kit yet is "Awaiting installation", not a broken farm.
+      health: (f.kit_count ?? 1) === 0 ? "Awaiting installation" : "Attention Required",
       status: (f.status as Farm["status"]) ?? "Active",
       hectares: Number(f.total_area ?? 0),
       registered: f.updated_at?.slice(0, 10) ?? "",

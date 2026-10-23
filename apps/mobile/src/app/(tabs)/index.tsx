@@ -16,7 +16,9 @@ import { WeatherSummary } from '@/components/WeatherSummary';
 import { DripHelper } from '@/components/DripHelper';
 import { averageSoilText } from '@/lib/moistureDisplay';
 import { TodayCard } from '@/components/TodayCard';
-import { SetupCard } from '@/components/SetupCard';
+import { WhereYouAreNow } from '@/components/WhereYouAreNow';
+import { AutoOfferCard } from '@/components/AutoOfferCard';
+import { useJourney } from '@/hooks/useJourney';
 import { DroughtCard } from '@/components/DroughtCard';
 import { CardList } from '@/components/ui/Card';
 import { InfoGrid } from '@/components/ui/InfoGrid';
@@ -37,6 +39,7 @@ export default function HomeScreen() {
   const moisture = moistureText === 'No reading' ? t('empty.noReading') : moistureText;
   const bottom = useBottomPadding();
   const unread = alerts.filter(a => !a.read).length;
+  const journey = useJourney();
   // Today's cards come from GET /api/farmer/farms/{id}/today on the API.
   const [today, setToday] = useState<TodayZone[] | null>(null);
   const [todayFailed, setTodayFailed] = useState(false);
@@ -85,8 +88,12 @@ export default function HomeScreen() {
         : farmError ? <DataState kind="error" title={t('home.farmUnavailable')} description={t('home.farmUnavailableBody')} onRetry={refreshFarms} />
         : !farm ? <DataState kind="empty" title={t('home.noFarm')} description={t('home.noFarmBody')} />
         : <>
-          {/* Setup still to finish comes first; it is gone once setup is complete. */}
-          <SetupCard />
+          {/* Where you are now (B3-03): the stage, the next action, who acts next and the date,
+              with "Your details: X of 4" and "Installation: <stage>". Before migration 0058 the
+              old setup card shows instead. Then "Turn on automatic watering?" for a zone the
+              installer has just commissioned. */}
+          <WhereYouAreNow state={journey} />
+          {journey.status === 'ready' ? <AutoOfferCard journey={journey.journey} onAnswered={journey.reload} /> : null}
           {/* The water budget, and drought mode with each zone's priority when it is on. */}
           <DroughtCard />
           {/* Today next: it is what a farmer opens the app to find out. */}

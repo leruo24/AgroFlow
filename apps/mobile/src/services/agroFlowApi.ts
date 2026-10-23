@@ -1372,3 +1372,98 @@ export function updateCommunityReport(reportId: number, kind: 'still_burning' | 
     method: 'POST', body: JSON.stringify({ kind, direction: direction ?? null }),
   });
 }
+
+// ---------------------------------------------------------------------------------------------
+// The journey (Part B of the 22 October audit fixes; docs/audit/ui-contracts.md). Every state
+// here is the server's: the app never works a stage or a percentage out by itself.
+// ---------------------------------------------------------------------------------------------
+
+export type FarmerTaskKey = 'preferences' | 'farm' | 'water' | 'crops';
+export type JourneyStage =
+  | 'enquiry' | 'details' | 'service_agreed' | 'account_active'
+  | 'ready_for_installation' | 'visit_booked' | 'installing' | 'commissioned';
+
+export type InstallerCheck = {
+  item: 'kit_linked' | 'calibration' | 'flow_measured' | 'run_limit' | 'test_start_stop';
+  label: string; done: boolean; required: boolean; whoCompletes: 'installer';
+  doneBy: string | null; doneAt: string | null; provenance: string | null; value: string | null;
+};
+
+export type HelpTopic = 'location' | 'water_source' | 'tank_capacity' | 'tank_level' | 'crop'
+  | 'planting_date' | 'irrigation_type' | 'soil_type' | 'area' | 'other';
+
+export type LegalDocument = {
+  key: 'terms' | 'privacy'; title: string; version: string; date: string; status: string; statusLabel: string; url: string;
+};
+
+export type Journey = {
+  farmId: number;
+  setupProgress: { done: number; total: number; label: string; tasks: { key: FarmerTaskKey; done: boolean; doneAt: string | null }[] };
+  installation: { stage: JourneyStage; label: string; text: string; live: boolean };
+  whereYouAreNow: {
+    stage: JourneyStage; stageLabel: string; stageNumber: number; stageCount: number;
+    steps: { key: string; label: string; done: boolean }[];
+    done: string[]; stillToDo: string[];
+    nextAction: string; whoActsNext: 'you' | 'agroflow_staff' | 'installer'; whoActsNextLabel: string;
+    knownDate: string | null; dateLabel: string;
+  };
+  zones: {
+    zoneId: number; name: string; commissionState: 'legacy' | 'pending' | 'commissioned'; commissionedAt: string | null;
+    irrigationMode: string; offerAutomatic: boolean; autoOfferAnswer: 'automatic' | 'manual' | null; installerChecks: InstallerCheck[];
+  }[];
+  helpRequests: { id: number; topic: HelpTopic; zoneId: number | null; status: 'open' | 'resolved'; createdAt: string; ownerName: string | null }[];
+  terms: { accepted: { all: boolean; termsAcceptedAt: string | null; privacyAcceptedAt: string | null }; documents: LegalDocument[] };
+};
+
+export function fetchJourney(farmId: string | number) {
+  return authorizedRequest<Journey>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/journey`);
+}
+
+// Finishes one of the four tasks. The server checks the saved data first (400 with the reason).
+export function finishFarmerTask(farmId: string | number, task: FarmerTaskKey) {
+  return authorizedRequest<Journey>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/tasks/${task}`, { method: 'POST', body: '{}' });
+}
+
+// "I don't know – help me": a staff follow-up with an owner. Asking twice is the same request.
+export function askForHelp(farmId: string | number, topic: HelpTopic, zoneId?: number | null, note?: string | null) {
+  return authorizedRequest<{ id: number; topic: HelpTopic; status: 'open'; assigned: boolean; message: string }>(
+    `/api/farmer/farms/${encodeURIComponent(String(farmId))}/help`,
+    { method: 'POST', body: JSON.stringify({ topic, zoneId: zoneId ?? null, note: note ?? null }) });
+}
+
+export function acceptTerms(termsVersion: string, privacyVersion: string) {
+  return authorizedRequest<{ accepted: true; termsVersion: string; privacyVersion: string; termsAcceptedAt: string; privacyAcceptedAt: string }>(
+    '/api/farmer/terms/accept', { method: 'POST', body: JSON.stringify({ accepted: true, termsVersion, privacyVersion }) });
+}
+
+// "Turn on automatic watering?" after commissioning: Yes (automatic) or Keep manual.
+export function answerAutomaticOffer(zoneId: number, answer: 'automatic' | 'manual') {
+  return authorizedRequest<{ zoneId: number; answer: string; irrigationMode: string }>(
+    `/api/farmer/zones/${zoneId}/automatic-offer`, { method: 'POST', body: JSON.stringify({ answer }) });
+}
+
+export type ServiceSupport = {
+  farmId: number; status: string; statusLabel: string; serviceAgreedAt?: string | null;
+  payer: string | null; planDescription: string | null; contactName?: string | null;
+  example: { installationZar: number; monthlyZar: number; zones: number; label: string; text: string };
+  help: { inApp: string; telegram: string; staff: string };
+  billing?: string;
+};
+
+export function fetchServiceSupport(farmId?: string | number | null) {
+  return authorizedRequest<ServiceSupport>(`/api/farmer/service${farmId ? `?farmId=${encodeURIComponent(String(farmId))}` : ''}`);
+}
+
+// The draft documents (no sign-in needed to read them).
+export async function fetchLegalText(key: 'terms' | 'privacy'): Promise<string> {
+  const apiBase = resolveApiBase();
+  if (!apiBase) throw new Error('AgroFlow.Api could not be located. Set EXPO_PUBLIC_AGROFLOW_API_BASE.');
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}/api/public/legal/${key}`);
+  } catch {
+    throw new NetworkError();
+  }
+  if (!response.ok) throw new ApiHttpError(`The document could not be loaded (${response.status}).`, response.status);
+  return response.text();
+}

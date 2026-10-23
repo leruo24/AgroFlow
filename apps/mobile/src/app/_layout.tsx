@@ -64,7 +64,9 @@ function RootNavigator() {//decides which screens the user is permitted to acces
   // effect only does the navigation.
   // Already in the wizard (any step, e.g. a link to /setup?step=password): stay there.
   // (A string compare: Expo's generated route types only learn of /setup when the dev server runs.)
-  const inSetup = (useSegments()[0] as string | undefined) === 'setup';
+  // The draft terms (/legal) open from the wizard's "Before you start", so they are allowed too.
+  const firstSegment = useSegments()[0] as string | undefined;
+  const inSetup = firstSegment === 'setup' || firstSegment === 'legal';
 
   useEffect(
     () => {
@@ -186,6 +188,12 @@ function RootNavigator() {//decides which screens the user is permitted to acces
 {/* The recovery route stays registered while Supabase changes the temporary auth state. It comes after the protected routes so it is never the default screen. */}
       <Stack.Screen
         name="update-password"
+      />
+
+      {/* The draft terms of service and privacy notice (Part B): public documents, readable
+          signed in or out. */}
+      <Stack.Screen
+        name="legal"
       />
 
       {/* One-tap sign-in from the Telegram welcome (/signin?token=...). Outside the guards like

@@ -84,6 +84,7 @@ export function enquiryActions(e: Enquiry, myId: string | undefined): string {
   return `<div class="row-actions">
     <button type="button" class="btn ghost" data-act="enquiry-log-call" data-id="${e.id}">Log call</button>
     ${e.outcome === "wants" ? `<a href="#" class="row-act" data-act="enquiry-onboard" data-id="${e.id}">Start onboarding</a>` : ""}
+    ${!e.farmerProfileId && e.status !== "lost" && !e.anonymisedAt ? `<a href="#" class="row-act" data-act="enquiry-link" data-id="${e.id}">Link to existing farmer</a>` : ""}
     ${e.noAnswerCount >= 3
       ? `<a href="#" class="row-act" data-act="enquiry-close" data-id="${e.id}" title="Three calls with no answer">Close (no answer ×${e.noAnswerCount})</a>`
       : ""}

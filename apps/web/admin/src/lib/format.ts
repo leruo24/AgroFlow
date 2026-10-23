@@ -101,6 +101,8 @@ export function badgeTone(text: string): BadgeTone {
 /** Farm health gets its own explicit mapping (traffic-light semantics). */
 export function healthTone(health: string): BadgeTone {
   if (health === "Healthy") return "good";
+  // AF-09: waiting for a first installation is normal, not a fault.
+  if (health === "Awaiting installation") return "info";
   if (health === "Attention Required") return "warn";
   return "bad";
 }
@@ -108,7 +110,7 @@ export function healthTone(health: string): BadgeTone {
 // Uses the dot-r/dot-good/dot-bad style from the system-health panel (dashboard.ts)
 // instead of an emoji or a new icon.
 export const healthDot = (health: string): string => {
-  const tone = health === "Healthy" ? "good" : health === "Attention Required" ? "warn" : "bad";
+  const tone = health === "Healthy" ? "good" : health === "Attention Required" ? "warn" : health === "Awaiting installation" ? "info" : "bad";
   return `<span class="dot-r dot-${tone}"></span>`;
 };
 
