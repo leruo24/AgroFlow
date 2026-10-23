@@ -693,7 +693,7 @@
     "community.form.needSubtype": "Choose which one.",
     "community.form.needSeverity": "Choose how serious it is.",
     "sensor.title": "Sensor Readings",
-    "sensor.updated": "Updated {ago}",
+    "sensor.updated": "Last reading {ago}",
     "sensor.justNow": "just now",
     "sensor.minAgo": "{n} min ago",
     "sensor.hoursAgo": "{n} h ago",
@@ -1225,6 +1225,7 @@
     "legal.notAccepted": "Not accepted yet. You accept them in Your preferences, under Before you start.",
     "legal.loading": "Loading the documents…",
     "legal.failed": "Could not load the documents. Check your connection and try again.",
-    "settings.helpDocs": "Help and documents"
+    "settings.helpDocs": "Help and documents",
+    "kit.backlog": "{count} readings from while it was offline are still uploading."
   }
 }

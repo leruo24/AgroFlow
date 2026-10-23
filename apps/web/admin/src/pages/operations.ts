@@ -91,7 +91,11 @@ export async function hardwarePage(): Promise<string> {
         h.online === undefined
           ? `<span class="muted">Unknown</span>`
           : badge(h.online ? "Online" : "Offline", h.online ? "good" : "warn"),
-        esc(h.lastSeen ? fmtDate(h.lastSeen) : "Never"),
+        // With the kit's backlog when it has readings still to upload (it was offline).
+        esc(h.lastSeen ? fmtDate(h.lastSeen) : "Never") +
+          (h.offlineBacklog && h.offlineBacklog > 0
+            ? `<div class="muted sm" data-backlog="${esc(h.id)}">${fmtInt(h.offlineBacklog)} reading${h.offlineBacklog === 1 ? "" : "s"} waiting to upload</div>`
+            : ""),
         h.tokenStatus
           ? badge(h.tokenStatus, h.tokenStatus === "active" ? "good" : "warn")
           : `<span class="muted">Unknown</span>`,

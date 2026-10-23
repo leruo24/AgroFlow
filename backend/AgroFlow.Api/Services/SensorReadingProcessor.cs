@@ -31,7 +31,8 @@ public static class SensorReadingProcessor
     public static async Task<SensorReadingResult> ProcessAsync(
         NpgsqlConnection connection, long zoneId, string sensorType, float value,
         INotificationService? notifications = null, CancellationToken cancellationToken = default,
-        DateTimeOffset? recordedAt = null, DateTimeOffset? receivedAt = null)
+        DateTimeOffset? recordedAt = null, DateTimeOffset? receivedAt = null,
+        long? hardwareId = null)
     {
         var arrived = receivedAt ?? DateTimeOffset.UtcNow;
         var timing = ReadingAge.Classify(recordedAt, arrived);
@@ -44,9 +45,10 @@ public static class SensorReadingProcessor
         if (recordedAt is not null)
         {
             // A kit may resend a buffered reading (power cut after sending, before it was
-            // removed from flash). Same zone, type and time is the same reading: kept once.
+            // removed from flash). The database unique index makes the same physical kit,
+            // sensor type and measured time atomic and safe under concurrent retries.
             var stored = await InsertTimedReadingOnceAsync(
-                connection, zoneId, sensorType, value, ReadingAge.StoredTime(recordedAt, arrived));
+                connection, zoneId, hardwareId, sensorType, value, ReadingAge.StoredTime(recordedAt, arrived));
             if (!stored || !ReadingAge.MayDriveLiveDecisions(timing))
             {
                 return new SensorReadingResult(
@@ -55,7 +57,7 @@ public static class SensorReadingProcessor
         }
         else
         {
-            await InsertSensorReadingAsync(connection, zoneId, sensorType, value);
+            await InsertSensorReadingAsync(connection, zoneId, hardwareId, sensorType, value);
         }
 
         var (moisture, temperature, humidity, moistureThreshold, desiredMoisture) =
@@ -181,31 +183,53 @@ public static class SensorReadingProcessor
         return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 
-    // False when this zone already has this sensor type at exactly this time.
+    // False when this physical kit already stored this sensor type at exactly this
+    // measured time. The HTTP compatibility route has no kit identity, so it keeps
+    // the older zone/type/time guard.
     private static async Task<bool> InsertTimedReadingOnceAsync(
-        NpgsqlConnection connection, long zoneId, string sensorType, float value, DateTimeOffset recordedAt)
+        NpgsqlConnection connection, long zoneId, long? hardwareId, string sensorType, float value,
+        DateTimeOffset recordedAt)
     {
-        await using var cmd = new NpgsqlCommand(
-            """
-            insert into sensor_reading (zone_id, sensor_type, value, recorded_at)
-            select $1, $2, $3, $4
-             where not exists (
-                select 1 from sensor_reading
-                 where zone_id = $1 and sensor_type = $2 and recorded_at = $4)
-            """, connection);
+        var sql = hardwareId is null
+            ? """
+              insert into sensor_reading (zone_id, sensor_type, value, recorded_at)
+              select $1, $2, $3, $4
+               where not exists (
+                  select 1 from sensor_reading
+                   where zone_id = $1 and sensor_type = $2 and recorded_at = $4)
+              """
+            : """
+              insert into sensor_reading (zone_id, hardware_id, sensor_type, value, recorded_at)
+              values ($1, $2, $3, $4, $5)
+              on conflict do nothing
+              """;
+        await using var cmd = new NpgsqlCommand(sql, connection);
         cmd.Parameters.AddWithValue(zoneId);
-        cmd.Parameters.AddWithValue(sensorType);
-        cmd.Parameters.AddWithValue(value);
-        cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.TimestampTz, recordedAt.ToUniversalTime());
+        if (hardwareId is null)
+        {
+            cmd.Parameters.AddWithValue(sensorType);
+            cmd.Parameters.AddWithValue(value);
+            cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.TimestampTz, recordedAt.ToUniversalTime());
+        }
+        else
+        {
+            cmd.Parameters.AddWithValue(hardwareId.Value);
+            cmd.Parameters.AddWithValue(sensorType);
+            cmd.Parameters.AddWithValue(value);
+            cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.TimestampTz, recordedAt.ToUniversalTime());
+        }
         return await cmd.ExecuteNonQueryAsync() == 1;
     }
 
     private static async Task InsertSensorReadingAsync(
-        NpgsqlConnection connection, long zoneId, string sensorType, float value)
+        NpgsqlConnection connection, long zoneId, long? hardwareId, string sensorType, float value)
     {
-        await using var cmd = new NpgsqlCommand(
-            "insert into sensor_reading (zone_id, sensor_type, value) values ($1, $2, $3)", connection);
+        var sql = hardwareId is null
+            ? "insert into sensor_reading (zone_id, sensor_type, value) values ($1, $2, $3)"
+            : "insert into sensor_reading (zone_id, hardware_id, sensor_type, value) values ($1, $2, $3, $4)";
+        await using var cmd = new NpgsqlCommand(sql, connection);
         cmd.Parameters.AddWithValue(zoneId);
+        if (hardwareId is not null) cmd.Parameters.AddWithValue(hardwareId.Value);
         cmd.Parameters.AddWithValue(sensorType);
         cmd.Parameters.AddWithValue(value);
         await cmd.ExecuteNonQueryAsync();

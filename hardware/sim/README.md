@@ -2,7 +2,7 @@
 
 Runs the **real** `AgroFlow.Api` against a throwaway local Postgres with **every migration
 applied** and a local MQTT broker, and drives it with a pretend kit that follows firmware
-1.6.0's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
+1.7.0's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
 
 ```bash
 cd hardware/sim
@@ -21,12 +21,15 @@ prints the API's log and the broker's connections.
 | The kit enrols with a one-time code, and the code works once | `POST /api/devices/claim`, then the same code again (401) |
 | The kit shows online | `hardware.status = 'Online'`, `enrollment_status = 'active'`, `last_seen` within a minute |
 | Readings are stored | three rounds of soil, temperature and humidity over MQTT, every 2 s |
-| Late readings are accepted with their own time, once | a soil reading with `recordedAt` 3 hours ago, sent twice: one row, at that time |
-| ... and do not start automatic watering | no `irrigation_commands` row after it, on an automatic zone |
+| A 10-minute broker outage is recovered | the broker stops, twenty 30-second three-sensor samples queue, the broker restarts, and all 60 upload oldest first with their measured times |
+| Replayed readings are stored once | the oldest buffered MQTT message is retried; the per-kit/type/measured-time key still produces 60 rows, not 61 |
+| An old buffered reading does not start automatic watering | no `irrigation_commands` row after the old dry sample, on an automatic zone |
 | Control: a live reading of the same value does | the same dry value, live: an `auto` `start` reaches the kit |
 | A manual 1-minute command reaches the kit and is acknowledged | an `irrigation_commands` row (what Water now creates) → MQTT → `POST .../executed` → `executed` |
 | The run is logged | `POST /api/irrigation-events`: a `manual` event of 60 s |
 | A pump run kept offline and uploaded twice is counted once | two identical `offline_queued` events: one row |
+| The backlog shows in the kit's status | every replayed reading carries `backlog`; `hardware.offline_backlog` reads 30 halfway through the 60 and 0 at the end |
+| A lost acknowledgement does not water twice | the kit waters, its acknowledgement is dropped, the API resends (replay sweep, 5 s here); the kit acknowledges again with the first time and does not water; a rebooted kit with the same flash also refuses it |
 | A Manual zone is never watered automatically | a bone-dry live reading on a Manual zone: no command; `GET /api/devices/config` says `autoWateringAllowed: false` (true once Automatic) |
 | Every command carries the zone's maximum run time | `maxRunSeconds` 300 by default; a zone limited to 3 min sends 180 for a 600 s request, and the kit runs 180 |
 | A finished run marks its command finished | the run report sets `irrigation_commands.finished_at` and `irrigation_event.command_id` (migration 0051) |

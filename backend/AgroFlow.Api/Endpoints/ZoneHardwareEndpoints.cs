@@ -24,7 +24,10 @@ public record ZoneHardwareResponse(
     DateTimeOffset? HumidityLastReadingAt,
     string TokenStatus,
     string? SetupNetworkName,
-    string? SetupNetworkPassword);
+    string? SetupNetworkPassword,
+    // Readings the kit still had waiting to upload at its latest reading (firmware 1.7.0+;
+    // migration 0060). Null: not reported.
+    int? OfflineBacklog = null);
 
 public record ChangeWifiResponse(Guid CommandId, string SetupNetworkName, string SetupNetworkPassword);
 
@@ -44,7 +47,8 @@ public record AdminHardwareRow(
     string? FirmwareVersion,
     string EnrollmentStatus,
     string TokenStatus,
-    string? MqttUsername);
+    string? MqttUsername,
+    int? OfflineBacklog = null);
 
 // Device commands (change WiFi, open setup) and the screens that use them.
 public static class ZoneHardwareEndpoints
@@ -91,15 +95,17 @@ public static class ZoneHardwareEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
+        var backlog = await HardwareBacklog.ExpressionAsync(connection, "h", cancellationToken);
+
         // The MQTT username comes from a left join, so any fleet size is one query. Burned
         // entries are left out because that login is retired.
         await using var cmd = new NpgsqlCommand(
-            """
+            $"""
             select h.hardware_id, h.device_id, h.device_name, h.zone_id, z.name, f.name,
                    greatest(h.last_seen, coalesce(r.recorded_at, h.last_seen)),
                    h.firmware_version, h.enrollment_status,
                    h.device_token_hash is not null, h.token_revoked_at,
-                   p.username
+                   p.username, {backlog}
               from hardware h
               left join zone z on z.id = h.zone_id
               left join farm f on f.farm_id = z.farm_id
@@ -134,7 +140,8 @@ public static class ZoneHardwareEndpoints
                 reader.IsDBNull(7) ? null : reader.GetString(7),
                 reader.IsDBNull(8) ? "unregistered" : reader.GetString(8),
                 DescribeTokenStatus(hardwareId, hasToken, revokedAt),
-                reader.IsDBNull(11) ? null : reader.GetString(11)));
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.IsDBNull(12) ? null : reader.GetInt32(12)));
         }
 
         return Results.Ok(rows);
@@ -155,12 +162,14 @@ public static class ZoneHardwareEndpoints
 
         var accessClause = requireFarmAccess ? $"and ({FarmAccessSql})" : "";
 
+        var backlog = await HardwareBacklog.ExpressionAsync(connection, "h", cancellationToken);
+
         // One query for the whole screen. The three lateral joins give each sensor's
         // "last heard from" time, to decide "working" or "not responding".
         var sql = $"""
             select h.hardware_id, h.device_id, h.device_name, h.last_seen, h.firmware_version,
                    h.device_token_hash is not null, h.token_revoked_at,
-                   soil.recorded_at, temp.recorded_at, hum.recorded_at
+                   soil.recorded_at, temp.recorded_at, hum.recorded_at, {backlog}
               from zone z
               left join hardware h
                 on h.zone_id = z.id and h.enrollment_status = 'active'
@@ -204,6 +213,7 @@ public static class ZoneHardwareEndpoints
         var soilAt = reader.IsDBNull(7) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(7);
         var tempAt = reader.IsDBNull(8) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(8);
         var humAt = reader.IsDBNull(9) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(9);
+        var offlineBacklog = reader.IsDBNull(10) ? (int?)null : reader.GetInt32(10);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -226,7 +236,8 @@ public static class ZoneHardwareEndpoints
             humAt,
             DescribeTokenStatus(hardwareId, hasToken, revokedAt),
             deviceId is null ? null : DeviceSetupCommands.SetupNetworkName(deviceId),
-            deviceId is null ? null : DeviceSetupCommands.SetupNetworkPassword(deviceId)));
+            deviceId is null ? null : DeviceSetupCommands.SetupNetworkPassword(deviceId),
+            offlineBacklog));
     }
 
     // active / revoked / legacy key, as shown on the admin hardware page.

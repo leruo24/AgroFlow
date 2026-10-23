@@ -176,6 +176,10 @@ public sealed class SchemaCheck
             "select 1 where (select bool_and(relrowsecurity) from pg_class where relnamespace = 'public'::regnamespace and relname in ('farm','zone','farm_member','profile'))",
             "A farmer signed in to the app could read other farmers' farms and zones through the client API."),
 
+        new("0060", "index", "uq_sensor_reading_hardware_measured",
+            "select to_regclass('public.uq_sensor_reading_hardware_measured')::text",
+            "Offline reading retries can be stored twice because the per-kit uniqueness key is missing."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",
