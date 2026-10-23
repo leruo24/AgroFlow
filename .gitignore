@@ -25,8 +25,13 @@ supabase/.temp/
 
 # Build and test output
 dist/
+[Bb]uild/
+web-build/
+coverage/
+[Tt]est[Rr]esults/
 test-results/
 playwright-report/
+blob-report/
 *.log
 
 # Video and archives. The loading animations are app assets and stay tracked.

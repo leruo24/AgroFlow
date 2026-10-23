@@ -1,79 +1,65 @@
 # AgroFlow
 
-Smart irrigation for small farms: ESP32 field kits, a Supabase/Postgres
-database with Row Level Security, a .NET API that talks to the hardware and
-runs the FAO-56 water-balance engine, a farmer-facing mobile app, and an
-admin web console with a public landing page.
+AgroFlow is a smart-irrigation platform for small farms. An ESP32 field kit
+reports sensor readings and operates a pump; a .NET 8 API handles devices,
+recommendations, reports, notifications, and integrations; Supabase provides
+Postgres and authentication; and the farmer and staff apps provide the user
+interfaces.
 
-The irrigation advice is deterministic: every recommendation comes from the
-FAO-56 water balance (crop, soil, weather and sensor readings), and the same
-inputs always give the same answer. See [docs/engine/rule-book.md](docs/engine/rule-book.md).
+Irrigation advice is deterministic and based on the project's FAO-56 water
+balance. See the [engine rule book](docs/engine/rule-book.md) for the implemented
+rules.
 
-## Repository layout
+## Folder map
 
-| Path | What it is |
+| Path | Purpose |
 |---|---|
-| [`apps/mobile/`](apps/mobile/) | Expo / React Native app for farmers (Android, iOS and an installable web build). Signs in with Supabase Auth and reads its own farm's data directly, scoped by RLS. |
-| [`apps/web/admin/`](apps/web/admin/) | Vite + TypeScript admin console, the public landing page, the interactive 3D field controller and the Experience AgroFlow demo. Playwright tests in `tests/`. |
-| [`backend/`](backend/) | `AgroFlow.Api` (ASP.NET Core 8: MQTT bridge, device enrollment, reports, Telegram, weather collection), `AgroFlow.Domain` (domain model in the DB / XDB / Controller pattern, the FAO-56 engine and the rule book), `AgroFlow.Domain.Tests` (xUnit). |
-| [`hardware/`](hardware/) | ESP32 firmware, one sketch folder per device type, plus the shared MQTT topic notes. |
-| [`supabase/`](supabase/) | `migrations/` (the schema history, applied in order), `diagnostics/`, and `scripts/apply-migrations.ps1`. |
-| [`docs/`](docs/) | Engine documentation, reports, operations helpers, sample reports and test evidence. See [docs/README.md](docs/README.md). |
-| `Dockerfile`, `.dockerignore` | The Railway image for `backend/AgroFlow.Api`. The build context is the repo root because the Api references the sibling Domain project. |
+| [`apps/mobile/`](apps/mobile/README.md) | Expo farmer app for Android and the web. |
+| [`apps/web/admin/`](apps/web/admin/README.md) | Vite product site and staff console. |
+| [`backend/AgroFlow.Api/`](backend/AgroFlow.Api/README.md) | ASP.NET Core API, MQTT bridge, reports, weather, and notifications. |
+| [`backend/AgroFlow.Domain/`](backend/AgroFlow.Domain/README.md) | Domain model and irrigation decision engine. |
+| `backend/AgroFlow.Domain.Tests/` | xUnit tests for the domain and API. |
+| [`hardware/esp32/`](hardware/esp32/README.md) | ESP32 irrigation-node firmware and native tests. |
+| [`hardware/sim/`](hardware/sim/README.md) | End-to-end kit simulation using local Postgres and MQTT. |
+| [`supabase/`](supabase/README.md) | Applied database migrations, diagnostics, and migration helpers. |
+| [`docs/`](docs/README.md) | Architecture, operations, release, presentation, report, and test evidence. |
 
-## Architecture
+The root `Dockerfile` builds the API for Railway. Deployment manifests and
+folder locations are part of the deployment contract and should not be moved.
 
-```
-ESP32 kit (per irrigation zone)
-  ├─ MQTT (HiveMQ Cloud, TLS) ── sensor readings, irrigation commands
-  └─ HTTP (AgroFlow.Api)      ── enrollment, irrigation event logging, OTA check
-        │
-        ▼
-  AgroFlow.Api (backend/AgroFlow.Api)
-    - the only component that connects to Postgres with elevated rights
-    - stores readings, runs the FAO-56 engine, decides and sends commands
-    - enrollment, onboarding, reports (PDF / Excel), Telegram, weather
-        │
-        ▼
-  Supabase (Postgres + Auth, Row Level Security: supabase/migrations/)
-        ▲                               ▲
-        │ RLS-scoped to the farmer      │ RLS-scoped to profile.role = 'admin'
-  apps/mobile                     apps/web/admin
-```
+## Local checks
 
-The two apps read and write their own data directly against Postgres with a
-Supabase Auth session; Row Level Security is what limits a farmer to their own
-farm and the console to admins. They call `AgroFlow.Api` only for what a
-client cannot do itself: hardware over MQTT, enrollment, reports, and anything
-that needs the service role.
+Run commands from the repository root unless a row says otherwise.
 
-## Running each part locally
-
-| Part | Commands |
-|---|---|
-| Mobile app | `cd apps/mobile`, `npm install`, copy `.env.example` to `.env`, then `npm start` (Expo). Tests: `npm test`. Type check: `npx tsc --noEmit`. |
-| Admin console | `cd apps/web/admin`, `npm ci`, copy `.env.example` to `.env`, then `npm run dev` (http://localhost:5173). Build: `npm run build`. End-to-end tests (mocked backend, no live system): `npx playwright test`. |
-| Backend API | `cd backend/AgroFlow.Api`, set the user-secrets listed in [backend/AgroFlow.Api/README.md](backend/AgroFlow.Api/README.md#run), then `dotnet run`. |
-| Backend tests | `dotnet test backend/AgroFlow.Domain.Tests` |
-| Firmware | Arduino IDE; see [hardware/README.md](hardware/README.md) and [the irrigation node's setup guide](hardware/esp32/AgroFlowIrrigationNode/README.md). |
-| Database | Migrations are applied by hand in the Supabase SQL editor. `supabase/scripts/apply-migrations.ps1 -From <n>` puts the ones you need on the clipboard in order; then run `docs/ops/verify-migrations.sql`. The files are not proof of the live schema: check the live database. |
-
-## Configuration and secrets
-
-| Part | Committed | Kept out of git |
+| Part | Install/run | Checks |
 |---|---|---|
-| `apps/mobile`, `apps/web/admin` | `.env.example` | `.env` (gitignored) |
-| `backend/AgroFlow.Api` | `appsettings.json` (non-secret settings) | .NET user-secrets: connection string, Supabase service-role key, `ApiKey`, MQTT password, Telegram token. See [backend/AgroFlow.Api/README.md](backend/AgroFlow.Api/README.md#configuration). |
-| `hardware/esp32/AgroFlowIrrigationNode` | `secrets.example.h` | `secrets.h` (gitignored) |
+| Backend | `dotnet run --project backend/AgroFlow.Api/AgroFlow.Api.csproj` | `dotnet build backend/AgroFlow.Api/AgroFlow.Api.csproj`; `dotnet test backend/AgroFlow.Domain.Tests/AgroFlow.Domain.Tests.csproj` |
+| Admin web | `cd apps/web/admin`; `npm ci`; `npm run dev` | `npm run build`; `npx playwright test` |
+| Farmer app | `cd apps/mobile`; `npm ci`; `npm start` | `npx tsc --noEmit`; `npx jest`; `npx expo export --platform web` |
+| Hardware simulation | `cd hardware/sim`; `npm ci` | `node run-e2e.mjs` |
+| ESP32 native code | See [`hardware/esp32/tests/README.md`](hardware/esp32/tests/README.md) | Build and run both C++ test programs. |
 
-> **Rotate these:** an earlier `appsettings.json` (database password, `ApiKey`,
-> Supabase service-role key, HiveMQ password) and the firmware's HiveMQ
-> password were committed before the secrets were moved out. They remain in git
-> history and must be rotated. History was deliberately left unrewritten.
+Copy each app's `.env.example` to its local `.env` before development. Backend
+secrets belong in .NET user-secrets locally and deployment environment variables
+in Railway. Never commit real credentials.
 
-## Where to read more
+## Deployment
 
-- What AgroFlow 2.0 does today: [docs/releases/release-notes-v2.md](docs/releases/release-notes-v2.md)
-- How the irrigation advice is worked out: [docs/fao56-engine-report.md](docs/fao56-engine-report.md), [docs/engine/rule-book.md](docs/engine/rule-book.md), [docs/engine/fao56-engine-audit.md](docs/engine/fao56-engine-audit.md)
-- Demo day: [docs/presentation/presentation-runbook.md](docs/presentation/presentation-runbook.md), [docs/ops/demo-account.md](docs/ops/demo-account.md)
-- Older reports, the September orientation notes and the showcase video project: tag `archive/pre-tidy-2026-10-10`
+| Deliverable | Deployment path |
+|---|---|
+| Product site and staff console | Vercel builds `apps/web/admin` with `npm run build` and serves `dist/`. |
+| Farmer web app | Vercel builds `apps/mobile` with `npx expo export --platform web` and serves `dist/`; `apps/mobile/vercel.json` supplies the router rewrite. |
+| Android APK | Expo Application Services uses `apps/mobile/eas.json`; publish the resulting APK at the URL configured for the product site. |
+| API | Railway builds the root `Dockerfile`, whose build context includes both backend projects. Runtime configuration is supplied by Railway variables. |
+| Database | Apply `supabase/migrations` to Supabase in numeric order. Existing migration files are immutable because they have already been applied live. |
+| Firmware | Build and flash `hardware/esp32/AgroFlowIrrigationNode` with the documented ESP32 toolchain; compiled firmware is not committed. |
+
+## Documentation
+
+Start with [`docs/README.md`](docs/README.md). The main references are the
+[release notes](docs/releases/release-notes-v2.md), [FAO-56 engine report](docs/fao56-engine-report.md),
+[rule book](docs/engine/rule-book.md), [hardware bring-up guide](docs/hardware-bringup.md),
+and [test evidence index](docs/test-evidence/README.md).
+
+The repository-cleanup findings and verification matrix are in
+[`docs/cleanup-report.md`](docs/cleanup-report.md).

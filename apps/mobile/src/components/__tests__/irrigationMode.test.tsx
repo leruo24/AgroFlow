@@ -87,12 +87,12 @@ describe('mode mapping', () => {
   });
 
   it('a zone saved as manual reads as manual (the bug), with automation off', () => {
-    const zone = mapZoneRow(row('manual') as never, 0, undefined, undefined, null, null, []);
+    const zone = mapZoneRow(row('manual') as never, undefined, undefined, null, null, []);
     expect(zone.irrigation.mode).toBe('manual');
     expect(zone.irrigation.automation.enabled).toBe(false);
-    expect(mapZoneRow(row('automatic') as never, 0, undefined, undefined, null, null, []).irrigation.mode).toBe('automatic');
-    expect(mapZoneRow(row('scheduled') as never, 0, undefined, undefined, null, null, []).irrigation.mode).toBe('scheduled');
-    expect(mapZoneRow(row('scheduled') as never, 0, undefined, undefined, null, null, []).irrigation.automation.enabled).toBe(false);
+    expect(mapZoneRow(row('automatic') as never, undefined, undefined, null, null, []).irrigation.mode).toBe('automatic');
+    expect(mapZoneRow(row('scheduled') as never, undefined, undefined, null, null, []).irrigation.mode).toBe('scheduled');
+    expect(mapZoneRow(row('scheduled') as never, undefined, undefined, null, null, []).irrigation.automation.enabled).toBe(false);
   });
 });
 
@@ -103,7 +103,7 @@ describe('zone screen', () => {
   function agro(mode: string) {
     return {
       farm: { id: '1', name: 'Nkosi Farm' },
-      zones: [mapZoneRow(row(mode) as never, 0, undefined, undefined, null, null, [])],
+      zones: [mapZoneRow(row(mode) as never, undefined, undefined, null, null, [])],
       isZonesLoading: false, zonesError: null, isFarmLoading: false, farmError: null,
       refreshZones: jest.fn(), refreshFarms: jest.fn(),
       startManualIrrigation, stopManualIrrigation: jest.fn(), updateIrrigationMode,
