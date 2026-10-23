@@ -197,6 +197,22 @@ try {
   const hw = (await q("select hardware_id, status, enrollment_status, last_seen > now() - interval '1 minute' as recent from hardware where device_id = $1", [DEVICE_ID])).rows[0];
   check('kit shows online', hw?.status === 'Online' && hw?.enrollment_status === 'active' && hw?.recent === true, JSON.stringify(hw));
 
+  // 6b. The kit's own report on every reading (firmware 1.7.1): Wi-Fi signal and soil-probe check,
+  //     kept on its record for the farmer's Kit tab (migration 0061).
+  await kit.publish('Temperature', 21.5, null, { rssi: -58, soilProbeOk: true });
+  const reported = await poll(async () => {
+    const r = (await q('select wifi_rssi, soil_probe_ok, kit_report_at is not null as at from hardware where device_id = $1', [DEVICE_ID])).rows[0];
+    return r?.wifi_rssi === -58 && r?.soil_probe_ok === true ? r : null;
+  });
+  await kit.publish('Humidity', 58, null, { rssi: -81, soilProbeOk: false });
+  const probeOut = await poll(async () => {
+    const r = (await q('select wifi_rssi, soil_probe_ok from hardware where device_id = $1', [DEVICE_ID])).rows[0];
+    return r?.soil_probe_ok === false && r?.wifi_rssi === -81 ? r : null;
+  });
+  check("the kit's Wi-Fi signal and soil-probe check reach its record (1.7.1), latest wins",
+    !!reported && !!probeOut, JSON.stringify({ reported, probeOut }));
+  await kit.publish('Temperature', 21.5, null, { rssi: -58, soilProbeOk: true });   // healthy again for the rest
+
   // 7. The broker drops for a logical 10 minutes. Like the firmware, the fake kit keeps
   //    every 30-second three-sensor sample with its measured time, then replays oldest first.
   const startsBefore = (await q("select count(*)::int n from irrigation_commands where zone_id = $1 and command = 'start'", [zoneId])).rows[0].n;

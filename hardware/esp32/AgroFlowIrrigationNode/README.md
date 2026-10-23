@@ -37,7 +37,7 @@ Not Adafruit's "DHT sensor library": it has `DHT.h`, not `DHTesp.h`, and the
 sketch will not compile with it alone. `WiFi.h`, `WiFiClientSecure.h`,
 `HTTPClient.h`, `HTTPUpdate.h`, `WebServer.h` and `Preferences.h` come with the core.
 
-v1.7.0 uses 92% (1,217,328 of 1,310,720 bytes) of the default "Default 4MB with spiffs"
+v1.7.1 uses 92% (1,218,072 of 1,310,720 bytes) of the default "Default 4MB with spiffs"
 app partition, compiled with esp32 core 3.3.11. If a later change does not fit, pick
 **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)**; OTA keeps working.
 
@@ -76,6 +76,10 @@ app partition, compiled with esp32 core 3.3.11. If a later change does not fit, 
   acknowledges it again with that first time and does not water again, even after a reboot.
 - **The backlog is in the kit's status.** Every reading carries `backlog`, the readings
   still waiting to upload; the admin **Kits** page and the farmer's kit screen show it.
+- **Setup details on Serial Monitor (v1.7.1).** At boot and whenever the setup page opens the
+  kit prints its device ID, setup Wi-Fi name and password, and `192.168.4.1`, between
+  `===== AgroFlow kit =====` lines. Every reading also carries `rssi` (Wi-Fi signal, dBm) and
+  `soilProbeOk` (its last soil sample was in the valid range), for the farmer's Kit tab.
 
 ## Local page (no internet needed)
 
@@ -121,7 +125,7 @@ MQTT login from `GET /api/devices/mqtt-credentials` on every boot (RAM only).
 | `LOST_CONTACT_STOP_MS` | 3 minutes | a server-started run stops after this long without MQTT |
 | `LOCAL_MAX_RUN_MS` | 5 minutes | the local page's own limit |
 | `SENSOR_REPORT_INTERVAL_MS` | 30 s | live readings |
-| `FIRMWARE_VERSION` | 1.7.0 | match `Firmware:LatestVersion` on the API when the `.bin` is hosted |
+| `FIRMWARE_VERSION` | 1.7.1 | match `Firmware:LatestVersion` on the API when the `.bin` is hosted |
 
 `ZONE_ID` and `FARM_ID` are not settings: they come back from the claim and are
 kept in flash.
