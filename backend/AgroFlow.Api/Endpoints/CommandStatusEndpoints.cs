@@ -17,7 +17,15 @@ public record CommandStatusResponse(
     int? DurationSeconds,
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? FinishedAt);
+    DateTimeOffset? FinishedAt,
+    // The audit's words (docs/audit/ui-contracts.md): request_sent, waiting_for_kit,
+    // kit_confirmed_start, finished, stop_requested, kit_confirmed_stop, no_response, failed.
+    string? Phase = null,
+    string? PhaseLabel = null,
+    DateTimeOffset? PublishedAt = null,
+    // Set when the request was over the zone's maximum and was capped (AF-05).
+    int? RequestedDurationSeconds = null,
+    bool Capped = false);
 
 // After Irrigate: GET /api/farmer/commands/{id} is polled by the zone screen; the zone's
 // recent commands are its history of what was asked and what the kit did.
@@ -70,9 +78,18 @@ public static class CommandStatusEndpoints
         }
 
         var finished = hasFinished ? "c.finished_at" : "null::timestamptz";
+        // 0057: when the command was published and what was asked before the cap.
+        bool hasPublished;
+        await using (var has = new NpgsqlCommand(
+            "select exists (select 1 from information_schema.columns where table_name = 'irrigation_commands' and column_name = 'published_at')",
+            connection))
+        {
+            hasPublished = await has.ExecuteScalarAsync(ct) is true;
+        }
+        var published = hasPublished ? "c.published_at, c.requested_duration_seconds" : "null::timestamptz, null::integer";
         var sql = $"""
             select c.id, c.zone_id, c.command, c.source, c.status, c.duration_seconds,
-                   c.created_at, c.executed_at, {finished}
+                   c.created_at, c.executed_at, {finished}, {published}
               from irrigation_commands c
               join zone z on z.id = c.zone_id
              where {where}
@@ -92,12 +109,16 @@ public static class CommandStatusEndpoints
             var createdAt = reader.GetFieldValue<DateTimeOffset>(6);
             DateTimeOffset? startedAt = reader.IsDBNull(7) ? null : reader.GetFieldValue<DateTimeOffset>(7);
             DateTimeOffset? finishedAt = reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8);
+            DateTimeOffset? publishedAt = reader.IsDBNull(9) ? null : reader.GetFieldValue<DateTimeOffset>(9);
+            int? requested = reader.IsDBNull(10) ? null : reader.GetInt32(10);
             var state = CommandState.Describe(status, createdAt, finishedAt, now);
+            var phase = CommandPhase.Describe(reader.GetString(2), status, createdAt, publishedAt, finishedAt, now);
             list.Add(new CommandStatusResponse(
                 reader.GetGuid(0), reader.GetInt64(1), reader.GetString(2), reader.GetString(3),
                 state, CommandState.Label(state),
                 reader.IsDBNull(5) ? null : reader.GetInt32(5),
-                createdAt, startedAt, finishedAt));
+                createdAt, startedAt, finishedAt,
+                phase, CommandPhase.Label(phase), publishedAt, requested, requested is not null));
         }
         return list;
     }

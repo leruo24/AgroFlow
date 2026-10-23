@@ -3,9 +3,11 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { AlertCircle, Inbox, RefreshCw } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { createDataStateStyles } from '@/styles/dataStateStyles';
+import { useI18n } from '@/i18n';
 
 type Props = { kind: 'loading' | 'empty' | 'error'; title: string; description?: string; onRetry?: () => void };
 export function DataState({ kind, title, description, onRetry }: Props) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createDataStateStyles(colors), [colors]);
   const Icon = kind === 'error' ? AlertCircle : Inbox;
@@ -17,7 +19,7 @@ export function DataState({ kind, title, description, onRetry }: Props) {
       </View>
       {description && <Text style={styles.description}>{description}</Text>}
       {onRetry && <Pressable accessibilityRole="button" accessibilityLabel={`Retry: ${title}`} onPress={onRetry} style={styles.retry}>
-        <RefreshCw size={18} color={colors.primaryDark} /><Text style={styles.retryText}>Retry</Text>
+        <RefreshCw size={18} color={colors.primaryDark} /><Text style={styles.retryText}>{t('common.retry')}</Text>
       </Pressable>}
     </View>
   );

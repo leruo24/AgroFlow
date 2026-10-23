@@ -605,3 +605,365 @@ Tests check that every key exists in all three languages and that the `{placehol
 | `heat.value` | Expected high: {value} C | Verwagte hoogste: {value} C | Bogodimo jo bo lebeletsweng: {value} C |
 | `heat.body` | Crops lose a lot of water on days like this and can scorch. | Gewasse verloor baie water op dae soos hierdie en kan verskroei. | Dijalo di latlhegelwa ke metsi a mantsi ka malatsi a a ntseng jaana mme di ka fisega. |
 | `heat.action` | Water early in the morning rather than in the heat of the day, and check on young or shallow-rooted zones. | Gee vroeg in die oggend water eerder as in die hitte van die dag, en kyk na jong of vlak gewortelde sones. | Nosetsa phakela go na le mo mogoteng wa motshegare, mme o tlhole dikarolo tse dinnye kgotsa tse di nang le medi e e sa tseneng thata. |
+
+## Audit fixes, 23 October 2026 (fix/audit-oct22)
+
+353 new strings: the Part A trust fixes, the four farmer tasks, "Where you are now", the draft terms screen, Service & support, the advice sentences (built from the server's codes) and the farmer screens that were still English. The Afrikaans and Setswana are **drafts** written without a first-language speaker; please check that each says the same thing as the English, in words a farmer uses. Watch especially: the advice sentences (`advice.*`), the terms screen (`terms.*`) and anything about watering safety (`run.capped`, `auto.*`).
+
+Still English on purpose: the draft terms and privacy notice themselves (translated once approved; the screen says so), the "© OpenStreetMap contributors" credit, and three screens translated on `fix/i18n-remaining` (forgot password, set password, kit), listed in `apps/mobile/src/lib/__tests__/hardcodedEnglish.test.ts`.
+
+| Key | English | Afrikaans (draft) | Setswana (draft) |
+|---|---|---|---|
+| `advice.day.friday` | Friday | Vrydag | Labotlhano |
+| `advice.day.monday` | Monday | Maandag | Mosupologo |
+| `advice.day.saturday` | Saturday | Saterdag | Lamatlhatso |
+| `advice.day.sunday` | Sunday | Sondag | Tshipi |
+| `advice.day.thursday` | Thursday | Donderdag | Labone |
+| `advice.day.tuesday` | Tuesday | Dinsdag | Labobedi |
+| `advice.day.wednesday` | Wednesday | Woensdag | Laboraro |
+| `advice.englishOnly` | Shown in English: this message has no translation yet. | In Engels gewys: hierdie boodskap het nog nie 'n vertaling nie. | E bontshiwa ka Seesemane: molaetsa o ga o ise o fetolelwe. |
+| `advice.kit.check_field` | Check the field by hand before watering | Kyk met die hand na die veld voordat jy natlei | Tlhatlhoba tshimo ka seatla pele o nosetsa |
+| `advice.kit.check_sensor` | Check the soil sensor before relying on today's advice | Kyk na die grondsensor voordat jy op vandag se advies staatmaak | Tlhatlhoba sesupo sa mmu pele o ikaega ka kgakololo ya gompieno |
+| `advice.kit.check_system` | Check the pump and pipes before watering | Kyk na die pomp en pype voordat jy natlei | Tlhatlhoba pompo le diphaephe pele o nosetsa |
+| `advice.kit.offline` | Check the kit: it has stopped sending readings | Kyk na die toerusting: dit stuur nie meer lesings nie | Tlhatlhoba sedirisiwa: se emisitse go romela dipalo |
+| `advice.kit.pump_failed` | Check the pump: it ran but the soil did not get wetter | Kyk na die pomp: dit het geloop, maar die grond het nie natter geword nie | Tlhatlhoba pompo: e dirile mme mmu ga o a nna metsi go feta |
+| `advice.kit.sensor_stuck` | Check the soil sensor: its reading has not moved | Kyk na die grondsensor: sy lesing het nie verander nie | Tlhatlhoba sesupo sa mmu: palo ya sone ga e a fetoga |
+| `advice.none.not_needed` | No watering needed today | Geen natlei vandag nodig nie | Ga go tlhokege go nosetsa gompieno |
+| `advice.none.not_planted` | No crop irrigation yet: the crop has not been planted | Nog geen gewasnatlei nie: die gewas is nog nie geplant nie | Ga go ise go nosediwe: thobo ga e ise e jwalwe |
+| `advice.none.season_complete` | Crop cycle complete; start a new crop cycle if this field was replanted | Gewassiklus voltooi; begin 'n nuwe siklus as hierdie veld weer geplant is | Paka ya thobo e fedile; simolola paka e ntšha fa tshimo e jwalwa gape |
+| `advice.setup.area` | Finish setup: add the size of this zone to get litres | Voltooi opstelling: voeg die grootte van hierdie sone by om liters te kry | Fetsa go baakanya: tsenya bogolo jwa karolo e go bona dilitara |
+| `advice.setup.calibration` | Your installer will set up the soil sensor (wet and dry) so its readings can be used | Jou installeerder sal die grondsensor opstel (nat en droog) sodat sy lesings gebruik kan word | Mointshi wa gago o tla baakanya sesupo sa mmu (metsi le go oma) gore dipalo tsa sone di dirisiwe |
+| `advice.setup.crop` | Finish setup: choose the crop for this zone so we can work out how much water it needs | Voltooi opstelling: kies die gewas vir hierdie sone sodat ons kan uitwerk hoeveel water dit nodig het | Fetsa go baakanya: tlhopha thobo ya karolo e gore re bone gore e tlhoka metsi a le kae |
+| `advice.setup.flow_rate` | Your installer will measure the water flow to give watering times in minutes | Jou installeerder sal die watervloei meet om natleityd in minute te gee | Mointshi wa gago o tla lekanya kelelo ya metsi go fa nako ya go nosetsa ka metsotso |
+| `advice.setup.kit` | Check the kit has power and WiFi: it has not sent readings lately | Kyk of die toerusting krag en WiFi het: dit het onlangs nie lesings gestuur nie | Tlhatlhoba gore sedirisiwa se na le motlakase le WiFi: ga se a romela dipalo bosheng |
+| `advice.setup.no_weather` | No advice yet: there is no weather for this farm | Nog geen advies nie: daar is geen weer vir hierdie plaas nie | Ga go ise go nne le kgakololo: ga go na maemo a loapi a polase e |
+| `advice.setup.planting_date` | Finish setup: add the planting date for advice that follows your crop's growth | Voltooi opstelling: voeg die plantdatum by vir advies wat jou gewas se groei volg | Fetsa go baakanya: tsenya letlha la go jala gore kgakololo e latele kgolo ya thobo |
+| `advice.setup.soil` | Finish setup: choose the soil type (sandy, loam or clay) for a closer estimate | Voltooi opstelling: kies die grondsoort (sanderig, leem of klei) vir 'n nouer skatting | Fetsa go baakanya: tlhopha mofuta wa mmu (motlhaba, o o tlwaelegileng kgotsa letsopa) go bona tekanyetso e e gaufi |
+| `advice.setup.weather_today` | No advice yet: there is not enough weather data for today | Nog geen advies nie: daar is nie genoeg weerdata vir vandag nie | Ga go ise go nne le kgakololo: ga go na tshedimosetso e e lekaneng ya maemo a loapi a gompieno |
+| `advice.skip.rain` | No watering today: rain is expected to cover it. | Geen natlei vandag nie: reën behoort dit te dek. | Ga go nosetsiwe gompieno: pula e solofetswe go lekana. |
+| `advice.soon.days` | No watering today; water is likely needed in the next few days | Geen natlei vandag nie; water is waarskynlik in die volgende paar dae nodig | Ga go nosetsiwe gompieno; metsi a ka tlhokega mo malatsing a a tlang |
+| `advice.soon.on` | No watering today; next on {day} | Geen natlei vandag nie; volgende op {day} | Ga go nosetsiwe gompieno; go latelang ka {day} |
+| `advice.water.now.litres` | Water about {litres} L this morning | Lei omtrent {litres} L vanoggend water | Nosetsa e ka nna {litres} L mo mosong ono |
+| `advice.water.now.minutes` | Water about {minutes} min this morning (about {litres} L) | Lei omtrent {minutes} min vanoggend water (omtrent {litres} L) | Nosetsa metsotso e ka nna {minutes} mo mosong ono (e ka nna {litres} L) |
+| `advice.water.now.mm` | Water about {mm} mm this morning | Lei omtrent {mm} mm vanoggend water | Nosetsa e ka nna {mm} mm mo mosong ono |
+| `advice.water.now.per_m2` | Water about {minutes} min for each square metre this morning | Lei omtrent {minutes} min per vierkante meter vanoggend water | Nosetsa metsotso e ka nna {minutes} mo metareng-sekwere nngwe le nngwe mo mosong ono |
+| `advice.water.now.seconds` | Water about {seconds} sec this morning (about {litres} L) | Lei omtrent {seconds} sek vanoggend water (omtrent {litres} L) | Nosetsa metsotswana e ka nna {seconds} mo mosong ono (e ka nna {litres} L) |
+| `advice.water.now.usual` | Water as usual this morning | Lei vanoggend soos gewoonlik water | Nosetsa jaaka ka gale mo mosong ono |
+| `advice.water.reduced.litres` | Rain helps, but water about {litres} L this morning | Reën help, maar lei omtrent {litres} L vanoggend water | Pula e a thusa, mme nosetsa e ka nna {litres} L mo mosong ono |
+| `advice.water.reduced.minutes` | Rain helps, but water about {minutes} min this morning (about {litres} L) | Reën help, maar lei omtrent {minutes} min vanoggend water (omtrent {litres} L) | Pula e a thusa, mme nosetsa metsotso e ka nna {minutes} mo mosong ono (e ka nna {litres} L) |
+| `advice.water.reduced.mm` | Rain helps, but water about {mm} mm this morning | Reën help, maar lei omtrent {mm} mm vanoggend water | Pula e a thusa, mme nosetsa e ka nna {mm} mm mo mosong ono |
+| `advice.water.reduced.per_m2` | Rain helps, but water about {minutes} min for each square metre this morning | Reën help, maar lei omtrent {minutes} min per vierkante meter vanoggend water | Pula e a thusa, mme nosetsa metsotso e ka nna {minutes} mo metareng-sekwere nngwe le nngwe mo mosong ono |
+| `advice.water.reduced.seconds` | Rain helps, but water about {seconds} sec this morning (about {litres} L) | Reën help, maar lei omtrent {seconds} sek vanoggend water (omtrent {litres} L) | Pula e a thusa, mme nosetsa metsotswana e ka nna {seconds} mo mosong ono (e ka nna {litres} L) |
+| `advice.water.reduced.usual` | Rain helps, but water as usual this morning | Reën help, maar lei vanoggend soos gewoonlik water | Pula e a thusa, mme nosetsa jaaka ka gale mo mosong ono |
+| `alerts.readFailed` | Could not save that you read this. It still shows as unread. | Kon nie stoor dat jy dit gelees het nie. Dit wys steeds as ongelees. | Ga go a kgona go boloka gore o badile se. Se sa ntse se bontsha gore ga se a balwa. |
+| `alerts.readRetryA11y` | Try again to mark {title} as read | Probeer weer om {title} as gelees te merk | Leka gape go tshwaya {title} jaaka se se badilweng |
+| `auto.body` | Your installer has tested this field's kit. With automatic watering, AgroFlow waters when the soil is dry enough, never longer than the field's limit. You can switch back any time. | Jou installeerder het hierdie veld se toerusting getoets. Met outomatiese natlei lei AgroFlow water wanneer die grond droog genoeg is, nooit langer as die veld se limiet nie. Jy kan enige tyd terugskakel. | Mointshi wa gago o lekile sedirisiwa sa tshimo e. Ka go nosetsa ka boitiriso, AgroFlow e nosetsa fa mmu o omile, e seng go feta tekanyetso ya tshimo. O ka busetsa nako nngwe le nngwe. |
+| `auto.keepManual` | Keep manual | Hou dit met die hand | Tlogela ka seatla |
+| `auto.title` | Turn on automatic watering for {zone}? | Skakel outomatiese natlei vir {zone} aan? | A o batla go simolola go nosetsa ka boitiriso mo {zone}? |
+| `auto.yes` | Yes, water automatically | Ja, lei outomaties water | Ee, nosetsa ka boitiriso |
+| `avatar.open` | Open profile | Maak profiel oop | Bula porofaele |
+| `common.loading` | Loading… | Laai tans… | Go a tsenngwa… |
+| `crop.citrus` | Citrus | Sitrus | Dinamune |
+| `crop.cucumber` | Cucumber | Komkommer | Kukumara |
+| `crop.dry_beans` | Dry beans | Droëbone | Dinawa tse di omileng |
+| `crop.leafy_veg` | Leafy vegetables | Blaargroente | Merogo ya matlhare |
+| `crop.maize` | Maize | Mielies | Mmidi |
+| `crop.potato` | Potato | Aartappel | Potata |
+| `crop.spinach` | Spinach | Spinasie | Sepinatšhe |
+| `crop.tomato` | Tomato | Tamatie | Tamati |
+| `cropScreen.crop` | Crop | Gewas | Thobo |
+| `cropScreen.notSure` | Not sure | Nie seker nie | Ga ke tlhomamise |
+| `cropScreen.notSureA11y` | Not sure of the planting date | Nie seker van die plantdatum nie | Ga ke tlhomamise letlha la go jala |
+| `cropScreen.notSureBody` | Not sure? Leave it: the advice then assumes the crop is at its thirstiest. | Nie seker nie? Los dit: die advies aanvaar dan die gewas is op sy dorstigste. | Ga o tlhomamise? E tlogele: kgakololo e tla tsaya gore thobo e nyorilwe thata. |
+| `cropScreen.planted` | Planted on | Geplant op | E jwetswe ka |
+| `cropScreen.save` | Save | Stoor | Boloka |
+| `cropScreen.saveA11y` | Save crop and planting date | Stoor gewas en plantdatum | Boloka thobo le letlha la go jala |
+| `cropScreen.title` | Crop and planting date | Gewas en plantdatum | Thobo le letlha la go jala |
+| `dismiss.confirm` | Dismiss | Maak weg | Tlosa |
+| `dismiss.confirmA11y` | Confirm dismiss | Bevestig wegmaak | Netefatsa go tlosa |
+| `dismiss.important` | It is important. It will come back if it happens again. | Dit is belangrik. Dit sal terugkom as dit weer gebeur. | Se botlhokwa. Se tla boa fa se direga gape. |
+| `dismiss.note` | Note (optional) | Nota (opsioneel) | Ntlha (ga go tlamege) |
+| `dismiss.show` | Show | Wys | Bontsha |
+| `dismiss.title` | Dismiss this? | Maak dit weg? | Tlosa se? |
+| `dismiss.undo` | Undo | Ontdoen | Busetsa |
+| `drought.noBudget.level` | Your {capacity} L tank is saved. Log how full it is (Log a refill) to see how many days of water you have. | Jou tenk van {capacity} L is gestoor. Teken aan hoe vol dit is (Teken 'n hervulling aan) om te sien vir hoeveel dae jy water het. | Tanka ya gago ya {capacity} L e bolokilwe. Kwala gore e tletse go le kae (Kwala go tlatsa) go bona gore o na le metsi a malatsi a le kae. |
+| `drought.noBudget.notTank` | Your water does not come from a tank, so there is no tank budget. Drought mode uses your soil readings and the forecast. | Jou water kom nie uit 'n tenk nie, dus is daar geen tenkbegroting nie. Droogtemodus gebruik jou grondlesings en die voorspelling. | Metsi a gago ga a tswe mo tankeng, ka jalo ga go na tekanyetso ya tanka. Mokgwa wa leuba o dirisa dipalo tsa mmu le kitsiso ya loapi. |
+| `drought.noBudget.use` | Your tank has about {litres} L. How many days it lasts shows once AgroFlow has watering records or today's advice for your zones. | Jou tenk het omtrent {litres} L. Hoeveel dae dit hou, wys sodra AgroFlow natleiingsrekords of vandag se advies vir jou sones het. | Tanka ya gago e na le metsi a ka nna {litres} L. Gore a tla fela morago ga malatsi a le kae go tla bontshiwa fa AgroFlow e na le dirikoto tsa go nosetsa kgotsa kgakololo ya gompieno ya dikarolo tsa gago. |
+| `enquiry.bestTime` | Best time to call * | Beste tyd om te bel * | Nako e e siameng ya go leletsa * |
+| `enquiry.crops` | What do you grow, or want to grow? * | Wat kweek jy, of wil jy kweek? * | O jala eng, kgotsa o batla go jala eng? * |
+| `enquiry.notes` | Anything else? (optional) | Enigiets anders? (opsioneel) | Sengwe gape? (ga go tlamege) |
+| `enquiry.notesA11y` | Anything else? | Enigiets anders? | Sengwe gape? |
+| `enquiry.otherCrop` | Which other crop? | Watter ander gewas? | Thobo efe e nngwe? |
+| `enquiry.province` | Province * | Provinsie * | Porofense * |
+| `enquiry.send` | Send | Stuur | Romela |
+| `enquiry.sendA11y` | Send enquiry | Stuur navraag | Romela kopo |
+| `enquiry.sizeA11y` | Farm size in hectares | Plaasgrootte in hektaar | Bogolo jwa polase ka diheketara |
+| `enquiry.subtitle` | A representative will phone you about AgroFlow. | 'n Verteenwoordiger sal jou oor AgroFlow bel. | Moemedi o tla go leletsa ka AgroFlow. |
+| `enquiry.title` | Ask for a call | Vra vir 'n oproep | Kopa mogala |
+| `forecast.showingOld` | Showing the forecast loaded at {time}. It may be out of date. | Wys die voorspelling wat om {time} gelaai is. Dit kan verouderd wees. | Go bontshiwa kitsiso e e tsentsweng ka {time}. E ka nna ya bo e le kgologolo. |
+| `helpButton.hint` | Opens a short explanation of this page | Maak 'n kort verduideliking van hierdie bladsy oop | E bula tlhaloso e khutshwane ya tsebe e |
+| `helpButton.label` | Help for this page | Hulp vir hierdie bladsy | Thuso ya tsebe e |
+| `history.loading` | Loading activity | Laai aktiwiteit | Go tsenngwa ditiro |
+| `history.loadingAlerts` | Loading alerts | Laai waarskuwings | Go tsenngwa ditemoso |
+| `history.noAlerts` | No alerts yet. | Nog geen waarskuwings nie. | Ga go ise go nne le ditemoso. |
+| `history.none` | No recent activity | Geen onlangse aktiwiteit nie | Ga go na ditiro tsa bosheng |
+| `history.noneBody` | Irrigation actions and system events will appear here. | Natleiaksies en stelselgebeure sal hier verskyn. | Ditiro tsa go nosetsa le ditiragalo tsa thulaganyo di tla bonala fa. |
+| `history.recent` | Recent activity | Onlangse aktiwiteit | Ditiro tsa bosheng |
+| `history.recorded` | Recorded events | Aangetekende gebeure | Ditiragalo tse di kwadilweng |
+| `history.title` | History | Geskiedenis | Hisitori |
+| `history.type` | Type | Soort | Mofuta |
+| `history.unavailable` | Unable to load activity | Kon nie aktiwiteit laai nie | Ga go a kgonega go tsenya ditiro |
+| `history.when` | When | Wanneer | Leng |
+| `history.zone` | Zone | Sone | Karolo |
+| `insights.advice` | Advice | Advies | Kgakololo |
+| `insights.dismissed` | Dismissed | Weggemaak | Tse di tlositsweng |
+| `insights.improve` | Improve your advice | Verbeter jou advies | Tokafatsa kgakololo ya gago |
+| `insights.noneDismissed` | No advice has been dismissed for this zone. | Geen advies is vir hierdie sone weggemaak nie. | Ga go na kgakololo e e tlositsweng ya karolo e. |
+| `insights.restore` | Restore | Herstel | Busetsa |
+| `journey.continue` | Continue your details | Gaan voort met jou besonderhede | Tswelela ka dintlha tsa gago |
+| `journey.date.account_active` | Whenever you are ready | Wanneer jy gereed is | Fa o siametse |
+| `journey.date.commissioned` | Live | Aktief | E a dira |
+| `journey.date.details` | Waiting for AgroFlow staff | Wag vir AgroFlow-personeel | Go emetswe badiri ba AgroFlow |
+| `journey.date.enquiry` | Waiting for a call | Wag vir 'n oproep | Go emetswe mogala |
+| `journey.date.installing` | Installation under way | Installering is aan die gang | Go tsenya go a tswelela |
+| `journey.date.ready_for_installation` | Waiting for booking | Wag vir bespreking | Go emetswe go bukiwa |
+| `journey.date.service_agreed` | Whenever you are ready | Wanneer jy gereed is | Fa o siametse |
+| `journey.date.visit_booked` | Visit booked | Besoek bespreek | Ketelo e bukilwe |
+| `journey.details` | Your details: {done} of {total} | Jou besonderhede: {done} van {total} | Dintlha tsa gago: {done} go {total} |
+| `journey.helpOpen` | AgroFlow staff are helping with {count} of your questions. | AgroFlow-personeel help met {count} van jou vrae. | Badiri ba AgroFlow ba thusa ka dipotso di le {count} tsa gago. |
+| `journey.installation` | Installation: {stage} | Installering: {stage} | Go tsenya: {stage} |
+| `journey.loading` | Loading where you are… | Laai waar jy is… | Go tsenngwa gore o fa kae… |
+| `journey.next.account_active` | Finish your details: {done} of {total} done. | Voltooi jou besonderhede: {done} van {total} klaar. | Fetsa dintlha tsa gago: {done} go {total} di weditswe. |
+| `journey.next.commissioned` | Your kit is connected. Check your fields, water and stop from the app, and ask for help any time. | Jou toerusting is gekoppel. Kyk na jou velde, lei water en stop in die toep, en vra enige tyd hulp. | Sedirisiwa sa gago se kopantswe. Leba ditshimo, nosetsa o bo o emise mo appeng, o bo o kope thuso nako nngwe le nngwe. |
+| `journey.next.details` | AgroFlow staff will agree the service and its cost with you. | AgroFlow-personeel sal die diens en die koste met jou ooreenkom. | Badiri ba AgroFlow ba tla dumalana le wena ka tirelo le tlhwatlhwa ya yone. |
+| `journey.next.enquiry` | AgroFlow staff will call you to talk about your farm. | AgroFlow-personeel sal jou bel om oor jou plaas te praat. | Badiri ba AgroFlow ba tla go leletsa go bua ka polase ya gago. |
+| `journey.next.installing` | Your installer is setting up and testing your kit. | Jou installeerder stel jou toerusting op en toets dit. | Mointshi wa gago o baakanya e bile o leka sedirisiwa sa gago. |
+| `journey.next.ready_for_installation` | AgroFlow staff will book your installation visit. | AgroFlow-personeel sal jou installeringsbesoek bespreek. | Badiri ba AgroFlow ba tla buka ketelo ya go tsenya. |
+| `journey.next.service_agreed` | Sign in, choose your own password and accept the terms. | Teken in, kies jou eie wagwoord en aanvaar die bepalings. | Tsena, itlhophele lefoko la sephiri mme o amogele melawana. |
+| `journey.next.visit_booked` | Your installer will visit to install and test your kit. | Jou installeerder sal kom om jou toerusting te installeer en te toets. | Mointshi wa gago o tla etela go tsenya le go leka sedirisiwa sa gago. |
+| `journey.stage.account_active` | account active | rekening aktief | akhaonto e a dira |
+| `journey.stage.commissioned` | connected and tested | gekoppel en getoets | e kopantswe e bile e lekilwe |
+| `journey.stage.details` | details being checked | besonderhede word nagegaan | dintlha di a sekasekwa |
+| `journey.stage.enquiry` | enquiry received | navraag ontvang | kopo e amogetswe |
+| `journey.stage.installing` | installing | word geïnstalleer | go a tsenngwa |
+| `journey.stage.ready_for_installation` | waiting for booking | wag vir bespreking | go emetswe go bukiwa |
+| `journey.stage.service_agreed` | service agreed | diens ooreengekom | tirelo e dumalanwe |
+| `journey.stage.visit_booked` | visit booked | besoek bespreek | ketelo e bukilwe |
+| `journey.title` | Where you are now | Waar jy nou is | O fa kae jaanong |
+| `journey.unavailable` | Your progress could not be loaded. Pull down to try again. | Jou vordering kon nie gelaai word nie. Trek af om weer te probeer. | Tswelelopele ya gago ga e a kgona go tsenngwa. Gogela tlase go leka gape. |
+| `journey.when` | When: {date} | Wanneer: {date} | Leng: {date} |
+| `journey.who.agroflow_staff` | AgroFlow staff | AgroFlow-personeel | Badiri ba AgroFlow |
+| `journey.who.installer` | Your installer | Jou installeerder | Mointshi wa gago |
+| `journey.who.you` | You | Jy | Wena |
+| `journey.whoNext` | Who acts next: {who} | Wie volgende optree: {who} | Yo o latelang: {who} |
+| `loading.skip` | Skip the opening animation | Slaan die openingsanimasie oor | Tlola setshwantsho se se tsamayang sa go bula |
+| `loading.starting` | AgroFlow is starting | AgroFlow begin | AgroFlow e a simolola |
+| `login.emailExample` | farmer@example.com | boer@voorbeeld.co.za | molemi@sekao.co.za |
+| `map.a11y` | Farm location map. Use the zoom buttons to change scale. | Kaart van die plaasligging. Gebruik die zoemknoppies om die skaal te verander. | Mmapa wa lefelo la polase. Dirisa dikonopo tsa go godisa go fetola selekanyo. |
+| `map.unavailable` | Map unavailable. Farm location is shown above. | Kaart nie beskikbaar nie. Die plaasligging word bo gewys. | Mmapa ga o bonale. Lefelo la polase le bontshitswe fa godimo. |
+| `recommended.keep` | Keep my own | Hou my eie | Tlogela tsa me |
+| `recommended.reset` | Reset to recommended | Herstel na aanbeveel | Busetsa go tse di akantshiwang |
+| `recommended.resetA11y` | Reset watering levels to recommended | Herstel natleivlakke na die aanbevole | Busetsa maemo a go nosetsa go a a akantshiwang |
+| `recommended.title` | Recommended for you | Aanbeveel vir jou | E akantshiwa mo go wena |
+| `recommended.use` | Use these settings | Gebruik hierdie instellings | Dirisa dipeakanyo tse |
+| `request.crop` | Crop | Gewas | Thobo |
+| `request.cropRequired` | Please select the main crop for this request. | Kies asseblief die hoofgewas vir hierdie versoek. | Tsweetswee tlhopha thobo e kgolo ya kopo e. |
+| `request.cropRequiredTitle` | Crop required | Gewas nodig | Thobo e a tlhokega |
+| `request.existingFarm` | Existing farm | Bestaande plaas | Polase e e leng teng |
+| `request.failedTitle` | Request failed | Versoek het misluk | Kopo e paletswe |
+| `request.farmRequired` | Please select the farm where the new zone should be created. | Kies asseblief die plaas waar die nuwe sone moet kom. | Tsweetswee tlhopha polase e karolo e ntšha e tshwanetseng go dirwa mo go yone. |
+| `request.farmRequiredTitle` | Farm required | Plaas nodig | Polase e a tlhokega |
+| `request.invalidSize` | Rough size must be a number greater than zero. | Die grootte moet 'n getal groter as nul wees. | Bogolo bo tshwanetse go nna palo e e fetang lefela. |
+| `request.invalidSizeTitle` | Invalid size | Ongeldige grootte | Bogolo jo bo sa siamang |
+| `request.loadingFarms` | Loading your farms... | Laai jou plase… | Go tsenngwa dipolase tsa gago… |
+| `request.location` | Farm location | Plaasligging | Lefelo la polase |
+| `request.locationPlaceholder` | Enter the farm location | Voer die plaas se ligging in | Kwala lefelo la polase |
+| `request.locationRequired` | Please enter the location of the new farm. | Voer asseblief die ligging van die nuwe plaas in. | Tsweetswee kwala lefelo la polase e ntšha. |
+| `request.locationRequiredTitle` | Location required | Ligging nodig | Lefelo le a tlhokega |
+| `request.newFarm` | New farm | Nuwe plaas | Polase e ntšha |
+| `request.newFarmBody` | Request installation for a new farm. | Vra vir installering op 'n nuwe plaas. | Kopa go tsenngwa mo polaseng e ntšha. |
+| `request.newZone` | New zone | Nuwe sone | Karolo e ntšha |
+| `request.newZoneBody` | Request an additional zone on an existing farm. | Vra vir 'n ekstra sone op 'n bestaande plaas. | Kopa karolo e nngwe mo polaseng e e leng teng. |
+| `request.noFarms` | No existing farms are available for a new-zone request. | Geen bestaande plase is beskikbaar vir 'n nuwe sone nie. | Ga go na dipolase tse di leng teng tsa kopo ya karolo e ntšha. |
+| `request.notesLabel` | Notes | Notas | Dintlha |
+| `request.notesPlaceholder` | Optional additional information | Opsionele ekstra inligting | Tshedimosetso e nngwe (ga go tlamege) |
+| `request.pendingNote` | Your request will remain pending until it is reviewed by an AgroFlow administrator. | Jou versoek bly hangende totdat 'n AgroFlow-administrateur dit nagaan. | Kopo ya gago e tla nna e emetse go fitlha motsamaisi wa AgroFlow a e sekaseka. |
+| `request.sizeHelp` | An approximate size is fine. 1 hectare is 10 000 m², about the size of a rugby field. A 10 m by 20 m plot is 200 m². | 'n Benaderde grootte is goed. 1 hektaar is 10 000 m², omtrent so groot soos 'n rugbyveld. 'n Stuk van 10 m by 20 m is 200 m². | Bogolo jo bo ka fa godimo bo siame. Heketara e le 1 ke 10 000 m², e ka nna bogolo jwa lebala la rakabi. Tshimo ya 10 m ka 20 m ke 200 m². |
+| `request.sizeLabel` | Rough size | Rowwe grootte | Bogolo jo bo ka fa godimo |
+| `request.sizePlaceholder` | e.g. 200 | bv. 200 | sk. 200 |
+| `request.sizeUnit.ha` | Hectares (ha) | Hektaar (ha) | Diheketara (ha) |
+| `request.sizeUnit.m2` | Square metres (m²) | Vierkante meter (m²) | Dimetara-sekwere (m²) |
+| `request.sizeUnit.unknown` | I don't know – help me measure | Ek weet nie – help my meet | Ga ke itse – nthuse go lekanya |
+| `request.sizeUnitLabel` | Size unit | Eenheid van grootte | Selekanyo sa bogolo |
+| `request.sizeUnitNeeded` | Choose square metres or hectares for the size, or I don't know. | Kies vierkante meter of hektaar vir die grootte, of Ek weet nie. | Tlhopha dimetara-sekwere kgotsa diheketara go bogolo, kgotsa Ga ke itse. |
+| `request.sizeUnitTitle` | Which unit? | Watter eenheid? | Selekanyo sefe? |
+| `request.sizeUnknownHelp` | That's fine. Staff will help you measure it at the visit. | Dis reg. Personeel sal jou help om dit by die besoek te meet. | Go siame. Badiri ba tla go thusa go e lekanya ka nako ya ketelo. |
+| `request.submit` | Submit request | Dien versoek in | Romela kopo |
+| `request.submitted` | Your request has been submitted and is now pending admin review. | Jou versoek is ingedien en wag nou vir die administrateur. | Kopo ya gago e romeletswe mme jaanong e emetse motsamaisi. |
+| `request.submittedTitle` | Request submitted | Versoek ingedien | Kopo e romeletswe |
+| `request.subtitle` | Request a new farm or zone from AgroFlow. | Vra AgroFlow vir 'n nuwe plaas of sone. | Kopa AgroFlow polase kgotsa karolo e ntšha. |
+| `request.title` | Farm request | Plaasversoek | Kopo ya polase |
+| `request.type` | Request type | Soort versoek | Mofuta wa kopo |
+| `run.capped` | Capped to {max} min (this zone's limit) | Beperk tot {max} min (hierdie sone se limiet) | E lekanyeditswe go {max} metsotso (tekanyetso ya karolo e) |
+| `service.contact` | Your contact at AgroFlow: {name} | Jou kontakpersoon by AgroFlow: {name} | Motho wa gago kwa AgroFlow: {name} |
+| `service.example` | Example price: {install} installation (hardware included) and {monthly} a month, for a {zones}-zone farm. Your final quote follows a site visit. | Voorbeeldprys: {install} installering (toerusting ingesluit) en {monthly} per maand, vir 'n plaas met {zones} sones. Jou finale kwotasie volg op 'n besoek. | Sekao sa tlhwatlhwa: {install} go tsenya (le sedirisiwa) le {monthly} ka kgwedi, mo polaseng ya dikarolo di le {zones}. Tlhwatlhwa ya bofelo e tla morago ga ketelo. |
+| `service.helpInApp` | Open Help in the app, or tap I don't know – help me on any setup question. | Maak Hulp in die toep oop, of tik Ek weet nie – help my by enige opstelvraag. | Bula Thuso mo appeng, kgotsa tobetsa Ga ke itse – nthuse mo potsong nngwe le nngwe ya go baakanya. |
+| `service.helpTelegram` | If you linked Telegram, message the AgroFlow bot. | As jy Telegram gekoppel het, stuur 'n boodskap aan die AgroFlow-bot. | Fa o golagantse Telegram, romela molaetsa go bot ya AgroFlow. |
+| `service.helpTitle` | How to get help | Hoe om hulp te kry | Go bona thuso jang |
+| `service.noPayments` | AgroFlow does not take payments in the app. | AgroFlow neem nie betalings in die toep nie. | AgroFlow ga e amogele dituelo mo appeng. |
+| `service.payer` | Paid by: {payer} | Betaal deur: {payer} | E duelwa ke: {payer} |
+| `service.plan` | Plan: {plan} | Plan: {plan} | Leano: {plan} |
+| `service.status` | Service: {status} | Diens: {status} | Tirelo: {status} |
+| `service.status.ended` | ended | beëindig | e fedile |
+| `service.status.not_agreed` | not agreed yet | nog nie ooreengekom nie | ga e ise e dumalanwe |
+| `service.status.paused` | paused | onderbreek | e emisitswe nakwana |
+| `service.status.paying` | active (paid service) | aktief (betaalde diens) | e a dira (tirelo e e duelwang) |
+| `service.status.sponsored` | sponsored | geborg | e duelelwa ke motshegetsi |
+| `service.status.trial` | trial | proeftydperk | teko |
+| `service.title` | Service & support | Diens en ondersteuning | Tirelo le thuso |
+| `service.unavailable` | Service details could not be loaded. | Diensbesonderhede kon nie gelaai word nie. | Dintlha tsa tirelo ga di a kgona go tsenngwa. |
+| `sheet.close` | Close | Sluit | Tswala |
+| `sheet.dismiss` | Dismiss | Maak toe | Tswala |
+| `soilScreen.loam` | Loam | Leem | Mmu o o tlwaelegileng |
+| `soilScreen.notSure` | Not sure? Pick | Nie seker nie? Kies | Ga o tlhomamise? Tlhopha |
+| `soilScreen.save` | Save soil type | Stoor grondsoort | Boloka mofuta wa mmu |
+| `soilScreen.title` | Soil type | Grondsoort | Mofuta wa mmu |
+| `tasks.check.calibration` | Soil sensor set up (wet and dry) | Grondsensor opgestel (nat en droog) | Sesupo sa mmu se baakantswe (metsi le go oma) |
+| `tasks.check.flow_measured` | Water flow measured | Watervloei gemeet | Kelelo ya metsi e lekantswe |
+| `tasks.check.kit_linked` | Kit linked to this field | Toerusting aan hierdie veld gekoppel | Sedirisiwa se golagantswe le tshimo e |
+| `tasks.check.run_limit` | Longest run set | Langste beurt gestel | Nako e telele ya go nosetsa e tlhomilwe |
+| `tasks.check.test_start_stop` | Test start and stop | Toets begin en stop | Teko ya go simolola le go emisa |
+| `tasks.crop.needBoth` | {zone} needs its crop and about when it was planted, or tap I don't know – help me. | {zone} het sy gewas nodig en omtrent wanneer dit geplant is, of tik Ek weet nie – help my. | {zone} e tlhoka thobo ya yone le gore e jwetswe leng, kgotsa tobetsa Ga ke itse – nthuse. |
+| `tasks.crops` | Your crops | Jou gewasse | Dijalo tsa gago |
+| `tasks.crops.about` | What grows in each field, when it was planted, and how it is watered. | Wat in elke veld groei, wanneer dit geplant is en hoe dit natgelei word. | Se se golang mo tshimong nngwe le nngwe, leng se jwetswe, le gore se nosediwa jang. |
+| `tasks.done` | Done | Klaar | Go weditswe |
+| `tasks.farm` | Your farm | Jou plaas | Polase ya gago |
+| `tasks.farm.about` | Check where your farm is. | Kyk waar jou plaas is. | Tlhatlhoba gore polase ya gago e kae. |
+| `tasks.helpMe` | I don't know – help me | Ek weet nie – help my | Ga ke itse – nthuse |
+| `tasks.installer.doneOn` | Done {date} | Klaar {date} | E weditswe {date} |
+| `tasks.installer.later` | This shows once your fields are set up. | Dit wys sodra jou velde opgestel is. | Se se tla bontshiwa fa ditshimo tsa gago di setse di baakantswe. |
+| `tasks.installer.legacy` | This field was already in use before these checks. Nothing to do. | Hierdie veld was reeds in gebruik voor hierdie kontroles. Niks om te doen nie. | Tshimo e e ne e setse e dirisiwa pele ga ditlhatlhobo tse. Ga go na sepe se se tshwanetseng go dirwa. |
+| `tasks.installer.title` | What your installer does | Wat jou installeerder doen | Se mointshi wa gago a se dirang |
+| `tasks.installer.why` | These need the kit and tools on site. You do not need to do anything here. | Hierdie het die toerusting en gereedskap op die plaas nodig. Jy hoef niks hier te doen nie. | Tse di tlhoka sedirisiwa le didirisiwa kwa polaseng. Ga o tlhoke go dira sepe fa. |
+| `tasks.installer.will` | Your installer will complete this | Jou installeerder sal dit voltooi | Mointshi wa gago o tla e fetsa |
+| `tasks.installerNote` | Flow, soil calibration, linking the kit, the longest run and the test run are done by your installer: you do not need to do them. | Vloei, grondkalibrasie, die koppeling van die toerusting, die langste beurt en die toetslopie word deur jou installeerder gedoen: jy hoef dit nie te doen nie. | Kelelo, go lekanya mmu, go golaganya sedirisiwa, nako e telele ya go nosetsa le teko di dirwa ke mointshi wa gago: ga o tlhoke go di dira. |
+| `tasks.irrigation.title` | How is each field watered? | Hoe word elke veld natgelei? | Tshimo nngwe le nngwe e nosediwa jang? |
+| `tasks.location.choose` | Say whether this is your farm, or tap I don't know – help me. | Sê of dit jou plaas is, of tik Ek weet nie – help my. | Bolela gore a ke polase ya gago, kgotsa tobetsa Ga ke itse – nthuse. |
+| `tasks.optional` | Optional: you can leave this as it is. | Opsioneel: jy kan dit so los. | Ga go tlamege: o ka e tlogela jaaka e ntse. |
+| `tasks.preferences` | Your preferences | Jou voorkeure | Dikeletso tsa gago |
+| `tasks.preferences.about` | Language, your own password, the terms, Telegram and alerts. | Taal, jou eie wagwoord, die bepalings, Telegram en waarskuwings. | Puo, lefoko la gago la sephiri, melawana, Telegram le ditemoso. |
+| `tasks.progress` | {task} · screen {n} of {of} | {task} · skerm {n} van {of} | {task} · sekirini {n} go {of} |
+| `tasks.saveContinue` | Save and continue | Stoor en gaan voort | Boloka o tswelele |
+| `tasks.saveFailed` | We couldn't save your changes. Your entries are still here. Try again. | Ons kon nie jou veranderinge stoor nie. Jou inskrywings is nog hier. Probeer weer. | Ga re a kgona go boloka diphetogo tsa gago. Se o se kwadileng se sa ntse se le fa. Leka gape. |
+| `tasks.saveOffline` | No connection, so nothing was saved. Your entries are still here; try again when you have a signal. | Geen verbinding nie, dus is niks gestoor nie. Jou inskrywings is nog hier; probeer weer wanneer jy sein het. | Ga go na kgolagano, ka jalo ga go a bolokwa sepe. Se o se kwadileng se sa ntse se le fa; leka gape fa o na le kgolagano. |
+| `tasks.saveReturn` | Save and go back | Stoor en gaan terug | Boloka o boele morago |
+| `tasks.size.notSaved` | Not saved yet | Nog nie gestoor nie | Ga e ise e bolokwe |
+| `tasks.size.optional` | Optional: leave it empty to keep what is saved, or let your installer measure it. | Opsioneel: los dit leeg om te hou wat gestoor is, of laat jou installeerder dit meet. | Ga go tlamege: e tlogele e se na sepe go boloka se se bolokilweng, kgotsa letla mointshi a e lekanye. |
+| `tasks.size.saved` | Saved: {area} | Gestoor: {area} | E bolokilwe: {area} |
+| `tasks.size.title` | How big is each field? | Hoe groot is elke veld? | Tshimo nngwe le nngwe e kana kang? |
+| `tasks.soilType.title` | What is the soil like in each field? | Hoe is die grond in elke veld? | Mmu o ntse jang mo tshimong nngwe le nngwe? |
+| `tasks.start` | Continue: {task} | Gaan voort: {task} | Tswelela: {task} |
+| `tasks.tank.saved` | Saved: a {litres} L tank. Leave it as it is, or choose a new size and level. | Gestoor: 'n tenk van {litres} L. Los dit so, of kies 'n nuwe grootte en vlak. | E bolokilwe: tanka ya {litres} L. E tlogele jaaka e ntse, kgotsa tlhopha bogolo le boemo jo bošwa. |
+| `tasks.title` | Your details | Jou besonderhede | Dintlha tsa gago |
+| `tasks.toDo` | To do | Nog te doen | Go sa dirwa |
+| `tasks.water` | Your water | Jou water | Metsi a gago |
+| `tasks.water.about` | Where your water comes from, and your tank if you have one. | Waar jou water vandaan kom, en jou tenk as jy een het. | Kwa metsi a gago a tswang teng, le tanka fa o na le yone. |
+| `tasks.water.choose` | Choose where your water comes from, or tap I don't know – help me. | Kies waar jou water vandaan kom, of tik Ek weet nie – help my. | Tlhopha kwa metsi a gago a tswang teng, kgotsa tobetsa Ga ke itse – nthuse. |
+| `tasks.why` | Four short tasks. Answer what you know; tap I don't know – help me for the rest, and AgroFlow staff will help. | Vier kort take. Beantwoord wat jy weet; tik Ek weet nie – help my vir die res, en AgroFlow-personeel sal help. | Ditiro di le nne tse dikhutshwane. Araba se o se itseng; tobetsa Ga ke itse – nthuse mo go se se setseng, mme badiri ba AgroFlow ba tla thusa. |
+| `telegram.alerts` | Alerts | Waarskuwings | Ditemoso |
+| `telegram.disconnectBody` | AgroFlow will stop messaging you about your zones, your irrigation and your requests. | AgroFlow sal ophou om jou boodskappe oor jou sones, natlei en versoeke te stuur. | AgroFlow e tla emisa go go romelela melaetsa ka dikarolo, go nosetsa le dikopo tsa gago. |
+| `telegram.disconnectTitle` | Disconnect Telegram? | Ontkoppel Telegram? | Kgaola Telegram? |
+| `telegram.finishBody` | Press Start in Telegram, then come back here and pull to refresh. | Druk Start in Telegram, kom dan terug hierheen en trek af om te verfris. | Tobetsa Start mo Telegram, o bo o boele fa o gogele tlase go ntšhafatsa. |
+| `telegram.finishTitle` | Finish in Telegram | Voltooi in Telegram | Fetsa mo Telegram |
+| `telegram.status` | Status | Status | Maemo |
+| `terms.accept` | I have read and accept the terms of service and the privacy notice. | Ek het die diensbepalings en die privaatheidskennisgewing gelees en aanvaar dit. | Ke badile e bile ke amogela melawana ya tirelo le kitsiso ya sephiri. |
+| `terms.acceptedOn` | Accepted {date}. | Aanvaar {date}. | E amogetswe {date}. |
+| `terms.doc.privacy` | privacy notice | privaatheidskennisgewing | kitsiso ya sephiri |
+| `terms.doc.terms` | terms of service | diensbepalings | melawana ya tirelo |
+| `terms.draft` | Draft – needs approval | Konsep – benodig goedkeuring | Tshekatsheko – e tlhoka go dumelelwa |
+| `terms.englishOnly` | These drafts are in English for now. Translations follow once the documents are approved. | Hierdie konsepte is vir eers in Engels. Vertalings volg sodra die dokumente goedgekeur is. | Ditshekatsheko tse di ka Seesemane ga jaana. Diphetolelo di tla latela fa ditokomane di dumeletswe. |
+| `terms.limits` | Watering needs the kit, power and a connection. When the kit does not answer, the app says No response rather than pretending it worked. | Natlei het die toerusting, krag en 'n verbinding nodig. Wanneer die toerusting nie antwoord nie, sê die toep Geen antwoord eerder as om voor te gee dit het gewerk. | Go nosetsa go tlhoka sedirisiwa, motlakase le kgolagano. Fa sedirisiwa se sa arabe, appe e bolela Ga go na karabo go na le go itira e kete go dirile. |
+| `terms.loadFailed` | The document could not be loaded. | Die dokument kon nie gelaai word nie. | Tokomane ga e a kgona go tsenngwa. |
+| `terms.optionalSeparate` | Telegram, community reports and your phone's location stay separate choices. You can change them any time in Settings. | Telegram, gemeenskapsverslae en jou foon se ligging bly aparte keuses. Jy kan dit enige tyd in Instellings verander. | Telegram, dipego tsa baagisani le lefelo la mogala wa gago di nna ditlhopho tse di farologaneng. O ka di fetola nako nngwe le nngwe mo Dipeakanyong. |
+| `terms.read` | Read the {title} | Lees die {title} | Bala {title} |
+| `terms.summary` | AgroFlow is a service: a field kit, this app and support from AgroFlow staff. Please read the terms and the privacy notice. Both are drafts that still need approval. | AgroFlow is 'n diens: toerusting op die veld, hierdie toep en ondersteuning van AgroFlow-personeel. Lees asseblief die bepalings en die privaatheidskennisgewing. Albei is konsepte wat nog goedkeuring nodig het. | AgroFlow ke tirelo: sedirisiwa sa kwa tshimong, appe e, le thuso go tswa go badiri ba AgroFlow. Tsweetswee bala melawana le kitsiso ya sephiri. Tsotlhe ke ditokomane tsa tshekatsheko tse di santseng di tlhoka go dumelelwa. |
+| `terms.tickFirst` | Tick the box to accept the terms and the privacy notice. | Merk die blokkie om die bepalings en die privaatheidskennisgewing te aanvaar. | Tshwaya lebokose go amogela melawana le kitsiso ya sephiri. |
+| `terms.title` | Before you start | Voordat jy begin | Pele o simolola |
+| `terms.unavailable` | The terms could not be loaded. Check your connection and try again. | Die bepalings kon nie gelaai word nie. Kyk na jou verbinding en probeer weer. | Melawana ga e a kgona go tsenngwa. Tlhatlhoba kgolagano o bo o leke gape. |
+| `terms.version` | Version {version}, {date} | Weergawe {version}, {date} | Kgatiso {version}, {date} |
+| `terms.weDo` | AgroFlow installs and tests the kit, keeps the app and advice running, caps every watering run at your field's limit, and helps when you ask. | AgroFlow installeer en toets die toerusting, hou die toep en advies aan die gang, beperk elke natleibeurt tot jou veld se limiet, en help wanneer jy vra. | AgroFlow e tsenya e bile e leka sedirisiwa, e tsamaisa appe le dikgakololo, e lekanyetsa go nosetsa go ya ka tekanyetso ya tshimo, mme e thusa fa o kopa. |
+| `terms.youDo` | You keep your password to yourself, keep the kit powered, check your crops and tell AgroFlow when something looks wrong. | Jy hou jou wagwoord vir jouself, hou die toerusting aan, kyk na jou gewasse en sê vir AgroFlow wanneer iets verkeerd lyk. | O boloka lefoko la sephiri e le la gago, o boloka sedirisiwa se na le motlakase, o tlhatlhoba dijalo mme o bolelela AgroFlow fa sengwe se sa siama. |
+| `today.provenance.at` | worked out {at} | uitgewerk {at} | e dirilwe {at} |
+| `today.provenance.crop` | For {model} | Vir {model} | Ya {model} |
+| `today.provenance.cropModel` | Worked out with the {model} model for your crop | Uitgewerk met die {model}-model vir jou gewas | E dirilwe ka sekao sa {model} sa thobo ya gago |
+| `today.provenance.missing` | no weather for {days} | geen weer vir {days} nie | ga go na maemo a loapi a {days} |
+| `today.provenance.noCrop` | No crop set for this zone | Geen gewas vir hierdie sone gestel nie | Ga go na thobo e e tlhomilweng ya karolo e |
+| `today.provenance.noWeather` | no saved weather yet | nog geen gestoorde weer nie | ga go ise go nne le maemo a loapi a a bolokilweng |
+| `today.provenance.weather` | weather {from} to {to} | weer {from} tot {to} | maemo a loapi go tloga {from} go fitlha {to} |
+| `weather.stale` | Weather out of date | Weer is verouderd | Maemo a loapi a kgologolo |
+| `weather.unavailable` | Weather unavailable | Weer nie beskikbaar nie | Maemo a loapi ga a bonale |
+| `weather.unavailableBody` | AgroFlow has no up-to-date forecast for this farm, so it cannot say whether it will rain. Check again later. | AgroFlow het geen bygewerkte voorspelling vir hierdie plaas nie, dus kan dit nie sê of dit gaan reën nie. Kyk later weer. | AgroFlow ga e na kitsiso e ntšha ya polase e, ka jalo ga e kgone go bolela gore pula e tla na. Leba gape moragonyana. |
+| `weather.unknownShort` | Not known | Nie bekend nie | Ga go itsiwe |
+| `weatherCard.failed` | We couldn’t retrieve the latest weather for this farm. | Ons kon nie die nuutste weer vir hierdie plaas kry nie. | Ga re a kgona go bona maemo a loapi a bosheng a polase e. |
+| `weatherCard.loading` | Loading weather | Laai weer | Go tsenngwa maemo a loapi |
+| `weatherCard.noLocation` | Weather needs a farm location | Weer het 'n plaasligging nodig | Maemo a loapi a tlhoka lefelo la polase |
+| `weatherCard.noLocationBody` | Weather will be available once this farm has coordinates. | Weer sal beskikbaar wees sodra hierdie plaas koördinate het. | Maemo a loapi a tla bonala fa polase e na le dikhoorotineite. |
+| `why.change` | What would change it | Wat dit sou verander | Se se ka se fetolang |
+| `why.rule` | The rule | Die reël | Molao |
+| `why.sure` | How sure we are | Hoe seker ons is | Re tlhomamisa go le kae |
+| `why.used` | What we used | Wat ons gebruik het | Se re se dirisitseng |
+| `zone.cropRow` | Crop and planting date | Gewas en plantdatum | Thobo le letlha la go jala |
+| `zone.cropRowBody` | What is growing, and since when | Wat groei, en sedert wanneer | Se se golang, le go tloga leng |
+| `zone.edit.crop` | Crop Type | Gewas | Thobo |
+| `zone.edit.cropPlaceholder` | Tomatoes | Tamaties | Ditamati |
+| `zone.edit.datePlaceholder` | YYYY-MM-DD | JJJJ-MM-DD | NNNN-KK-LL |
+| `zone.edit.days` | Irrigation Days | Natleidae | Malatsi a go nosetsa |
+| `zone.edit.location` | Location | Ligging | Lefelo |
+| `zone.edit.locationPlaceholder` | North Field | Noordveld | Tshimo ya Bokone |
+| `zone.edit.name` | Zone Name | Sonenaam | Leina la karolo |
+| `zone.edit.namePlaceholder` | Zone 1 | Sone 1 | Karolo 1 |
+| `zone.edit.planting` | Planting Date | Plantdatum | Letlha la go jala |
+| `zone.edit.scheduleTitle` | Edit Schedule | Wysig skedule | Fetola thulaganyo |
+| `zone.edit.start` | Start Time | Begintyd | Nako ya go simolola |
+| `zone.edit.title` | Edit Zone & Automation | Wysig sone en outomatisering | Fetola karolo le boitiriso |
+| `zone.edit.weather` | Weather Adjustment | Weeraanpassing | Go fetola go ya ka maemo a loapi |
+| `zone.edit.weatherBody` | Delay automatic irrigation when rain is expected. | Stel outomatiese natlei uit wanneer reën verwag word. | Diegisa go nosetsa ka boitiriso fa pula e solofetswe. |
+| `zone.err.dateFormat` | Enter the planting date in YYYY-MM-DD format. | Voer die plantdatum in as JJJJ-MM-DD. | Kwala letlha la go jala ka sebopego sa NNNN-KK-LL. |
+| `zone.err.dateFuture` | Planting date must be a valid date that is not in the future. | Die plantdatum moet 'n geldige datum wees wat nie in die toekoms is nie. | Letlha la go jala le tshwanetse go siama le se nne mo isagong. |
+| `zone.err.dateTitle` | Invalid Planting Date | Ongeldige plantdatum | Letlha la go jala le le sa siamang |
+| `zone.err.days` | Select at least one irrigation day. | Kies ten minste een natleidag. | Tlhopha bonnye letsatsi le le lengwe la go nosetsa. |
+| `zone.err.daysTitle` | Choose Irrigation Days | Kies natleidae | Tlhopha malatsi a go nosetsa |
+| `zone.err.duration` | Enter a duration between 1 and 1440 minutes. | Voer 'n duur tussen 1 en 1440 minute in. | Kwala paka fa gare ga metsotso e le 1 le 1440. |
+| `zone.err.durationTitle` | Invalid Duration | Ongeldige duur | Paka e e sa siamang |
+| `zone.err.missing` | Enter a zone name, location, and crop type. | Voer 'n sonenaam, ligging en gewas in. | Kwala leina la karolo, lefelo le thobo. |
+| `zone.err.missingTitle` | Missing Zone Details | Sonebesonderhede ontbreek | Dintlha tsa karolo di a tlhaela |
+| `zone.err.modeTitle` | Could Not Change Mode | Kon nie modus verander nie | Ga go a kgonega go fetola mokgwa |
+| `zone.err.moisture` | Moisture values must be between 0 and 100. | Vogwaardes moet tussen 0 en 100 wees. | Dipalo tsa bongola di tshwanetse go nna fa gare ga 0 le 100. |
+| `zone.err.moistureTitle` | Invalid Moisture Values | Ongeldige vogwaardes | Dipalo tsa bongola tse di sa siamang |
+| `zone.err.range` | The start threshold must be lower than the desired moisture level. | Die beginvlak moet laer wees as die gewenste vogvlak. | Boemo jwa go simolola bo tshwanetse go nna kwa tlase ga bongola jo bo batlegang. |
+| `zone.err.rangeTitle` | Invalid Automation Range | Ongeldige reeks | Tekanyo e e sa siamang |
+| `zone.err.saveTitle` | Could Not Update Zone | Kon nie sone opdateer nie | Ga go a kgonega go fetola karolo |
+| `zone.err.scheduleTitle` | Could Not Update Schedule | Kon nie skedule opdateer nie | Ga go a kgonega go fetola thulaganyo |
+| `zone.err.start` | Enter the time as HH:MM, for example 05:30. | Voer die tyd in as UU:MM, byvoorbeeld 05:30. | Kwala nako jaaka UU:MM, sekao 05:30. |
+| `zone.err.startTitle` | Invalid Start Time | Ongeldige begintyd | Nako ya go simolola e e sa siamang |
+| `zone.finishSetup` | Finish setup | Voltooi opstelling | Fetsa go baakanya |
+| `zone.finishSetupBody` | Planting date and size, for surer advice | Plantdatum en grootte, vir sekerder advies | Letlha la go jala le bogolo, go bona kgakololo e e tlhomameng |
+| `zone.kitRow` | Your kit | Jou toerusting | Sedirisiwa sa gago |
+| `zone.kitRowBody` | Is it working, and change its WiFi | Werk dit, en verander sy WiFi | A se a dira, le go fetola WiFi ya sone |
+| `zone.row.scheduleState` | Schedule | Skedule | Thulaganyo |
+| `zone.saved` | The zone settings were saved to Supabase. | Die sone se instellings is gestoor. | Dipeakanyo tsa karolo di bolokilwe. |
+| `zone.savedTitle` | Zone Updated | Sone opgedateer | Karolo e fetotswe |
+| `zone.scheduleSavedTitle` | Schedule Updated | Skedule opgedateer | Thulaganyo e fetotswe |
+| `zone.simulated` | SIMULATED | GESIMULEER | E ETSISITSWE |
+| `zone.soilRow` | Soil type | Grondsoort | Mofuta wa mmu |
+| `zone.soilRowBody` | How much water your soil holds | Hoeveel water jou grond hou | Gore mmu wa gago o tshwara metsi a le kae |
+| `zone.teachRow` | Teach the sensor your soil | Leer die sensor jou grond | Ruta sesupo mmu wa gago |
+| `zone.teachRowBody` | Your installer saves a wet and a dry reading | Jou installeerder stoor 'n nat en 'n droë lesing | Mointshi wa gago o boloka palo ya metsi le ya go oma |
+| `zone.val.minutes` | {n} min | {n} min | {n} metsotso |
+| `zone.val.rainMm` | Yes, {mm} mm | Ja, {mm} mm | Ee, {mm} mm |
+| `zone.val.schedule.active` | Active | Aktief | E a dira |
+| `zone.val.schedule.default` | Not saved yet (suggested values only) | Nog nie gestoor nie (net voorgestelde waardes) | Ga e ise e bolokwe (ke ditshitshinyo fela) |
+| `zone.val.schedule.inactive` | Inactive (saved, but this zone is not watering by schedule) | Onaktief (gestoor, maar hierdie sone word nie volgens skedule natgelei nie) | Ga e dire (e bolokilwe, mme karolo e ga e nosediwe ka thulaganyo) |
+| `zone.val.scheduleCapped` | {minutes} min each run (saved as {saved} min; capped to {max} min, this zone's limit) | {minutes} min per beurt (gestoor as {saved} min; beperk tot {max} min, hierdie sone se limiet) | {minutes} metsotso ka nako nngwe le nngwe (e bolokilwe jaaka {saved} metsotso; e lekanyeditswe go {max} metsotso, tekanyetso ya karolo e) |
+| `zone.weekAhead` | The week ahead | Die week wat kom | Beke e e tlang |
+| `zone.weekAheadBody` | Weather and watering advice for 7 days | Weer- en natleiadvies vir 7 dae | Maemo a loapi le kgakololo ya go nosetsa ya malatsi a le 7 |

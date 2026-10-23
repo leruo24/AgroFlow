@@ -21,6 +21,7 @@ import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { WebLoadingVideo } from '@/components/WebLoadingVideo';
+import { useI18n } from '@/i18n';
 
 // The video's own background colour (see the note above).
 export const LOADING_BACKGROUND = '#FFFFFF';
@@ -47,6 +48,7 @@ type Props = {
 };
 
 export function LoadingAnimation({ appReady, onFinished }: Props) {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(true);
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
   const [videoDone, setVideoDone] = useState(false);
@@ -193,7 +195,7 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
         { pointerEvents: 'auto' },
       ]}
       accessibilityRole="progressbar"
-      accessibilityLabel="AgroFlow is starting"
+      accessibilityLabel={t('loading.starting')}
     >
       {/* Tap to skip, but only once there is something to skip to - skipping
           into a half-loaded app shows a flash of empty screen. */}
@@ -202,7 +204,7 @@ export function LoadingAnimation({ appReady, onFinished }: Props) {
         onPress={() => {
           if (appReady) dismiss();
         }}
-        accessibilityLabel="Skip the opening animation"
+        accessibilityLabel={t('loading.skip')}
       >
         {Platform.OS === 'web' ? (
           <WebLoadingVideo

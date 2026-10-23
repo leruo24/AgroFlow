@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 
 import { AppAlert as Alert } from '@/components/AppAlert';
+import { useI18n } from '@/i18n';
 
 import {
   useTheme,
@@ -38,6 +39,7 @@ import {
 } from '@/styles/profileStyles';
 
 export function TelegramSection() {
+  const { t } = useI18n();
   const {
     colors,
   } = useTheme();
@@ -164,8 +166,8 @@ export function TelegramSection() {
       // The link only works once the farmer presses Start in Telegram, outside this app.
       // Re-checking when they come back is what turns this section green.
       Alert.alert(
-        'Finish in Telegram',
-        'Press Start in Telegram, then come back here and pull to refresh.'
+        t('telegram.finishTitle'),
+        t('telegram.finishBody')
       );
     } catch (
       caughtError: unknown
@@ -184,8 +186,8 @@ export function TelegramSection() {
 
   function handleDisconnect() {
     Alert.alert(
-      'Disconnect Telegram?',
-      'AgroFlow will stop messaging you about your zones, your irrigation and your requests.',
+      t('telegram.disconnectTitle'),
+      t('telegram.disconnectBody'),
       [
         {
           text: 'Cancel',
@@ -305,7 +307,7 @@ export function TelegramSection() {
                   styles.infoLabel
                 }
               >
-                Status
+                {t('telegram.status')}
               </Text>
 
               <Text
@@ -330,7 +332,7 @@ export function TelegramSection() {
                     styles.infoLabel
                   }
                 >
-                  Alerts
+                  {t('telegram.alerts')}
                 </Text>
 
                 <Switch

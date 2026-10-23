@@ -7,6 +7,7 @@ import { fetchCurrentWeather, type CurrentWeatherResponse } from '@/services/agr
 import { createWeatherSummaryStyles } from '@/styles/weatherSummaryStyles';
 import { DataState } from './DataState';
 import { hasCoordinates } from './FarmLocationMap';
+import { useI18n } from '@/i18n';
 
 function condition(code?: number) {
   if (code == null) return null;
@@ -21,6 +22,7 @@ function condition(code?: number) {
   return 'Conditions unavailable';
 }
 export function WeatherSummary({ farm }: { farm: Farm }) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createWeatherSummaryStyles(colors), [colors]);
   const [data, setData] = useState<CurrentWeatherResponse | null>(null);
@@ -38,9 +40,9 @@ export function WeatherSummary({ farm }: { farm: Farm }) {
     }).catch(() => { if (active) setState('failed'); });
     return () => { active = false; };
   }, [farm.id, farm.latitude, farm.longitude, valid, attempt]);
-  if (!valid) return <DataState kind="empty" title="Weather needs a farm location" description="Weather will be available once this farm has coordinates." />;
-  if (state === 'loading') return <DataState kind="loading" title="Loading weather" />;
-  if (state === 'failed' || !data) return <DataState kind="error" title="Weather unavailable" description="We couldn’t retrieve the latest weather for this farm." onRetry={() => setAttempt(n => n + 1)} />;
+  if (!valid) return <DataState kind="empty" title={t('weatherCard.noLocation')} description={t('weatherCard.noLocationBody')} />;
+  if (state === 'loading') return <DataState kind="loading" title={t('weatherCard.loading')} />;
+  if (state === 'failed' || !data) return <DataState kind="error" title={t('weather.unavailable')} description={t('weatherCard.failed')} onRetry={() => setAttempt(n => n + 1)} />;
   const current = data.current!;
   const rows = [
     current.relative_humidity_2m != null ? `Humidity ${Math.round(current.relative_humidity_2m)}%` : null,

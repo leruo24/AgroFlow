@@ -17,6 +17,13 @@
 // each reported as its own line here. Before that: the 0056 demo farms near Mahikeng are
 // seeded as expected, and the drought check that runs when the API starts went through every
 // farm without an error.
+// Audit fixes (2026-10-23): every path is capped at the zone maximum (scheduled and automatic
+// commands asking for an hour arrive as 5 min); a broker restart (a command made meanwhile waits
+// unsent, then arrives when the API has reconnected by itself); an API restart (a command saved
+// while it was down is sent when it is back). Double-tapped Irrigate, "No response" with no
+// acknowledgement and the capped message use the farmer's sign-in, so they run in-process
+// (SimDatabaseTests) against this same database and are reported as their own lines.
+// These are software checks with a pretend pump: they say nothing about the physical kit.
 // Exit code 0 = every check passed. Needs Node 20+ and the .NET 8 SDK.
 import net from 'node:net';
 import path from 'node:path';
@@ -51,11 +58,68 @@ async function poll(fn, timeoutMs = 15000) {
 }
 
 let db, broker, mqttServer, api, kit;
+const apiBase = `http://127.0.0.1:${API_PORT}`;
 const apiLog = [];
 const apiLogText = () => apiLog.join('');
+// The broker and the API are started by these, so the run can restart them (sections 9c, 9d).
+const mqttSockets = new Set();
+async function startBroker() {
+  broker = await Aedes.createBroker
+    ? await Aedes.createBroker({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) })
+    : Aedes({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) });
+  if (process.env.SIM_VERBOSE) {
+    broker.on('clientError', (c, e) => console.log('   broker: client error', c?.id, e.message));
+    broker.on('connectionError', (c, e) => console.log('   broker: connection error', c?.id, e.message));
+    broker.on('client', c => console.log('   broker: connected', c.id));
+    broker.on('clientDisconnect', c => console.log('   broker: disconnected', c.id));
+  }
+  mqttServer = net.createServer(broker.handle);
+  mqttServer.on('connection', socket => { mqttSockets.add(socket); socket.on('close', () => mqttSockets.delete(socket)); });
+  await new Promise(r => mqttServer.listen(MQTT_PORT, '127.0.0.1', r));
+}
+async function stopBroker() {
+  for (const socket of mqttSockets) socket.destroy();
+  await new Promise(r => mqttServer.close(() => r()));
+  await new Promise(r => broker.close(() => r()));
+}
+async function startApi(extraArgs = []) {
+  api = spawn('dotnet', ['run', '--project', path.join(repoRoot, 'backend', 'AgroFlow.Api'), '--no-launch-profile', ...extraArgs], {
+    env: {
+      ...process.env,
+      ASPNETCORE_ENVIRONMENT: 'Simulation',
+      ASPNETCORE_URLS: `http://127.0.0.1:${API_PORT}`,
+      ConnectionStrings__Supabase: db.connectionString,
+      ApiKey: 'sim-only-device-key',
+      Supabase__Url: 'http://127.0.0.1:9',
+      Supabase__JwksUrl: 'https://127.0.0.1:9/auth/v1/.well-known/jwks.json',
+      Supabase__ServiceRoleKey: 'none',
+      Mqtt__Host: '127.0.0.1', Mqtt__Port: String(MQTT_PORT), Mqtt__UseTls: 'false',
+      Mqtt__Username: MQTT_USER, Mqtt__Password: MQTT_PASS, Mqtt__ProtocolVersion: '311',
+      Telegram__BotToken: '', Telegram__EnablePolling: 'false',
+      WeatherAlerts__Enabled: 'false', Simulation__Enabled: 'false', FaultChecks__Enabled: 'false',
+      DeviceMonitor__Enabled: 'false',
+      Logging__LogLevel__Default: 'Warning', Logging__LogLevel__AgroFlow__Api: process.env.SIM_VERBOSE ? 'Information' : 'Warning',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  api.stdout.on('data', d => apiLog.push(String(d)));
+  api.stderr.on('data', d => apiLog.push(String(d)));
+  const up = await poll(async () => {
+    try { return (await fetch(apiBase + '/api/public/ping')).ok; } catch { return false; }
+  }, 180000);
+  if (!up) throw new Error('the API did not start:\n' + apiLog.join('').slice(-3000));
+}
+async function stopApi() {
+  const exited = new Promise(r => api.once('exit', r));
+  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(api.pid), '/T', '/F'], { stdio: 'ignore' });
+  else api.kill();
+  await exited;
+  await poll(async () => { try { await fetch(apiBase + '/api/public/ping'); return false; } catch { return true; } }, 20000);
+}
+
 const cleanup = async () => {
   await kit?.close();
-  if (api && !api.killed) api.kill();
+  if (api && api.exitCode === null) await stopApi().catch(() => {});
   mqttServer?.close();
   broker?.close();
   await db?.stop();
@@ -84,48 +148,13 @@ try {
   log(`seeded farmer, farm ${farmId}, zone ${zoneId} (automatic), kit with a one-time code`);
 
   // 3. MQTT broker (stands in for HiveMQ), with a login like the real one.
-  broker = await Aedes.createBroker
-    ? await Aedes.createBroker({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) })
-    : Aedes({ authenticate: (_c, u, p, cb) => cb(null, u === MQTT_USER && String(p) === MQTT_PASS) });
-  if (process.env.SIM_VERBOSE) {
-    broker.on('clientError', (c, e) => console.log('   broker: client error', c?.id, e.message));
-    broker.on('connectionError', (c, e) => console.log('   broker: connection error', c?.id, e.message));
-    broker.on('client', c => console.log('   broker: connected', c.id));
-    broker.on('clientDisconnect', c => console.log('   broker: disconnected', c.id));
-  }
-  mqttServer = net.createServer(broker.handle);
-  await new Promise(r => mqttServer.listen(MQTT_PORT, '127.0.0.1', r));
+  await startBroker();
   log(`MQTT broker on 127.0.0.1:${MQTT_PORT}`);
 
   // 4. The real API, pointed at both. Environment "Simulation", so no user-secrets load and no
   //    live connection string, key or token can be picked up.
   console.log('Starting AgroFlow.Api...');
-  api = spawn('dotnet', ['run', '--project', path.join(repoRoot, 'backend', 'AgroFlow.Api'), '--no-launch-profile'], {
-    env: {
-      ...process.env,
-      ASPNETCORE_ENVIRONMENT: 'Simulation',
-      ASPNETCORE_URLS: `http://127.0.0.1:${API_PORT}`,
-      ConnectionStrings__Supabase: db.connectionString,
-      ApiKey: 'sim-only-device-key',
-      Supabase__Url: 'http://127.0.0.1:9',
-      Supabase__JwksUrl: 'https://127.0.0.1:9/auth/v1/.well-known/jwks.json',
-      Supabase__ServiceRoleKey: 'none',
-      Mqtt__Host: '127.0.0.1', Mqtt__Port: String(MQTT_PORT), Mqtt__UseTls: 'false',
-      Mqtt__Username: MQTT_USER, Mqtt__Password: MQTT_PASS, Mqtt__ProtocolVersion: '311',
-      Telegram__BotToken: '', Telegram__EnablePolling: 'false',
-      WeatherAlerts__Enabled: 'false', Simulation__Enabled: 'false', FaultChecks__Enabled: 'false',
-      DeviceMonitor__Enabled: 'false',
-      Logging__LogLevel__Default: 'Warning', Logging__LogLevel__AgroFlow__Api: process.env.SIM_VERBOSE ? 'Information' : 'Warning',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  api.stdout.on('data', d => apiLog.push(String(d)));
-  api.stderr.on('data', d => apiLog.push(String(d)));
-  const apiBase = `http://127.0.0.1:${API_PORT}`;
-  const up = await poll(async () => {
-    try { return (await fetch(apiBase + '/api/public/ping')).ok; } catch { return false; }
-  }, 180000);
-  if (!up) throw new Error('the API did not start:\n' + apiLog.join('').slice(-3000));
+  await startApi();
   log('API up');
   await sleep(2500);   // MQTT subscription and LISTEN start just after the web server
 
@@ -219,8 +248,9 @@ try {
   const longId = (await q(
     "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'scheduled', 600) returning id", [zoneId])).rows[0].id;
   const long = await kit.waitForCommand(c => String(c.id) === String(longId)).catch(() => null);
-  check("a zone limited to 3 min sends maxRunSeconds 180, and the kit runs min(asked, maximum)",
-    long?.maxRunSeconds === 180 && runLimitSeconds(long) === 180, long ? `asked ${long.durationSeconds}s, max ${long.maxRunSeconds}s` : 'not delivered');
+  check("a zone limited to 3 min: a 10-min scheduled command arrives as 3 min (capped in the database), maxRunSeconds 180",
+    long?.durationSeconds === 180 && long?.maxRunSeconds === 180 && runLimitSeconds(long) === 180,
+    long ? `arrived ${long.durationSeconds}s, max ${long.maxRunSeconds}s` : 'not delivered');
   if (long) {
     await kit.ack(long.id);
     await kit.reportRun({ runtimeSeconds: 180, triggerSource: 'scheduled', startedAt: (() => { const d = new Date(); d.setMilliseconds(0); return d; })() });
@@ -256,6 +286,81 @@ try {
   const kept = (await q("select count(*)::int n from irrigation_event where zone_id = $1 and sync_status = 'offline_queued'", [zoneId])).rows[0].n;
   check('a kept pump run uploaded twice is counted once', r1.status === 200 && r2.status === 200 && kept === 1, `${kept} row(s)`);
 
+  // 9a. The cap on every path the kit sees (AF-05). Automatic watering's own command (section 7)
+  //     and a scheduled and an automatic one asking for an hour all arrive at the zone's maximum.
+  // (An automatic start has no length of its own: it runs until the server's stop, at most maxRunSeconds.)
+  check('the automatic command from section 7 runs at most the zone maximum (5 min)',
+    !!auto && auto.maxRunSeconds === 300 && runLimitSeconds(auto) <= 300,
+    auto ? `asked ${auto.durationSeconds ?? 'until stopped'}, the kit stops by ${runLimitSeconds(auto)}s` : 'none');
+  const nowWhole = () => { const d = new Date(); d.setMilliseconds(0); return d; };
+  for (const source of ['scheduled', 'auto']) {
+    const id = (await q(
+      "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', $2, 3600) returning id", [zoneId, source])).rows[0].id;
+    const got = await kit.waitForCommand(c => String(c.id) === String(id)).catch(() => null);
+    const row = (await q('select duration_seconds, requested_duration_seconds from irrigation_commands where id = $1', [id])).rows[0];
+    check(`a ${source} command asking for 60 min arrives as 5 min (the zone maximum); the hour asked is kept for the record`,
+      got?.durationSeconds === 300 && row?.duration_seconds === 300 && row?.requested_duration_seconds === 3600,
+      got ? `arrived ${got.durationSeconds}s; row ${JSON.stringify(row)}` : 'not delivered');
+    if (got) {
+      await kit.ack(got.id);
+      await kit.reportRun({ runtimeSeconds: 300, triggerSource: source, startedAt: nowWhole() });
+    }
+  }
+
+  // 9c. Broker restart. The API notices, a command made meanwhile waits (it is not marked as
+  //     sent), and when the broker is back the API reconnects by itself and the command arrives.
+  //     (The board reconnects by itself; the simulated kit is told to.)
+  console.log('Restarting the MQTT broker...');
+  await stopBroker();
+  const noticed = await poll(async () => /MQTT disconnected/.test(apiLogText()), 20000);
+  const whileDownId = (await q(
+    "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'manual', 60) returning id", [zoneId])).rows[0].id;
+  await sleep(3000);
+  const whileDown = (await q('select status, published_at from irrigation_commands where id = $1', [whileDownId])).rows[0];
+  check('broker down: the API notices, and a command made meanwhile waits unsent (no "Waiting for kit")',
+    !!noticed && whileDown?.status === 'pending' && whileDown?.published_at === null, JSON.stringify({ noticed: !!noticed, ...whileDown }));
+  await startBroker();
+  await poll(async () => { try { await kit.connectMqtt(); return true; } catch { return false; } }, 20000);
+  const replayed = await kit.waitForCommand(c => String(c.id) === String(whileDownId), 45000).catch(() => null);
+  const deliveries = kit.commands.filter(c => String(c.id) === String(whileDownId)).length;
+  check('broker back: the API reconnects by itself and the waiting command reaches the kit',
+    !!replayed, replayed ? `delivered ${deliveries} time(s)` : 'not delivered within 45 s');
+  if (replayed) {
+    await kit.ack(replayed.id);
+    await kit.reportRun({ runtimeSeconds: 60, triggerSource: 'manual', startedAt: nowWhole() });
+  }
+  const afterBrokerId = (await q(
+    "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'manual', 30) returning id", [zoneId])).rows[0].id;
+  const afterBroker = await kit.waitForCommand(c => String(c.id) === String(afterBrokerId)).catch(() => null);
+  check('...and a new command after the restart arrives as normal', !!afterBroker);
+  if (afterBroker) {
+    await kit.ack(afterBroker.id);
+    await kit.reportRun({ runtimeSeconds: 30, triggerSource: 'manual', startedAt: nowWhole() });
+  }
+
+  // 9d. API restart. A command saved while the API is down (as the scheduler in the database
+  //     does) is sent when it is back; the kit's readings and login keep working.
+  console.log('Restarting AgroFlow.Api...');
+  await stopApi();
+  const apiDownId = (await q(
+    "insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'scheduled', 45) returning id", [zoneId])).rows[0].id;
+  await startApi(['--no-build']);
+  const sentAfter = await kit.waitForCommand(c => String(c.id) === String(apiDownId), 45000).catch(() => null);
+  check('API restart: a command saved while it was down reaches the kit once it is back', !!sentAfter,
+    sentAfter ? `${sentAfter.durationSeconds}s` : 'not delivered within 45 s');
+  if (sentAfter) {
+    await kit.ack(sentAfter.id);
+    await kit.reportRun({ runtimeSeconds: 45, triggerSource: 'scheduled', startedAt: nowWhole() });
+  }
+  const readingsBefore = (await q('select count(*)::int n from sensor_reading where zone_id = $1', [zoneId])).rows[0].n;
+  await kit.publish('SoilMoisture', 63);
+  const readingAfter = await poll(async () =>
+    (await q('select count(*)::int n from sensor_reading where zone_id = $1', [zoneId])).rows[0].n > readingsBefore, 15000);
+  const cfgAfter = await kit.http('GET', '/api/devices/config');
+  check("...and the kit's readings and its login still work after the restart", !!readingAfter && cfgAfter.status === 200,
+    `reading stored ${!!readingAfter}, config ${cfgAfter.status}`);
+
+
   // 9b. Drought mode and community alerts: the demo farms (0056) and the start-up drought check.
   const demo = (await q(`select f.name, f.latitude, f.longitude, f.sim_scenario, f.water_source,
       (select count(*)::int from zone z where z.farm_id = f.farm_id) zones
@@ -284,7 +389,7 @@ try {
   console.log('Running the API database tests against this Postgres...');
   const tests = await new Promise(resolve => {
     const p = spawn('dotnet', ['test', path.join(repoRoot, 'backend', 'AgroFlow.Domain.Tests'),
-      '--filter', 'FullyQualifiedName~SimDatabaseTests|FullyQualifiedName~DroughtCommunityDbTests|FullyQualifiedName~DroughtCommunityFixTests', '--logger', 'console;verbosity=normal'], {
+      '--filter', 'FullyQualifiedName~SimDatabaseTests|FullyQualifiedName~DbTests|FullyQualifiedName~DroughtCommunityFixTests', '--logger', 'console;verbosity=normal'], {
       env: { ...process.env, AGROFLOW_SIM_DB: db.connectionString }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -300,8 +405,17 @@ try {
     tests.code === 0 && total >= 8 && passed === total && failedN === 0 && skippedN === 0,
     `${passed} of ${total} passed, ${failedN} failed, ${skippedN} skipped`);
   if (tests.code !== 0) console.log(tests.out.split('\n').filter(l => /Failed |Assert|Error Message|expected|actual/i.test(l)).slice(0, 30).join('\n'));
+  const passedIn = (cls, name) => new RegExp(`Passed\\s+\\S*${cls}\\.${name}`).test(tests.out);
+  // The farmer's own routes (Irrigate, command status, schedules), in-process with the test sign-in.
+  check('double-tapped Irrigate: one command; a second press and two at the same instant get that same one back',
+    passedIn('SimDatabaseTests', 'A_run_above_the_zones_maximum_is_capped_and_a_double_tap_is_one_run'));
+  check('no acknowledgement: the app reads "Waiting for kit", then "No response" after 60 s',
+    passedIn('SimDatabaseTests', 'With_no_acknowledgement_Irrigate_reads_No_response_after_the_wait'));
+  check("cap from the app: \"Capped to 3 min (this zone's limit)\"; a saved 20-min schedule shows 3 min; every insert path capped",
+    passedIn('SimDatabaseTests', 'A_run_above_the_zones_maximum_is_capped_and_a_double_tap_is_one_run') &&
+    passedIn('SimDatabaseTests', 'Every_insert_path_is_capped_by_the_database_too'));
   // The drought, community and fire scenarios, one line each.
-  const passedTest = name => new RegExp(`Passed\\s+\\S*DroughtCommunityDbTests\\.${name}`).test(tests.out);
+  const passedTest = name => passedIn('DroughtCommunityDbTests', name);
   check('scenario, drought: a low tank and a dry forecast turn drought mode on, with the water budget and zone priorities; by hand too',
     passedTest('Drought_mode_turns_on_from_the_farms_own_data_with_a_budget_and_zone_priorities_and_by_hand'));
   check('scenario, community: 2 reports per 36 hours (confirming does not count); nearby farms told by distance only, never the reporter',

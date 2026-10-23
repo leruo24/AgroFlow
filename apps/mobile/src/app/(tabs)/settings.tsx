@@ -21,6 +21,7 @@ import { disconnectTelegram, fetchTelegramLinkStatus } from '@/services/agroFlow
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { ServiceSupportCard } from '@/components/ServiceSupportCard';
 
 const NOTIFICATION_PREFERENCES_KEY =
   'agroflow_notification_preferences';
@@ -470,7 +471,7 @@ export default function SettingsScreen() {
           {/* Which alerts also come to Telegram, and quiet hours: the wizard's alerts step. */}
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => router.push('/setup?step=alerts' as never)}
+            onPress={() => router.push('/setup?task=preferences&screen=alerts&from=settings' as never)}
             activeOpacity={0.75}
             accessibilityRole="button"
             testID="alert-choices"
@@ -482,7 +483,7 @@ export default function SettingsScreen() {
           {/* Community alerts on or off (the wizard's step), and the reports themselves. */}
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => router.push('/setup?step=community' as never)}
+            onPress={() => router.push('/setup?task=preferences&screen=community&from=settings' as never)}
             activeOpacity={0.75}
             accessibilityRole="button"
             testID="community-choice"
@@ -491,10 +492,10 @@ export default function SettingsScreen() {
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
 
-          {/* Every step of the setup wizard again, from the start (app/setup.tsx). */}
+          {/* The four tasks of Your details (app/setup.tsx), to look at or change. */}
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => router.push('/setup?redo=1' as never)}
+            onPress={() => router.push('/setup' as never)}
             activeOpacity={0.75}
             accessibilityRole="button"
             testID="redo-setup"
@@ -502,6 +503,9 @@ export default function SettingsScreen() {
             <Text style={styles.profileText}>{t('settings.redoSetup')}</Text>
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
+
+          {/* Service & support: status, who pays, the plan, how to get help (Part B). */}
+          <ServiceSupportCard />
 
           <TouchableOpacity
             style={styles.profileButton}

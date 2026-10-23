@@ -35,6 +35,8 @@ jest.mock('@/components/ScreenHeader', () => {
 const mockFarm = { id: '1', name: 'Mahikeng (Simulated)' };
 jest.mock('@/context/AgroFlowContext', () => ({ useAgroFlow: () => ({ farm: mockFarm }) }));
 jest.mock('@/services/agroFlowApi', () => ({
+  fetchServiceSupport: jest.fn(() => new Promise(() => undefined)),
+  fetchJourney: jest.fn(() => new Promise(() => undefined)),
   fetchDrought: jest.fn(),
   setDroughtMode: jest.fn(),
   fetchCommunity: jest.fn(),

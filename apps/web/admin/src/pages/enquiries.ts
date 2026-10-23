@@ -7,7 +7,7 @@
 
 import { badge } from "@/ui/components";
 import { ZONE_CROPS } from "@/data/referenceData";
-import { esc, fmtDateTimeSast } from "@/lib/format";
+import { esc, fmtDateTimeSast, fmtArea } from "@/lib/format";
 import type { Enquiry, EnquiryCall } from "@/services/agroFlowApi";
 
 export const REASONS: { value: string; label: string }[] = [
@@ -84,6 +84,7 @@ export function enquiryActions(e: Enquiry, myId: string | undefined): string {
   return `<div class="row-actions">
     <button type="button" class="btn ghost" data-act="enquiry-log-call" data-id="${e.id}">Log call</button>
     ${e.outcome === "wants" ? `<a href="#" class="row-act" data-act="enquiry-onboard" data-id="${e.id}">Start onboarding</a>` : ""}
+    ${!e.farmerProfileId && e.status !== "lost" && !e.anonymisedAt ? `<a href="#" class="row-act" data-act="enquiry-link" data-id="${e.id}">Link to existing farmer</a>` : ""}
     ${e.noAnswerCount >= 3
       ? `<a href="#" class="row-act" data-act="enquiry-close" data-id="${e.id}" title="Three calls with no answer">Close (no answer ×${e.noAnswerCount})</a>`
       : ""}
@@ -96,7 +97,7 @@ function enquiryRow(e: Enquiry, myId: string | undefined): string {
     : `<a href="#" class="cell-link" data-act="view-enquiry" data-id="${e.id}"><strong>${esc(e.fullName ?? "")}</strong></a>
        <div class="muted">${e.phone ? `<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>` : ""}${e.email ? ` · ${esc(e.email)}` : ""}</div>`;
   const where = [e.town, e.province].filter(Boolean).join(", ");
-  const size = e.farmSizeHa != null ? ` · ${e.farmSizeHa} ha` : "";
+  const size = e.farmSizeHa != null ? ` · ${fmtArea(e.farmSizeHa)}` : "";
 
   return `<tr data-enquiry="${e.id}">
     <td>${who}</td>

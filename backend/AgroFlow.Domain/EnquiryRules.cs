@@ -76,8 +76,10 @@ namespace AgroFlow.Business
             else if (digits.StartsWith("0") && digits.Length == 10) national = digits.Substring(1);
             else return null;
 
-            // National numbers start 1-8 (landlines 1-5, mobiles 6-8).
+            // National numbers start 1-8 (landlines 1-5, mobiles 6-8), so 000 000 0000 fails here.
             if (national[0] < '1' || national[0] > '8') return null;
+            // One digit repeated (082 222 2222 aside, 011 111 1111) is a placeholder, not a number.
+            if (national.Distinct().Count() == 1) return null;
             return "+27" + national;
         }
 

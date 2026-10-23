@@ -1,0 +1,20 @@
+{
+  "_about": "AF-20: the same phone cases for the server (PhoneRules / EnquiryRules.NormalisePhone) and every client form. ok = accepted as a South African number. Well formed is not proof of ownership; never call these.",
+  "cases": [
+    { "phone": "", "ok": false },
+    { "phone": "abcdefghij", "ok": false },
+    { "phone": "0000000000", "ok": false },
+    { "phone": "000 000 0000", "ok": false },
+    { "phone": "+27 00 000 0000", "ok": false },
+    { "phone": "011 111 1111", "ok": false },
+    { "phone": "0821234567", "ok": true },
+    { "phone": "082 123 4567", "ok": true },
+    { "phone": "+27 82 123 4567", "ok": true },
+    { "phone": "27821234567", "ok": true },
+    { "phone": "(082) 123-4567", "ok": true },
+    { "phone": "012 345 6789", "ok": true },
+    { "phone": "082123456", "ok": false },
+    { "phone": "08212345678", "ok": false },
+    { "phone": "0921234567", "ok": false }
+  ]
+}

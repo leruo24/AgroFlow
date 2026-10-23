@@ -497,8 +497,19 @@ private static async Task<IResult> RegisterFarmAsync(
                 f.updated_at,
                 f.latitude,
                 f.longitude,
-                f.is_simulated
+                f.is_simulated,
+                -- AF-23: one membership definition for the directory and the drawer: the owner and
+                -- every farm_member, each person once.
+                m.ids,
+                -- Kits enrolled on the farm's zones (AF-09: none yet means awaiting installation).
+                (select count(*) from hardware h join zone z on z.id = h.zone_id
+                  where z.farm_id = f.farm_id and h.enrollment_status = 'active')::int
             from farm f
+            left join lateral (
+                select coalesce(array_agg(distinct x.pid), '{}'::uuid[]) as ids from (
+                    select f.owner_id as pid where f.owner_id is not null
+                    union
+                    select fm.profile_id from farm_member fm where fm.farm_id = f.farm_id) x) m on true
             left join profile p
                 on p.id = f.owner_id
             -- Archived farms are EXCLUDED by default and returned only when
@@ -548,7 +559,10 @@ private static async Task<IResult> RegisterFarmAsync(
                     : reader.GetDateTime(7),
                 latitude = reader.IsDBNull(8) ? (double?)null : reader.GetDouble(8),
                 longitude = reader.IsDBNull(9) ? (double?)null : reader.GetDouble(9),
-                is_simulated = !reader.IsDBNull(10) && reader.GetBoolean(10)
+                is_simulated = !reader.IsDBNull(10) && reader.GetBoolean(10),
+                member_ids = reader.IsDBNull(11) ? Array.Empty<Guid>() : reader.GetFieldValue<Guid[]>(11),
+                member_count = reader.IsDBNull(11) ? 0 : reader.GetFieldValue<Guid[]>(11).Length,
+                kit_count = reader.GetInt32(12),
             });
         }
 

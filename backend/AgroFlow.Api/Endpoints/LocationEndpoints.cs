@@ -19,7 +19,10 @@ internal sealed record LocationSearchProviderResult(
     [property: JsonPropertyName("admin3")] string? Municipality = null);
 
 // Detail is "Town, District/Municipality, Province".
-internal sealed record LocationSearchItem(string Name, string Detail, double Latitude, double Longitude, string? Province = null, string? District = null);
+internal sealed record LocationSearchItem(string Name, string Detail, double Latitude, double Longitude, string? Province = null, string? District = null,
+    // Set when the typed name is a former or other name of this town ("Mafeking" -> Mahikeng): the
+    // admin site shows it as a suggestion and never replaces what staff typed (B3-01).
+    string? AliasOf = null);
 internal sealed record ReverseLocationItem(string? Locality, string? District, string? Province, string? Country, string? DisplayName);
 
 public static class LocationEndpoints
@@ -59,9 +62,11 @@ public static class LocationEndpoints
                     found.Add(r);
             if (found.Count > 0) break;
         }
+        var alias = AgroFlow.Business.LocationRules.AliasFor(query);
         var items = found
             .Where(r => AgroFlow.Business.LocationRules.ValidateCoordinates(r.Result.Latitude, r.Result.Longitude) is null)
-            .OrderByDescending(r => Math.Max(AgroFlow.Business.LocationRules.Similarity(query, r.Result.Name),
+            .OrderByDescending(r => Math.Max(Math.Max(AgroFlow.Business.LocationRules.Similarity(query, r.Result.Name),
+                                            alias is null ? 0 : AgroFlow.Business.LocationRules.Similarity(alias, r.Result.Name)),
                                             r.Municipality is null ? 0 : AgroFlow.Business.LocationRules.Similarity(query, r.Municipality)))
             .Select(r => new LocationSearchItem(
                 r.Result.Name,
@@ -69,7 +74,8 @@ public static class LocationEndpoints
                 r.Result.Latitude,
                 r.Result.Longitude,
                 r.Result.Province,
-                r.Result.District))
+                r.Result.District,
+                alias is not null && string.Equals(r.Result.Name, alias, StringComparison.OrdinalIgnoreCase) ? query : null))
             .DistinctBy(r => (r.Name, r.Detail))
             .Take(8)
             .ToList();

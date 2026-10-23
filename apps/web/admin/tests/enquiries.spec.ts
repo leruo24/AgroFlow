@@ -129,7 +129,7 @@ test("after three unanswered calls it offers Close; an ended enquiry offers Dele
   await expect.poll(() => writes.map((w) => w.path)).toContain("/api/admin/enquiries/4/anonymise");
 });
 
-test("Start onboarding fills the onboarding form from the enquiry, and finishing it completes the enquiry", async ({ page }) => {
+test("Start onboarding fills the onboarding form from the enquiry, and the onboarding carries the enquiry to link", async ({ page }) => {
   const writes = await open(page);
   await enquiriesTab(page);
 
@@ -148,10 +148,12 @@ test("Start onboarding fills the onboarding form from the enquiry, and finishing
   await page.locator('[data-field="zone_area_preset_0"]').selectOption("small");
   await page.locator('[data-act="onboarding-submit"]').click();
 
-  await expect.poll(() => writes.map((w) => w.path)).toEqual(
-    expect.arrayContaining(["/api/farmers/onboard", "/api/admin/enquiries/3/onboarded"]));
-  const linked = writes.find((w) => w.path === "/api/admin/enquiries/3/onboarded")!;
-  expect(linked.body).toEqual({ farmerProfileId: "00000000-0000-4000-8000-0000000000f9" });
+  // AF-24: the onboarding carries the enquiry and the server links it once the account exists,
+  // so no separate call (and no invented call log) is needed.
+  await expect.poll(() => writes.map((w) => w.path)).toContain("/api/farmers/onboard");
+  const onboard = writes.find((w) => w.path === "/api/farmers/onboard")!;
+  expect(onboard.body["enquiryId"]).toBe(3);
+  expect(writes.map((w) => w.path)).not.toContain("/api/admin/enquiries/3/calls");
 });
 
 test("the Enquiries & sales follow-up report downloads with its period, province and handler", async ({ page }) => {

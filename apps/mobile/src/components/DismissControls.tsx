@@ -5,6 +5,7 @@ import { BlurSheet } from '@/components/BlurSheet';
 import { createTodayStyles } from '@/styles/todayStyles';
 import type { DismissView } from '@/lib/dismissals';
 import { Space } from '@/constants/colors';
+import { useI18n } from '@/i18n';
 
 // The app's dismiss pieces: the x button, the Active / Dismissed / All switch, the
 // 5-second Undo bar, and the note sheet a critical item asks for.
@@ -20,11 +21,12 @@ export function DismissButton({ label, onPress }: { label: string; onPress: () =
 }
 
 export function ViewSwitch({ value, onChange }: { value: DismissView; onChange: (v: DismissView) => void }) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
   const options: [DismissView, string][] = [['active', 'Active'], ['dismissed', 'Dismissed'], ['all', 'All']];
   return (
-    <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel="Show">
+    <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel={t('dismiss.show')}>
       {options.map(([v, label]) => (
         <Pressable key={v} accessibilityRole="radio" accessibilityState={{ selected: value === v }}
           onPress={() => onChange(v)} style={[styles.choice, { minHeight: Platform.OS === 'web' ? 44 : 36, minWidth: 0 }, value === v && styles.choiceSelected]}>
@@ -37,6 +39,7 @@ export function ViewSwitch({ value, onChange }: { value: DismissView; onChange: 
 
 /** Shows `message` with Undo for 5 s; Undo runs once. */
 export function UndoBar({ message, onUndo, onDone }: { message: string | null; onUndo: () => void; onDone: () => void }) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const used = useRef(false);
   useEffect(() => {
@@ -50,13 +53,13 @@ export function UndoBar({ message, onUndo, onDone }: { message: string | null; o
     <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       backgroundColor: colors.text, borderRadius: 8, paddingHorizontal: Space.md, paddingVertical: Space.sm, marginVertical: Space.sm }}>
       <Text style={{ color: colors.white, flex: 1 }}>{message}</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Undo" onPress={() => {
+      <Pressable accessibilityRole="button" accessibilityLabel={t('dismiss.undo')} onPress={() => {
         if (used.current) return;
         used.current = true;
         onUndo();
         onDone();
       }}>
-        <Text style={{ color: colors.primary, fontWeight: '700', paddingLeft: Space.md }}>Undo</Text>
+        <Text style={{ color: colors.primary, fontWeight: '700', paddingLeft: Space.md }}>{t('dismiss.undo')}</Text>
       </Pressable>
     </View>
   );
@@ -66,19 +69,20 @@ export function UndoBar({ message, onUndo, onDone }: { message: string | null; o
 export function DismissNoteSheet({ title, visible, onCancel, onConfirm }: {
   title: string; visible: boolean; onCancel: () => void; onConfirm: (note: string | null) => void;
 }) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
   const [note, setNote] = useState('');
   useEffect(() => { if (visible) setNote(''); }, [visible]);
   return (
-    <BlurSheet visible={visible} onClose={onCancel} title="Dismiss this?">
+    <BlurSheet visible={visible} onClose={onCancel} title={t('dismiss.title')}>
       <View style={styles.sheet}>
         <Text style={styles.intro}>{title}</Text>
-        <Text style={styles.help}>It is important. It will come back if it happens again.</Text>
-        <TextInput accessibilityLabel="Note (optional)" placeholder="Note (optional)" placeholderTextColor={colors.textMuted}
+        <Text style={styles.help}>{t('dismiss.important')}</Text>
+        <TextInput accessibilityLabel={t('dismiss.note')} placeholder={t('dismiss.note')} placeholderTextColor={colors.textMuted}
           value={note} onChangeText={setNote} maxLength={500} style={styles.input} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Confirm dismiss" onPress={() => onConfirm(note.trim() || null)} style={styles.button}>
-          <Text style={styles.buttonText}>Dismiss</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('dismiss.confirmA11y')} onPress={() => onConfirm(note.trim() || null)} style={styles.button}>
+          <Text style={styles.buttonText}>{t('dismiss.confirm')}</Text>
         </Pressable>
       </View>
     </BlurSheet>

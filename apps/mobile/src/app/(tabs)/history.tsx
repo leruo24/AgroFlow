@@ -101,7 +101,7 @@ export default function HistoryScreen() {
     <SafeAreaView style={styles.page} edges={['top']}>
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottom }]}>
         <ScreenHeader
-          title="History"
+          title={t('history.title')}
           subtitle={farm ? farm.name : 'Review irrigation and system activity.'}
           help="history"
         />
@@ -117,25 +117,25 @@ export default function HistoryScreen() {
             <View style={styles.summary}>
               <View style={styles.stat}>
                 <Text style={styles.statValue}>{loading || error ? '—' : history.length}</Text>
-                <Text style={styles.caption}>Recorded events</Text>
+                <Text style={styles.caption}>{t('history.recorded')}</Text>
               </View>
             </View>
 
-            <Text accessibilityRole="header" style={styles.sectionTitle}>Recent activity</Text>
+            <Text accessibilityRole="header" style={styles.sectionTitle}>{t('history.recent')}</Text>
 
             {loading ? (
-              <DataState kind="loading" title="Loading activity" />
+              <DataState kind="loading" title={t('history.loading')} />
             ) : error ? (
               <DataState
                 kind="error"
-                title="Unable to load activity"
+                title={t('history.unavailable')}
                 onRetry={farmError ? refreshFarms : refreshZones}
               />
             ) : ordered.length === 0 ? (
               <DataState
                 kind="empty"
-                title="No recent activity"
-                description="Irrigation actions and system events will appear here."
+                title={t('history.none')}
+                description={t('history.noneBody')}
               />
             ) : (
               <CardList>{ordered.map((item) => (
@@ -159,7 +159,7 @@ export default function HistoryScreen() {
           <>
             {/* Filters */}
             <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Zone</Text>
+              <Text style={styles.filterLabel}>{t('history.zone')}</Text>
               <View style={styles.filterRow}>
                 {chip('All zones', zoneFilter === 'all', () => setZoneFilter('all'), 'z-all')}
                 {zones.map((z) =>
@@ -169,7 +169,7 @@ export default function HistoryScreen() {
             </View>
 
             <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>Type</Text>
+              <Text style={styles.filterLabel}>{t('history.type')}</Text>
               <View style={styles.filterRow}>
                 {chip('All', typeFilter === 'all', () => setTypeFilter('all'), 't-all')}
                 {chip('Alerts', typeFilter === 'alert', () => setTypeFilter('alert'), 't-alert')}
@@ -178,7 +178,7 @@ export default function HistoryScreen() {
             </View>
 
             <View style={styles.filterGroup}>
-              <Text style={styles.filterLabel}>When</Text>
+              <Text style={styles.filterLabel}>{t('history.when')}</Text>
               <View style={styles.filterRow}>
                 {chip('7 days', period === 7, () => setPeriod(7), 'p-7')}
                 {chip('30 days', period === 30, () => setPeriod(30), 'p-30')}
@@ -188,9 +188,9 @@ export default function HistoryScreen() {
 
             {/* The list */}
             {alertsLoading ? (
-              <DataState kind="loading" title="Loading alerts" />
+              <DataState kind="loading" title={t('history.loadingAlerts')} />
             ) : visible.length === 0 ? (
-              <DataState kind="empty" title="No alerts yet." />
+              <DataState kind="empty" title={t('history.noAlerts')} />
             ) : (
               <CardList>{visible.map((item) => (
                 <Card key={item.id}>

@@ -57,6 +57,8 @@ jest.mock('@/components/AppAlert', () => ({
 }));
 
 jest.mock('@/services/agroFlowApi', () => ({
+  fetchServiceSupport: jest.fn(() => new Promise(() => undefined)),
+  fetchJourney: jest.fn(() => new Promise(() => undefined)),
   // The zone screen's Sensor Readings card asks for the farm's tank.
   fetchTankStatus: jest.fn(() => Promise.resolve({ farmId: 1, capacityLitres: null, estimatedRemainingLitres: null, isLow: false })),
   fetchZoneHardware: jest.fn(() => Promise.resolve({ hardwareId: 1, deviceId: 'AF-1', online: true })),

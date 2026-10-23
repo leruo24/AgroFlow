@@ -5,12 +5,14 @@ import { useTheme } from '@/context/ThemeContext';
 import type { Farm } from '@/context/AgroFlowContext';
 import { createFarmLocationMapStyles } from '@/styles/farmLocationMapStyles';
 import FarmMapSurface from './FarmMapSurface';
+import { useI18n } from '@/i18n';
 
 export function hasCoordinates(farm: Pick<Farm, 'latitude' | 'longitude'>) {
   return farm.latitude != null && farm.longitude != null && Number.isFinite(farm.latitude) && Number.isFinite(farm.longitude)
     && Math.abs(farm.latitude) <= 90 && Math.abs(farm.longitude) <= 180;
 }
 export function FarmLocationMap({ farm }: { farm: Farm }) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createFarmLocationMapStyles(colors), [colors]);
   const [collapsed, setCollapsed] = useState(false);
@@ -36,6 +38,6 @@ export function FarmLocationMap({ farm }: { farm: Farm }) {
         })}
       </View>
     </View>}
-    {failed && <Text style={styles.unavailableText}>Map unavailable. Farm location is shown above.</Text>}
+    {failed && <Text style={styles.unavailableText}>{t('map.unavailable')}</Text>}
   </View>;
 }

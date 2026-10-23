@@ -16,7 +16,9 @@ import { WeatherSummary } from '@/components/WeatherSummary';
 import { DripHelper } from '@/components/DripHelper';
 import { averageSoilText } from '@/lib/moistureDisplay';
 import { TodayCard } from '@/components/TodayCard';
-import { SetupCard } from '@/components/SetupCard';
+import { WhereYouAreNow } from '@/components/WhereYouAreNow';
+import { AutoOfferCard } from '@/components/AutoOfferCard';
+import { useJourney } from '@/hooks/useJourney';
 import { DroughtCard } from '@/components/DroughtCard';
 import { CardList } from '@/components/ui/Card';
 import { InfoGrid } from '@/components/ui/InfoGrid';
@@ -37,6 +39,7 @@ export default function HomeScreen() {
   const moisture = moistureText === 'No reading' ? t('empty.noReading') : moistureText;
   const bottom = useBottomPadding();
   const unread = alerts.filter(a => !a.read).length;
+  const journey = useJourney();
   // Today's cards come from GET /api/farmer/farms/{id}/today on the API.
   const [today, setToday] = useState<TodayZone[] | null>(null);
   const [todayFailed, setTodayFailed] = useState(false);
@@ -47,11 +50,16 @@ export default function HomeScreen() {
       .catch(() => setTodayFailed(true));
   }, [farm]);
   useEffect(() => { setToday(null); loadToday(); }, [loadToday]);
-  const [tank, setTank] = useState<TankStatus | null>(null);
+  // Kept with the farm it belongs to (AF-22): another farm's tank is never shown, and until this
+  // farm's answer arrives the card says Loading, not "not set up".
+  const [tankFor, setTankFor] = useState<{ farmId: string; status: TankStatus } | null>(null);
   const [tankFailed, setTankFailed] = useState(false);
+  const tank = tankFor && farm && tankFor.farmId === farm.id ? tankFor.status : null;
+  const tankLoading = !!farm && !tank && !tankFailed;
   const loadTank = useCallback(() => {
     if (!farm) return;
-    fetchTankStatus(farm.id).then(value => { setTank(value); setTankFailed(false); }).catch(() => setTankFailed(true));
+    const farmId = farm.id;
+    fetchTankStatus(farmId).then(value => { setTankFor({ farmId, status: value }); setTankFailed(false); }).catch(() => setTankFailed(true));
   }, [farm]);
   useFocusEffect(loadTank);
   // Back online: swap the saved copies for live ones.
@@ -69,7 +77,8 @@ export default function HomeScreen() {
     { label: t('home.metricIrrigating'), value: zones.some(z => z.sensors.soilMoisture.status === 'Online' || z.sensors.temperatureHumidity.status === 'Online')
       ? String(zones.filter(z => z.irrigation.override.active).length) : t('empty.noKit') },
     { label: t('home.metricWater'), value: waterToday },
-    { label: t('home.metricAlerts'), value: String(unread) },
+    // Not a false 0 while the zones and alerts are still loading (AF-22).
+    { label: t('home.metricAlerts'), value: isZonesLoading ? '—' : String(unread) },
   ];
   return <SafeAreaView style={styles.page} edges={['top']}>
     <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottom }]} showsVerticalScrollIndicator={false}>
@@ -79,8 +88,12 @@ export default function HomeScreen() {
         : farmError ? <DataState kind="error" title={t('home.farmUnavailable')} description={t('home.farmUnavailableBody')} onRetry={refreshFarms} />
         : !farm ? <DataState kind="empty" title={t('home.noFarm')} description={t('home.noFarmBody')} />
         : <>
-          {/* Setup still to finish comes first; it is gone once setup is complete. */}
-          <SetupCard />
+          {/* Where you are now (B3-03): the stage, the next action, who acts next and the date,
+              with "Your details: X of 4" and "Installation: <stage>". Before migration 0058 the
+              old setup card shows instead. Then "Turn on automatic watering?" for a zone the
+              installer has just commissioned. */}
+          <WhereYouAreNow state={journey} />
+          {journey.status === 'ready' ? <AutoOfferCard journey={journey.journey} onAnswered={journey.reload} /> : null}
           {/* The water budget, and drought mode with each zone's priority when it is on. */}
           <DroughtCard />
           {/* Today next: it is what a farmer opens the app to find out. */}
@@ -94,7 +107,8 @@ export default function HomeScreen() {
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('home.tank')}</Text>
           {tankFailed ? <DataState kind="error" title={t('home.tankUnavailable')} onRetry={loadTank} />
             : <View style={styles.tankCard}>
-              <Text style={styles.tankEstimate}>{tank?.estimatedRemainingLitres != null
+              <Text style={styles.tankEstimate} testID="home-tank-estimate">{tankLoading ? t('common.loading')
+                : tank?.estimatedRemainingLitres != null
                 ? t('home.tankLeft', { litres: Math.round(tank.estimatedRemainingLitres) })
                 : tank?.capacityLitres ? t('home.tankNoRefill') : t('home.tankNotSetUp')}</Text>
               {tank?.waterPhWarning ? <Text style={styles.caption}>{tank.waterPhWarning}</Text> : null}

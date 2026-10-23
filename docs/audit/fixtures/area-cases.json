@@ -1,0 +1,15 @@
+{
+  "_about": "AF-07: one area format for C# (AreaFormat.Describe), the admin site and the app (formatArea).",
+  "cases": [
+    { "hectares": 0.01, "text": "0.01 ha (100 m²)" },
+    { "hectares": 0.02, "text": "0.02 ha (200 m²)" },
+    { "hectares": 0.5, "text": "0.5 ha (5 000 m²)" },
+    { "hectares": 1, "text": "1 ha" },
+    { "hectares": 1.5, "text": "1.5 ha" },
+    { "hectares": 0.005, "text": "0.005 ha (50 m²)" },
+    { "hectares": 0.00002, "text": "0.0001 ha (0.2 m²)" },
+    { "hectares": 12.346, "text": "12.35 ha" },
+    { "hectares": 0, "text": null },
+    { "hectares": null, "text": null }
+  ]
+}

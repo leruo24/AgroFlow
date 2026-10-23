@@ -44,6 +44,13 @@ public sealed class AppSettingsStore
     // Number settings must stay numbers and inside sensible bounds; text stays text.
     public static string? Validate(string key, JsonElement value)
     {
+        // The example service price (0058): rand amounts and the words shown with them.
+        if (key == "service.price_label")
+            return value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 2 and <= 200 } ? null : "Type the words shown with the price (3 to 200 characters).";
+        if (key is "service.installation_price_zar" or "service.monthly_price_zar")
+            return value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var zar) && zar is >= 0 and <= 1_000_000 ? null : "Use an amount in rand between 0 and 1 000 000.";
+        if (key == "service.example_zones")
+            return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var zones) && zones is >= 1 and <= 50 ? null : "Use a number of zones between 1 and 50.";
         if (key == "fire.emergency_text")
             return value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 2 and <= 200 } ? null : "Type the emergency number text (3 to 200 characters).";
         if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var n)) return "This setting must be a number.";
@@ -104,6 +111,21 @@ public sealed class AppSettingsStore
             Num(v, "fire.escalate_factor", d.FireEscalateFactor),
             v.TryGetValue("fire.emergency_text", out var t) && t.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(t.GetString())
                 ? t.GetString()! : d.EmergencyText);
+    }
+
+    public sealed record ServiceSettings(double InstallationZar, double MonthlyZar, int Zones, string Label);
+
+    // The example price farmers see (0058): R4 000 installation and R610 a month for a 2-zone farm
+    // unless staff change it. An example, never a bill.
+    public async Task<ServiceSettings> ServiceAsync(CancellationToken ct)
+    {
+        var v = await ValuesAsync(ct);
+        var label = v.TryGetValue("service.price_label", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString()! : null;
+        return new ServiceSettings(
+            Num(v, "service.installation_price_zar", 4000),
+            Num(v, "service.monthly_price_zar", 610),
+            (int)Num(v, "service.example_zones", 2),
+            string.IsNullOrWhiteSpace(label) ? "example for a 2-zone farm; final quote after a site visit" : label);
     }
 
     private static double Num(Dictionary<string, JsonElement> v, string key, double fallback) =>

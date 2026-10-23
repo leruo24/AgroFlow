@@ -23,6 +23,7 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { createServiceRequestStyles } from '@/styles/serviceRequestStyles';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { useI18n, type TranslationKey } from '@/i18n';
 
 type RequestType = 'new_farm' | 'new_zone';
 
@@ -47,6 +48,7 @@ const cropOptions: {
 ];
 
 export default function ServiceRequestScreen() {
+  const { t } = useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -65,6 +67,8 @@ export default function ServiceRequestScreen() {
 
   const [location, setLocation] = useState('');
   const [roughSize, setRoughSize] = useState('');
+  // AF-19: the size always has a unit, or is honestly "I don't know".
+  const [sizeUnit, setSizeUnit] = useState<'m2' | 'ha' | 'unknown' | null>(null);
   const [cropType, setCropType] =
     useState<CropType | ''>('');
   const [notes, setNotes] = useState('');
@@ -143,6 +147,7 @@ export default function ServiceRequestScreen() {
   function resetForm() {
     setLocation('');
     setRoughSize('');
+    setSizeUnit(null);
     setCropType('');
     setNotes('');
   }
@@ -153,8 +158,8 @@ export default function ServiceRequestScreen() {
       !selectedFarmId
     ) {
       Alert.alert(
-        'Farm required',
-        'Please select the farm where the new zone should be created.'
+        t('request.farmRequiredTitle'),
+        t('request.farmRequired')
       );
       return;
     }
@@ -164,16 +169,21 @@ export default function ServiceRequestScreen() {
       !location.trim()
     ) {
       Alert.alert(
-        'Location required',
-        'Please enter the location of the new farm.'
+        t('request.locationRequiredTitle'),
+        t('request.locationRequired')
       );
       return;
     }
 
     const parsedSize =
-      roughSize.trim() === ''
+      sizeUnit === 'unknown' || roughSize.trim() === ''
         ? undefined
-        : Number(roughSize);
+        : Number(roughSize.replace(',', '.'));
+
+    if (parsedSize !== undefined && sizeUnit === null) {
+      Alert.alert(t('request.sizeUnitTitle'), t('request.sizeUnitNeeded'));
+      return;
+    }
 
     if (
       parsedSize !== undefined &&
@@ -181,16 +191,16 @@ export default function ServiceRequestScreen() {
         parsedSize <= 0)
     ) {
       Alert.alert(
-        'Invalid size',
-        'Rough size must be a number greater than zero.'
+        t('request.invalidSizeTitle'),
+        t('request.invalidSize')
       );
       return;
     }
 
     if (!cropType) {
       Alert.alert(
-        'Crop required',
-        'Please select the main crop for this request.'
+        t('request.cropRequiredTitle'),
+        t('request.cropRequired')
       );
       return;
     }
@@ -209,14 +219,15 @@ export default function ServiceRequestScreen() {
             ? location.trim()
             : undefined,
         roughSize: parsedSize,
+        roughSizeUnit: sizeUnit === 'unknown' ? 'unknown' : parsedSize !== undefined ? sizeUnit ?? undefined : undefined,
         cropType,
         notes:
           notes.trim() || undefined,
       });
 
       Alert.alert(
-        'Request submitted',
-        'Your request has been submitted and is now pending admin review.',
+        t('request.submittedTitle'),
+        t('request.submitted'),
         [
           {
             text: 'Done',
@@ -234,7 +245,7 @@ export default function ServiceRequestScreen() {
           : 'Something went wrong while submitting your request.';
 
       Alert.alert(
-        'Request failed',
+        t('request.failedTitle'),
         message
       );
     } finally {
@@ -266,17 +277,17 @@ export default function ServiceRequestScreen() {
               onPress={() => router.back()}
               style={styles.backButton}
               accessibilityRole="button"
-              accessibilityLabel="Go back"
+              accessibilityLabel={t('common.back')}
             >
               <ChevronLeft size={24} strokeWidth={2} />
             </Pressable>
 
             <View style={styles.headerText}>
               <Text style={styles.title}>
-                Farm request
+                {t('request.title')}
               </Text>
               <Text style={styles.subtitle}>
-                Request a new farm or zone from AgroFlow.
+                {t('request.subtitle')}
               </Text>
             </View>
 
@@ -284,7 +295,7 @@ export default function ServiceRequestScreen() {
           </View>
 
           <Text style={styles.sectionTitle}>
-            Request type
+            {t('request.type')}
           </Text>
 
           <View style={styles.optionGroup}>
@@ -307,12 +318,12 @@ export default function ServiceRequestScreen() {
               <Text
                 style={styles.optionTitle}
               >
-                New farm
+                {t('request.newFarm')}
               </Text>
               <Text
                 style={styles.optionDescription}
               >
-                Request installation for a new farm.
+                {t('request.newFarmBody')}
               </Text>
             </Pressable>
 
@@ -334,12 +345,12 @@ export default function ServiceRequestScreen() {
               <Text
                 style={styles.optionTitle}
               >
-                New zone
+                {t('request.newZone')}
               </Text>
               <Text
                 style={styles.optionDescription}
               >
-                Request an additional zone on an existing farm.
+                {t('request.newZoneBody')}
               </Text>
             </Pressable>
           </View>
@@ -347,7 +358,7 @@ export default function ServiceRequestScreen() {
           {requestType === 'new_zone' ? (
             <>
               <Text style={styles.sectionTitle}>
-                Existing farm
+                {t('request.existingFarm')}
               </Text>
 
               {farmsLoading ? (
@@ -358,13 +369,13 @@ export default function ServiceRequestScreen() {
                   <Text
                     style={styles.loadingText}
                   >
-                    Loading your farms...
+                    {t('request.loadingFarms')}
                   </Text>
                 </View>
               ) : farms.length === 0 ? (
                 <View style={styles.infoBox}>
                   <Text style={styles.infoText}>
-                    No existing farms are available for a new-zone request.
+                    {t('request.noFarms')}
                   </Text>
                 </View>
               ) : (
@@ -420,14 +431,14 @@ export default function ServiceRequestScreen() {
           {requestType === 'new_farm' ? (
             <>
               <Text style={styles.sectionTitle}>
-                Farm location
+                {t('request.location')}
               </Text>
 
               <TextInput
                 style={styles.input}
                 value={location}
                 onChangeText={setLocation}
-                placeholder="Enter the farm location"
+                placeholder={t('request.locationPlaceholder')}
                 placeholderTextColor={
                   colors.textMuted
                 }
@@ -438,26 +449,41 @@ export default function ServiceRequestScreen() {
           ) : null}
 
           <Text style={styles.sectionTitle}>
-            Rough size
+            {t('request.sizeLabel')}
           </Text>
 
           <TextInput
-            style={styles.input}
-            value={roughSize}
+            style={[styles.input, sizeUnit === 'unknown' && { opacity: 0.5 }]}
+            value={sizeUnit === 'unknown' ? '' : roughSize}
             onChangeText={setRoughSize}
-            placeholder="e.g. 2.5"
+            editable={sizeUnit !== 'unknown'}
+            placeholder={t('request.sizePlaceholder')}
             placeholderTextColor={
               colors.textMuted
             }
             keyboardType="decimal-pad"
+            accessibilityLabel={t('request.sizeLabel')}
+            testID="request-size"
           />
 
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={t('request.sizeUnitLabel')}>
+            {(['m2', 'ha', 'unknown'] as const).map(unit => {
+              const on = sizeUnit === unit;
+              return <Pressable key={unit} accessibilityRole="radio" accessibilityState={{ checked: on }}
+                onPress={() => setSizeUnit(unit)} testID={`request-size-unit-${unit}`}
+                style={[styles.input, { flexGrow: 1, minWidth: 96, justifyContent: 'center', alignItems: 'center' },
+                  on && { borderColor: colors.primaryDark, borderWidth: 2 }]}>
+                <Text style={{ color: colors.text, fontWeight: on ? '700' : '400' }}>{t(`request.sizeUnit.${unit}` as TranslationKey)}</Text>
+              </Pressable>;
+            })}
+          </View>
+
           <Text style={styles.helperText}>
-            Enter an approximate size. The unit can be confirmed during installation.
+            {sizeUnit === 'unknown' ? t('request.sizeUnknownHelp') : t('request.sizeHelp')}
           </Text>
 
           <Text style={styles.sectionTitle}>
-            Crop
+            {t('request.crop')}
           </Text>
 
           <View style={styles.cropGrid}>
@@ -494,7 +520,7 @@ export default function ServiceRequestScreen() {
           </View>
 
           <Text style={styles.sectionTitle}>
-            Notes
+            {t('request.notesLabel')}
           </Text>
 
           <TextInput
@@ -504,7 +530,7 @@ export default function ServiceRequestScreen() {
             ]}
             value={notes}
             onChangeText={setNotes}
-            placeholder="Optional additional information"
+            placeholder={t('request.notesPlaceholder')}
             placeholderTextColor={
               colors.textMuted
             }
@@ -530,13 +556,13 @@ export default function ServiceRequestScreen() {
               <Text
                 style={styles.submitText}
               >
-                Submit request
+                {t('request.submit')}
               </Text>
             )}
           </Pressable>
 
           <Text style={styles.footerNote}>
-            Your request will remain pending until it is reviewed by an AgroFlow administrator.
+            {t('request.pendingNote')}
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
