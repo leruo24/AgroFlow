@@ -47,7 +47,7 @@ export const Type = {
   // 12 on web, where browsers expect at least 12 px; the phones keep 11.
   label: Platform.OS === 'web' ? 12 : 11,
   caption: 13,
-  body: 15,
+  body: 16,
   title: 18,
   display: 32,
 } as const;
@@ -123,6 +123,7 @@ export const MapChrome = {
 } as const;
 
 export type AppColors = {
+  action: string;
   primary: string;
   primaryDark: string;
 
@@ -176,31 +177,31 @@ export type AppColors = {
 };
 
 export const lightColors: AppColors = {
-  primary: '#42C3C7',
-  primaryDark: '#168F99',
+  action: '#143D2A',
+  primary: '#0E6F77',
+  primaryDark: '#0E6F77',
 
   secondary: '#7FA88A',
-  secondaryDark: '#2F6B4B',
+  secondaryDark: '#143D2A',
 
   navigation: '#FFFFFF',
   navigationText: '#253126',
   navigationMuted: '#637064',
 
-  // Flat white page background, the same as `surface`: cards do not sit on a different
-  // plane from the page.
-  background: '#FFFFFF',
+  // Cream page with white work surfaces; sage supports quiet groups.
+  background: '#F7F5ED',
 
   surface: '#FFFFFF',
-  surfaceSecondary: '#F5F6F5',
+  surfaceSecondary: '#E8EEE5',
   tabBarSurface: '#FFFFFF',
   scrim: 'rgba(0,0,0,0.32)',
 
-  text: '#253126',
-  textSecondary: '#637064',
-  textMuted: '#879187',
+  text: '#18342B',
+  textSecondary: '#526359',
+  textMuted: '#526359',
 
   // A neutral grey for the few real boundaries; `divider` below separates rows.
-  border: '#E4E7E4',
+  border: '#C7D1C5',
   divider: 'rgba(20,26,20,0.08)',
 
   white: '#FFFFFF',
@@ -217,19 +218,20 @@ export const lightColors: AppColors = {
 
   healthyBackground: '#E1EDDC',
 
-  success: '#4F8F62',
+  success: '#28613C',
   successBackground: '#E1EDDC',
 
-  warning: '#B77A26',
+  warning: '#815015',
   warningBackground: '#FFF2DC',
 
-  error: '#D65A50',
+  error: '#B13B32',
   errorBackground: '#FBE7E5',
 };
 
 export const darkColors: AppColors = {
+  action: '#0E6F77',
   primary: '#58CDD0',
-  primaryDark: '#76DCE0',
+  primaryDark: '#85D3D8',
 
   secondary: '#8BB697',
   secondaryDark: '#9BC58B',
@@ -238,16 +240,16 @@ export const darkColors: AppColors = {
   navigationText: '#FFFFFF',
   navigationMuted: '#B8CEC0',
 
-  background: '#182018',
+  background: '#10231C',
 
-  surface: '#222C22',
-  surfaceSecondary: '#2A352A',
-  tabBarSurface: '#222C22',
+  surface: '#19362B',
+  surfaceSecondary: '#234638',
+  tabBarSurface: '#19362B',
   scrim: 'rgba(0,0,0,0.48)',
 
-  text: '#F1F5EF',
-  textSecondary: '#B5C0B3',
-  textMuted: '#8F9A8E',
+  text: '#F1F5EE',
+  textSecondary: '#C3D2C6',
+  textMuted: '#C3D2C6',
 
   border: '#3A4739',
   divider: 'rgba(241,245,239,0.08)',

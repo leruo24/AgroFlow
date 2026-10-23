@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import { lazy, Suspense, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { SoilCutaway } from "./SoilCutaway";
+import { text as t } from "@/pages/publicCopy";
 import { SCENARIOS } from "../data/scenarios";
 import { createInitialState, demoReducer } from "../engine/demoReducer";
-import { FieldScene } from "../three/FieldScene";
+const FieldScene = lazy(() => import("../three/FieldScene").then(module => ({ default: module.FieldScene })));
 import { RecommendationCard } from "./RecommendationCard";
 
 interface ExperienceProps {
@@ -15,6 +17,7 @@ const CONTROLLER_READY_HOLD_MS = 650;
 const WEATHER_ALERT_HOLD_MS = 2800;
 
 export function ExperienceAgroFlow({ onClose }: ExperienceProps) {
+  const [simpleView, setSimpleView] = useState(true);
   const [state, dispatch] = useReducer(demoReducer, undefined, () =>
     demoReducer(
       demoReducer(createInitialState("HOT_DRY"), { type: "INTRO_COMPLETE" }),
@@ -76,15 +79,15 @@ export function ExperienceAgroFlow({ onClose }: ExperienceProps) {
 
   const exploreTechnology = () => {
     onClose();
-    window.setTimeout(() => document.querySelector("#technology")?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth" }), 0);
+    window.location.assign("/technology");
   };
 
   return (
     <div className="experience-shell" role="dialog" aria-modal="true" aria-labelledby="experienceTitle" data-testid="experience-dialog">
       <a className="experience-skip-link" href="#experienceCard">Skip to recommendation</a>
 
-      <section className="experience-stage" aria-label="Interactive view of North Field">
-        <FieldScene
+      <section className={`experience-stage${simpleView ? ' is-2d' : ''}`} aria-label="Interactive view of North Field">
+        {simpleView ? <SoilCutaway moisture={state.relativeMoisture} /> : <Suspense fallback={<SoilCutaway moisture={state.relativeMoisture} />}><FieldScene
           pumpRunning={state.pumpRunning}
           relayOn={state.relayOn}
           controllerActive={state.controllerStatus === "ACTIVE"}
@@ -94,16 +97,17 @@ export function ExperienceAgroFlow({ onClose }: ExperienceProps) {
           viewMode="FIELD"
           rainExpected={state.forecastRainMm >= 15}
           reducedMotion={reducedMotion}
-        />
+        /></Suspense>}
 
         <header className="experience-brand">
-          <img src="brand/agroflow-icon-192.png" width="38" height="38" alt="" />
+          <img src="/brand/agroflow-icon-192.png" width="38" height="38" alt="" />
           <div>
             <strong id="experienceTitle">Experience AgroFlow</strong>
             <span>See how AgroFlow turns field data into an irrigation decision.</span>
           </div>
         </header>
         <button type="button" className="experience-close" onClick={onClose} aria-label="Close Experience AgroFlow">×</button>
+        <button type="button" className="experience-view-toggle" aria-pressed={simpleView} onClick={() => setSimpleView(!simpleView)}>{t("simulated")} · {simpleView ? "2D" : "3D"}</button>
 
         <div className="experience-field-label" aria-label="Demo field details">
           <strong>North Field</strong><span>Tomatoes · 200 m² · Loam soil</span>

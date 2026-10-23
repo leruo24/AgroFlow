@@ -4,6 +4,8 @@
  * so a state that is not current is not in the DOM at all (nothing is just hidden). */
 
 import "@/styles/main.css";
+import "@/styles/visual.css";
+import { wireAppearance } from "@/ui/appearance";
 import { SHELL_HTML } from "@/app/shell";
 import { initNav, bootRouter, setAfterRender } from "@/app/router";
 import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/interactions";
@@ -142,6 +144,7 @@ function render(state: ViewState): void {
   // (bootRouter's hashchange, initHeader's outside-click) stay, so they guard against double
   // binding themselves (see app/router.ts and app/interactions.ts).
   root.innerHTML = SHELL_HTML;
+  wireAppearance(root);
   document.getElementById("sidebarToggle")?.addEventListener("click", () => {
     document.getElementById("sidebar")?.classList.toggle("open");
   });

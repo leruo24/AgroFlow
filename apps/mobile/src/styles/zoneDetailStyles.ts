@@ -238,7 +238,7 @@ content: {
       borderColor: colors.border,
     },
     modeButtonSelected: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.action,
       borderColor: colors.primaryDark,
     },
     modeButtonText: {
@@ -258,7 +258,7 @@ content: {
       paddingHorizontal: Spacing.three,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.action,
       borderRadius: Radius.sm,
     },
     primaryButtonText: {

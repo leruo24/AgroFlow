@@ -52,7 +52,7 @@ export default function OneTapSignInScreen() {
               testID="onetap-login"
               accessibilityRole="button"
               onPress={() => router.replace('/login')}
-              style={{ backgroundColor: colors.primaryDark, borderRadius: 12, paddingVertical: Space.md, paddingHorizontal: Space.xl, minHeight: 48 }}
+              style={{ backgroundColor: colors.action, borderRadius: 12, paddingVertical: Space.md, paddingHorizontal: Space.xl, minHeight: 48 }}
             >
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>{t('onetap.toLogin')}</Text>
             </TouchableOpacity>

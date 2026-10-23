@@ -17,7 +17,7 @@ async function mockPublicPage(page: Page): Promise<void> {
 test("public hardware story is usable and does not block the rest of the landing page", async ({ page }) => {
   const errors = captureErrors(page);
   await mockPublicPage(page);
-  await page.goto("/");
+  await page.goto("/technology");
   await page.locator("#agroflow-splash").waitFor({ state: "detached", timeout: 15_000 });
 
   await expect(page.getByRole("heading", { name: "The AgroFlow field controller" })).toBeVisible({ timeout: 15_000 });
@@ -38,7 +38,7 @@ test("public hardware story is usable and does not block the rest of the landing
   }
   await expect(page.getByRole("button", { name: "Rotate product left" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Explore inside" })).toBeAttached();
-  await expect(page.getByRole("button", { name: "Reset product view" })).toBeAttached();
+  await expect(page.getByRole("button", { name: "Reset view" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Rotate product right" })).toBeAttached();
 
   // The finished closed product exposes only its four external connection
@@ -57,7 +57,7 @@ test("public hardware story is usable and does not block the rest of the landing
   await expect(esp32Marker.locator("span")).toHaveCSS("opacity", "0");
   await esp32Marker.hover();
   await expect(esp32Marker.locator("span")).toHaveCSS("opacity", "1");
-  await page.getByRole("button", { name: "Reset product view" }).click();
+  await page.getByRole("button", { name: "Reset view" }).click();
   await expect(viewer).toHaveAttribute("data-enclosure-state", "closed");
   await expect(page.getByRole("button", { name: "Explore inside" })).toHaveAttribute("aria-expanded", "false");
 
@@ -67,8 +67,8 @@ test("public hardware story is usable and does not block the rest of the landing
   expect(stickyBox!.y).toBeGreaterThanOrEqual(20);
   expect(stickyBox!.y).toBeLessThanOrEqual(30);
 
-  await page.getByRole("heading", { name: "How it works" }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole("heading", { name: "How it works" })).toBeVisible();
+  await page.goto("/how-it-works");
+  await expect(page.getByRole("heading", { name: "From a conversation to your first reading." })).toBeVisible();
   const hasHorizontalOverflow = await page.evaluate(() =>
     document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
   );
@@ -85,7 +85,7 @@ test("public hardware story is usable and does not block the rest of the landing
 test("hardware story remains compact and overflow-free on a phone", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockPublicPage(page);
-  await page.goto("/");
+  await page.goto("/technology");
   await page.locator("#agroflow-splash").waitFor({ state: "detached", timeout: 15_000 });
 
   const viewer = page.locator("[data-hardware-viewer]");
@@ -97,6 +97,6 @@ test("hardware story remains compact and overflow-free on a phone", async ({ pag
   expect(box!.height).toBeLessThanOrEqual(430);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 
-  await page.getByRole("heading", { name: "How it works" }).scrollIntoViewIfNeeded();
-  await expect(page.getByRole("heading", { name: "How it works" })).toBeVisible();
+  await page.goto("/how-it-works");
+  await expect(page.getByRole("heading", { name: "From a conversation to your first reading." })).toBeVisible();
 });

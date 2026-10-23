@@ -5,6 +5,7 @@ import { BlurSheet } from '@/components/BlurSheet';
 import { createTodayStyles } from '@/styles/todayStyles';
 import type { DismissView } from '@/lib/dismissals';
 import { Space } from '@/constants/colors';
+import { useI18n } from '@/i18n';
 
 // The app's dismiss pieces: the x button, the Active / Dismissed / All switch, the
 // 5-second Undo bar, and the note sheet a critical item asks for.
@@ -20,13 +21,14 @@ export function DismissButton({ label, onPress }: { label: string; onPress: () =
 }
 
 export function ViewSwitch({ value, onChange }: { value: DismissView; onChange: (v: DismissView) => void }) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
-  const options: [DismissView, string][] = [['active', 'Active'], ['dismissed', 'Dismissed'], ['all', 'All']];
+  const options: [DismissView, string][] = [['active', t('visual.active')], ['dismissed', t('visual.dismissed')], ['all', t('visual.all')]];
   return (
-    <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel="Show">
+    <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel={t('visual.show')}>
       {options.map(([v, label]) => (
-        <Pressable key={v} accessibilityRole="radio" accessibilityState={{ selected: value === v }}
+        <Pressable key={v} accessibilityRole="radio" accessibilityState={{ selected: value === v, checked: value === v }}
           onPress={() => onChange(v)} style={[styles.choice, { minHeight: Platform.OS === 'web' ? 44 : 36, minWidth: 0 }, value === v && styles.choiceSelected]}>
           <Text style={styles.choiceText}>{label}</Text>
         </Pressable>

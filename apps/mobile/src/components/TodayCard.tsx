@@ -7,6 +7,7 @@ import { ManualLogSheet } from '@/components/ManualLogSheet';
 import type { TodayZone } from '@/services/agroFlowApi';
 import { useI18n, type TranslationKey } from '@/i18n';
 import { adviceOverLimit, zoneMaxRunMinutes } from '@/lib/runLimit';
+import { useSimpleView } from '@/components/visual/AppearanceControls';
 
 const LEVEL_LABEL: Record<'high' | 'medium' | 'low', TranslationKey> = {
   high: 'today.confHigh', medium: 'today.confMedium', low: 'today.confLow',
@@ -20,6 +21,7 @@ type Props = {
 // One card per zone: today's action, how sure we are, and an "I watered" button.
 // The wording comes from the server; nothing is calculated on the phone.
 export function TodayCard({ zone, onLogged }: Props) {
+  const { simple } = useSimpleView();
   const { colors } = useTheme();
   const { t } = useI18n();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
@@ -31,7 +33,7 @@ export function TodayCard({ zone, onLogged }: Props) {
   return (
     <View style={styles.card} testID={`today-${zone.zoneId}`}>
       <Text style={styles.zoneName}>{zone.name}</Text>
-      <Text style={[styles.action, actionStyle]}>{zone.action.text}</Text>
+      <Text style={[styles.action, actionStyle, simple && { fontSize: 24, lineHeight: 34 }]}>{zone.action.text}</Text>
       {/* Longer than one run can be: say so instead of cutting the advice short. */}
       {adviceOverLimit(zone.recommendedMinutes, zone.maxRunMinutes) ? (
         <Text style={styles.overLimit} testID={`today-over-limit-${zone.zoneId}`}>

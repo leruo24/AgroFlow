@@ -16,7 +16,7 @@ async function landing(page: Page, reply: { status: number; body: unknown }): Pr
     }
     return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
   });
-  await page.goto("/");
+  await page.goto("/contact");
   await expect(page.getByRole("heading", { name: "Interested in AgroFlow? Get a call back" })).toBeVisible({ timeout: 15000 });
   return sent;
 }

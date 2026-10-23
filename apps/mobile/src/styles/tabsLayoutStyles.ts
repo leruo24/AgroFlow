@@ -1,7 +1,7 @@
 import { Platform, StyleSheet } from 'react-native';
 import { Radius, Type, type AppColors, Space } from '@/constants/colors';
 
-export const FLOATING_TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 82 : Platform.OS === 'web' ? 80 : 72;
+export const FLOATING_TAB_BAR_HEIGHT = 96;
 export const FLOATING_TAB_BAR_MARGIN_BOTTOM = Platform.OS === 'ios' ? 8 : 12;
 
 // The tab icon wrapper, the same for all five tabs. No theme dependency, so a plain

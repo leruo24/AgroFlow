@@ -12,6 +12,7 @@ import { useMemo, type ComponentType } from 'react';
 import {
   ColorValue,
   Platform,
+  Text,
   View,
   useWindowDimensions,
 } from 'react-native';
@@ -77,6 +78,7 @@ export default function TabsLayout() {//creates layout component
         tabBarStyle,
 
         tabBarLabelStyle: [styles.tabBarLabel, narrow && { fontSize: 11 }],
+        tabBarLabel: ({ children, color }) => <Text style={[styles.tabBarLabel, { color, textAlign: 'center', flexShrink: 1, width: '100%', maxWidth: '100%' }]}>{children}</Text>,
         tabBarItemStyle: styles.tabBarItem,
         tabBarIconStyle: styles.tabBarIcon,
       }}

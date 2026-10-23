@@ -21,6 +21,10 @@ import { disconnectTelegram, fetchTelegramLinkStatus } from '@/services/agroFlow
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { SimpleViewControl } from '@/components/visual/AppearanceControls';
+import { FieldGuide } from '@/components/visual/FieldGuide';
+import { LegalNotice } from '@/components/visual/LegalNotice';
+import { DayNightMotif } from '@/components/visual/DayNightMotif';
 
 const NOTIFICATION_PREFERENCES_KEY =
   'agroflow_notification_preferences';
@@ -250,6 +254,8 @@ export default function SettingsScreen() {
           <Text style={styles.note}>{t('settings.languageNote')}</Text>
 
           <Text style={styles.sectionTitle}>{t('settings.appearance')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}><DayNightMotif /><Text style={[styles.note, { flex: 1 }]}>{t('visual.dayNight')}</Text></View>
+          <SimpleViewControl />
 
           <View style={styles.sectionCard}>
             {appearanceOptions.map((option) => {
@@ -293,6 +299,11 @@ export default function SettingsScreen() {
             {t('settings.currentTheme', { mode: resolvedTheme === 'dark' ? t('settings.themeDark') : t('settings.themeLight') })}
           </Text>
 
+          <Text style={styles.sectionTitle}>{t('visual.service')}</Text>
+          <Text style={styles.note}>{t('visual.serviceBody')}</Text>
+          <FieldGuide />
+          <LegalNotice />
+          <Text style={styles.note}>{t('visual.draft')}</Text>
           <Text style={styles.sectionTitle}>{t('settings.notifications')}</Text>
 
           <View style={styles.sectionCard}>
