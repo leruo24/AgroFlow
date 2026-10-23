@@ -15,6 +15,7 @@ export type PageId =
   | "settings"
   | "onboarding"
   | "requests"
+  | "enquiries"
   | "mqttLogins"
   | "droughtCommunity";
 
@@ -22,6 +23,12 @@ export interface NavItem {
   id: PageId;
   label: string;
   icon: string;
+}
+
+/** A sidebar group: a heading over its pages, or a single page shown on its own. */
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
 }
 
 /** Options passed into a page renderer (e.g. a specific record to open). */
