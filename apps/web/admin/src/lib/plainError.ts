@@ -36,6 +36,12 @@ const PING = `${API_BASE}/api/public/ping`;
 // (a page load fires several; supabase-js retries reads).
 let probe: { at: number; result: Promise<boolean> } | null = null;
 
+/** Does the API answer its open /api/public/ping? The test for "is the server up", kept
+ *  apart from any diagnostic: a failing health check is not an outage. */
+export async function serverAnswersPing(): Promise<boolean> {
+  return pingAnswers();
+}
+
 async function pingAnswers(): Promise<boolean> {
   try {
     const res = await fetch(PING, { method: "GET", cache: "no-store" });
