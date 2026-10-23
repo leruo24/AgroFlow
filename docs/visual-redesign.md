@@ -1,5 +1,8 @@
 # Visual redesign: review handoff
 
+Latest revision: [blue/teal visual revision and final checks](visual-revision.md).
+The report below describes the earlier cream/green implementation.
+
 The public site previously hid its navigation on phones and kept every destination
 on one long page; the staff entry used a broken relative logo path. This change adds
 separate public pages, accessible navigation and a shared visual language across the
