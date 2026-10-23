@@ -59,8 +59,8 @@ export function DroughtCard() {
       {view.zones.map(z => <ZoneRow key={z.zoneId} z={z} styles={styles} t={t} />)}
     </> : null}
     <Text style={styles.help}>{t('drought.modeLabel')}</Text>
-    <View style={styles.modes} accessibilityRole="radiogroup">
-      {(['auto', 'on', 'off'] as const).map(m => <Pressable key={m} accessibilityRole="radio" accessibilityState={{ checked: mode === m, disabled: busy }}
+    <View accessibilityLabel={t('drought.modeLabel')} style={styles.modes} accessibilityRole="radiogroup">
+      {(['auto', 'on', 'off'] as const).map(m => <Pressable key={m} accessibilityRole="radio" aria-disabled={busy} aria-checked={mode === m} accessibilityState={{ checked: mode === m, disabled: busy }}
         onPress={() => { void choose(m); }} style={[styles.mode, mode === m && styles.modeOn]} testID={`drought-mode-${m}`}>
         <Text style={[styles.modeText, mode === m && styles.modeTextOn]}>{t(`drought.mode.${m}` as TranslationKey)}</Text>
       </Pressable>)}

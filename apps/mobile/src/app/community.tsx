@@ -152,8 +152,8 @@ function ReportCard({ t, styles, report: r, onConfirm, onUpdated }: {
         </Pressable>)}
       </View>
       <Text style={styles.help}>{t('community.fire.spreadingTowards')}</Text>
-      <View style={styles.chips}>
-        {DIRECTIONS.map(d => <Pressable key={d} accessibilityRole="radio" accessibilityState={{ checked: direction === d }} onPress={() => setDirection(d)}
+      <View accessibilityRole="radiogroup" accessibilityLabel={t('community.fire.pickDirection')} style={styles.chips}>
+        {DIRECTIONS.map(d => <Pressable key={d} accessibilityRole="radio" aria-checked={direction === d} accessibilityState={{ checked: direction === d }} onPress={() => setDirection(d)}
           style={[styles.chip, direction === d && styles.chipOn]} testID={`community-fire-dir-${d}-${r.reportId}`}>
           <Text style={[styles.chipText, direction === d && styles.chipTextOn]}>{t(`community.dir.${d}` as TranslationKey)}</Text>
         </Pressable>)}
@@ -203,8 +203,8 @@ function ReportForm({ t, styles, farmId, limit, nearby, emergency, onConfirm, on
       <Text style={styles.secondaryText}>{t('common.back')}</Text>
     </Pressable> : <>
       <Text style={styles.label}>{t('community.form.what')}</Text>
-      <View style={styles.chips}>
-        {COMMUNITY_CATEGORIES.map(c => <Pressable key={c.category} accessibilityRole="radio" accessibilityState={{ checked: category === c.category }}
+      <View accessibilityRole="radiogroup" accessibilityLabel={t('community.form.needCategory')} style={styles.chips}>
+        {COMMUNITY_CATEGORIES.map(c => <Pressable key={c.category} accessibilityRole="radio" aria-checked={category === c.category} accessibilityState={{ checked: category === c.category }}
           onPress={() => { setCategory(c.category); setSubtype(c.subtypes.length === 1 ? c.subtypes[0] : null); }}
           style={[styles.chip, category === c.category && styles.chipOn]} testID={`community-cat-${c.category}`}>
           <Text style={[styles.chipText, category === c.category && styles.chipTextOn]}>{t(`community.cat.${c.category}` as TranslationKey)}</Text>
@@ -218,16 +218,16 @@ function ReportForm({ t, styles, farmId, limit, nearby, emergency, onConfirm, on
       </View> : null}
       {subtypes.length > 1 ? <>
         <Text style={styles.label}>{t('community.form.which')}</Text>
-        <View style={styles.chips}>
-          {subtypes.map(s => <Pressable key={s} accessibilityRole="radio" accessibilityState={{ checked: subtype === s }} onPress={() => setSubtype(s)}
+        <View accessibilityRole="radiogroup" accessibilityLabel={t('community.form.needSubtype')} style={styles.chips}>
+          {subtypes.map(s => <Pressable key={s} accessibilityRole="radio" aria-checked={subtype === s} accessibilityState={{ checked: subtype === s }} onPress={() => setSubtype(s)}
             style={[styles.chip, subtype === s && styles.chipOn]} testID={`community-sub-${s}`}>
             <Text style={[styles.chipText, subtype === s && styles.chipTextOn]}>{t(`community.sub.${s}` as TranslationKey)}</Text>
           </Pressable>)}
         </View>
       </> : null}
       <Text style={styles.label}>{t('community.form.howSerious')}</Text>
-      <View style={styles.chips}>
-        {SEVERITIES.map(s => <Pressable key={s} accessibilityRole="radio" accessibilityState={{ checked: severity === s }} onPress={() => setSeverity(s)}
+      <View accessibilityRole="radiogroup" accessibilityLabel={t('community.form.howSerious')} style={styles.chips}>
+        {SEVERITIES.map(s => <Pressable key={s} accessibilityRole="radio" aria-checked={severity === s} accessibilityState={{ checked: severity === s }} onPress={() => setSeverity(s)}
           style={[styles.chip, severity === s && styles.chipOn]} testID={`community-sev-${s}`}>
           <Text style={[styles.chipText, severity === s && styles.chipTextOn]}>{t(`community.severity.${s}` as TranslationKey)}</Text>
         </Pressable>)}

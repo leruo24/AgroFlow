@@ -79,6 +79,14 @@ test("registering a farm asks for soil (Loam by default), a size preset and week
   await expect(wiz.locator('[data-act="zone-soil"]')).toHaveCount(3);
   await expect(wiz.locator('[data-act="zone-soil"].is-selected')).toHaveText(/Loam/);
   await expect(wiz).toContainText("Not sure? Pick Loam.");
+  // RET-07: custom soil cards behave like one named native radio group.
+  const soilGroup = wiz.getByRole('radiogroup', { name: 'Zone 1 soil' });
+  const loam = soilGroup.getByRole('radio', { name: /Loam/ });
+  await expect(loam).toHaveAttribute('aria-checked', 'true');
+  await loam.focus(); await page.keyboard.press('ArrowRight');
+  await expect(soilGroup.getByRole('radio', { name: /Clay/ })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowLeft');
+  await expect(loam).toHaveAttribute('aria-checked', 'true');
 
   await wiz.locator('[data-field="zone_name_0"]').fill("North Plot");
   await wiz.locator('[data-field="zone_crop_0"]').selectOption({ index: 1 });

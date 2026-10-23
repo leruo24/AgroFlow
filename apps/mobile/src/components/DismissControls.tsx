@@ -28,7 +28,7 @@ export function ViewSwitch({ value, onChange }: { value: DismissView; onChange: 
   return (
     <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel={t('dismiss.show')}>
       {options.map(([v, label]) => (
-        <Pressable key={v} accessibilityRole="radio" accessibilityState={{ selected: value === v, checked: value === v }}
+        <Pressable key={v} accessibilityRole="radio" aria-checked={value === v} accessibilityState={{ selected: value === v, checked: value === v }}
           onPress={() => onChange(v)} style={[styles.choice, { minHeight: Platform.OS === 'web' ? 44 : 36, minWidth: 0 }, value === v && styles.choiceSelected]}>
           <Text style={styles.choiceText}>{label}</Text>
         </Pressable>

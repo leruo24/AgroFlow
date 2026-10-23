@@ -88,8 +88,9 @@ export default function HistoryScreen() {
     <Pressable
       key={key}
       onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityRole="radio"
+      accessibilityState={{ selected, checked: selected }}
+      aria-checked={selected}
       accessibilityLabel={label}
       style={[styles.chip, selected && styles.chipSelected]}
     >
@@ -107,7 +108,7 @@ export default function HistoryScreen() {
         />
 
         {/* Section switch */}
-        <View style={styles.filterRow}>
+        <View style={styles.filterRow} accessibilityRole="radiogroup" accessibilityLabel={t('history.title')}>
           {chip('Watering', section === 'activity', () => setSection('activity'), 'sec-activity')}
           {chip('Alerts & advice', section === 'alerts', () => setSection('alerts'), 'sec-alerts')}
         </View>
@@ -160,7 +161,7 @@ export default function HistoryScreen() {
             {/* Filters */}
             <View style={styles.filterGroup}>
               <Text style={styles.filterLabel}>{t('history.zone')}</Text>
-              <View style={styles.filterRow}>
+              <View style={styles.filterRow} accessibilityRole="radiogroup" accessibilityLabel={t('history.zone')}>
                 {chip('All zones', zoneFilter === 'all', () => setZoneFilter('all'), 'z-all')}
                 {zones.map((z) =>
                   chip(z.name, zoneFilter === z.id, () => setZoneFilter(z.id), `z-${z.id}`)
@@ -170,7 +171,7 @@ export default function HistoryScreen() {
 
             <View style={styles.filterGroup}>
               <Text style={styles.filterLabel}>{t('history.type')}</Text>
-              <View style={styles.filterRow}>
+              <View style={styles.filterRow} accessibilityRole="radiogroup" accessibilityLabel={t('history.type')}>
                 {chip('All', typeFilter === 'all', () => setTypeFilter('all'), 't-all')}
                 {chip('Alerts', typeFilter === 'alert', () => setTypeFilter('alert'), 't-alert')}
                 {chip('Advice', typeFilter === 'advice', () => setTypeFilter('advice'), 't-advice')}
@@ -179,7 +180,7 @@ export default function HistoryScreen() {
 
             <View style={styles.filterGroup}>
               <Text style={styles.filterLabel}>{t('history.when')}</Text>
-              <View style={styles.filterRow}>
+              <View style={styles.filterRow} accessibilityRole="radiogroup" accessibilityLabel={t('history.when')}>
                 {chip('7 days', period === 7, () => setPeriod(7), 'p-7')}
                 {chip('30 days', period === 30, () => setPeriod(30), 'p-30')}
                 {chip('All', period === 'all', () => setPeriod('all'), 'p-all')}

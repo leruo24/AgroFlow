@@ -124,6 +124,7 @@ export function createLoginStyles(
       color:
         colors.primaryDark,
     },
+    enquiryTarget: { minHeight: 48, paddingVertical: 12, marginVertical: 12, justifyContent: 'center' },
 
     input: {
       height: 52,

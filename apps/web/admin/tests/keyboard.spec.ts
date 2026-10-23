@@ -64,8 +64,11 @@ test("register a farm with the keyboard only", async ({ page }) => {
   await page.keyboard.type("Bed 1");
   await tabTo(page, '[data-field="zone_crop_0"]');
   await page.keyboard.type("Maize");
-  await tabTo(page, '[data-act="zone-soil"][data-soil="clay"]');
-  await page.keyboard.press("Enter");
+  // RET-07: Tab enters the selected radio; arrows select within its group.
+  await tabTo(page, '[data-act="zone-soil"][data-soil="loam"]');
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('[data-act="zone-soil"][data-soil="clay"]')).toBeFocused();
+  await expect(page.locator('[data-act="zone-soil"][data-soil="clay"]')).toHaveAttribute('aria-checked', 'true');
   await tabTo(page, '[data-field="zone_area_preset_0"]');
   await page.keyboard.type("Small");
   await tabTo(page, "[data-wizard-next]");

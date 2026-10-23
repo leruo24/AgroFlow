@@ -1,0 +1,39 @@
+{
+  "results": [
+    {
+      "screen": "login",
+      "width": 390,
+      "theme": "dark",
+      "violations": [],
+      "callTargetHeight": 49
+    },
+    {
+      "screen": "soil-feel",
+      "width": 390,
+      "focus": "enter/trap/Escape/return passed"
+    },
+    {
+      "screen": "settings",
+      "width": 390,
+      "radioKeys": "ArrowRight/Left, checked state and group names passed"
+    },
+    {
+      "screen": "login",
+      "width": 1366,
+      "theme": "dark",
+      "violations": [],
+      "callTargetHeight": 49
+    },
+    {
+      "screen": "soil-feel",
+      "width": 1366,
+      "focus": "enter/trap/Escape/return passed"
+    },
+    {
+      "screen": "settings",
+      "width": 1366,
+      "radioKeys": "ArrowRight/Left, checked state and group names passed"
+    }
+  ],
+  "pageErrors": []
+}

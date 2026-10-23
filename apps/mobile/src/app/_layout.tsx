@@ -20,6 +20,7 @@ import {
 
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { WebRadioSemantics } from '@/components/WebRadioSemantics';
 import { loadLanguage } from '@/i18n';
 import { onReconnect } from '@/lib/connectivity';
 import { flushQueue } from '@/lib/offlineQueue';
@@ -271,6 +272,7 @@ onReconnect(() => { void flushQueue(); });
 export default function RootLayout() {/*wraps the application with ThemeProvider, AuthProvider, and AgroFlowProvider to provide theme, authentication, and farm state contexts throughout the app. It renders the RootNavigator component, which defines the main navigation structure of the app using Expo Router's Stack navigator.*/
   return (
     <ThemeProvider>
+      <WebRadioSemantics />
       {/* Auth provider: checks for a saved session */}
       <AuthProvider>
         {/* Farm data provider */}

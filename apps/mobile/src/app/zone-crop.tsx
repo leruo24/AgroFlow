@@ -71,12 +71,12 @@ export default function ZoneCropScreen() {
 
       <ScrollView contentContainerStyle={[{ padding: Space.lg, gap: Space.sm }, { paddingBottom: bottomPad }]}>
         <Text style={styles.label}>{t('cropScreen.crop')}</Text>
-        <View style={styles.choices} accessibilityRole="radiogroup">
+        <View accessibilityLabel={t('cropScreen.crop')} style={styles.choices} accessibilityRole="radiogroup">
           {ZONE_CROPS.map((c) => (
             <Pressable
               key={c.value}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: crop === c.value }}
+              accessibilityRole="radio" aria-checked={crop === c.value}
+              accessibilityState={{ checked: crop === c.value, selected: crop === c.value }}
               onPress={() => setCrop(c.value)}
               style={[styles.choice, crop === c.value && styles.choiceSelected]}
             >
