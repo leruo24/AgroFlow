@@ -306,7 +306,7 @@ ${panel(
       </label>
 
       <label class="f">
-        Nearest locality (filled in from the town you choose below)
+        Nearest village, town or landmark (optional when the farm is pinned)
         <input
           type="text"
           data-field="location"
@@ -339,6 +339,10 @@ ${panel(
     </div>
 
     ${locationPickerHtml({ name: "onboardingLocation" })}
+    <!-- B3-01: a location problem is said here, beside the map and coordinates, not only at the top. -->
+    <div id="onboardingLocationError" class="onboarding-error" style="display:none" aria-live="polite"></div>
+    <p class="field-note">A pin or typed coordinates are enough on their own: a rural farm does not need a recognised town.
+      The town search only suggests; what you pick or type is what is saved.</p>
 
     <div id="zonesContainer" class="zones-container"></div>
 

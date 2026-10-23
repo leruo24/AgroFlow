@@ -108,7 +108,7 @@ export default function ForgotPasswordScreen() {
               <View style={styles.brandMark} />
               <View>
                 <Text style={styles.brandName}>AgroFlow</Text>
-                <Text style={styles.brandSubtitle}>Smart Irrigation</Text>
+                <Text style={styles.brandSubtitle}>{t('signin.tagline')}</Text>
               </View>
             </View>
 
@@ -134,7 +134,7 @@ export default function ForgotPasswordScreen() {
                   <TextInput
                     value={email}
                     onChangeText={value => { setEmail(value); if (error) setError(''); }}
-                    placeholder="farmer@example.com"
+                    placeholder={t('login.emailExample')}
                     placeholderTextColor={colors.textMuted}
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -224,7 +224,7 @@ export default function ForgotPasswordScreen() {
               </View>
             ) : null}
 
-            <Text style={styles.footer}>AgroFlow Smart Irrigation System</Text>
+            <Text style={styles.footer}>{t('signin.footer')}</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

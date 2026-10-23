@@ -3,7 +3,7 @@
 // It helps a farmer decide whether to water tomorrow or wait for rain: the weather is the
 // evidence and the advice line under each day is the answer. Without a zone it shows only
 // the weather, which is what Home links to.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -47,17 +47,28 @@ export default function ForecastScreen() {
   const [data, setData] = useState<ForecastResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The last forecast that loaded for THIS zone or farm, and when (AF-17): shown under an
+  // error, labelled as old, instead of an empty screen. Cleared when the zone or farm changes.
+  const [lastGoodAt, setLastGoodAt] = useState<number | null>(null);
+  const inFlight = useRef(false);
+  const forKey = `${zoneId ?? ''}|${farm?.id ?? ''}`;
+  const keyRef = useRef(forKey);
 
   const load = useCallback(async () => {
+    // One request at a time: repeated taps on Try again do not stack up fetches.
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setLoading(true);
     try {
+      const fresh = await fetchForecast({
+        // Security: the farm is only sent when no zone is named. Otherwise the server takes the
+        // farm from the zone, so a farmer cannot pair their farm with someone else's zone.
+        ...(zoneId ? { zoneId } : farm?.id ? { farmId: farm.id } : {}),
+      });
+      setData(fresh);
+      setLastGoodAt(Date.now());
+      // The error and the "old" label go only after a success.
       setError(null);
-      setData(
-        await fetchForecast({
-          // Security: the farm is only sent when no zone is named. Otherwise the server takes the
-          // farm from the zone, so a farmer cannot pair their farm with someone else's zone.
-          ...(zoneId ? { zoneId } : farm?.id ? { farmId: farm.id } : {}),
-        })
-      );
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -65,13 +76,20 @@ export default function ForecastScreen() {
           : t('forecast.loadFailed')
       );
     } finally {
+      inFlight.current = false;
       setLoading(false);
     }
   }, [zoneId, farm?.id]);
 
   useEffect(() => {
+    // A different zone or farm never shows the previous one's forecast.
+    if (keyRef.current !== forKey) {
+      keyRef.current = forKey;
+      setData(null);
+      setLastGoodAt(null);
+    }
     void load();
-  }, [load]);
+  }, [load, forKey]);
 
   const renderIcon = (icon: ForecastDay['icon']) => {
     // Colour is never the only signal: the rain figure is written out beside every icon.
@@ -101,11 +119,23 @@ export default function ForecastScreen() {
           help="forecast"
         />
 
-        {loading ? (
+        {error ? (
+          <View style={{ gap: 8 }} testID="forecast-error">
+            <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>
+            <Pressable accessibilityRole="button" accessibilityState={{ disabled: loading, busy: loading }} disabled={loading}
+              onPress={() => { void load(); }} testID="forecast-retry"
+              style={{ alignSelf: 'flex-start', minHeight: 48, justifyContent: 'center' }}>
+              {loading ? <ActivityIndicator color={colors.primaryDark} />
+                : <Text style={[styles.emptyTitle, { color: colors.primaryDark }]}>{t('common.retry')}</Text>}
+            </Pressable>
+            {data && lastGoodAt ? <Text style={styles.emptyBody} testID="forecast-stale">
+              {t('forecast.showingOld', { time: new Date(lastGoodAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) })}
+            </Text> : null}
+          </View>
+        ) : null}
+        {loading && !data ? (
           <ActivityIndicator color={colors.primaryDark} />
-        ) : error ? (
-          <Text style={styles.error}>{error}</Text>
-        ) : !data || data.days.length === 0 ? (
+        ) : error && !data ? null : !data || data.days.length === 0 ? (
           // Says whether there is nothing to show or something is broken; an empty screen looks broken.
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>

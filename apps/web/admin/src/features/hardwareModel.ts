@@ -667,7 +667,7 @@ export function buildHardwareModel(THREE: ThreeModule): HardwareModel {
 
   // Door-style lid: the group origin is the real left-side hinge axis.
   const lid = new THREE.Group();
-  lid.position.set(-2.84, 0, 0.86);
+  lid.position.set(-2.86, 0, 0.73);
   root.add(lid);
   const lidPanel = new THREE.Mesh(roundedPanelGeometry(THREE, 5.72, 4.25, 0.28, 0.36), shellEdge);
   lidPanel.position.set(2.84, 0, 0.14);

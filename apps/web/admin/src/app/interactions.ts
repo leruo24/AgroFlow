@@ -1,6 +1,7 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
 
 import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms, findAttentionGroup } from "@/data/api";
+import { openCaseDrawer, handleCaseAction } from "@/app/caseView";
 import { toast, toastWithUndo } from "@/lib/toast";
 import { setView as setDismissView } from "@/lib/dismiss";
 import { openDrawer, closeDrawer, beginPanelIntent, currentPanelIntent } from "@/lib/drawer";
@@ -11,6 +12,10 @@ import {
   getFarmers,
   inviteFarmer,
   onboardFarmer,
+  linkEnquiryToFarmer,
+  getOnboardingOperation,
+  OnboardingError,
+  type OnboardingOperation,
   issueLinkCodeForFarmer,
   regenerateTelegramCode,
   registerFarm,
@@ -63,9 +68,10 @@ import { refreshHealthPanel } from "@/app/health";
 import {
   getFilter, setFilter, resetFilter, resolvePreset, applyFilters, rangeLabel,
 } from "@/lib/filters";
-import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
+import { esc, fmtInt, fmtPct, fmtDate, fmtLitres, fmtDateTimeSast, fmtArea, hectaresText, roughSizeText } from "@/lib/format";
+import { phoneProblem } from "@/lib/phone";
 import { ZONE_CROPS } from "@/data/referenceData";
-import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest } from "@/types/models";
+import type { DateRangePreset, Farm, FilterState, Handling, ServiceRequest, User } from "@/types/models";
 import { zoneRow, readZoneSetup, zoneSetupProblem, syncZoneChoices, recommendHtml, SOILS, AREA_PRESETS } from "@/pages/onboarding";
 import { locationPickerHtml, mountLocationPicker } from "@/lib/map";
 import { changedSettings, mountCommunityMap } from "@/pages/droughtCommunity";
@@ -75,7 +81,7 @@ import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
 import { initBell } from "@/app/bell";
 import { isStaffRole } from "@/lib/staff";
-import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, markEnquiryOnboarded, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace, setFarmDroughtMode, resolveStaffNotice, hideCommunityReport, saveDroughtCommunitySettings } from "@/services/agroFlowApi";
+import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace, setFarmDroughtMode, resolveStaffNotice, hideCommunityReport, saveDroughtCommunitySettings } from "@/services/agroFlowApi";
 
 
 /* Pickers */
@@ -598,7 +604,11 @@ async function openFarmDetail(id: number): Promise<void> {
   const todayByZone = new Map((today?.zones ?? []).map((z) => [z.zoneId, z]));
   const levelLabel = { high: "High", medium: "Medium", low: "Low" } as const;
 
-  const farmUsers = users.filter((u) => u.farm === f.name);
+  // The farm's own member list from the API (AF-23), so the drawer and the directory agree;
+  // matching by farm name is only the fallback for an older API.
+  const farmUsers = f.memberIds && f.memberIds.length
+    ? users.filter((u) => f.memberIds!.includes(u.id))
+    : users.filter((u) => u.farm === f.name);
   const farmHw = hardware.filter((h) => h.farm === f.name);
   const farmAlerts = alerts.filter((a) => a.farm === f.name);
   const farmJobs = maintenance.filter((m) => m.farm === f.name);
@@ -626,15 +636,19 @@ async function openFarmDetail(id: number): Promise<void> {
         <div class="detail-list">
           <div class="detail-row"><span>Health status</span><b>${esc(f.health)}</b></div>
           <div class="detail-row"><span>Account status</span><b>${esc(f.status)}</b></div>
-          <div class="detail-row"><span>Size</span><b>${fmtInt(f.hectares)} ha</b></div>
+          <div class="detail-row"><span>Size</span><b>${esc(fmtArea(f.hectares))}</b></div>
           <div class="detail-row"><span>Nearest locality</span><b>${esc(f.location || "Not set")}</b></div>
           <div class="detail-row"><span>Farm location</span><b>${preciseLocation}</b></div>
           <div class="detail-row"><span>Registered</span><b>${esc(fmtDate(f.registered))}</b></div>
           <div class="detail-row"><span>Last activity</span><b>${esc(f.lastActivity)}</b></div>
-          <div class="detail-row"><span>Device connectivity</span><b>${fmtPct(f.healthFactors.deviceConnectivity)}</b></div>
-          <div class="detail-row"><span>Gateway</span><b>${f.healthFactors.gatewayOnline ? "Online" : "Offline"}</b></div>
-          <div class="detail-row"><span>Sensor availability</span><b>${fmtPct(f.healthFactors.sensorsAvailable)}</b></div>
+          ${f.devices === 0
+            // AF-09: a farm with no kit yet is waiting for installation, not offline.
+            ? `<div class="detail-row"><span>Kit</span><b>Not installed yet</b></div>`
+            : `<div class="detail-row"><span>Device connectivity</span><b>${fmtPct(f.healthFactors.deviceConnectivity)}</b></div>
+               <div class="detail-row"><span>Gateway</span><b>${f.healthFactors.gatewayOnline ? "Online" : "Offline"}</b></div>
+               <div class="detail-row"><span>Sensor availability</span><b>${fmtPct(f.healthFactors.sensorsAvailable)}</b></div>`}
         </div>
+        <button class="btn sm" data-act="open-case" data-id="${f.id}">Open installation case</button>
         <button class="btn ghost sm" data-act="edit-farm-location" data-id="${f.id}">View / adjust on map</button>`),
       section("Tank and pH", tankPh ? `
         <div class="detail-list">
@@ -899,6 +913,13 @@ async function handleAction(el: HTMLElement): Promise<void> {
   const act = el.dataset["act"];
   const idAttr = el.dataset["id"] ?? "";
   const numId = Number(idAttr);
+
+  // The installation case (Part B): its own module.
+  if (act === "open-case") {
+    const staff = await api.getUsers().catch(() => []);
+    return void openCaseDrawer(numId, staff.filter((u) => isStaffRole(u.role)).map((u) => ({ id: u.id, name: u.name })));
+  }
+  if (act?.startsWith("case-")) return void handleCaseAction(act, el);
 
   switch (act) {
     /* Filters */
@@ -1467,66 +1488,74 @@ async function handleAction(el: HTMLElement): Promise<void> {
   const err = validateOnboardingStep2(v, zoneCount);
 
   if (err) {
-    return void showOnboardingError(err);
+    return void showOnboardingError(err, err === OUTSIDE_SA || err.startsWith("Choose the farm") ? "location" : null);
   }
 
   clearOnboardingError();
 
- const zones = Array.from({ length: zoneCount }, (_, i) => readZoneSetup(v, i));
+  const zones = Array.from({ length: zoneCount }, (_, i) => readZoneSetup(v, i));
+  const lat = v["latitude"] ? Number(v["latitude"]) : NaN;
+  const lng = v["longitude"] ? Number(v["longitude"]) : NaN;
+  const pinned = insideSouthAfrica(lat, lng);
+  // One request id per attempt (AF-01): a Retry sends the same one, so the server continues the
+  // same farm and farmer instead of creating a second.
+  onboardingRequestId ??= newRequestId();
+
+  const submit = document.querySelector<HTMLButtonElement>('[data-act="onboarding-submit"]');
+  if (submit?.dataset["busy"] === "1") return;
+  if (submit) { submit.dataset["busy"] = "1"; submit.disabled = true; submit.textContent = "Saving…"; }
 
   try {
     const result = await onboardFarmer({
+      requestId: onboardingRequestId,
+      enquiryId: onboardingFromEnquiry?.id ?? null,
       farmer: {
         fullName: v["fullName"] ?? "",
         email: v["email"] ?? "",
         phone: v["phone"] ?? "",
-        
       },
 
       farm: {
         farmName: v["farmName"] ?? "",
         location: v["location"] ?? "",
         sizeHectares: Number(v["farmSize"]) || 0,
+        // The pin and the province/town go with the first request and are saved with the farm in
+        // one transaction: a rural pin no longer depends on the town search (AF-01).
+        latitude: pinned ? lat : null,
+        longitude: pinned ? lng : null,
+        province: (v["province"] ?? "").trim() || null,
+        town: (v["town"] ?? "").trim() || null,
         zones,
       },
     });
 
-    const lat = v["latitude"] ? Number(v["latitude"]) : NaN;
-    const lng = v["longitude"] ? Number(v["longitude"]) : NaN;
-    if (result.farmId && insideSouthAfrica(lat, lng)) await saveFarmPlace(result.farmId, v, lat, lng);
-
-    toast(
-      "Farmer onboarded successfully.",
-      "success",
-    );
+    toast(result.temporaryPassword ? "Farmer onboarded successfully." : result.message, "success");
 
     /* Do not navigate away: the temporary password exists nowhere else (the server never
      * stored it), so leaving now loses it and the only fix is a reset. The handover step is
      * where the installer finishes. */
     handoverProfileId = result.profileId;
-
-    // Onboarding started from an enquiry completes it and links the new farmer. If this fails
-    // the enquiry stays open and we say so.
-    if (onboardingFromEnquiry) {
-      const enquiryId = onboardingFromEnquiry.id;
-      onboardingFromEnquiry = null;
-      await markEnquiryOnboarded(enquiryId, result.profileId)
-        .then((r) => toast(r.message, "success"))
-        .catch((e: unknown) => toast(e instanceof Error ? `The enquiry is still open: ${e.message}` : "The enquiry is still open.", "warn"));
-    }
+    // The server linked the enquiry with the account (AF-24); its warning says if it could not.
+    onboardingFromEnquiry = null;
+    onboardingRequestId = null;
+    lastOperation = null;
 
     await renderHandover(result);
 
     return void goToOnboardingStep(3);
-    } catch (e) {
-    showErrorModal(
-      e instanceof Error
-        ? e.message
-        : "Something went wrong.",
-      "Unable to onboard farmer",
-    );
-
+  } catch (e) {
+    if (e instanceof OnboardingError) {
+      // Kept on the form with every entry, the message beside the part to fix, and what was
+      // saved. Once anything is saved the button only ever retries the same attempt.
+      showOnboardingError(e.message, e.field === "location" ? "location" : null, e.operation);
+      return;
+    }
+    // No answer at all: ask the server what this attempt saved before offering anything.
+    const op = onboardingRequestId ? await getOnboardingOperation(onboardingRequestId).catch(() => null) : null;
+    showOnboardingError(e instanceof Error ? e.message : "Something went wrong.", null, op);
     return;
+  } finally {
+    if (submit) { submit.dataset["busy"] = ""; submit.disabled = false; submit.textContent = submitLabel(); }
   }
 }
     case "handover-regenerate": {
@@ -1572,6 +1601,8 @@ async function handleAction(el: HTMLElement): Promise<void> {
     }
     case "handover-done":
       handoverProfileId = null;
+      onboardingRequestId = null;
+      lastOperation = null;
       return void navigate("farms");
     /* Hardware */
     case "view-device": {
@@ -2194,7 +2225,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
               ["Request", request.requestType === "new_farm" ? "New farm" : "New zone"],
               ["Farm", esc(request.farmName ?? "Not set up yet")],
               ["Crop", esc(formatCrop(request.cropType))],
-              ["Rough size", request.roughSize !== null ? `${request.roughSize} ha` : "Not stated"],
+              ["Rough size", roughSizeText(request.roughSize, request.roughSizeUnit)],
               ["Location", esc(request.location ?? "Not stated")],
               ["Contact", esc(request.farmerEmail || "Not on file")],
               ["Notes", esc(request.notes ?? "None")],
@@ -2415,6 +2446,41 @@ async function handleAction(el: HTMLElement): Promise<void> {
       return void navigate("onboarding");
     }
 
+    // AF-24: an enquiry whose farmer was onboarded another way is linked, not duplicated. Possible
+    // matches (same phone or email) are listed first, but staff choose: nothing links by itself,
+    // and no call is logged.
+    case "enquiry-link": {
+      const enquiry = (await getEnquiries()).find((e) => String(e.id) === idAttr);
+      if (!enquiry) return void toast("That enquiry could not be found.", "warn");
+      const farmers = await api.getFarmerAccounts().catch(() => [] as User[]);
+      const digits = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "").slice(-9);
+      const match = (u: User) => (enquiry.phone && digits(u.phone) && digits(u.phone) === digits(enquiry.phone))
+        || (enquiry.email && u.email && u.email.toLowerCase() === enquiry.email.toLowerCase());
+      const ordered = [...farmers.filter(match), ...farmers.filter((u) => !match(u))];
+      return void openDrawer({
+        title: `Link enquiry #${enquiry.id} to a farmer`,
+        subtitle: "For a farmer who already has an account. The enquiry is completed; no call is logged.",
+        bodyHtml: `
+          <label class="f">Farmer
+            <select data-field="linkFarmer">
+              <option value="">Choose the farmer…</option>
+              ${ordered.map((u) => `<option value="${esc(u.id)}">${match(u) ? "Possible match: " : ""}${esc(u.name)} · ${esc(u.farm)} · ${esc(u.phone || u.email)}</option>`).join("")}
+            </select>
+          </label>
+          <p class="muted">Enquiry: ${esc(enquiry.fullName ?? "")} · ${esc(enquiry.phone ?? "")} · ${esc(enquiry.town ?? "")}, ${esc(enquiry.province)}.
+            A possible match only means the phone or email is the same; check it is the same person.</p>`,
+        confirmLabel: "Link and complete the enquiry",
+        onConfirm: (values) => {
+          const farmer = values["linkFarmer"];
+          if (!farmer) { toast("Choose the farmer first.", "warn"); return false; }
+          void linkEnquiryToFarmer(enquiry.id, farmer)
+            .then(async (r) => { toast(r.message, "success"); await refresh(); })
+            .catch((e: unknown) => showErrorModal("Could not link the enquiry", plainError(e, "Nothing was changed.")));
+          return true;
+        },
+      });
+    }
+
     case "view-enquiry": {
       const intent = currentPanelIntent();
       const [enquiries, calls] = await Promise.all([getEnquiries(), getEnquiryCalls(Number(idAttr)).catch(() => [])]);
@@ -2432,7 +2498,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
               ["Phone", e.phone ? `<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>` : "Deleted"],
               ["Email", esc(e.email ?? (e.anonymisedAt ? "Deleted" : "Not given"))],
               ["Crops", esc(cropsText(e))],
-              ["Farm size", e.farmSizeHa != null ? `${e.farmSizeHa} ha` : "Not given"],
+              ["Farm size", e.farmSizeHa != null ? fmtArea(e.farmSizeHa) : "Not given"],
               ["Best time to call", esc(e.bestTime)],
               ["Notes", esc(e.notes ?? "None")],
               ["Received", esc(fmtDateTimeSast(e.createdAt))],
@@ -3056,7 +3122,7 @@ let handoverProfileId: string | null = null;
 
 async function renderHandover(result: {
   email: string;
-  temporaryPassword: string;
+  temporaryPassword: string | null;
   telegramDeepLink: string | null;
   telegramCodeExpiresAt: string | null;
   warning: string | null;
@@ -3065,7 +3131,8 @@ async function renderHandover(result: {
   if (email) email.textContent = result.email;
 
   const password = document.getElementById("handoverPassword");
-  if (password) password.textContent = result.temporaryPassword;
+  // Null: this request had already finished; the password was shown then (use Reset password).
+  if (password) password.textContent = result.temporaryPassword ?? "Already shown: use Reset password for a new one";
 
   await renderQr(result.telegramDeepLink, result.telegramCodeExpiresAt);
 
@@ -3131,18 +3198,42 @@ function clearHandoverNotice(): void {
   box.textContent = "";
 }
 
-function showOnboardingError(message: string): void {
-  const box = document.getElementById("onboardingError");
+/* B3-01: the message goes beside the part to fix (the location section for a location problem),
+ * the entries stay, and when the server saved something it says what, and the button becomes
+ * "Retry (continues the same farm)". Never an unconditional "Create again". */
+let lastOperation: OnboardingOperation | null = null;
+
+function showOnboardingError(message: string, near: "location" | null = null, operation: OnboardingOperation | null = null): void {
+  const box = document.getElementById(near === "location" ? "onboardingLocationError" : "onboardingError")
+    ?? document.getElementById("onboardingError");
   if (!box) return;
-  box.textContent = plainError(message);
+  const saved = operation && operation.offer !== "new_form" ? ` ${operation.message}` : "";
+  box.textContent = plainError(message) + saved;
   box.style.display = "block";
+  box.setAttribute("role", "alert");
+  lastOperation = operation;
+  const submit = document.querySelector<HTMLButtonElement>('[data-act="onboarding-submit"]');
+  if (submit) submit.textContent = submitLabel();
+  if (near === "location") document.querySelector<HTMLElement>('[data-map-pick="onboardingLocation"]')?.scrollIntoView({ block: "center" });
 }
 
 function clearOnboardingError(): void {
-  const box = document.getElementById("onboardingError");
-  if (!box) return;
-  box.style.display = "none";
-  box.textContent = "";
+  for (const id of ["onboardingError", "onboardingLocationError"]) {
+    const box = document.getElementById(id);
+    if (!box) continue;
+    box.style.display = "none";
+    box.textContent = "";
+  }
+}
+
+function submitLabel(): string {
+  return lastOperation?.offer === "retry" ? "Retry (continues the same farm)" : "Onboard farmer";
+}
+
+function newRequestId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 function goToOnboardingStep(step: 1 | 2 | 3): void {
@@ -3172,6 +3263,9 @@ function validateOnboardingStep1(v: Record<string, string>): string | null {
   }
 
   if (!v["phone"]?.trim()) return "Phone number is required.";
+  // The same rule as the server and the public form (AF-20).
+  const phone = phoneProblem(v["phone"]);
+  if (phone) return phone;
 
   return null;
 }
@@ -3180,8 +3274,9 @@ function validateOnboardingStep2(v: Record<string, string>, zoneCount: number): 
   if (!v["farmName"]?.trim()) return "Farm name is required.";
   const lat = v["latitude"] ? Number(v["latitude"]) : null;
   const lng = v["longitude"] ? Number(v["longitude"]) : null;
-  if (!v["location"]?.trim()) return "Choose the farm's province and town, or type its nearest locality.";
   if ((lat !== null || lng !== null) && !(lat !== null && lng !== null && insideSouthAfrica(lat, lng))) return OUTSIDE_SA;
+  // Valid coordinates are enough on their own: a rural farm does not need a recognised town (AF-01).
+  if (!v["location"]?.trim() && !(lat !== null && lng !== null)) return "Choose the farm's province and town, pin it on the map, or enter its coordinates.";
   if (!v["farmSize"] || Number(v["farmSize"]) <= 0) return "Enter a valid farm size.";
   if (zoneCount === 0) return "Add at least one zone.";
 
@@ -3370,7 +3465,7 @@ function wireKitWizard(farms: Farm[]): void {
         options: theirs.map((f) => ({
           value: String(f.id),
           label: f.name,
-          secondary: `${f.region || f.province || "Location not set"} · ${f.hectares} ha`,
+          secondary: `${f.region || f.province || "Location not set"} · ${fmtArea(f.hectares)}`,
         })),
       });
 
@@ -3676,7 +3771,7 @@ function validateRegisterFarmZones(
   const total = zones.reduce((sum, z) => sum + z.sizeHectares, 0);
 
   if (farmSize > 0 && total > farmSize) {
-    return `The zones add up to ${total.toFixed(1)} ha, which is more than the farm's ${farmSize.toFixed(1)} ha.`;
+    return `The zones add up to ${hectaresText(total)}, which is more than the farm's ${hectaresText(farmSize)}.`;
   }
 
   const names = zones.map((z) => z.name.trim().toLowerCase());
@@ -3731,7 +3826,7 @@ function wireRegisterFarmReview(): void {
         ["Farmer", esc(ownerName ?? "Not chosen")],
         ["Farm name", esc(v["farmName"] ?? "")],
         ["Nearest locality", esc(v["location"] || "Coordinates supplied")],
-        ["Size", v["farmSize"] ? `${esc(v["farmSize"])} ha` : ""],
+        ["Size", v["farmSize"] ? esc(fmtArea(Number(v["farmSize"]))) : ""],
         ["Coordinates", esc(coords)],
         ["Zones", String(zones.length)],
       ])}
@@ -4006,6 +4101,9 @@ function bindDelegatedClicks(): void {
 
 /* Onboarding launched from an enquiry starts filled in from it. */
 let onboardingFromEnquiry: Enquiry | null = null;
+/* The current onboarding attempt (AF-01): made at the first submit, kept for every retry, and
+ * cleared when it completes or a new farmer is started. */
+let onboardingRequestId: string | null = null;
 let onboardingPrefilled = false;
 
 function prefillOnboardingFromEnquiry(): void {

@@ -4,6 +4,7 @@ import { RotateCcw } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { createZoneInsightsStyles } from '@/styles/zoneInsightsStyles';
 import { resetZoneToRecommended } from '@/services/agroFlowApi';
+import { useI18n } from '@/i18n';
 
 type Props = {
   zoneId: number;
@@ -14,6 +15,7 @@ type Props = {
 // When something is missing the backend replies with a plain sentence saying what to add
 // ("Do the wet and dry soil setup first"), and we show it as is instead of working it out here.
 export function ResetRecommendedButton({ zoneId, onReset }: Props) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneInsightsStyles(colors), [colors]);
 
@@ -45,7 +47,7 @@ export function ResetRecommendedButton({ zoneId, onReset }: Props) {
     <View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Reset watering levels to recommended"
+        accessibilityLabel={t('recommended.resetA11y')}
         accessibilityState={{ busy, disabled: busy }}
         disabled={busy}
         onPress={reset}
@@ -56,7 +58,7 @@ export function ResetRecommendedButton({ zoneId, onReset }: Props) {
         ) : (
           <RotateCcw size={18} color={colors.primaryDark} strokeWidth={1.7} />
         )}
-        <Text style={styles.resetButtonText}>Reset to recommended</Text>
+        <Text style={styles.resetButtonText}>{t('recommended.reset')}</Text>
       </Pressable>
 
       {message ? (

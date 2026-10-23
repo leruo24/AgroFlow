@@ -39,6 +39,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The draft terms and privacy notice the app shows at activation (Part B). -->
+    <EmbeddedResource Include="Legal\*.md" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- The report builders in Reports/ are internal: they are an
          implementation detail of three endpoints, not API surface. The test
          project still has to exercise them, because a malformed chart does

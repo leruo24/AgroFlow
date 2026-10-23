@@ -78,7 +78,7 @@ export function createSettingsStyles(colors: AppColors) {
       width: 10,
       height: 10,
       borderRadius: Radius.full,
-      backgroundColor: colors.primary,
+      backgroundColor: colors.action,
     },
     notificationRow: {
       minHeight: 70,

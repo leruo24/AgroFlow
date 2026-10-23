@@ -4,7 +4,8 @@
 --
 --   auth.users      the table Supabase Auth owns (profile.id references it; 0008's trigger
 --                   copies new users into profile)
---   auth.uid()      the signed-in user's id inside RLS policies; null here (no client logins)
+--   auth.uid()      the signed-in user's id inside RLS policies, read from the request's JWT
+--                   claims the way Supabase does (null when there are none, as for the API)
 --   anon, authenticated, service_role   the roles the policies and grants name
 --   cron.schedule() pg_cron's scheduler, which the local Postgres does not have; a no-op
 
@@ -19,7 +20,10 @@ create table if not exists auth.users (
 );
 
 create or replace function auth.uid() returns uuid
-language sql stable as $$ select null::uuid $$;
+language sql stable as $$
+    select nullif(coalesce(current_setting('request.jwt.claim.sub', true),
+                           (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')), '')::uuid
+$$;
 
 do $$
 begin

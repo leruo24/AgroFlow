@@ -75,7 +75,7 @@ export function createProfileStyles(
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
-        colors.primaryDark,
+        colors.action,
       borderRadius: Radius.sm,
     },
 
@@ -126,7 +126,7 @@ export function createProfileStyles(
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
-        colors.primary,
+        colors.action,
       borderRadius: Radius.full,
     },
 
@@ -262,7 +262,7 @@ export function createProfileStyles(
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
-        colors.primaryDark,
+        colors.action,
       borderRadius: Radius.sm,
     },
 

@@ -41,6 +41,8 @@ jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { name: 'Tha
 jest.mock('@/services/insightsService', () => ({ fetchAlertExplanations: jest.fn(() => Promise.resolve({})), todayInSast: () => '2026-10-20' }));
 jest.mock('@/components/AppAlert', () => ({ AppAlert: { alert: jest.fn() } }));
 jest.mock('@/services/agroFlowApi', () => ({
+  fetchServiceSupport: jest.fn(() => new Promise(() => undefined)),
+  fetchJourney: jest.fn(() => new Promise(() => undefined)),
   // The zone screen's Sensor Readings card asks for the farm's tank.
   fetchTankStatus: jest.fn(() => Promise.resolve({ farmId: 1, capacityLitres: null, estimatedRemainingLitres: null, isLow: false })),
   fetchZoneHardware: jest.fn(() => Promise.resolve({ hardwareId: null, deviceId: null, online: false })),

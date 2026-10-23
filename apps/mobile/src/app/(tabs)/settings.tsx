@@ -21,6 +21,12 @@ import { disconnectTelegram, fetchTelegramLinkStatus } from '@/services/agroFlow
 import { AppAlert as Alert } from '@/components/AppAlert';
 import { LANGUAGES, useI18n, type TranslationKey } from '@/i18n';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { ServiceSupportCard } from '@/components/ServiceSupportCard';
+import { SimpleViewControl } from '@/components/visual/AppearanceControls';
+import { FieldGuide } from '@/components/visual/FieldGuide';
+import { LegalNotice } from '@/components/visual/LegalNotice';
+import { useJourney } from '@/hooks/useJourney';
+import { DayNightMotif } from '@/components/visual/DayNightMotif';
 
 const NOTIFICATION_PREFERENCES_KEY =
   'agroflow_notification_preferences';
@@ -55,6 +61,8 @@ const notificationOptions: {
 export default function SettingsScreen() {
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(true);
+  // Terms & privacy shows the documents and the recorded acceptance from the farm's journey.
+  const journey = useJourney();
   const {
     themePreference,
     resolvedTheme,
@@ -250,6 +258,8 @@ export default function SettingsScreen() {
           <Text style={styles.note}>{t('settings.languageNote')}</Text>
 
           <Text style={styles.sectionTitle}>{t('settings.appearance')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}><DayNightMotif /><Text style={[styles.note, { flex: 1 }]}>{t('visual.dayNight')}</Text></View>
+          <SimpleViewControl />
 
           <View style={styles.sectionCard}>
             {appearanceOptions.map((option) => {
@@ -293,6 +303,11 @@ export default function SettingsScreen() {
             {t('settings.currentTheme', { mode: resolvedTheme === 'dark' ? t('settings.themeDark') : t('settings.themeLight') })}
           </Text>
 
+          {/* Help and documents: the field guide, and Terms & privacy with the real versions and
+              the farmer's recorded acceptance. Service & support is its own card below. */}
+          <Text style={styles.sectionTitle}>{t('settings.helpDocs')}</Text>
+          <FieldGuide />
+          <LegalNotice journey={journey} />
           <Text style={styles.sectionTitle}>{t('settings.notifications')}</Text>
 
           <View style={styles.sectionCard}>
@@ -470,7 +485,7 @@ export default function SettingsScreen() {
           {/* Which alerts also come to Telegram, and quiet hours: the wizard's alerts step. */}
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => router.push('/setup?step=alerts' as never)}
+            onPress={() => router.push('/setup?task=preferences&screen=alerts&from=settings' as never)}
             activeOpacity={0.75}
             accessibilityRole="button"
             testID="alert-choices"
@@ -482,7 +497,7 @@ export default function SettingsScreen() {
           {/* Community alerts on or off (the wizard's step), and the reports themselves. */}
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => router.push('/setup?step=community' as never)}
+            onPress={() => router.push('/setup?task=preferences&screen=community&from=settings' as never)}
             activeOpacity={0.75}
             accessibilityRole="button"
             testID="community-choice"
@@ -491,10 +506,10 @@ export default function SettingsScreen() {
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
 
-          {/* Every step of the setup wizard again, from the start (app/setup.tsx). */}
+          {/* The four tasks of Your details (app/setup.tsx), to look at or change. */}
           <TouchableOpacity
             style={styles.profileButton}
-            onPress={() => router.push('/setup?redo=1' as never)}
+            onPress={() => router.push('/setup' as never)}
             activeOpacity={0.75}
             accessibilityRole="button"
             testID="redo-setup"
@@ -502,6 +517,9 @@ export default function SettingsScreen() {
             <Text style={styles.profileText}>{t('settings.redoSetup')}</Text>
             <Text style={styles.arrow}>›</Text>
           </TouchableOpacity>
+
+          {/* Service & support: status, who pays, the plan, how to get help (Part B). */}
+          <ServiceSupportCard />
 
           <TouchableOpacity
             style={styles.profileButton}

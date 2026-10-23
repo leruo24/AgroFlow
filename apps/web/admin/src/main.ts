@@ -4,6 +4,8 @@
  * so a state that is not current is not in the DOM at all (nothing is just hidden). */
 
 import "@/styles/main.css";
+import "@/styles/visual.css";
+import { wireAppearance } from "@/ui/appearance";
 import { SHELL_HTML } from "@/app/shell";
 import { initNav, bootRouter, setAfterRender } from "@/app/router";
 import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/interactions";
@@ -11,6 +13,7 @@ import { initAuth, onAuthChange, isAdminAuthenticated, signOut, RESET_QUERY } fr
 import { LOGIN_HTML, wireLogin, resetPasswordHtml, wireResetPassword } from "@/pages/login";
 import { toast } from "@/lib/toast";
 import { WELCOME_HTML, wireWelcome } from "@/pages/welcome";
+import { mountPublicNavigation } from "@/pages/publicNavigation";
 import { startHealthPolling, stopHealthPolling } from "@/app/health";
 
 declare global {
@@ -142,6 +145,7 @@ function render(state: ViewState): void {
   // (bootRouter's hashchange, initHeader's outside-click) stay, so they guard against double
   // binding themselves (see app/router.ts and app/interactions.ts).
   root.innerHTML = SHELL_HTML;
+  wireAppearance(root);
   document.getElementById("sidebarToggle")?.addEventListener("click", () => {
     document.getElementById("sidebar")?.classList.toggle("open");
   });
@@ -175,7 +179,14 @@ async function boot(): Promise<void> {
     window.location.replace(staffUrl());
     return;
   }
-  render("loading"); // explicit, even though index.html's static #root content already shows this - every state this app can be in goes through render(), no exceptions
+  if (!inStaffArea() && !resetRequested()) {
+    render("welcome");
+    mountPublicNavigation(getRoot());
+    performance.mark('agroflow-public-ready');
+    window.__agroflowAppReady?.();
+    return;
+  }
+  render("loading"); // Staff/recovery still wait for the existing authentication check.
   await initAuth();
   render(currentState());
 

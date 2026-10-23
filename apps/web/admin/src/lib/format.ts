@@ -101,6 +101,8 @@ export function badgeTone(text: string): BadgeTone {
 /** Farm health gets its own explicit mapping (traffic-light semantics). */
 export function healthTone(health: string): BadgeTone {
   if (health === "Healthy") return "good";
+  // AF-09: waiting for a first installation is normal, not a fault.
+  if (health === "Awaiting installation") return "info";
   if (health === "Attention Required") return "warn";
   return "bad";
 }
@@ -108,6 +110,41 @@ export function healthTone(health: string): BadgeTone {
 // Uses the dot-r/dot-good/dot-bad style from the system-health panel (dashboard.ts)
 // instead of an emoji or a new icon.
 export const healthDot = (health: string): string => {
-  const tone = health === "Healthy" ? "good" : health === "Attention Required" ? "warn" : "bad";
+  const tone = health === "Healthy" ? "good" : health === "Attention Required" ? "warn" : health === "Awaiting installation" ? "info" : "bad";
   return `<span class="dot-r dot-${tone}"></span>`;
 };
+
+/* One way to write an area (AF-07), the same as the API's AreaFormat and the app's formatArea:
+ * hectares to the precision the value needs, never "0 ha" for a real small farm, and square
+ * metres beside it under a hectare: "0.02 ha (200 m²)". Cases: docs/audit/fixtures/area-cases.json.
+ * No area at all shows "Not set", never "0 ha". */
+export function hectaresText(ha: number): string {
+  if (!Number.isFinite(ha) || ha <= 0) return "0 ha";
+  const decimals = ha >= 0.01 ? 2 : ha >= 0.001 ? 3 : 4;
+  const factor = 10 ** decimals;
+  let rounded = Math.round(ha * factor + Number.EPSILON) / factor;
+  if (rounded <= 0) rounded = 1 / factor;
+  return `${Number(rounded.toFixed(decimals))} ha`;
+}
+
+function squareMetresText(m2: number): string {
+  const rounded = m2 < 10 ? Math.round(m2 * 10) / 10 : Math.round(m2);
+  const [whole, fraction] = String(rounded).split(".");
+  return `${whole!.replace(/\B(?=(\d{3})+(?!\d))/g, " ")}${fraction ? `.${fraction}` : ""} m²`;
+}
+
+export function formatArea(hectares: number | null | undefined): string | null {
+  if (hectares == null || !Number.isFinite(Number(hectares)) || Number(hectares) <= 0) return null;
+  const ha = Number(hectares);
+  return ha < 1 ? `${hectaresText(ha)} (${squareMetresText(ha * 10_000)})` : hectaresText(ha);
+}
+
+export const fmtArea = (hectares: number | null | undefined): string => formatArea(hectares) ?? "Not set";
+
+/* A request's rough size with its qualification (AF-19): never a bare number. */
+export function roughSizeText(hectares: number | null, unit: string | null | undefined): string {
+  if (unit === "unknown") return "Not known: help the farmer measure at the visit";
+  if (hectares == null) return "Not stated";
+  const area = formatArea(hectares) ?? "Not stated";
+  return unit === "unstated" ? `${area} (the farmer gave no unit; confirm at the visit)` : area;
+}

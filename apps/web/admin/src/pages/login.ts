@@ -8,6 +8,7 @@ import {
 } from "@/app/auth";
 import { appLinksHtml } from "@/lib/downloads";
 import { plainError } from "@/lib/plainError";
+import { brandHtml } from "@/ui/brand";
 
 const BRAND = `
       <div class="auth-brand">
@@ -15,7 +16,7 @@ const BRAND = `
              console looks like part of the same product rather than a
              separate tool that happens to share a name. Relative path: the
              site is served from a sub-path on GitHub Pages. -->
-        <img class="auth-logo" src="brand/agroflow-icon-192.png" alt="" width="68" height="68" />
+        ${brandHtml("visual-brand", "")}
         <h1>AgroFlow</h1>
         <p class="muted">Staff sign-in</p>
       </div>`;

@@ -47,7 +47,7 @@ export const Type = {
   // 12 on web, where browsers expect at least 12 px; the phones keep 11.
   label: Platform.OS === 'web' ? 12 : 11,
   caption: 13,
-  body: 15,
+  body: 16,
   title: 18,
   display: 32,
 } as const;
@@ -123,6 +123,9 @@ export const MapChrome = {
 } as const;
 
 export type AppColors = {
+  action: string;
+  dangerAction: string;
+  successAction: string;
   primary: string;
   primaryDark: string;
 
@@ -176,31 +179,33 @@ export type AppColors = {
 };
 
 export const lightColors: AppColors = {
-  primary: '#42C3C7',
-  primaryDark: '#168F99',
+  action: '#126B91',
+  dangerAction: '#B13B32',
+  successAction: '#28613C',
+  primary: '#126B91',
+  primaryDark: '#126B91',
 
   secondary: '#7FA88A',
-  secondaryDark: '#2F6B4B',
+  secondaryDark: '#143D2A',
 
   navigation: '#FFFFFF',
-  navigationText: '#253126',
-  navigationMuted: '#637064',
+  navigationText: '#183344',
+  navigationMuted: '#526575',
 
-  // Flat white page background, the same as `surface`: cards do not sit on a different
-  // plane from the page.
-  background: '#FFFFFF',
+  // Neutral page; water interactions are blue, crop/brand details remain green.
+  background: '#F7FAFC',
 
   surface: '#FFFFFF',
-  surfaceSecondary: '#F5F6F5',
+  surfaceSecondary: '#E7F3FA',
   tabBarSurface: '#FFFFFF',
   scrim: 'rgba(0,0,0,0.32)',
 
-  text: '#253126',
-  textSecondary: '#637064',
-  textMuted: '#879187',
+  text: '#183344',
+  textSecondary: '#526575',
+  textMuted: '#526575',
 
   // A neutral grey for the few real boundaries; `divider` below separates rows.
-  border: '#E4E7E4',
+  border: '#C5D5DF',
   divider: 'rgba(20,26,20,0.08)',
 
   white: '#FFFFFF',
@@ -212,44 +217,47 @@ export const lightColors: AppColors = {
   weatherBackground: '#DFF2F5',
   weatherBorder: '#B5D8DF',
 
-  irrigationBackground: '#E4F0E1',
-  irrigationBorder: '#B9D0B2',
+  irrigationBackground: '#E7F3FA',
+  irrigationBorder: '#B8D5E5',
 
   healthyBackground: '#E1EDDC',
 
-  success: '#4F8F62',
+  success: '#28613C',
   successBackground: '#E1EDDC',
 
-  warning: '#B77A26',
+  warning: '#815015',
   warningBackground: '#FFF2DC',
 
-  error: '#D65A50',
+  error: '#B13B32',
   errorBackground: '#FBE7E5',
 };
 
 export const darkColors: AppColors = {
+  action: '#126B91',
+  dangerAction: '#B13B32',
+  successAction: '#28613C',
   primary: '#58CDD0',
-  primaryDark: '#76DCE0',
+  primaryDark: '#85D3D8',
 
   secondary: '#8BB697',
   secondaryDark: '#9BC58B',
 
-  navigation: '#123A29',
+  navigation: '#192B37',
   navigationText: '#FFFFFF',
-  navigationMuted: '#B8CEC0',
+  navigationMuted: '#BDCEDA',
 
-  background: '#182018',
+  background: '#101C25',
 
-  surface: '#222C22',
-  surfaceSecondary: '#2A352A',
-  tabBarSurface: '#222C22',
+  surface: '#192B37',
+  surfaceSecondary: '#203C4C',
+  tabBarSurface: '#192B37',
   scrim: 'rgba(0,0,0,0.48)',
 
-  text: '#F1F5EF',
-  textSecondary: '#B5C0B3',
-  textMuted: '#8F9A8E',
+  text: '#EDF5FA',
+  textSecondary: '#BDCEDA',
+  textMuted: '#BDCEDA',
 
-  border: '#3A4739',
+  border: '#4D6575',
   divider: 'rgba(241,245,239,0.08)',
 
   white: '#FFFFFF',
@@ -261,8 +269,8 @@ export const darkColors: AppColors = {
   weatherBackground: '#203840',
   weatherBorder: '#34535C',
 
-  irrigationBackground: '#293A2B',
-  irrigationBorder: '#40563F',
+  irrigationBackground: '#203C4C',
+  irrigationBorder: '#416276',
 
   healthyBackground: '#293A2B',
 
