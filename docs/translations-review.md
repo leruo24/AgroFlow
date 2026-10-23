@@ -967,3 +967,17 @@ Still English on purpose: the draft terms and privacy notice themselves (transla
 | `zone.val.scheduleCapped` | {minutes} min each run (saved as {saved} min; capped to {max} min, this zone's limit) | {minutes} min per beurt (gestoor as {saved} min; beperk tot {max} min, hierdie sone se limiet) | {minutes} metsotso ka nako nngwe le nngwe (e bolokilwe jaaka {saved} metsotso; e lekanyeditswe go {max} metsotso, tekanyetso ya karolo e) |
 | `zone.weekAhead` | The week ahead | Die week wat kom | Beke e e tlang |
 | `zone.weekAheadBody` | Weather and watering advice for 7 days | Weer- en natleiadvies vir 7 dae | Maemo a loapi le kgakololo ya go nosetsa ya malatsi a le 7 |
+
+## Release, 23 October 2026 (merge/oct23-release)
+
+New strings from wiring the redesign to the real contracts (Settings → Terms & privacy, and the Help and documents heading). Afrikaans and Setswana are drafts. Codex's own `visual.*` strings (PR #3) are drafts too; Codex lists them in docs/visual-revision.md.
+
+| Key | English | Afrikaans (draft) | Setswana (draft) |
+|---|---|---|---|
+| `legal.acceptedOn` | You accepted these on {date}. | Jy het dit op {date} aanvaar. | O di amogetse ka {date}. |
+| `legal.failed` | Could not load the documents. Check your connection and try again. | Kon nie die dokumente laai nie. Kyk na jou verbinding en probeer weer. | Dikwalo ga di a kgona go laela. Tlhatlhoba kgokagano ya gago o leke gape. |
+| `legal.loading` | Loading the documents… | Laai die dokumente… | Go laela dikwalo… |
+| `legal.notAccepted` | Not accepted yet. You accept them in Your preferences, under Before you start. | Nog nie aanvaar nie. Jy aanvaar dit in Jou voorkeure, onder Voor jy begin. | Ga di ise di amogelwe. O di amogela mo Dikeletso tsa gago, ka fa tlase ga Pele o simolola. |
+| `legal.read` | Read {title} | Lees {title} | Bala {title} |
+| `legal.version` | Version {version}, {date} | Weergawe {version}, {date} | Kgatiso {version}, {date} |
+| `settings.helpDocs` | Help and documents | Hulp en dokumente | Thuso le dikwalo |
