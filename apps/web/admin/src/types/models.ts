@@ -277,6 +277,8 @@ export interface Hardware {
       returned to any admin screen. */
   mqttUsername?: string | null;
   enrollmentStatus?: string;
+  /** Readings the kit still had waiting to upload at its latest reading (firmware 1.7.0+). */
+  offlineBacklog?: number | null;
 }
 
 /* alerts */

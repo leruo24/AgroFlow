@@ -1,4 +1,4 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.6.0).
+// AgroFlow irrigation node - ESP32 firmware (v1.7.0).
 //
 // WiFiManager setup portal + one-time enrollment code -> /api/devices/claim.
 // MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors as
@@ -25,9 +25,9 @@
 //   6. The broker address can come from the server: if mqtt-credentials returns
 //      mqttHost/mqttPort the board uses them, otherwise the compiled-in
 //      MQTT_HOST/MQTT_PORT. Moving brokers is a Railway setting, not a reflash.
-//   7. Offline buffer (v1.5.0): while MQTT is down the board keeps a reading every
-//      OFFLINE_SAMPLE_INTERVAL_MS in a bounded ring in flash (oldest dropped first,
-//      each with its time), and publishes them in order with "recordedAt" when it is
+//   7. Offline buffer (v1.5.0, every reading since v1.7.0): while MQTT is down the
+//      board keeps each 30-second sensor reading in a bounded ring in flash (oldest
+//      dropped first, each with its time), and publishes them in order with "recordedAt" when it is
 //      back. The API stores them but never starts automatic watering from an old
 //      reading. Pump runs the server has not heard about are kept the same way and
 //      uploaded as irrigation events. The ring logic is OfflineBuffer.h (unit-tested
@@ -48,9 +48,16 @@
 //  11. Lost-connection failsafe (v1.6.0): a run the server started stops when the kit has had
 //      no MQTT contact with the server for LOST_CONTACT_STOP_MS (3 minutes). The offline
 //      fallback and the local page are meant to run offline and keep their own limits.
+//  12. A command runs once (v1.7.0): the kit remembers the last RECENT_COMMAND_IDS command
+//      IDs in flash, with the time it first acknowledged each. A repeated ID (the API resends
+//      a command whose acknowledgement was lost; MQTT can deliver twice) gets that original
+//      acknowledgement again and is never carried out a second time. The ID is saved before
+//      the pump moves, so a reboot mid-run cannot repeat it either. Logic: CommandIds.h.
+//  13. Backlog in the kit's status (v1.7.0): every published reading carries "backlog", the
+//      number of readings still waiting to upload. The API keeps it on the kit's record.
 //
 // Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
-// DHT sensor library for ESPx (beegee_tokyo).
+// DHTesp ("DHT sensor library for ESPx", beegee_tokyo).
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -64,6 +71,7 @@
 #include <string.h>
 #include "DHTesp.h"
 #include "OfflineBuffer.h"
+#include "CommandIds.h"
 #include "RunLimits.h"
 #include "secrets.h"
 
@@ -81,7 +89,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Update this and Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json each release.
-const char *FIRMWARE_VERSION = "1.6.0";
+const char *FIRMWARE_VERSION = "1.7.0";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -107,12 +115,14 @@ const time_t MIN_VALID_EPOCH = 1700000000;
 
 // Offline buffer (OfflineBuffer.h). Sized to fit the board's settings flash (NVS)
 // next to the WiFi details: 180 readings x 20 bytes, one soil + temperature +
-// humidity sample every 10 minutes = about 10 hours offline before the oldest is
-// dropped. 32 pump runs x 16 bytes.
+// humidity sample every 30 seconds = about 30 minutes offline before the oldest
+// is dropped. 32 pump runs x 16 bytes.
 const size_t READING_BUFFER_CAPACITY = 180;
 const size_t RUN_BUFFER_CAPACITY = 32;
-const unsigned long OFFLINE_SAMPLE_INTERVAL_MS = 10UL * 60UL * 1000UL;
 const size_t REPLAY_BATCH = 5;            // per loop pass, so sensors and the safety cap keep running
+
+// Command IDs already carried out (see 12. above): 32 x 44 bytes in flash, NVS key "cmdids".
+const size_t RECENT_COMMAND_IDS = 32;
 
 // Local page on the setup network (see 8. above).
 const char *LOCAL_PAGE_USER = "agroflow";
@@ -191,11 +201,10 @@ unsigned long lastFallbackCheckMillis = 0;
 // Kept in flash (NVS keys "readbuf" / "runbuf") so a power cut does not lose them.
 agroflow::RingBuffer<agroflow::BufferedReading, READING_BUFFER_CAPACITY> readingBuffer;
 agroflow::RingBuffer<agroflow::BufferedRun, RUN_BUFFER_CAPACITY> runBuffer;
+agroflow::RecentCommandIds<RECENT_COMMAND_IDS> recentCommands;
 uint32_t nextReadingSeq = 1;
 uint32_t nextRunSeq = 1;
 uint16_t bootId = 0;
-unsigned long lastOfflineSampleMillis = 0;
-bool offlineSampleTaken = false;
 
 // The latest values, for the local page.
 int lastSoilRaw = -1;
@@ -205,7 +214,7 @@ float lastHumidity = NAN;
 bool localRoutesWanted = false;
 
 void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch);
-void markCommandExecuted(const char *commandId);
+void markCommandExecuted(const char *commandId, uint32_t ackEpoch);
 void openSetupPortal(const char *reason);
 void forgetWifiAndOpenSetup(const char *reason);
 void factoryReset(const char *reason);
@@ -531,6 +540,9 @@ bool postSensorReading(const char *sensorType, float value, uint32_t recordedEpo
     doc["recordedAt"] = isoFromEpoch((time_t)recordedEpoch);
     doc["seq"] = seq;
   }
+  // Readings still waiting after this one: a replayed reading is still in the ring.
+  size_t waiting = readingBuffer.size();
+  doc["backlog"] = (unsigned)(recordedEpoch > 0 && waiting > 0 ? waiting - 1 : waiting);
   String body;
   serializeJson(doc, body);
   return mqttClient.publish(mqttSensorsTopic.c_str(), body.c_str());
@@ -552,6 +564,18 @@ void saveRunBuffer() {
   if (runBuffer.empty()) preferences.remove("runbuf");
   else if (preferences.putBytes("runbuf", blob, len) != len) Serial.println("WARN: could not save offline pump runs to flash");
   preferences.putULong("runseq", nextRunSeq);
+}
+
+void saveRecentCommands() {
+  static uint8_t blob[decltype(recentCommands)::blobSize()];
+  size_t len = recentCommands.toBytes(blob, sizeof(blob));
+  if (preferences.putBytes("cmdids", blob, len) != len) Serial.println("WARN: could not save recent command IDs to flash");
+}
+
+void loadRecentCommands() {
+  static uint8_t blob[decltype(recentCommands)::blobSize()];
+  size_t len = preferences.getBytesLength("cmdids");
+  if (len > 0 && len <= sizeof(blob) && preferences.getBytes("cmdids", blob, len) == len) recentCommands.fromBytes(blob, len);
 }
 
 void loadOfflineBuffers() {
@@ -605,17 +629,11 @@ void sendOrBuffer(uint8_t kind, float value) {
   bufferReading(kind, value);
 }
 
-// Called on a timer: read the soil probe and the DHT11, and publish each value
-// to this board's MQTT sensors topic. While MQTT is down, keep one sample every
-// OFFLINE_SAMPLE_INTERVAL_MS in the offline buffer instead.
+// Called every 30 seconds: read the soil probe and the DHT11, and publish each
+// value to this board's MQTT sensors topic. While MQTT is down, keep every value
+// in the offline buffer instead.
 void reportSensorReadings() {
   bool online = mqttClient.connected();
-  bool sampleOffline = !online &&
-      (!offlineSampleTaken || millis() - lastOfflineSampleMillis >= OFFLINE_SAMPLE_INTERVAL_MS);
-  if (sampleOffline) {
-    lastOfflineSampleMillis = millis();
-    offlineSampleTaken = true;
-  }
   size_t bufferedBefore = readingBuffer.size();
   uint32_t droppedBefore = readingBuffer.dropped();
 
@@ -625,7 +643,7 @@ void reportSensorReadings() {
     float pct = rawToPercent(raw);
     lastSoilPercent = pct;
     if (online) sendOrBuffer(agroflow::kSoilMoisture, pct);
-    else if (sampleOffline) bufferReading(agroflow::kSoilMoisture, pct);
+    else bufferReading(agroflow::kSoilMoisture, pct);
     Serial.printf("Soil raw=%d (%.0f%%)\n", raw, pct);
   } else {
     lastSoilPercent = -1.0f;
@@ -640,7 +658,7 @@ void reportSensorReadings() {
     if (online) {
       sendOrBuffer(agroflow::kTemperature, v.temperature);
       sendOrBuffer(agroflow::kHumidity, v.humidity);
-    } else if (sampleOffline) {
+    } else {
       bufferReading(agroflow::kTemperature, v.temperature);
       bufferReading(agroflow::kHumidity, v.humidity);
     }
@@ -668,6 +686,22 @@ void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
   const char *commandId = doc["id"];
   const char *command = doc["command"];
   if (!commandId || !command) return;
+  bool known = strcmp(command, "start") == 0 || strcmp(command, "stop") == 0 ||
+               strcmp(command, "open_setup") == 0 || strcmp(command, "change_wifi") == 0;
+  if (!known) return;
+
+  // Already carried out (its acknowledgement was lost, or MQTT delivered it twice): send the
+  // original acknowledgement again and do nothing else. Never waters a second time.
+  int64_t firstAck = recentCommands.acknowledgedAt(commandId);
+  if (firstAck >= 0) {
+    Serial.printf("Command %s already carried out - acknowledging again, not repeating it\n", commandId);
+    markCommandExecuted(commandId, (uint32_t)firstAck);
+    return;
+  }
+  // Saved before acting, so a reboot part-way through cannot carry it out twice.
+  uint32_t ackEpoch = hasValidTime() ? (uint32_t)time(nullptr) : 0;
+  recentCommands.remember(commandId, ackEpoch);
+  saveRecentCommands();
 
   if (strcmp(command, "start") == 0) {
     // One run at a time: a second start while watering changes nothing (it is still ACKed).
@@ -692,17 +726,15 @@ void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
   } else if (strcmp(command, "stop") == 0) {
     stopPumpCycle();
   } else if (strcmp(command, "open_setup") == 0) {
-    markCommandExecuted(commandId);
+    markCommandExecuted(commandId, ackEpoch);
     openSetupPortal("remote open_setup command");
     return;
-  } else if (strcmp(command, "change_wifi") == 0) {
-    markCommandExecuted(commandId);   // ACK while we still have the old WiFi
+  } else {   // change_wifi
+    markCommandExecuted(commandId, ackEpoch);   // ACK while we still have the old WiFi
     forgetWifiAndOpenSetup("change WiFi requested from the app");
     return;
-  } else {
-    return;
   }
-  markCommandExecuted(commandId);
+  markCommandExecuted(commandId, ackEpoch);
 }
 
 void reconnectMqtt() {
@@ -724,6 +756,8 @@ void reconnectMqtt() {
     Serial.println("connected");
     lastMqttConnectedMillis = millis();
     mqttClient.subscribe(mqttCommandsTopic.c_str());
+    Serial.printf("Subscribed to %s; backlog %u readings, %u pump runs to upload\n",
+                  mqttCommandsTopic.c_str(), (unsigned)readingBuffer.size(), (unsigned)runBuffer.size());
     if (fallbackCycle) {
       Serial.println("MQTT back - ending offline-fallback watering, server control resumes");
       stopPumpCycle();
@@ -766,7 +800,9 @@ void runOfflineFallback() {
 
 // Command ACK + irrigation events (HTTP)
 
-void markCommandExecuted(const char *commandId) {
+// ackEpoch: when the kit first carried the command out (0 if the clock was not set), so a
+// repeat sends the same time as the original acknowledgement.
+void markCommandExecuted(const char *commandId, uint32_t ackEpoch) {
   if (WiFi.status() != WL_CONNECTED) { Serial.println("WARN: offline, cannot ACK command - the API will redeliver it"); return; }
   WiFiClientSecure client;
   HTTPClient http;
@@ -775,7 +811,8 @@ void markCommandExecuted(const char *commandId) {
 
   JsonDocument doc;
   doc["deviceId"] = getDeviceId();
-  if (hasValidTime()) doc["executedAt"] = nowIso8601();
+  if (ackEpoch > 0) doc["executedAt"] = isoFromEpoch((time_t)ackEpoch);
+  else if (hasValidTime()) doc["executedAt"] = nowIso8601();
   String body;
   serializeJson(doc, body);
   int httpCode = http.POST(body);
@@ -1096,6 +1133,7 @@ void setup() {
   bootId = (uint16_t)(preferences.getUShort("bootId", 0) + 1);
   preferences.putUShort("bootId", bootId);
   loadOfflineBuffers();
+  loadRecentCommands();
 
   deviceToken = preferences.getString("token", "");
   autoWateringAllowed = preferences.getBool("autoOk", false);

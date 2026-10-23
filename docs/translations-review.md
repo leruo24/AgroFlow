@@ -981,3 +981,11 @@ New strings from wiring the redesign to the real contracts (Settings → Terms &
 | `legal.read` | Read {title} | Lees {title} | Bala {title} |
 | `legal.version` | Version {version}, {date} | Weergawe {version}, {date} | Kgatiso {version}, {date} |
 | `settings.helpDocs` | Help and documents | Hulp en dokumente | Thuso le dikwalo |
+
+## ESP32 offline buffer, 23 October 2026 (fix/esp32-offline-buffer)
+
+The farmer's kit screen, while a kit is still uploading readings it kept offline. Afrikaans and Setswana are drafts.
+
+| Key | English | Afrikaans (draft) | Setswana (draft) |
+|---|---|---|---|
+| `kit.backlog` | {count} readings from while it was offline are still uploading. | {count} lesings van toe dit vanlyn was, word nog opgelaai. | Dipalo di le {count} tsa fa e ne e se mo inthaneteng di sa ntse di romelwa. |

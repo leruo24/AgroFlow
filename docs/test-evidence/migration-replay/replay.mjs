@@ -74,7 +74,7 @@ async function replayOnce(port) {
     out.rerun0007and0010 = rerun;
     out.schemaChangedByRerun = Object.keys(before).filter(k => before[k] !== after[k]);
 
-    // The audit-fix migrations (0057-0059) run a second time: they must apply cleanly and change
+    // The audit-fix migrations (0057-0059) and the ESP32 one (0060) run a second time: they must apply cleanly and change
     // nothing (the snapshot above, plus policies, grants, the cap trigger and the seeded settings).
     const AUDIT = `select
       (select string_agg(tablename || '.' || policyname, ',' order by tablename, policyname) from pg_policies where schemaname = 'public') as policies,
@@ -85,7 +85,7 @@ async function replayOnce(port) {
       (select string_agg(commission_state, ',' order by id) from zone) as commission_states`;
     const beforeAudit = { ...(await client.query(SNAPSHOT)).rows[0], ...(await client.query(AUDIT)).rows[0] };
     const rerunAudit = [];
-    for (const file of files.filter(f => /^005[789]_/.test(f))) rerunAudit.push(await run(client, file) ?? `${file}: ok`);
+    for (const file of files.filter(f => /^00(5[789]|60)_/.test(f))) rerunAudit.push(await run(client, file) ?? `${file}: ok`);
     const afterAudit = { ...(await client.query(SNAPSHOT)).rows[0], ...(await client.query(AUDIT)).rows[0] };
     out.rerun0057to0059 = rerunAudit;
     out.schemaChangedByAuditRerun = Object.keys(beforeAudit).filter(k => beforeAudit[k] !== afterAudit[k]);

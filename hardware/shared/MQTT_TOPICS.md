@@ -106,10 +106,11 @@ screen's "sensor working / not responding" readout. A DHT11 that fails to read
 simply sends nothing, which is what the app reports as "Not responding: using
 weather app data".
 
-### Readings kept while offline (v1.5.0)
+### Readings kept while offline (v1.7.0)
 
-While MQTT is down a v1.5.0 board keeps one soil + temperature + humidity sample
-every 10 minutes in a bounded ring in its flash (180 readings, about 10 hours;
+While MQTT is down a v1.7.0 board keeps every soil + temperature + humidity sample
+from the normal 30-second report cycle in a bounded ring in its flash (180 readings,
+about 30 minutes;
 the oldest is dropped first). When it reconnects it publishes them **oldest
 first** on the same topic, with two extra fields:
 
@@ -121,11 +122,12 @@ first** on the same topic, with two extra fields:
 |---|---|
 | `recordedAt` | when the board took the reading (UTC, from NTP). Absent on a live reading. |
 | `seq` | the board's own counter, increasing by one per kept reading |
+| `backlog` | readings still waiting to upload after this one (firmware 1.7.0+, on every reading, live or kept). The API keeps the latest on the kit's record (`hardware.offline_backlog`, migration 0060). |
 
 The API (`ReadingAge`, `SensorReadingProcessor`) stores a kept reading with its
 own time. If it is more than **10 minutes** old it is stored only: it never
 changes the zone's health, raises an alert or sends a pump command. Older than
-7 days, or more than 5 minutes in the future, it is dropped. The same zone,
+7 days, or more than 5 minutes in the future, it is dropped. The same physical kit,
 type and `recordedAt` twice is stored once, so a resend after a power cut does
 not duplicate. While anything is still waiting, new readings join the back of
 the queue, so the server receives them in the order they were taken.

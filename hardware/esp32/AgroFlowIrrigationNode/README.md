@@ -17,6 +17,8 @@ Serial Monitor should say): [`docs/hardware-bringup.md`](../../../docs/hardware-
 |---|---|
 | `AgroFlowIrrigationNode.ino` | the sketch |
 | `OfflineBuffer.h` | the offline ring buffer and replay, plain C++ (no Arduino headers) so it is unit-tested natively: [`../tests/`](../tests/) |
+| `CommandIds.h` | the last 32 command IDs the kit carried out, so a repeat is acknowledged again but never run twice; plain C++, unit-tested natively |
+| `RunLimits.h` | how long a run may last; plain C++, unit-tested natively |
 | `secrets.example.h` | copy to `secrets.h` (gitignored); holds only `API_BASE_URL`, which is not a secret |
 
 ## Board and libraries
@@ -35,8 +37,8 @@ Not Adafruit's "DHT sensor library": it has `DHT.h`, not `DHTesp.h`, and the
 sketch will not compile with it alone. `WiFi.h`, `WiFiClientSecure.h`,
 `HTTPClient.h`, `HTTPUpdate.h`, `WebServer.h` and `Preferences.h` come with the core.
 
-v1.6.0 uses about 92% (1,216,292 bytes) of the default "Default 4MB with spiffs" app partition
-(1,214,736 of 1,310,720 bytes). If a later change does not fit, pick
+v1.7.0 uses 92% (1,217,328 of 1,310,720 bytes) of the default "Default 4MB with spiffs"
+app partition, compiled with esp32 core 3.3.11. If a later change does not fit, pick
 **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)**; OTA keeps working.
 
 ## How long a run lasts (v1.6.0)
@@ -50,10 +52,10 @@ v1.6.0 uses about 92% (1,216,292 bytes) of the default "Default 4MB with spiffs"
   on. The run is kept and uploaded when it is back, like any offline run.
 - The rule lives in `RunLimits.h` and is unit-tested natively (`hardware/esp32/tests`).
 
-## What the board does when the internet is down (v1.6.0)
+## What the board does when the internet is down (v1.7.0)
 
-- **Readings are kept.** While MQTT is down it keeps one soil + temperature +
-  humidity sample every 10 minutes in flash: 180 readings, about 10 hours. When
+- **Readings are kept.** While MQTT is down it keeps every 30-second soil + temperature +
+  humidity sample in flash: 180 readings, about 30 minutes. When
   full, the oldest goes first. A power cut does not lose them. On reconnect they
   are published oldest first with their own time (`recordedAt`), a few per loop
   so watering and the safety cap keep running. The server stores them but never
@@ -68,6 +70,12 @@ v1.6.0 uses about 92% (1,216,292 bytes) of the default "Default 4MB with spiffs"
   answer from `GET /api/devices/config` (boot, then every 10 minutes online, kept
   in flash) said the zone is Automatic. A Manual or Scheduled zone, or a kit that
   has never had an answer, is never watered by the kit on its own.
+- **A command runs once.** The kit keeps the last 32 command IDs in flash, each with
+  the time it first acknowledged it, and saves a new ID before it acts. When the API
+  resends a command whose acknowledgement was lost (or MQTT delivers it twice), the kit
+  acknowledges it again with that first time and does not water again, even after a reboot.
+- **The backlog is in the kit's status.** Every reading carries `backlog`, the readings
+  still waiting to upload; the admin **Kits** page and the farmer's kit screen show it.
 
 ## Local page (no internet needed)
 
@@ -113,8 +121,7 @@ MQTT login from `GET /api/devices/mqtt-credentials` on every boot (RAM only).
 | `LOST_CONTACT_STOP_MS` | 3 minutes | a server-started run stops after this long without MQTT |
 | `LOCAL_MAX_RUN_MS` | 5 minutes | the local page's own limit |
 | `SENSOR_REPORT_INTERVAL_MS` | 30 s | live readings |
-| `OFFLINE_SAMPLE_INTERVAL_MS` | 10 minutes | kept readings while offline |
-| `FIRMWARE_VERSION` | 1.6.0 | match `Firmware:LatestVersion` on the API when the `.bin` is hosted |
+| `FIRMWARE_VERSION` | 1.7.0 | match `Firmware:LatestVersion` on the API when the `.bin` is hosted |
 
 `ZONE_ID` and `FARM_ID` are not settings: they come back from the claim and are
 kept in flash.

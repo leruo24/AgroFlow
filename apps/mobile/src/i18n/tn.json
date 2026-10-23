@@ -693,7 +693,7 @@
     "community.form.needSubtype": "Tlhopha efe.",
     "community.form.needSeverity": "Tlhopha gore go masisi go le kae.",
     "sensor.title": "Dipalo tsa disensara",
-    "sensor.updated": "Go ntšhwafaditswe {ago}",
+    "sensor.updated": "Go balwa ga bofelo {ago}",
     "sensor.justNow": "jaanong jaana",
     "sensor.minAgo": "metsotso e le {n} e e fetileng",
     "sensor.hoursAgo": "diura di le {n} tse di fetileng",
@@ -1225,6 +1225,7 @@
     "legal.notAccepted": "Ga di ise di amogelwe. O di amogela mo Dikeletso tsa gago, ka fa tlase ga Pele o simolola.",
     "legal.loading": "Go laela dikwalo…",
     "legal.failed": "Dikwalo ga di a kgona go laela. Tlhatlhoba kgokagano ya gago o leke gape.",
-    "settings.helpDocs": "Thuso le dikwalo"
+    "settings.helpDocs": "Thuso le dikwalo",
+    "kit.backlog": "Dipalo di le {count} tsa fa e ne e se mo inthaneteng di sa ntse di romelwa."
   }
 }

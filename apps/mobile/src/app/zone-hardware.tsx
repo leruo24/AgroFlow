@@ -199,6 +199,12 @@ export default function ZoneHardwareScreen() {
                   ? t('kit.onlineBody')
                   : t('kit.offlineBody')}
               </Text>
+              {/* Readings the kit kept while it was offline and is still uploading. */}
+              {kit.offlineBacklog != null && kit.offlineBacklog > 0 ? (
+                <Text style={styles.statusDetail} testID="kit-backlog">
+                  {t('kit.backlog', { count: kit.offlineBacklog })}
+                </Text>
+              ) : null}
             </View>
 
             {/* 2. Sensors */}

@@ -1,16 +1,21 @@
-// A pretend AgroFlow irrigation kit (firmware 1.6.0's contract) for the simulation. It talks
+// A pretend AgroFlow irrigation kit (firmware 1.7.0's contract) for the simulation. It talks
 // to the real AgroFlow.Api exactly as the ESP32 sketch does:
 //   POST /api/devices/claim                    one-time enrollment code -> device token
 //   GET  /api/devices/mqtt-credentials         X-Device-Token -> MQTT login
-//   MQTT agroflow/farm/{farm}/device/{id}/sensors   {"sensorType","value"[,"recordedAt","seq"]}
+//   MQTT agroflow/farm/{farm}/device/{id}/sensors   {"sensorType","value"[,"recordedAt","seq"],"backlog"}
 //   MQTT agroflow/farm/{farm}/device/{id}/commands  {"id","command","durationSeconds","source","maxRunSeconds"}
 //   POST /api/devices/commands/{id}/executed   ACK
 //   POST /api/irrigation-events                a finished pump run
 // The pump is pretend: a run is reported with the commanded duration straight away, so a
 // "1-minute run" does not make the test wait a minute. startRun() runs the pump for real time
-// with firmware 1.6.0's two stops (RunLimits.h): min(asked, maxRunSeconds, 120 min), and the
+// with firmware 1.7.0's two stops (RunLimits.h): min(asked, maxRunSeconds, 120 min), and the
 // lost-connection failsafe, whose 3 minutes the simulation shortens (lostContactMs).
+// carryOut() applies firmware 1.7.0's "a command runs once" rule (CommandIds.h): a repeated
+// command ID is acknowledged again with its first time and never carried out again. The IDs
+// live in `flash`, which a test can hand to a new FakeKit to stand in for a reboot.
 import mqtt from 'mqtt';
+
+export const RECENT_COMMAND_IDS = 32;
 
 export const DEFAULT_MAX_RUN_SECONDS = 5 * 60;
 export const ABSOLUTE_MAX_RUN_SECONDS = 120 * 60;
@@ -24,10 +29,11 @@ export function runLimitSeconds(command) {
 }
 
 export class FakeKit {
-  constructor({ apiBase, mqttUrl, deviceId, firmwareVersion = '1.5.0', log = () => {} }) {
-    Object.assign(this, { apiBase, mqttUrl, deviceId, firmwareVersion, log });
+  constructor({ apiBase, mqttUrl, deviceId, firmwareVersion = '1.7.0', log = () => {}, flash = { commandIds: [] } }) {
+    Object.assign(this, { apiBase, mqttUrl, deviceId, firmwareVersion, log, flash });
     this.commands = [];
     this.seq = 1;
+    this.runs = [];   // every command the kit actually carried out
   }
 
   async http(method, path, body, withToken = true) {
@@ -68,12 +74,13 @@ export class FakeKit {
     this.log(`MQTT connected as ${creds.body.mqttUsername}, subscribed to ${this.commandsTopic}`);
   }
 
-  async publish(sensorType, value, recordedAt = null) {
+  async publish(sensorType, value, recordedAt = null, { backlog = null } = {}) {
     const payload = { sensorType, value };
     if (recordedAt) {
       payload.recordedAt = recordedAt.toISOString().replace(/\.\d{3}Z$/, 'Z');
       payload.seq = this.seq++;
     }
+    if (backlog !== null) payload.backlog = backlog;
     await this.client.publishAsync(this.sensorsTopic, JSON.stringify(payload));
   }
 
@@ -93,8 +100,27 @@ export class FakeKit {
     throw new Error('no matching command arrived');
   }
 
-  ack(commandId) {
-    return this.http('POST', `/api/devices/commands/${commandId}/executed`, { deviceId: this.deviceId, executedAt: new Date().toISOString() });
+  ack(commandId, executedAt = new Date()) {
+    return this.http('POST', `/api/devices/commands/${commandId}/executed`, { deviceId: this.deviceId, executedAt: executedAt.toISOString() });
+  }
+
+  // The firmware's handler for a start command (v1.7.0): an ID already carried out gets its
+  // original acknowledgement again and nothing else; a new ID is saved to flash first, then
+  // the pump runs (pretend: recorded in `runs`) and the kit acknowledges. loseAck drops that
+  // acknowledgement on the way, as a network cut would.
+  async carryOut(command, { loseAck = false } = {}) {
+    const seen = this.flash.commandIds.find(e => e.id === command.id);
+    if (seen) {
+      this.log(`command ${command.id} already carried out - acknowledging again, not repeating it`);
+      await this.ack(command.id, seen.ackedAt);
+      return { repeated: true };
+    }
+    const ackedAt = new Date();
+    this.flash.commandIds.push({ id: command.id, ackedAt });
+    if (this.flash.commandIds.length > RECENT_COMMAND_IDS) this.flash.commandIds.shift();
+    this.runs.push({ id: command.id, seconds: runLimitSeconds(command), at: ackedAt });
+    if (!loseAck) await this.ack(command.id, ackedAt);
+    return { repeated: false, ackedAt };
   }
 
   reportRun({ runtimeSeconds, triggerSource, startedAt, syncStatus = 'synced' }) {

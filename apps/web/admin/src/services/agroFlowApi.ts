@@ -621,6 +621,8 @@ export type AdminHardwareRow = {
   /** active / revoked / legacy key / no device */
   tokenStatus: string;
   mqttUsername: string | null;
+  /** Readings still waiting to upload on the kit (firmware 1.7.0+, migration 0060); null if not reported. */
+  offlineBacklog?: number | null;
 };
 
 export function getAdminHardware(): Promise<AdminHardwareRow[]> {
