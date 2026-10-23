@@ -477,6 +477,21 @@ public static class FarmerEndpoints
         if (request.IrrigationMode is not null and not ("automatic" or "scheduled" or "manual"))
             return Results.BadRequest(new { error = "Invalid irrigation mode." });
 
+        // A new zone waits for commissioning before the farmer can make it automatic (0058); zones
+        // from before the journey (legacy) keep working as they did. Staff can always switch it.
+        if (request.IrrigationMode == "automatic" || request.AutomationEnabled == true)
+        {
+            await using var check = await dataSource.OpenConnectionAsync();
+            await using var stateCmd = new NpgsqlCommand(
+                "select commission_state from zone where id = $1", check);
+            stateCmd.Parameters.AddWithValue(zoneId);
+            string? state = null;
+            try { state = await stateCmd.ExecuteScalarAsync() as string; }
+            catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedColumn) { }
+            if (state is not null && Commissioning.FarmerMayChooseMode("automatic", state) is { } notYet)
+                return Results.Json(new { error = notYet, reason = "not_commissioned" }, statusCode: StatusCodes.Status409Conflict);
+        }
+
         if (request.ScheduleDurationMinutes is < 1 or > 1440)
             return Results.BadRequest(new { error = "A schedule runs for 1 to 1440 minutes." });
 

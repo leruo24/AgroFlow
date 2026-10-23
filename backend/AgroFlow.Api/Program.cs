@@ -404,6 +404,8 @@ app.MapEnquiryReportEndpoints();
 app.MapDismissalEndpoints();
 app.MapMqttPoolEndpoints();
 app.MapPasswordResetEndpoints();
+// The enquiry-to-installation journey (Part B of the 22 October audit fixes).
+app.MapJourneyEndpoints();
 
 
 app.Run();

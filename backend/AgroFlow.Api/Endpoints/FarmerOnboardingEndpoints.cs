@@ -647,6 +647,7 @@ public static class FarmerOnboardingEndpoints
             cmd.Parameters.AddWithValue(profileId);
             if (await cmd.ExecuteScalarAsync(ct) is null)
                 return "The farmer is onboarded, but the enquiry was not linked: it is linked to another farmer or no longer exists.";
+            await JourneyStore.LinkCaseAsync(connection, enquiryId, profileId, farmId, ct);
             return null;
         }
         catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedTable)

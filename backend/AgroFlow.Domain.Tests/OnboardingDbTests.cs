@@ -20,13 +20,6 @@ public sealed class OnboardingSimHost : SimDbHost
 {
     public static readonly FakeAccounts Accounts = new();
 
-    // AGROFLOW_TEST_LOG=1 prints the API's log, to see why a request failed.
-    protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
-    {
-        base.ConfigureWebHost(builder);
-        if (Environment.GetEnvironmentVariable("AGROFLOW_TEST_LOG") == "1")
-            Microsoft.AspNetCore.Hosting.WebHostBuilderExtensions.ConfigureLogging(builder, l => Microsoft.Extensions.Logging.ConsoleLoggerExtensions.AddConsole(l));
-    }
 
     protected override void ConfigureDatabase(IServiceCollection services)
     {

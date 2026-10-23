@@ -211,4 +211,72 @@ public class AuditFixTests
         Assert.Equal(missing, view.Missing);
         if (cap is > 0) Assert.True(view.HasTank);
     }
+
+    // Part B: the journey and commissioning --------------------------------------------------
+
+    private static Journey.Facts F(bool agreed = false, bool pw = false, bool terms = false, int tasks = 0, DateTimeOffset? visit = null,
+        bool inProgress = false, int zones = 1, int commissioned = 0, int legacy = 0, int kits = 0, int checksDone = 0) =>
+        new(false, true, true, agreed, pw, terms, tasks, 0, visit, visit is null ? null : "Thabo", inProgress,
+            zones, commissioned, legacy, kits, checksDone, (zones - legacy) * 5, null);
+
+    [Fact]
+    public void The_stage_moves_through_the_journey_from_the_facts()
+    {
+        Assert.Equal(Journey.Details, Journey.StageOf(F()));
+        Assert.Equal(Journey.ServiceAgreed, Journey.StageOf(F(agreed: true)));
+        Assert.Equal(Journey.ServiceAgreed, Journey.StageOf(F(agreed: true, pw: true)));          // terms not accepted yet
+        Assert.Equal(Journey.AccountActive, Journey.StageOf(F(agreed: true, pw: true, terms: true, tasks: 3)));
+        Assert.Equal(Journey.ReadyForInstallation, Journey.StageOf(F(agreed: true, pw: true, terms: true, tasks: 4)));
+        Assert.Equal(Journey.VisitBooked, Journey.StageOf(F(agreed: true, pw: true, terms: true, tasks: 4, visit: DateTimeOffset.UtcNow.AddDays(2))));
+        Assert.Equal(Journey.Installing, Journey.StageOf(F(tasks: 4, checksDone: 2)));
+        Assert.Equal(Journey.Commissioned, Journey.StageOf(F(commissioned: 1, kits: 1)));
+        // A farm that was already running before the journey is live, not sent back.
+        Assert.Equal(Journey.Commissioned, Journey.StageOf(F(zones: 2, legacy: 2, kits: 1)));
+        Assert.Equal(Journey.Details, Journey.StageOf(F(zones: 2, legacy: 2, kits: 0)));
+    }
+
+    [Fact]
+    public void Where_you_are_now_names_who_acts_next_and_never_invents_a_date()
+    {
+        var ready = Journey.Describe(F(agreed: true, pw: true, terms: true, tasks: 4));
+        Assert.Equal(Journey.Staff, ready.WhoActsNext);
+        Assert.Null(ready.KnownDate);
+        Assert.Equal("Waiting for booking", ready.DateLabel);
+        var when = new DateTimeOffset(2026, 10, 30, 9, 0, 0, TimeSpan.FromHours(2));
+        var booked = Journey.Describe(F(agreed: true, pw: true, terms: true, tasks: 4, visit: when));
+        Assert.Equal(Journey.Installer, booked.WhoActsNext);
+        Assert.Equal(when, booked.KnownDate);
+        Assert.Contains("Thabo", booked.NextAction);
+        // A gap behind the current stage is still listed.
+        var early = Journey.Describe(F(visit: when));
+        Assert.Contains(early.StillToDo, s => s.Contains("service"));
+        Assert.Equal(Journey.Stages.Count, early.StageCount);
+    }
+
+    [Fact]
+    public void A_zone_is_commissioned_by_four_things_and_only_then_offered_automatic()
+    {
+        var all = new Commissioning.ZoneFacts(true, true, true, true, false, true);
+        Assert.True(Commissioning.IsCommissioned(all));   // the run limit is on the list but not one of the four
+        Assert.False(Commissioning.IsCommissioned(all with { TestAcknowledged = false }));
+        Assert.False(Commissioning.IsCommissioned(all with { HasDryReading = false }));
+        Assert.False(Commissioning.IsCommissioned(all with { FlowRecordedAsMeasured = false }));
+        Assert.True(Commissioning.OfferAutomatic("commissioned", null));
+        Assert.False(Commissioning.OfferAutomatic("commissioned", "manual"));
+        Assert.False(Commissioning.OfferAutomatic("legacy", null));
+        Assert.NotNull(Commissioning.FarmerMayChooseMode("automatic", "pending"));
+        Assert.Null(Commissioning.FarmerMayChooseMode("automatic", "legacy"));
+        Assert.Null(Commissioning.FarmerMayChooseMode("manual", "pending"));
+    }
+
+    [Fact]
+    public void The_draft_documents_are_served_with_their_version_and_marked_draft()
+    {
+        foreach (var d in AgroFlow.Api.Services.LegalDocuments.All)
+        {
+            var text = AgroFlow.Api.Services.LegalDocuments.Text(d);
+            Assert.Contains("Draft – needs approval", text);
+            Assert.Contains(d.Version, text);
+        }
+    }
 }

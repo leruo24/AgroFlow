@@ -168,6 +168,10 @@ public sealed class SchemaCheck
             "select to_regclass('public.onboarding_request')::text",
             "Onboarding cannot be retried safely (a retry may make a second farm), runs are not capped by the database, and request sizes have no unit."),
 
+        new("0058", "table", "service_case",
+            "select to_regclass('public.service_case')::text",
+            "The farmer's four setup tasks, the installation case, visits, the installer checklist, help requests and terms acceptance do not work."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",
