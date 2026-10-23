@@ -172,10 +172,10 @@ test("the public page shows no console and no link to it; staff sign in at /staf
   await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: /Smart irrigation for small farms/ })).toBeVisible({ timeout: 15000 });
 
-  await expect(page.getByRole("link", { name: "Request a call", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Get the app" })).toBeAttached();
+  await expect(page.locator(".visual-hero").getByRole("link", { name: "Request a call", exact: true })).toBeVisible();
+  await expect(page.locator(".visual-header").getByRole("link", { name: "Get the app", exact: true })).toBeAttached();
   await expect(page.locator("#appShell, #nav, [data-act]")).toHaveCount(0);
   await expect(page.getByText(/Admin console|Open admin console/)).toHaveCount(0);
   // Nothing on the product site links to staff sign-in.
@@ -185,13 +185,13 @@ test("the public page shows no console and no link to it; staff sign in at /staf
   // Staff sign in at their own address, with its own layout.
   await page.goto("/staff/");
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible({ timeout: 15000 });
-  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Smart irrigation for small farms/ })).toHaveCount(0);
 });
 
 test("the root address opens the product site even with a staff session; old staff links go to /staff/", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 1, maxDelayMs: 2 });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: /Smart irrigation for small farms/ })).toBeVisible({ timeout: 15000 });
   await expect(page.locator("#appShell")).toHaveCount(0);
   await page.goto("/#/admin");
   await expect(page).toHaveURL(/\/staff\/$/);

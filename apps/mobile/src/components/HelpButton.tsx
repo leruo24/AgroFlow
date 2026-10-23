@@ -6,6 +6,7 @@ import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeContext';
 import { BlurSheet } from '@/components/BlurSheet';
 import { helpFor, type HelpScreen } from '@/constants/helpContent';
+import { FieldGuide } from '@/components/visual/FieldGuide';
 import { useAppPreferences } from '@/hooks/useAppPreferences';
 import { useI18n } from '@/i18n';
 
@@ -52,6 +53,7 @@ export function HelpButton({ screen }: Props) {
               {paragraph}
             </Text>
           ))}
+          <FieldGuide />
         </View>
       </BlurSheet>
     </>

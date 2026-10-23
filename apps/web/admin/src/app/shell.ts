@@ -3,6 +3,9 @@
  * string that main.ts wires up after inserting it. */
 
 import { Icon } from "@/lib/icons";
+import { brandHtml } from "@/ui/brand";
+import { appearanceHtml } from "@/ui/appearance";
+import { text as t } from "@/pages/publicCopy";
 
 export const SHELL_HTML = `
   <div class="app" id="appShell">
@@ -13,10 +16,9 @@ export const SHELL_HTML = `
              Pages, not a domain root. alt is empty because the wordmark
              beside it already says "AgroFlow" - a screen reader should not
              hear the name twice. -->
-        <img class="brand-logo" src="brand/agroflow-icon-192.png" alt="" width="36" height="36" />
+        ${brandHtml("visual-brand", t("staff"))}
         <div>
-          <h1>AgroFlow</h1>
-          <div class="sub">Administration</div>
+          <div class="sub">${t("staffBody")}</div>
         </div>
       </a>
       <nav class="nav" id="nav"></nav>
@@ -58,6 +60,7 @@ export const SHELL_HTML = `
             <a href="#settings">Profile</a>
             <a href="#" data-act="open-change-password">Change password</a>
             <a href="#settings">Settings</a>
+            ${appearanceHtml()}
             <button id="logoutBtn" data-logout type="button">Log out</button>
           </div>
         </div>

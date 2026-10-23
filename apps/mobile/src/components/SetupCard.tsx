@@ -19,8 +19,8 @@ export function SetupCard() {
     title: { color: colors.text, fontSize: Type.title, fontWeight: '700' },
     hint: { color: colors.textSecondary, fontSize: Type.body, lineHeight: 22 },
     track: { height: 8, borderRadius: 4, backgroundColor: colors.divider, overflow: 'hidden' },
-    fill: { height: 8, borderRadius: 4, backgroundColor: colors.primaryDark },
-    button: { minHeight: 52, borderRadius: Radius.sm, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'center' },
+    fill: { height: 8, borderRadius: 4, backgroundColor: colors.action },
+    button: { minHeight: 52, borderRadius: Radius.sm, backgroundColor: colors.action, alignItems: 'center', justifyContent: 'center' },
     buttonText: { color: colors.white, fontSize: Type.body, fontWeight: '700' },
   }), [colors]);
 

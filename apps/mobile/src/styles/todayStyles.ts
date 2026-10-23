@@ -30,15 +30,15 @@ export function createTodayStyles(colors: AppColors) {
     },
     buttons: { ...sharedLayout.inlineRow, flexWrap: 'wrap', gap: Spacing.two },
     button: {
-      minHeight: 44,
+      minHeight: 56,
       paddingHorizontal: Spacing.three,
       justifyContent: 'center',
       borderRadius: Radius.sm,
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.action,
     },
     buttonText: { fontSize: Type.body, fontWeight: '600', color: colors.white },
     ghost: {
-      minHeight: 44,
+      minHeight: 56,
       paddingHorizontal: Spacing.three,
       justifyContent: 'center',
       borderRadius: Radius.sm,

@@ -26,8 +26,12 @@ import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { fetchFarmToday, fetchTankStatus, type TankStatus, type TodayZone } from '@/services/agroFlowApi';
 import { useI18n } from '@/i18n';
 import { onReconnect } from '@/lib/connectivity';
+import { FarmPostcard } from '@/components/visual/FarmPostcard';
+import { TankIllustration } from '@/components/visual/TankIllustration';
+import { useSimpleView } from '@/components/visual/AppearanceControls';
 
 export default function HomeScreen() {
+  const { simple } = useSimpleView();
   const { colors } = useTheme();
   const { t } = useI18n();
   const { farm, isFarmLoading, farmError, zones, isZonesLoading, zonesError, refreshZones, refreshFarms, alerts } = useAgroFlow();
@@ -92,6 +96,7 @@ export default function HomeScreen() {
               with "Your details: X of 4" and "Installation: <stage>". Before migration 0058 the
               old setup card shows instead. Then "Turn on automatic watering?" for a zone the
               installer has just commissioned. */}
+          <FarmPostcard name={farm.name} />
           <WhereYouAreNow state={journey} />
           {journey.status === 'ready' ? <AutoOfferCard journey={journey.journey} onAnswered={journey.reload} /> : null}
           {/* The water budget, and drought mode with each zone's priority when it is on. */}
@@ -102,11 +107,13 @@ export default function HomeScreen() {
             : today === null ? <DataState kind="loading" title={t('home.todayLoading')} />
             : today.length === 0 ? <DataState kind="empty" title={t('home.noZones')} description={t('home.noZonesToday')} />
             : <CardList>{today.map(z => <TodayCard key={z.zoneId} zone={z} onLogged={loadToday} />)}</CardList>}
-          <FarmLocationMap key={farm.id} farm={farm} />
-          <WeatherSummary key={farm.id + '-' + farm.latitude + '-' + farm.longitude} farm={farm} />
+          {!simple && <FarmLocationMap key={farm.id} farm={farm} />}
+          {!simple && <WeatherSummary key={farm.id + '-' + farm.latitude + '-' + farm.longitude} farm={farm} />}
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('home.tank')}</Text>
           {tankFailed ? <DataState kind="error" title={t('home.tankUnavailable')} onRetry={loadTank} />
             : <View style={styles.tankCard}>
+              {/* No picture while loading: an outline would read as Unknown before the answer (AF-22). */}
+              {tankLoading ? null : <TankIllustration litres={tank?.estimatedRemainingLitres} capacity={tank?.capacityLitres} />}
               <Text style={styles.tankEstimate} testID="home-tank-estimate">{tankLoading ? t('common.loading')
                 : tank?.estimatedRemainingLitres != null
                 ? t('home.tankLeft', { litres: Math.round(tank.estimatedRemainingLitres) })

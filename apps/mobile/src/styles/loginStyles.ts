@@ -42,7 +42,7 @@ export function createLoginStyles(
       height: 28,
       marginRight: Space.sm,
       backgroundColor:
-        colors.primary,
+        colors.action,
     },
 
     brandName: {
@@ -182,7 +182,7 @@ export function createLoginStyles(
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor:
-        colors.primaryDark,
+        colors.action,
       borderRadius: Radius.sm,
     },
 

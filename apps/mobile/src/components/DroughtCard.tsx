@@ -117,7 +117,7 @@ function createStyles(colors: AppColors) {
     skip: { color: colors.text, backgroundColor: colors.divider },
     modes: { flexDirection: 'row', gap: Spacing.one },
     mode: { flex: 1, minHeight: 44, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-    modeOn: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
+    modeOn: { backgroundColor: colors.action, borderColor: colors.primaryDark },
     modeText: { color: colors.text, fontSize: Type.caption, fontWeight: '600' },
     modeTextOn: { color: colors.white },
     error: { color: colors.error, fontSize: Type.body },

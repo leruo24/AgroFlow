@@ -24,11 +24,11 @@ export function ViewSwitch({ value, onChange }: { value: DismissView; onChange: 
   const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createTodayStyles(colors), [colors]);
-  const options: [DismissView, string][] = [['active', 'Active'], ['dismissed', 'Dismissed'], ['all', 'All']];
+  const options: [DismissView, string][] = [['active', t('visual.active')], ['dismissed', t('visual.dismissed')], ['all', t('visual.all')]];
   return (
     <View style={styles.choices} accessibilityRole="radiogroup" accessibilityLabel={t('dismiss.show')}>
       {options.map(([v, label]) => (
-        <Pressable key={v} accessibilityRole="radio" accessibilityState={{ selected: value === v }}
+        <Pressable key={v} accessibilityRole="radio" accessibilityState={{ selected: value === v, checked: value === v }}
           onPress={() => onChange(v)} style={[styles.choice, { minHeight: Platform.OS === 'web' ? 44 : 36, minWidth: 0 }, value === v && styles.choiceSelected]}>
           <Text style={styles.choiceText}>{label}</Text>
         </Pressable>
