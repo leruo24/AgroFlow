@@ -11,7 +11,7 @@ export const SHELL_HTML = `
   <div class="app" id="appShell">
     <aside class="sidebar" id="sidebar">
       <!-- The logo and name go Home (admin polish, item 3). -->
-      <a class="brand" id="brandHome" href="#dashboard" aria-label="AgroFlow Administration - go to Home">
+      <a class="brand" id="brandHome" href="#dashboard" aria-label="AgroFlow Staff - go to Overview">
         <!-- Relative path: the site is served from a sub-path on GitHub
              Pages, not a domain root. alt is empty because the wordmark
              beside it already says "AgroFlow" - a screen reader should not

@@ -56,7 +56,8 @@ test("the sidebar and Home show what needs a call, and lead to the Enquiries tab
   const errors = captureErrors(page);
   await open(page, "/staff/#dashboard");
 
-  await expect(page.locator('#nav button[data-page="requests"] .nav-badge')).toHaveText("2", { timeout: 15000 });
+  // The count sits on the Enquiries entry (the brief's grouping, 2026-10-23).
+  await expect(page.locator('#nav button[data-page="enquiries"] .nav-badge')).toHaveText("2", { timeout: 15000 });
   await expect(page.locator(".attn-card", { hasText: "Call-backs due" })).toBeVisible();
   await expect(page.locator(".attn-card", { hasText: "Enquiries waiting for a call" })).toBeVisible();
 

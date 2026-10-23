@@ -2352,8 +2352,9 @@ async function handleAction(el: HTMLElement): Promise<void> {
 
     /* The two tabs on Requests. */
     case "requests-tab":
+      // Each tab has its own address (#requests, #enquiries), so the sidebar shows the right one.
       setRequestsTab(el.dataset["tab"] ?? "requests");
-      return void refresh();
+      return void showPage(el.dataset["tab"] === "enquiries" ? "enquiries" : "requests");
 
     // Open / Completed / All.
     case "requests-filter":
@@ -2361,8 +2362,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
       return void refresh();
 
     case "go-enquiries":
-      setRequestsTab("enquiries");
-      return void showPage("requests");
+      return void showPage("enquiries");
 
     case "enquiry-claim":
       try {
@@ -4123,10 +4123,10 @@ function prefillOnboardingFromEnquiry(): void {
   toast("Filled in from the enquiry. Finishing onboarding completes it.", "info");
 }
 
-/* The Requests entry in the sidebar shows how many enquiries need a person: nobody has
+/* The Enquiries entry in the sidebar shows how many enquiries need a person: nobody has
  * them yet, or a call-back is due. */
 async function refreshEnquiryBadge(): Promise<void> {
-  const button = document.querySelector<HTMLElement>('#nav button[data-page="requests"]');
+  const button = document.querySelector<HTMLElement>('#nav button[data-page="enquiries"]');
   if (!button) return;
   const summary = await getEnquirySummary().catch(() => null);
   const count = (Number(summary?.waiting) || 0) + (Number(summary?.callbacksDue) || 0);

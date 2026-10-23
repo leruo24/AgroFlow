@@ -286,6 +286,26 @@ export const copy = {
     "Projek en beskikbaarheid",
     "Porojeke le go bonala ga tirelo",
   ],
+  // About (B3-06): the people, the sponsor and the one way to reach the team. Names and the
+  // organisation are as the team supplied them (2026-10-23); no personal phone numbers or emails.
+  team: ["The team", "Die span", "Setlhopha"],
+  teamBody: [
+    "AgroFlow is built by Team 2 of INF3003W at the University of Cape Town (UCT): Lubaelihle Msuku, Leruo Matlhatsi, Olwethu Nkabinde and Philisile Tyobeka.",
+    "AgroFlow word gebou deur Span 2 van INF3003W aan die Universiteit van Kaapstad (UCT): Lubaelihle Msuku, Leruo Matlhatsi, Olwethu Nkabinde en Philisile Tyobeka.",
+    "AgroFlow e agilwe ke Setlhopha 2 sa INF3003W kwa Yunibesithing ya Cape Town (UCT): Lubaelihle Msuku, Leruo Matlhatsi, Olwethu Nkabinde le Philisile Tyobeka.",
+  ],
+  sponsor: ["Project sponsor", "Projekborg", "Motshegetsi wa porojeke"],
+  sponsorBody: [
+    "The project sponsor is the Mafikeng Cisco Edge Centre.",
+    "Die projekborg is die Mafikeng Cisco Edge Centre.",
+    "Motshegetsi wa porojeke ke Mafikeng Cisco Edge Centre.",
+  ],
+  reach: ["How to reach us", "Hoe om ons te bereik", "Ka moo o ka re bonang"],
+  reachBody: [
+    "Use the Request a call form and the team will get back to you. We do not list personal phone numbers or email addresses.",
+    "Gebruik die Versoek 'n oproep-vorm en die span sal na jou terugkom. Ons lys nie persoonlike foonnommers of e-posadresse nie.",
+    "Dirisa foromo ya Kopa go founelwa mme setlhopha se tla go araba. Ga re bontshe dinomoro tsa mogala kgotsa diaterese tsa imeile tsa motho ka namana.",
+  ],
   projectBody: [
     "A working prototype combining field hardware, a farmer app, a staff console and backend services. Confirm service coverage, installation and support arrangements with the team.",
     "'n Werkende prototipe wat veldhardeware, 'n boertoepassing, 'n personeelkonsole en agtergronddienste kombineer. Bevestig diensgebied, installasie en ondersteuning met die span.",
