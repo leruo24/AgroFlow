@@ -232,6 +232,20 @@ public class AuditLogAndSchemaCheckTests
             "Add one, or a missed migration will go unnoticed exactly as 0033-0036 did.");
     }
 
+    [Fact]
+    public void EveryRegclassOrRegprocedureProbeIsReadAsText()
+    {
+        // Production (2026-10-23): two probes returned regprocedure, which Npgsql cannot read,
+        // and the whole schema check reported "could not be checked". A probe that selects a
+        // to_regclass / to_regprocedure / to_regtype value must cast it to text. (Used inside a
+        // condition, "... is null", the answer is a boolean and needs no cast.)
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "backend", "AgroFlow.Api", "Services", "SchemaCheck.cs"));
+        var probes = Regex.Matches(source, @"select\s+to_reg(class|procedure|proc|type|namespace)\('[^']*'\)(::text)?");
+        Assert.NotEmpty(probes);
+        var uncast = probes.Where(m => !m.Groups[2].Success).Select(m => m.Value).ToList();
+        Assert.True(uncast.Count == 0, $"Read these as text (add ::text): {string.Join(", ", uncast)}");
+    }
+
     /// Walks up from the test assembly until the repo root is found. The test
     /// host's working directory is bin/Debug/net8.0, which is three levels
     /// below the project and five below the root.

@@ -78,7 +78,7 @@ public sealed class SchemaCheck
             "Automatic weekly and monthly reports never run."),
 
         new("0036", "function", "archive_farm",
-            "select to_regprocedure('public.archive_farm(bigint)')",
+            "select to_regprocedure('public.archive_farm(bigint)')::text",
             "Farms cannot be archived, so test farms stay in every list and total."),
 
         new("0037", "table", "admin_audit_log",
@@ -108,7 +108,7 @@ public sealed class SchemaCheck
             "Farmers cannot log \"I watered\" or \"How does the soil feel?\" - farms without a kit get weather-only advice."),
 
         new("0043", "function", "zone_farmer_edit_guard",
-            "select to_regprocedure('public.zone_farmer_edit_guard()')",
+            "select to_regprocedure('public.zone_farmer_edit_guard()')::text",
             "A farmer's own login could change any zone column directly, including the watering thresholds."),
 
         new("0044", "table", "enquiry",
@@ -216,6 +216,16 @@ public sealed class SchemaCheck
                     // where Storage was never enabled, which is worth reporting.
                     _logger.LogDebug(ex,
                         "Schema probe for {Migration} ({Name}) could not run.",
+                        expected.Migration, expected.Name);
+                    found = false;
+                }
+                catch (Exception ex) when (ex is InvalidCastException or NotSupportedException)
+                {
+                    // The probe ran but its answer could not be read (every probe returns text or a
+                    // number; a regclass/regprocedure is not readable by Npgsql). One bad probe must
+                    // not turn the whole check into "could not reach the database": name it instead.
+                    _logger.LogError(ex,
+                        "Schema probe for {Migration} ({Name}) returned a value the API cannot read; fix its SQL.",
                         expected.Migration, expected.Name);
                     found = false;
                 }
