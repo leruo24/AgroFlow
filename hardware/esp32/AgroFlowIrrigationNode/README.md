@@ -17,6 +17,8 @@ Serial Monitor should say): [`docs/hardware-bringup.md`](../../../docs/hardware-
 |---|---|
 | `AgroFlowIrrigationNode.ino` | the sketch |
 | `OfflineBuffer.h` | the offline ring buffer and replay, plain C++ (no Arduino headers) so it is unit-tested natively: [`../tests/`](../tests/) |
+| `CommandIds.h` | the last 32 command IDs the kit carried out, so a repeat is acknowledged again but never run twice; plain C++, unit-tested natively |
+| `RunLimits.h` | how long a run may last; plain C++, unit-tested natively |
 | `secrets.example.h` | copy to `secrets.h` (gitignored); holds only `API_BASE_URL`, which is not a secret |
 
 ## Board and libraries
@@ -35,8 +37,8 @@ Not Adafruit's "DHT sensor library": it has `DHT.h`, not `DHTesp.h`, and the
 sketch will not compile with it alone. `WiFi.h`, `WiFiClientSecure.h`,
 `HTTPClient.h`, `HTTPUpdate.h`, `WebServer.h` and `Preferences.h` come with the core.
 
-v1.7.0 uses 92% (1,216,164 bytes) of the default "Default 4MB with spiffs" app partition
-(1,214,736 of 1,310,720 bytes). If a later change does not fit, pick
+v1.7.0 uses 92% (1,217,328 of 1,310,720 bytes) of the default "Default 4MB with spiffs"
+app partition, compiled with esp32 core 3.3.11. If a later change does not fit, pick
 **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA)**; OTA keeps working.
 
 ## How long a run lasts (v1.6.0)
@@ -68,6 +70,12 @@ v1.7.0 uses 92% (1,216,164 bytes) of the default "Default 4MB with spiffs" app p
   answer from `GET /api/devices/config` (boot, then every 10 minutes online, kept
   in flash) said the zone is Automatic. A Manual or Scheduled zone, or a kit that
   has never had an answer, is never watered by the kit on its own.
+- **A command runs once.** The kit keeps the last 32 command IDs in flash, each with
+  the time it first acknowledged it, and saves a new ID before it acts. When the API
+  resends a command whose acknowledgement was lost (or MQTT delivers it twice), the kit
+  acknowledges it again with that first time and does not water again, even after a reboot.
+- **The backlog is in the kit's status.** Every reading carries `backlog`, the readings
+  still waiting to upload; the admin **Kits** page and the farmer's kit screen show it.
 
 ## Local page (no internet needed)
 

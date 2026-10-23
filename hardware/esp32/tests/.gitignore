@@ -1,3 +1,7 @@
 offline_buffer_test
 offline_buffer_test.exe
 *.pdb
+command_ids_test
+command_ids_test.exe
+run_limits_test
+run_limits_test.exe
