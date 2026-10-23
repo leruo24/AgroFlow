@@ -124,10 +124,10 @@ public class LateReadingTests
     }
 
     [Fact]
-    public void Migration_0057_makes_a_physical_kits_measured_reading_atomic()
+    public void Migration_0060_makes_a_physical_kits_measured_reading_atomic()
     {
         var root = RepoRoot();
-        var migration = File.ReadAllText(Path.Combine(root, "supabase", "migrations", "0057_sensor_reading_device_dedupe.sql"));
+        var migration = File.ReadAllText(Path.Combine(root, "supabase", "migrations", "0060_sensor_reading_device_dedupe.sql"));
         var processor = File.ReadAllText(Path.Combine(root, "backend", "AgroFlow.Api", "Services", "SensorReadingProcessor.cs"));
         Assert.Contains("add column if not exists hardware_id", migration);
         Assert.Contains("on sensor_reading (hardware_id, sensor_type, recorded_at)", migration);
