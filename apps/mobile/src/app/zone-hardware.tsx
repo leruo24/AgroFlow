@@ -30,6 +30,7 @@ import {
   type ZoneHardware,
 } from '@/services/agroFlowApi';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { t, useI18n } from '@/i18n';
 
 // "last seen 4 minutes ago" in as few words as possible. Null when there is nothing to say,
 // so the caller shows no clause instead of "last seen never".
@@ -42,19 +43,19 @@ function describeLastSeen(iso: string | null): string | null {
   const minutes = Math.floor((Date.now() - then) / 60000);
 
   // A kit that reported seconds ago, or a clock slightly ahead of ours.
-  if (minutes < 1) return 'just now';
-  if (minutes === 1) return '1 minute ago';
-  if (minutes < 60) return `${minutes} minutes ago`;
+  if (minutes < 1) return t('sensor.justNow');
+  if (minutes < 60) return t('sensor.minAgo', { n: minutes });
 
   const hours = Math.floor(minutes / 60);
-  if (hours === 1) return '1 hour ago';
-  if (hours < 24) return `${hours} hours ago`;
+  if (hours < 24) return t('sensor.hoursAgo', { n: hours });
 
   const days = Math.floor(hours / 24);
-  return days === 1 ? 'yesterday' : `${days} days ago`;
+  return days === 1 ? t('kit.yesterday') : t('sensor.daysAgo', { n: days });
 }
 
 export default function ZoneHardwareScreen() {
+  // Re-renders in the farmer's language; t() below reads the same choice.
+  useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -77,7 +78,7 @@ export default function ZoneHardwareScreen() {
 
   const load = useCallback(async () => {
     if (!Number.isFinite(zoneId) || zoneId <= 0) {
-      setError('This zone could not be found.');
+      setError(t('kit.noZone'));
       setLoading(false);
       return;
     }
@@ -89,7 +90,7 @@ export default function ZoneHardwareScreen() {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : 'Your kit details could not be loaded.'
+          : t('kit.loadFailed')
       );
     } finally {
       setLoading(false);
@@ -104,12 +105,12 @@ export default function ZoneHardwareScreen() {
   // the farmer needs while they leave the app to switch WiFi.
   const confirmChangeWifi = useCallback(() => {
     Alert.alert(
-      'Change WiFi?',
-      'Your kit will forget its current WiFi and open its own setup network. Watering keeps running in the meantime.',
+      t('kit.changeTitle'),
+      t('kit.changeBody'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Change WiFi',
+          text: t('kit.change'),
           style: 'destructive',
           onPress: () => {
             void (async () => {
@@ -132,7 +133,7 @@ export default function ZoneHardwareScreen() {
                   setError(
                     changeError instanceof Error
                       ? changeError.message
-                      : 'Your kit could not be reached.'
+                      : t('kit.unreachable')
                   );
                 }
               } finally {
@@ -155,14 +156,14 @@ export default function ZoneHardwareScreen() {
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.navigate('/irrigation'))}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('common.back')}
           hitSlop={8}
           style={{ alignSelf: 'flex-start' }}
         >
           <ArrowLeft size={24} color={colors.text} strokeWidth={2.25} />
         </Pressable>
 
-        <ScreenHeader title="Your kit" subtitle={zoneName} help="zoneHardware" />
+        <ScreenHeader title={t('kit.title')} subtitle={zoneName} help="zoneHardware" />
 
         {loading ? (
           <ActivityIndicator color={colors.primaryDark} />
@@ -171,9 +172,9 @@ export default function ZoneHardwareScreen() {
         ) : !kit || kit.hardwareId === null ? (
           // A zone with no kit installed. Nothing is wrong; the farmer has no box here yet.
           <View style={styles.statusCard}>
-            <Text style={styles.statusHeadline}>No kit here yet</Text>
+            <Text style={styles.statusHeadline}>{t('kit.none')}</Text>
             <Text style={styles.statusDetail}>
-              This zone has no kit installed. Watering is set by hand until one is fitted.
+              {t('kit.noneBody')}
             </Text>
           </View>
         ) : (
@@ -187,16 +188,16 @@ export default function ZoneHardwareScreen() {
             >
               <Text style={styles.statusHeadline}>
                 {kit.online
-                  ? 'Online'
+                  ? t('kit.online')
                   : lastSeenPhrase
-                    ? `Offline, last seen ${lastSeenPhrase}`
-                    : 'Offline'}
+                    ? t('kit.offlineSeen', { when: lastSeenPhrase })
+                    : t('kit.offline')}
               </Text>
 
               <Text style={styles.statusDetail}>
                 {kit.online
-                  ? 'Your kit is talking to us and your watering is running normally.'
-                  : 'We have not heard from your kit recently. Check that it has power and that your WiFi is working.'}
+                  ? t('kit.onlineBody')
+                  : t('kit.offlineBody')}
               </Text>
             </View>
 
@@ -206,44 +207,42 @@ export default function ZoneHardwareScreen() {
                 decides that - so saying so is the difference between a
                 farmer who ignores it and one who drives out to the field. */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Sensors</Text>
+              <Text style={styles.sectionTitle}>{t('kit.sensors')}</Text>
 
               <View style={styles.row}>
-                <Text style={styles.rowLabel}>Soil sensor</Text>
+                <Text style={styles.rowLabel}>{t('zone.row.soilSensor')}</Text>
                 <Text style={kit.soilSensorWorking ? styles.rowValue : styles.rowValueWarning}>
-                  {kit.soilSensorWorking ? 'Working' : 'Not responding'}
+                  {kit.soilSensorWorking ? t('kit.working') : t('kit.notResponding')}
                 </Text>
               </View>
 
               <View style={styles.row}>
-                <Text style={styles.rowLabel}>Temperature sensor</Text>
+                <Text style={styles.rowLabel}>{t('kit.tempSensor')}</Text>
                 <Text
                   style={
                     kit.temperatureSensorWorking ? styles.rowValue : styles.rowValueWarning
                   }
                 >
-                  {kit.temperatureSensorWorking ? 'Working' : 'Not responding'}
+                  {kit.temperatureSensorWorking ? t('kit.working') : t('kit.notResponding')}
                 </Text>
               </View>
 
               <View style={[styles.row, styles.rowLast]}>
-                <Text style={styles.rowLabel}>Damp-in-the-air sensor</Text>
+                <Text style={styles.rowLabel}>{t('kit.humiditySensor')}</Text>
                 <Text style={kit.humiditySensorWorking ? styles.rowValue : styles.rowValueWarning}>
-                  {kit.humiditySensorWorking ? 'Working' : 'Not responding'}
+                  {kit.humiditySensorWorking ? t('kit.working') : t('kit.notResponding')}
                 </Text>
               </View>
 
               {(!kit.temperatureSensorWorking || !kit.humiditySensorWorking) && (
                 <Text style={styles.rowNote}>
-                  Not responding: using weather app data. Your watering carries on as normal - the
-                  soil sensor is what decides when to water.
+                  {t('kit.airSensorNote')}
                 </Text>
               )}
 
               {!kit.soilSensorWorking && (
                 <Text style={styles.rowNote}>
-                  Without the soil sensor your kit cannot decide when to water on its own. It will
-                  keep to its timetable, and you can still water by hand.
+                  {t('kit.soilSensorNote')}
                 </Text>
               )}
             </View>
@@ -252,40 +251,40 @@ export default function ZoneHardwareScreen() {
             {/* Last, and quietly. Only ever needed when somebody on a phone
                 call asks which kit this is. */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Kit details</Text>
+              <Text style={styles.sectionTitle}>{t('kit.details')}</Text>
 
               <View style={styles.row}>
-                <Text style={styles.rowLabel}>Kit ID</Text>
-                <Text style={styles.rowValueMuted}>{kit.deviceId ?? 'Not known yet'}</Text>
+                <Text style={styles.rowLabel}>{t('kit.id')}</Text>
+                <Text style={styles.rowValueMuted}>{kit.deviceId ?? t('kit.notKnown')}</Text>
               </View>
 
               <View style={[styles.row, styles.rowLast]}>
-                <Text style={styles.rowLabel}>Version</Text>
+                <Text style={styles.rowLabel}>{t('kit.version')}</Text>
                 <Text style={styles.rowValueMuted}>
-                  {kit.firmwareVersion ?? 'Not reported yet'}
+                  {kit.firmwareVersion ?? t('kit.notReported')}
                 </Text>
               </View>
             </View>
 
             {/* 4. Change WiFi */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>WiFi</Text>
+              <Text style={styles.sectionTitle}>{t('kit.wifi')}</Text>
 
               <Text style={styles.rowNote}>
-                Use this if you got a new router, or changed your WiFi name or password.
+                {t('kit.wifiWhen')}
               </Text>
 
               <Pressable
                 onPress={confirmChangeWifi}
                 disabled={changing}
                 accessibilityRole="button"
-                accessibilityLabel="Change WiFi"
+                accessibilityLabel={t('kit.change')}
                 style={[styles.primaryButton, changing && styles.primaryButtonBusy]}
               >
                 {changing ? (
                   <ActivityIndicator color={colors.white} />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Change WiFi</Text>
+                  <Text style={styles.primaryButtonText}>{t('kit.change')}</Text>
                 )}
               </Pressable>
 
@@ -299,9 +298,9 @@ export default function ZoneHardwareScreen() {
 
                   {offline.setupNetworkName && offline.setupNetworkPassword && (
                     <View style={styles.credentialBlock}>
-                      <Text style={styles.credentialLabel}>Then join this network</Text>
+                      <Text style={styles.credentialLabel}>{t('kit.thenJoin')}</Text>
                       <Text style={styles.credential}>{offline.setupNetworkName}</Text>
-                      <Text style={styles.credentialLabel}>Password</Text>
+                      <Text style={styles.credentialLabel}>{t('signin.password')}</Text>
                       <Text style={styles.credential}>{offline.setupNetworkPassword}</Text>
                     </View>
                   )}
@@ -320,14 +319,12 @@ export default function ZoneHardwareScreen() {
                 it. */}
             {Platform.OS === 'web' && (
               <Text style={styles.footnote}>
-                You are using AgroFlow in a browser. To finish a WiFi change you need the phone
-                that will join your kit&apos;s setup network, so do this step on your phone.
+                {t('kit.webNote')}
               </Text>
             )}
 
             <Text style={styles.footnote}>
-              Your kit keeps watering on its own while it is off WiFi, using the last readings it
-              took.
+              {t('kit.offWifiNote')}
             </Text>
           </>
         )}
@@ -340,18 +337,18 @@ export default function ZoneHardwareScreen() {
       <BlurSheet
         visible={instructionsFor !== null}
         onClose={() => setInstructionsFor(null)}
-        title="Now set up your WiFi"
+        title={t('kit.sheetTitle')}
       >
         <View style={styles.sheetBody}>
           <Text style={styles.sheetIntro}>
-            Your kit has opened its own WiFi network. Three steps:
+            {t('kit.sheetIntro')}
           </Text>
 
           <View style={styles.step}>
             <Text style={styles.stepNumber}>1</Text>
             <Text style={styles.stepText}>
-              On this phone, join the WiFi network{' '}
-              <Text style={styles.credential}>{instructionsFor?.network}</Text> (password{' '}
+              {t('kit.step1Join')}{' '}
+              <Text style={styles.credential}>{instructionsFor?.network}</Text> ({t('kit.step1Password')}{' '}
               <Text style={styles.credential}>{instructionsFor?.password}</Text>).
             </Text>
           </View>
@@ -359,18 +356,17 @@ export default function ZoneHardwareScreen() {
           <View style={styles.step}>
             <Text style={styles.stepNumber}>2</Text>
             <Text style={styles.stepText}>
-              A setup page opens. Choose your new WiFi and enter its password.
+              {t('kit.step2')}
             </Text>
           </View>
 
           <View style={styles.step}>
             <Text style={styles.stepNumber}>3</Text>
-            <Text style={styles.stepText}>Your kit reconnects by itself within a minute.</Text>
+            <Text style={styles.stepText}>{t('kit.step3')}</Text>
           </View>
 
           <Text style={styles.footnote}>
-            The setup network stays open for 5 minutes. If it closes before you get there, unplug
-            and replug your kit 3 times quickly to open it again.
+            {t('kit.setupWindow')}
           </Text>
         </View>
       </BlurSheet>
