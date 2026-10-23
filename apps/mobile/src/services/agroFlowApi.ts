@@ -668,7 +668,8 @@ export type ZoneSetupFacts = {
 export type TodayZone = {
   zoneId: number;
   name: string;
-  action: { kind: TodayActionKind; text: string };
+  // code + args (AF-02): the sentence is built in the farmer's language (lib/advice.ts); text is the English.
+  action: { kind: TodayActionKind; text: string; code?: string; args?: Record<string, string> };
   // The engine's runtime for a "water" card, in whole minutes (null otherwise), and the
   // zone's maximum run time, so the card can say when the advice needs more than one run.
   recommendedMinutes?: number | null;

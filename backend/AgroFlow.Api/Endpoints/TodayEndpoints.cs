@@ -93,7 +93,7 @@ public static class TodayEndpoints
                 {
                     zoneId = zone.ZoneId,
                     name = zone.ZoneName,
-                    action = new { kind = action.Kind, text = action.Text },
+                    action = new { kind = action.Kind, text = action.Text, code = action.Code, args = action.Args },
                     // The engine's own runtime, read as it is (the engine is not changed): only
                     // for a "water" card, in whole minutes, null when it has no runtime.
                     recommendedMinutes = action.Kind == "water" && result.RecommendedRuntimeSeconds is { } secs

@@ -279,4 +279,24 @@ public class AuditFixTests
             Assert.Contains(d.Version, text);
         }
     }
+
+    // AF-02: every advice code the server sends has a sentence in all three app dictionaries.
+    [Fact]
+    public void Every_advice_code_has_an_app_sentence_in_english_afrikaans_and_setswana()
+    {
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "backend", "AgroFlow.Domain", "Agronomy", "RuleBook", "TodayRules.cs"));
+        var fixedCodes = System.Text.RegularExpressions.Regex.Matches(source, "\"((?:none|skip|kit|soon|setup)\\.[a-z_]+)\"")
+            .Select(m => m.Groups[1].Value).Where(c => c != "setup.next").Distinct().ToList();
+        var amounts = new[] { "minutes", "seconds", "litres", "per_m2", "mm", "usual" };
+        var codes = fixedCodes.Concat(amounts.SelectMany(a => new[] { "water.now." + a, "water.reduced." + a })).ToList();
+        Assert.True(codes.Count >= 25, string.Join(", ", codes));
+        foreach (var lang in new[] { "en", "af", "tn" })
+        {
+            var dict = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "apps", "mobile", "src", "i18n", lang + ".json"))).RootElement.GetProperty("strings");
+            foreach (var code in codes)
+                Assert.True(dict.TryGetProperty("advice." + code, out var v) && v.GetString() is { Length: > 0 }, $"{lang}: advice.{code}");
+            foreach (var field in new[] { "crop", "planting_date", "flow_rate", "area", "soil", "calibration", "kit" })
+                Assert.True(dict.TryGetProperty("advice.setup." + field, out _), $"{lang}: advice.setup.{field}");
+        }
+    }
 }

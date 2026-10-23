@@ -5,8 +5,10 @@ import { Pressable, Text } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { createAccountAvatarStyles } from '@/styles/accountAvatarStyles';
+import { useI18n } from '@/i18n';
 
 export function AccountAvatar() {
+  const { t } = useI18n();
   const { user } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => createAccountAvatarStyles(colors), [colors]);
@@ -20,7 +22,7 @@ export function AccountAvatar() {
     <Pressable
       onPress={() => router.push('/profile')}
       accessibilityRole="button"
-      accessibilityLabel="Open profile"
+      accessibilityLabel={t('avatar.open')}
       style={styles.avatar}
     >
       <Text style={styles.initials}>{initials}</Text>

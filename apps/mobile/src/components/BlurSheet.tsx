@@ -28,6 +28,7 @@ import type {
 } from '@/constants/colors';
 
 import { Type, Space } from '@/constants/colors';
+import { useI18n } from '@/i18n';
 
 import {
   useTheme,
@@ -50,6 +51,7 @@ export function BlurSheet({
   children,
   maxHeightRatio = 0.82,
 }: BlurSheetProps) {
+  const { t } = useI18n();
   const {
     colors,
   } = useTheme();
@@ -73,7 +75,7 @@ export function BlurSheet({
           style={styles.backdropPress}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss"
+          accessibilityLabel={t('sheet.dismiss')}
         />
 
         <View
@@ -93,7 +95,7 @@ export function BlurSheet({
               hitSlop={8}
               style={styles.closeButton}
               accessibilityRole="button"
-              accessibilityLabel="Close"
+              accessibilityLabel={t('sheet.close')}
             >
               <X size={22} color={colors.textSecondary} strokeWidth={1.8} />
             </TouchableOpacity>

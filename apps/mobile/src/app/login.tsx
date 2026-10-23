@@ -355,7 +355,7 @@ export default function LoginScreen() {
                       }
                     }
                   }
-                  placeholder="farmer@example.com"
+                  placeholder={t('login.emailExample')}
                   placeholderTextColor={
                     colors.textMuted
                   }

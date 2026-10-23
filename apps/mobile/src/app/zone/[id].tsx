@@ -405,7 +405,7 @@ export default function ZoneControlScreen() {
               router.canGoBack() ? router.back() : router.navigate('/irrigation')
             }
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('common.back')}
           >
             <ArrowLeft
               size={24}
@@ -565,7 +565,7 @@ export default function ZoneControlScreen() {
       error: unknown
     ) {
       Alert.alert(
-        'Could Not Change Mode',
+        t('zone.err.modeTitle'),
         getErrorMessage(
           error,
           'Check your connection and Supabase permissions, then try again.'
@@ -773,8 +773,8 @@ ${t('run.capped', { max: run.max })}`
       !cleanedPlantingDate
     ) {
       Alert.alert(
-        'Missing Zone Details',
-        'Enter a zone name, location, and crop type.'
+        t('zone.err.missingTitle'),
+        t('zone.err.missing')
       );
 
       return;
@@ -782,8 +782,8 @@ ${t('run.capped', { max: run.max })}`
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanedPlantingDate)) {
       Alert.alert(
-        'Invalid Planting Date',
-        'Enter the planting date in YYYY-MM-DD format.'
+        t('zone.err.dateTitle'),
+        t('zone.err.dateFormat')
       );
 
       return;
@@ -811,8 +811,8 @@ ${t('run.capped', { max: run.max })}`
 
     if (!isRealDate || cleanedPlantingDate > today) {
       Alert.alert(
-        'Invalid Planting Date',
-        'Planting date must be a valid date that is not in the future.'
+        t('zone.err.dateTitle'),
+        t('zone.err.dateFuture')
       );
 
       return;
@@ -835,8 +835,8 @@ ${t('run.capped', { max: run.max })}`
         100
     ) {
       Alert.alert(
-        'Invalid Moisture Values',
-        'Moisture values must be between 0 and 100.'
+        t('zone.err.moistureTitle'),
+        t('zone.err.moisture')
       );
 
       return;
@@ -847,8 +847,8 @@ ${t('run.capped', { max: run.max })}`
       stopThreshold
     ) {
       Alert.alert(
-        'Invalid Automation Range',
-        'The start threshold must be lower than the desired moisture level.'
+        t('zone.err.rangeTitle'),
+        t('zone.err.range')
       );
 
       return;
@@ -884,8 +884,8 @@ ${t('run.capped', { max: run.max })}`
       );
 
       Alert.alert(
-        'Zone Updated',
-        'The zone settings were saved to Supabase.'
+        t('zone.savedTitle'),
+        t('zone.saved')
       );
     } catch (
       error: unknown
@@ -896,7 +896,7 @@ ${t('run.capped', { max: run.max })}`
       );
 
       Alert.alert(
-        'Could Not Update Zone',
+        t('zone.err.saveTitle'),
         getErrorMessage(
           error,
           'Check your connection and Supabase permissions, then try again.'
@@ -984,8 +984,8 @@ ${t('run.capped', { max: run.max })}`
       )
     ) {
       Alert.alert(
-        'Invalid Start Time',
-        'Enter the time as HH:MM, for example 05:30.'
+        t('zone.err.startTitle'),
+        t('zone.err.start')
       );
 
       return;
@@ -996,8 +996,8 @@ ${t('run.capped', { max: run.max })}`
       0
     ) {
       Alert.alert(
-        'Choose Irrigation Days',
-        'Select at least one irrigation day.'
+        t('zone.err.daysTitle'),
+        t('zone.err.days')
       );
 
       return;
@@ -1013,8 +1013,8 @@ ${t('run.capped', { max: run.max })}`
         1440
     ) {
       Alert.alert(
-        'Invalid Duration',
-        'Enter a duration between 1 and 1440 minutes.'
+        t('zone.err.durationTitle'),
+        t('zone.err.duration')
       );
 
       return;
@@ -1045,8 +1045,8 @@ ${t('run.capped', { max: run.max })}`
       );
 
       Alert.alert(
-        'Schedule Updated',
-        'The regular irrigation schedule was saved to Supabase.'
+        t('zone.scheduleSavedTitle'),
+        t('zone.scheduleSaved')
       );
     } catch (
       error: unknown
@@ -1057,7 +1057,7 @@ ${t('run.capped', { max: run.max })}`
       );
 
       Alert.alert(
-        'Could Not Update Schedule',
+        t('zone.err.scheduleTitle'),
         getErrorMessage(
           error,
           'Check your connection and Supabase permissions, then try again.'
@@ -1113,7 +1113,7 @@ ${t('run.capped', { max: run.max })}`
               0.7
             }
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel={t('common.back')}
           >
             <ArrowLeft
               size={24}
@@ -1159,7 +1159,7 @@ ${t('run.capped', { max: run.max })}`
 
           {selectedZone.isSimulated && (
             <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>SIMULATED</Text>
+              <Text style={styles.statusBadgeText}>{t('zone.simulated')}</Text>
             </View>
           )}
 
@@ -1235,7 +1235,7 @@ ${t('run.capped', { max: run.max })}`
             }
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Your kit"
+            accessibilityLabel={t('zone.kitRow')}
           >
             <View
               style={
@@ -1247,7 +1247,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowTitle
                 }
               >
-                Your kit
+                {t('zone.kitRow')}
               </Text>
 
               <Text
@@ -1255,7 +1255,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowHint
                 }
               >
-                Is it working, and change its WiFi
+                {t('zone.kitRowBody')}
               </Text>
             </View>
 
@@ -1284,7 +1284,7 @@ ${t('run.capped', { max: run.max })}`
             }
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="The week ahead"
+            accessibilityLabel={t('zone.weekAhead')}
           >
             <View
               style={
@@ -1296,7 +1296,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowTitle
                 }
               >
-                The week ahead
+                {t('zone.weekAhead')}
               </Text>
 
               <Text
@@ -1304,7 +1304,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowHint
                 }
               >
-                Weather and watering advice for 7 days
+                {t('zone.weekAheadBody')}
               </Text>
             </View>
 
@@ -1330,11 +1330,11 @@ ${t('run.capped', { max: run.max })}`
             }
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Crop and planting date"
+            accessibilityLabel={t('zone.cropRow')}
           >
             <View style={styles.linkRowCopy}>
-              <Text style={styles.linkRowTitle}>Crop and planting date</Text>
-              <Text style={styles.linkRowHint}>What is growing, and since when</Text>
+              <Text style={styles.linkRowTitle}>{t('zone.cropRow')}</Text>
+              <Text style={styles.linkRowHint}>{t('zone.cropRowBody')}</Text>
             </View>
             <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
           </TouchableOpacity>
@@ -1348,11 +1348,11 @@ ${t('run.capped', { max: run.max })}`
             }
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Finish setup"
+            accessibilityLabel={t('zone.finishSetup')}
           >
             <View style={styles.linkRowCopy}>
-              <Text style={styles.linkRowTitle}>Finish setup</Text>
-              <Text style={styles.linkRowHint}>Planting date, size, flow rate - for surer advice</Text>
+              <Text style={styles.linkRowTitle}>{t('zone.finishSetup')}</Text>
+              <Text style={styles.linkRowHint}>{t('zone.finishSetupBody')}</Text>
             </View>
             <ChevronRight size={20} color={colors.textMuted} strokeWidth={2} />
           </TouchableOpacity>
@@ -1373,7 +1373,7 @@ ${t('run.capped', { max: run.max })}`
             }
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Soil type"
+            accessibilityLabel={t('zone.soilRow')}
           >
             <View
               style={
@@ -1385,7 +1385,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowTitle
                 }
               >
-                Soil type
+                {t('zone.soilRow')}
               </Text>
 
               <Text
@@ -1393,7 +1393,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowHint
                 }
               >
-                How much water your soil holds
+                {t('zone.soilRowBody')}
               </Text>
             </View>
 
@@ -1414,7 +1414,7 @@ ${t('run.capped', { max: run.max })}`
             }
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Teach the sensor your soil"
+            accessibilityLabel={t('zone.teachRow')}
           >
             <View
               style={
@@ -1426,7 +1426,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowTitle
                 }
               >
-                Teach the sensor your soil
+                {t('zone.teachRow')}
               </Text>
 
               <Text
@@ -1434,7 +1434,7 @@ ${t('run.capped', { max: run.max })}`
                   styles.linkRowHint
                 }
               >
-                Save a wet and a dry reading
+                {t('zone.teachRowBody')}
               </Text>
             </View>
 
@@ -1799,48 +1799,48 @@ ${t('run.capped', { max: run.max })}`
         </View>
       </ScrollView>
 
-      <BlurSheet visible={isEditingZone} onClose={() => { if (!settingsSaving) cancelZoneEditing(); }} title="Edit Zone & Automation">
+      <BlurSheet visible={isEditingZone} onClose={() => { if (!settingsSaving) cancelZoneEditing(); }} title={t('zone.edit.title')}>
               <View
                 style={
                   styles.inlineForm
                 }
               >
-                <Text style={styles.inputLabel}>Zone Name</Text>
+                <Text style={styles.inputLabel}>{t('zone.edit.name')}</Text>
                 <TextInput
                   value={zoneName}
                   onChangeText={setZoneName}
                   editable={!settingsSaving}
-                  placeholder="Zone 1"
+                  placeholder={t('zone.edit.namePlaceholder')}
                   placeholderTextColor={colors.text}
                   style={styles.input}
                 />
 
-                <Text style={styles.inputLabel}>Location</Text>
+                <Text style={styles.inputLabel}>{t('zone.edit.location')}</Text>
                 <TextInput
                   value={zoneLocation}
                   onChangeText={setZoneLocation}
                   editable={!settingsSaving}
-                  placeholder="North Field"
+                  placeholder={t('zone.edit.locationPlaceholder')}
                   placeholderTextColor={colors.text}
                   style={styles.input}
                 />
 
-                <Text style={styles.inputLabel}>Crop Type</Text>
+                <Text style={styles.inputLabel}>{t('zone.edit.crop')}</Text>
                 <TextInput
                   value={zoneCrop}
                   onChangeText={setZoneCrop}
                   editable={!settingsSaving}
-                  placeholder="Tomatoes"
+                  placeholder={t('zone.edit.cropPlaceholder')}
                   placeholderTextColor={colors.text}
                   style={styles.input}
                 />
 
-                <Text style={styles.inputLabel}>Planting Date</Text>
+                <Text style={styles.inputLabel}>{t('zone.edit.planting')}</Text>
                 <TextInput
                   value={plantingDate}
                   onChangeText={setPlantingDate}
                   editable={!settingsSaving}
-                  placeholder="YYYY-MM-DD"
+                  placeholder={t('zone.edit.datePlaceholder')}
                   placeholderTextColor={colors.text}
                   style={styles.input}
                   maxLength={10}
@@ -1877,9 +1877,9 @@ ${t('run.capped', { max: run.max })}`
 
                 <View style={styles.switchRow}>
                   <View style={styles.switchCopy}>
-                    <Text style={styles.switchTitle}>Weather Adjustment</Text>
+                    <Text style={styles.switchTitle}>{t('zone.edit.weather')}</Text>
                     <Text style={styles.switchDescription}>
-                      Delay automatic irrigation when rain is expected.
+                      {t('zone.edit.weatherBody')}
                     </Text>
                   </View>
                   <Switch
@@ -1909,13 +1909,13 @@ ${t('run.capped', { max: run.max })}`
                   disabled={settingsSaving}
                   onPress={cancelZoneEditing}
                 >
-                  <Text style={styles.outlineButtonText}>Cancel</Text>
+                  <Text style={styles.outlineButtonText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
       </BlurSheet>
-      <BlurSheet visible={isEditingSchedule} onClose={() => { if (!scheduleSettingsSaving) cancelScheduleEditing(); }} title="Edit Schedule">
+      <BlurSheet visible={isEditingSchedule} onClose={() => { if (!scheduleSettingsSaving) cancelScheduleEditing(); }} title={t('zone.edit.scheduleTitle')}>
               <View style={styles.inlineForm}>
-                <Text style={styles.inputLabel}>Irrigation Days</Text>
+                <Text style={styles.inputLabel}>{t('zone.edit.days')}</Text>
 
                 <View style={styles.scheduleDayRow}>
                   {SCHEDULE_DAY_OPTIONS.map((day) => {
@@ -1952,7 +1952,7 @@ ${t('run.capped', { max: run.max })}`
 
                 <View style={styles.inputRow}>
                   <View style={styles.inputColumn}>
-                    <Text style={styles.inputLabel}>Start Time</Text>
+                    <Text style={styles.inputLabel}>{t('zone.edit.start')}</Text>
                     <TextInput
                       style={styles.input}
                       value={regularScheduleStartTime}
@@ -1998,7 +1998,7 @@ ${t('run.capped', { max: run.max })}`
                   disabled={scheduleSettingsSaving}
                   onPress={cancelScheduleEditing}
                 >
-                  <Text style={styles.outlineButtonText}>Cancel</Text>
+                  <Text style={styles.outlineButtonText}>{t('common.cancel')}</Text>
                 </TouchableOpacity>
               </View>
       </BlurSheet>
