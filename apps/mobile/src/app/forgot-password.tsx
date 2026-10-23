@@ -134,7 +134,7 @@ export default function ForgotPasswordScreen() {
                   <TextInput
                     value={email}
                     onChangeText={value => { setEmail(value); if (error) setError(''); }}
-                    placeholder="farmer@example.com"
+                    placeholder={t('login.emailExample')}
                     placeholderTextColor={colors.textMuted}
                     keyboardType="email-address"
                     autoCapitalize="none"

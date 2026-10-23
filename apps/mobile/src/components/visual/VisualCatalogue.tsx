@@ -59,7 +59,7 @@ export function VisualCatalogue({
         <Text style={{ color: colors.textSecondary, fontSize: 16 }}>
           {t("visual.pending")}
         </Text>
-        <LegalNotice />
+        <LegalNotice journey={{ status: "loading", journey: null }} />
         <Pressable
           accessibilityRole="checkbox"
           accessibilityState={{ checked: accepted }}

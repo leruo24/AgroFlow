@@ -195,6 +195,20 @@ describe('after Irrigate', () => {
     }
     await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe("Kit didn't respond — check it's online"));
   });
+
+  it("with the server's phase (0057), shows it word for word: Waiting for kit, then No response", async () => {
+    hardware.mockResolvedValue(kit({}));
+    startManualIrrigation.mockResolvedValueOnce('cmd-4' as never);
+    status
+      .mockResolvedValueOnce({ ...answer('sent'), phase: 'waiting_for_kit', phaseLabel: 'Waiting for kit' })
+      .mockResolvedValue({ ...answer('no_response'), phase: 'no_response', phaseLabel: 'No response' });
+    jest.useFakeTimers();
+    await pressStart();
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe('Waiting for kit'));
+    await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
+    await waitFor(() => expect(screen.getByTestId('run-status').props.children).toBe('No response'));
+  });
 });
 
 describe("the zone's maximum run time", () => {

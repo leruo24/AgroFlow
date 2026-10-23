@@ -14,6 +14,7 @@ import { useZoneKit } from '@/hooks/useZoneKit';
 import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
 import { effectiveRunMinutes, scheduleState } from '@/lib/schedule';
 import { useRunStatus, type RunState } from '@/hooks/useRunStatus';
+import { CommandPhaseLabel } from '@/components/visual/CommandPhaseLabel';
 import { ApiHttpError } from '@/services/agroFlowApi';
 import { t, useI18n, type TranslationKey } from '@/i18n';
 import { SensorReadingsCard, WaterUsageCard, ZoneDetailsCard } from '@/components/ZoneOverviewCards';
@@ -316,7 +317,9 @@ export default function ZoneControlScreen() {
 
   // The last Water now from this screen, followed until the kit reports it finished.
   const [run, setRun] = useState<{ id: string; seconds: number } | null>(null);
-  const runState = useRunStatus(run?.id ?? null, run?.seconds ?? 0);
+  const runStatus = useRunStatus(run?.id ?? null, run?.seconds ?? 0);
+  const runState = runStatus?.state ?? null;
+  const runPhase = runStatus?.phase ?? null;
 
   useEffect(() => {
     if (
@@ -1673,7 +1676,11 @@ ${t('run.capped', { max: run.max })}`
                       {t('offline.needsConnection')}
                     </Text>
                   ) : null}
-                  {runState ? (
+                  {/* The server's phase in the farmer's language (no English phaseLabel passed);
+                      an API older than 0057 has no phase and keeps the run line below. */}
+                  {runPhase ? (
+                    <CommandPhaseLabel phase={runPhase} testID="run-status" />
+                  ) : runState ? (
                     <Text
                       style={[styles.offlineNote, runState === 'finished' && { color: colors.success }]}
                       accessibilityLiveRegion="polite"

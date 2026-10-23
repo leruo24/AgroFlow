@@ -9,6 +9,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { useI18n, type TranslationKey } from '@/i18n';
 import { SetupCard } from '@/components/SetupCard';
+import { HosepipeProgress } from '@/components/visual/SetupPresentation';
 import { formatSast } from '@/lib/sastTime';
 import type { JourneyState } from '@/hooks/useJourney';
 
@@ -36,10 +37,10 @@ export function WhereYouAreNow({ state }: { state: JourneyState }) {
   const openHelp = j.helpRequests.filter(h => h.status === 'open').length;
   return <View style={styles.card} testID="where-you-are-now">
     <Text accessibilityRole="header" style={styles.title}>{t('journey.title')}</Text>
-    <View style={styles.row}>
-      <Text style={styles.part} testID="where-details">{t('journey.details', { done: details.done, total: details.total })}</Text>
-      <Text style={styles.part} testID="where-installation">{t('journey.installation', { stage: t(`journey.stage.${j.installation.stage}` as TranslationKey) })}</Text>
-    </View>
+    <HosepipeProgress completed={details.done} installationStage={j.installation.stage}
+      label={t('journey.details', { done: details.done, total: details.total })}
+      installationText={t('journey.installation', { stage: t(`journey.stage.${j.installation.stage}` as TranslationKey) })}
+      detailsTestID="where-details" installationTestID="where-installation" />
     <Text style={styles.next} testID="where-next">{t(`journey.next.${w.stage}` as TranslationKey, { done: details.done, total: details.total })}</Text>
     <Text style={styles.label}>{t('journey.whoNext', { who })}</Text>
     <Text style={styles.label} testID="where-date">{t('journey.when', { date })}</Text>
@@ -55,11 +56,9 @@ function createStyles(colors: AppColors) {
   return StyleSheet.create({
     card: { gap: Spacing.two, padding: Spacing.three, borderRadius: Radius.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: Spacing.three },
     title: { color: colors.text, fontSize: Type.title, fontWeight: '700' },
-    row: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-    part: { color: colors.text, fontSize: Type.caption, fontWeight: '700', paddingHorizontal: Spacing.two, paddingVertical: 4, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.divider, overflow: 'hidden' },
     next: { color: colors.text, fontSize: Type.body, lineHeight: 22 },
     label: { color: colors.textSecondary, fontSize: Type.caption, lineHeight: 20 },
-    button: { minHeight: 48, borderRadius: Radius.sm, backgroundColor: colors.primaryDark, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.three },
+    button: { minHeight: 48, borderRadius: Radius.sm, backgroundColor: colors.action, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.three },
     buttonText: { color: colors.white, fontSize: Type.body, fontWeight: '700' },
   });
 }

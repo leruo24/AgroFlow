@@ -25,6 +25,7 @@ import { ServiceSupportCard } from '@/components/ServiceSupportCard';
 import { SimpleViewControl } from '@/components/visual/AppearanceControls';
 import { FieldGuide } from '@/components/visual/FieldGuide';
 import { LegalNotice } from '@/components/visual/LegalNotice';
+import { useJourney } from '@/hooks/useJourney';
 import { DayNightMotif } from '@/components/visual/DayNightMotif';
 
 const NOTIFICATION_PREFERENCES_KEY =
@@ -60,6 +61,8 @@ const notificationOptions: {
 export default function SettingsScreen() {
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(true);
+  // Terms & privacy shows the documents and the recorded acceptance from the farm's journey.
+  const journey = useJourney();
   const {
     themePreference,
     resolvedTheme,
@@ -300,11 +303,11 @@ export default function SettingsScreen() {
             {t('settings.currentTheme', { mode: resolvedTheme === 'dark' ? t('settings.themeDark') : t('settings.themeLight') })}
           </Text>
 
-          <Text style={styles.sectionTitle}>{t('visual.service')}</Text>
-          <Text style={styles.note}>{t('visual.serviceBody')}</Text>
+          {/* Help and documents: the field guide, and Terms & privacy with the real versions and
+              the farmer's recorded acceptance. Service & support is its own card below. */}
+          <Text style={styles.sectionTitle}>{t('settings.helpDocs')}</Text>
           <FieldGuide />
-          <LegalNotice />
-          <Text style={styles.note}>{t('visual.draft')}</Text>
+          <LegalNotice journey={journey} />
           <Text style={styles.sectionTitle}>{t('settings.notifications')}</Text>
 
           <View style={styles.sectionCard}>

@@ -25,6 +25,7 @@ import { TelegramSection } from '@/components/TelegramSection';
 import FarmMapSurface from '@/components/FarmMapSurface';
 import { useAppPreferences } from '@/hooks/useAppPreferences';
 import { useSetup } from '@/hooks/useSetup';
+import { HosepipeProgress } from '@/components/visual/SetupPresentation';
 import { useJourney } from '@/hooks/useJourney';
 import {
   ApiHttpError, DEFAULT_PREFERENCES, acceptTerms, askForHelp, changeZoneCrop, fetchNotificationPreferences, finishFarmerTask,
@@ -289,10 +290,14 @@ function Hub({ t, styles, journey, loading, onOpen }: { t: T; styles: Styles; jo
   return <>
     <Text accessibilityRole="header" style={styles.title}>{t('tasks.title')}</Text>
     <Text style={styles.why}>{t('tasks.why')}</Text>
-    <Text style={styles.label} testID="setup-details-count">
-      {loading ? t('journey.loading') : journey ? t('journey.details', { done: journey.setupProgress.done, total: journey.setupProgress.total }) : t('journey.unavailable')}
-    </Text>
-    {journey ? <Text style={styles.label} testID="setup-installation">{t('journey.installation', { stage: t(`journey.stage.${journey.installation.stage}` as TranslationKey) })}</Text> : null}
+    {/* "Your details: X of 4" as the hosepipe (the server's count of the four tasks), with
+        "Installation: <stage>" beneath it. Nothing is counted here (B3-02, B3-03). */}
+    {journey
+      ? <HosepipeProgress completed={journey.setupProgress.done} installationStage={journey.installation.stage}
+          label={t('journey.details', { done: journey.setupProgress.done, total: journey.setupProgress.total })}
+          installationText={t('journey.installation', { stage: t(`journey.stage.${journey.installation.stage}` as TranslationKey) })}
+          detailsTestID="setup-details-count" installationTestID="setup-installation" />
+      : <Text style={styles.label} testID="setup-details-count">{loading ? t('journey.loading') : t('journey.unavailable')}</Text>}
     {FARMER_TASKS.map(task => <Pressable key={task} accessibilityRole="button" onPress={() => onOpen(task)} style={styles.card} testID={`setup-task-${task}`}
       accessibilityLabel={`${t(`tasks.${task}` as TranslationKey)}: ${done.has(task) ? t('tasks.done') : t('tasks.toDo')}`}>
       <View style={styles.cardHead}>

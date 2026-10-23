@@ -1218,6 +1218,13 @@
     "kit.step1Password": "lefoko la sephiri",
     "kit.step2": "Tsebe ya go baakanya e a buleka. Tlhopha WiFi ya gago e ntšha o tsenye lefoko la yone la sephiri.",
     "kit.step3": "Sediriswa sa gago se golagana gape ka bosi mo motsotsong.",
-    "kit.setupWindow": "Neteweke ya go baakanya e nna e butswe metsotso e le 5. Fa e tswalega pele o fitlha, ntsha o busetse sediriswa sa gago makgetlho a le 3 ka bonako go e bula gape."
+    "kit.setupWindow": "Neteweke ya go baakanya e nna e butswe metsotso e le 5. Fa e tswalega pele o fitlha, ntsha o busetse sediriswa sa gago makgetlho a le 3 ka bonako go e bula gape.",
+    "legal.version": "Kgatiso {version}, {date}",
+    "legal.read": "Bala {title}",
+    "legal.acceptedOn": "O di amogetse ka {date}.",
+    "legal.notAccepted": "Ga di ise di amogelwe. O di amogela mo Dikeletso tsa gago, ka fa tlase ga Pele o simolola.",
+    "legal.loading": "Go laela dikwalo…",
+    "legal.failed": "Dikwalo ga di a kgona go laela. Tlhatlhoba kgokagano ya gago o leke gape.",
+    "settings.helpDocs": "Thuso le dikwalo"
   }
 }

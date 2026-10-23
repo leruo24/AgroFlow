@@ -1218,6 +1218,13 @@
     "kit.step1Password": "password",
     "kit.step2": "A setup page opens. Choose your new WiFi and enter its password.",
     "kit.step3": "Your kit reconnects by itself within a minute.",
-    "kit.setupWindow": "The setup network stays open for 5 minutes. If it closes before you get there, unplug and replug your kit 3 times quickly to open it again."
+    "kit.setupWindow": "The setup network stays open for 5 minutes. If it closes before you get there, unplug and replug your kit 3 times quickly to open it again.",
+    "legal.version": "Version {version}, {date}",
+    "legal.read": "Read {title}",
+    "legal.acceptedOn": "You accepted these on {date}.",
+    "legal.notAccepted": "Not accepted yet. You accept them in Your preferences, under Before you start.",
+    "legal.loading": "Loading the documents…",
+    "legal.failed": "Could not load the documents. Check your connection and try again.",
+    "settings.helpDocs": "Help and documents"
   }
 }

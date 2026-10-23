@@ -6,6 +6,7 @@ import { visualCatalogueHtml } from "./visualCatalogue";
 import termsDraft from "@/content/terms-draft.md?raw";
 import privacyDraft from "@/content/privacy-draft.md?raw";
 import { legalDraftHtml } from "@/ui/legalDraft";
+import { wirePublicFacts } from "@/ui/publicFacts";
 import { irrigationIllustrationHtml, wireIrrigationIllustration } from '@/features/irrigationIllustration';
 
 const routes: readonly [string, CopyKey][] = [
@@ -109,13 +110,13 @@ export function renderPublicSite(original: string): string {
     case "/service-pricing":
       body =
         hero("pricingTitle", "receiveBody") +
-        `<section class="visual-grid"><article class="visual-card"><h2>${t("install")}</h2><p class="visual-price">R4,000</p><p>${t("quote")}</p></article><article class="visual-card"><h2>${t("monthly")}</h2><p class="visual-price">R610 / ${publicLanguage() === "af" ? "maand" : publicLanguage() === "tn" ? "kgwedi" : "month"}</p><p>${t("quote")}</p></article></section><section class="visual-band"><p>${t("costs")}</p>${cta()}</section>`;
+        `<section class="visual-grid"><article class="visual-card"><h2>${t("install")}</h2><p class="visual-price" data-price="installation"><span data-price-amount>R4,000</span></p><p>${t("quote")}</p></article><article class="visual-card"><h2>${t("monthly")}</h2><p class="visual-price" data-price="monthly"><span data-price-amount>R610</span> / ${publicLanguage() === "af" ? "maand" : publicLanguage() === "tn" ? "kgwedi" : "month"}</p><p>${t("quote")}</p></article></section><section class="visual-band"><p>${t("costs")}</p>${cta()}</section>`;
       break;
     case "/terms":
     case "/privacy":
       body =
         hero(label, "draftBody") +
-        `<section class="visual-band" role="status"><h2>${t("draft")}</h2><p>${t("legalLanguage")}</p><p>0.1-draft · <time datetime="2026-10-23">2026-10-23</time></p></section><article class="legal-document" lang="en">${legalDraftHtml(path === "/terms" ? termsDraft : privacyDraft)}</article>`;
+        `<section class="visual-band" role="status"><h2 data-legal-draft>${t("draft")}</h2><p>${t("legalLanguage")}</p><p data-legal-version>0.1-draft · <time datetime="2026-10-23">2026-10-23</time></p></section><article class="legal-document" lang="en" data-legal-doc="${path === "/terms" ? "terms" : "privacy"}">${legalDraftHtml(path === "/terms" ? termsDraft : privacyDraft)}</article>`;
       break;
     default:
       body =
@@ -140,6 +141,7 @@ export function wirePublicSite(root: HTMLElement): void {
     .querySelector("[data-catalogue-back]")
     ?.addEventListener("click", () => history.back());
   wireAppearance(root);
+  wirePublicFacts(root);
   const button = root.querySelector<HTMLButtonElement>("[data-public-menu]");
   const nav = root.querySelector<HTMLElement>("#publicNav");
   const close = () => {

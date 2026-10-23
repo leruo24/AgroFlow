@@ -17,9 +17,11 @@ export type CommandPhase = (typeof COMMAND_PHASES)[number];
 export function CommandPhaseLabel({
   phase,
   phaseLabel,
+  testID,
 }: {
   phase: CommandPhase;
   phaseLabel?: string;
+  testID?: string;
 }) {
   const { colors } = useTheme();
   const { t } = useI18n();
@@ -36,7 +38,7 @@ export function CommandPhaseLabel({
         borderRadius: 12,
       }}
     >
-      <Text style={{ color: colors.text, fontSize: 18, fontWeight: "600" }}>
+      <Text style={{ color: colors.text, fontSize: 18, fontWeight: "600" }} testID={testID}>
         {phaseLabel ?? t(`visual.phase.${phase}`)}
       </Text>
     </View>

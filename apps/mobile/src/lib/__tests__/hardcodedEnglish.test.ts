@@ -18,11 +18,6 @@ const FOLDERS = ['app', 'components'];
 // Staff-only or developer-only files are not farmer screens.
 const SKIP = [/__tests__/, /\.native\.tsx$/, /WebLoadingVideo/, /mascot[\\/]/];
 
-// Translated on fix/i18n-remaining (uncommitted when this test was written, 23 October 2026).
-// Remove each entry when that branch is merged; the test then guards these files too.
-const PENDING_ON_I18N_BRANCH = ['app/forgot-password.tsx', 'app/update-password.tsx', 'app/zone-hardware.tsx'];
-const relative = (f: string) => path.relative(SRC, f).split('\\').join('/');
-
 // Not English sentences: brand names, units and marks.
 const ALLOWED = new Set(['AgroFlow', 'Telegram', 'L', 'ml', 'm²', 'ha', 'min', '°C', '%', 'pH', 'OK', 'AgroFlow Staff', 'mm', 'L/min', '—', '·', '✓', '○', '›', '•']);
 
@@ -68,8 +63,7 @@ export function findHardCodedEnglish(source: string): string[] {
 
 describe('AF-02: farmer screens', () => {
   const all = FOLDERS.flatMap(f => files(path.join(SRC, f)))
-    .filter(f => !SKIP.some(r => r.test(f)))
-    .filter(f => !PENDING_ON_I18N_BRANCH.includes(relative(f)));
+    .filter(f => !SKIP.some(r => r.test(f)));
 
   it('finds the files', () => {
     expect(all.length).toBeGreaterThan(30);

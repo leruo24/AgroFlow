@@ -16,18 +16,22 @@ export function HosepipeProgress({
   installationStage,
   label,
   installationText,
+  detailsTestID,
+  installationTestID,
 }: {
   completed: number;
   installationStage: string;
   label?: string;
   installationText?: string;
+  detailsTestID?: string;
+  installationTestID?: string;
 }) {
   const { colors } = useTheme();
   const { t } = useI18n();
   const count = Math.max(0, Math.min(4, Math.floor(completed)));
   return (
     <View style={{ gap: 16 }}>
-      <Text style={{ color: colors.text, fontSize: 18 }}>
+      <Text style={{ color: colors.text, fontSize: 18 }} testID={detailsTestID}>
         {label ?? t("visual.details", { count })}
       </Text>
       <View
@@ -53,7 +57,7 @@ export function HosepipeProgress({
           />
         ))}
       </View>
-      <Text style={{ color: colors.textSecondary, fontSize: 16 }}>
+      <Text style={{ color: colors.textSecondary, fontSize: 16 }} testID={installationTestID}>
         {installationText ??
           `${t("visual.installation")}: ${installationStage}`}
       </Text>

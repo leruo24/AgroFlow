@@ -1,4 +1,5 @@
 import { publicPageHtml, wireWelcome } from './welcome';
+import { wirePublicFacts } from '@/ui/publicFacts';
 
 // The public header/footer survive route changes; staff and recovery still use
 // their separate authenticated document. No session state is read or manufactured.
@@ -17,6 +18,7 @@ export function mountPublicNavigation(root: HTMLElement): void {
     const menu = root.querySelector<HTMLButtonElement>('[data-public-menu]');
     if (menu?.getAttribute('aria-expanded') === 'true') menu.click();
     wireWelcome(next);
+    wirePublicFacts(next);
     next.focus({ preventScroll: true });
     window.scrollTo(0, 0);
     if (location.hash === '#enquire') document.getElementById('enquiryOpen')?.click();

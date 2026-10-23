@@ -52,6 +52,10 @@ public static class JourneyEndpoints
         app.MapGet("/api/public/legal/{key}", (string key) => LegalDocuments.Find(key) is { } d
             ? Results.Text(LegalDocuments.Text(d), "text/markdown; charset=utf-8")
             : Results.NotFound(new { error = "No such document." })).AllowAnonymous();
+        // The example price the public /service-pricing page shows: the same staff-edited
+        // service.* settings as the farmer's Service & support, so the two never disagree.
+        app.MapGet("/api/public/service-price", async (AppSettingsStore settings, CancellationToken ct) =>
+            Results.Ok(await ServicePrice.ExampleAsync(settings, ct))).AllowAnonymous();
 
         var staff = app.MapGroup("/api/admin").RequireAuthorization().AddEndpointFilter<AdminOnlyFilter>();
         staff.MapGet("/farms/{farmId:long}/case", GetCaseAsync);
