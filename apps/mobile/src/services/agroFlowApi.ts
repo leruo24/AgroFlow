@@ -966,6 +966,27 @@ export type ZoneHardware = {
   offlineBacklog?: number | null;
 };
 
+// The Kit tab (GET /api/farmer/farms/{farmId}/kits): one card per zone, with a plain status and a
+// checklist worked out by the server (KitHealth) from what the kit really reports. Each line is a
+// key and a state; the app words it in the farmer's language (kitTab.line.<key>.<state>).
+export type KitOverall = 'working' | 'needs_attention' | 'not_connected' | 'awaiting_installation';
+export type KitLine = { key: string; state: string; tone: 'ok' | 'warn' | 'bad' | 'info'; at: string | null; value: string | null };
+export type KitCard = {
+  zoneId: number;
+  zoneName: string;
+  hasKit: boolean;
+  deviceId: string | null;
+  deviceName: string | null;
+  setupNetworkName: string | null;
+  setupNetworkPassword: string | null;
+  overall: KitOverall;
+  lines: KitLine[];
+};
+
+export function fetchFarmKits(farmId: string | number) {
+  return authorizedRequest<KitCard[]>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/kits`);
+}
+
 export function fetchZoneHardware(zoneId: number) {
   return authorizedRequest<ZoneHardware>(
     `/api/farmer/zones/${zoneId}/hardware`

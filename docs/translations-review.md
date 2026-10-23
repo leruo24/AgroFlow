@@ -989,3 +989,80 @@ The farmer's kit screen, while a kit is still uploading readings it kept offline
 | Key | English | Afrikaans (draft) | Setswana (draft) |
 |---|---|---|---|
 | `kit.backlog` | {count} readings from while it was offline are still uploading. | {count} lesings van toe dit vanlyn was, word nog opgelaai. | Dipalo di le {count} tsa fa e ne e se mo inthaneteng di sa ntse di romelwa. |
+
+## Kit setup info and the Kit tab, 23 October 2026 (fix/kit-setup-info)
+
+The new Kit tab (one card per zone: overall status, the checklist, the kit's setup Wi-Fi), the More tab, and the Telegram message a farmer gets once when a kit connects (backend BotText). Afrikaans and Setswana are drafts.
+
+Check: the app already calls the kit "stel" in Afrikaans (`kit.*`) and "sediriswa" in Setswana, so these drafts keep those words. "Stel" is ambiguous on its own ("set"); "toerusting" may read better. Whichever is chosen should be used everywhere.
+
+| Key | English | Afrikaans (draft) | Setswana (draft) |
+|---|---|---|---|
+| `kitTab.awaitingBody` | No kit is connected to this zone yet. Next: AgroFlow staff book your installation visit, and your installer connects the kit. You do not need to do anything now. | Nog geen stel is aan hierdie sone gekoppel nie. Volgende: AgroFlow-personeel bespreek jou installasiebesoek, en jou installeerder koppel die stel. Jy hoef nou niks te doen nie. | Ga go ise go nne le sediriswa se se golaganngwang le karolo e. Se se latelang: badiri ba AgroFlow ba beela ketelo ya go tsenya, mme motsenyi wa gago o golaganya sediriswa. Ga o tlhoke go dira sepe jaanong. |
+| `kitTab.changeWifi` | Change Wi-Fi | Verander Wi-Fi | Fetola Wi-Fi |
+| `kitTab.copied` | Copied | Gekopieer | E kopolotswe |
+| `kitTab.copy` | Copy | Kopieer | Kopolola |
+| `kitTab.copyName` | Copy the setup Wi-Fi name | Kopieer die opstel-Wi-Fi se naam | Kopolola leina la Wi-Fi ya go baakanya |
+| `kitTab.copyOrShare` | Copy or share | Kopieer of deel | Kopolola kgotsa abelana |
+| `kitTab.copyPassword` | Copy the setup Wi-Fi password | Kopieer die opstel-Wi-Fi se wagwoord | Kopolola lefoko la sephiri la Wi-Fi ya go baakanya |
+| `kitTab.details` | Kit details | Stelbesonderhede | Dintlha tsa sediriswa |
+| `kitTab.error` | Your kit's status could not be loaded. | Jou stel se status kon nie gelaai word nie. | Maemo a sediriswa sa gago ga a kgona go laela. |
+| `kitTab.errorBody` | This says nothing about the kit itself: it keeps watering by its own rules. Check your connection and try again. | Dit sê niks oor die stel self nie: dit hou aan natlei volgens sy eie reëls. Kyk na jou verbinding en probeer weer. | Se ga se re sepe ka sediriswa ka bosone: se tswelela go nosetsa ka melao ya sone. Tlhatlhoba kgokagano ya gago o leke gape. |
+| `kitTab.intro` | What your kit is doing now, from what it reports. Pull down to refresh. | Wat jou stel nou doen, volgens wat dit rapporteer. Trek af om te verfris. | Se sediriswa sa gago se se dirang jaanong, go ya ka se se se begang. Goga go ya tlase go ntšhafatsa. |
+| `kitTab.line.backlog.none` | Offline readings waiting to upload: none | Vanlyn-lesings wat wag om op te laai: geen | Dipalo tsa fa se ne se sa golaganngwa tse di emetseng go romelwa: ga di yo |
+| `kitTab.line.backlog.waiting` | Offline readings waiting to upload: {count} | Vanlyn-lesings wat wag om op te laai: {count} | Dipalo tsa fa se ne se sa golaganngwa tse di emetseng go romelwa: {count} |
+| `kitTab.line.climate.error` | Temperature and humidity sensor: not reading – check its cable | Temperatuur- en humiditeitsensor: lees nie – kyk na sy kabel | Sesupo sa mogote le bongola: ga se bale – tlhatlhoba terata ya sone |
+| `kitTab.line.climate.none` | Temperature and humidity sensor: no reading yet | Temperatuur- en humiditeitsensor: nog geen lesing nie | Sesupo sa mogote le bongola: ga go ise go nne le palo |
+| `kitTab.line.climate.ok` | Temperature and humidity sensor: OK | Temperatuur- en humiditeitsensor: in orde | Sesupo sa mogote le bongola: se siame |
+| `kitTab.line.climate.unknown` | Temperature and humidity sensor: not known while the kit is not connected | Temperatuur- en humiditeitsensor: onbekend terwyl die stel nie gekoppel is nie | Sesupo sa mogote le bongola: ga go itsiwe fa sediriswa se sa golaganngwa |
+| `kitTab.line.connection.never` | Not connected · not seen yet | Nie gekoppel nie · nog nie gesien nie | Ga se a golaganngwa · ga se ise se bonwe |
+| `kitTab.line.connection.offline` | Not connected · last seen {when} | Nie gekoppel nie · laas gesien {when} | Ga se a golaganngwa · se bonwe la bofelo {when} |
+| `kitTab.line.connection.online` | Connected · last seen {when} | Gekoppel · laas gesien {when} | Se golaganngwe · se bonwe la bofelo {when} |
+| `kitTab.line.firmware.current` | Firmware {version} | Fermware {version} | Firmware {version} |
+| `kitTab.line.firmware.unknown` | Firmware: not reported yet | Fermware: nog nie gerapporteer nie | Firmware: ga e ise e begwe |
+| `kitTab.line.firmware.update_available` | Firmware {version} · update available ({latest}) | Fermware {version} · opdatering beskikbaar ({latest}) | Firmware {version} · e ntšhafaditsweng e teng ({latest}) |
+| `kitTab.line.pump.confirmed` | Pump switch: last command confirmed by the kit at {time} | Pompskakelaar: laaste opdrag deur die stel bevestig om {time} | Sekonopo sa pompo: taelo ya bofelo e netefaditswe ke sediriswa ka {time} |
+| `kitTab.line.pump.never` | Pump switch: not used yet | Pompskakelaar: nog nie gebruik nie | Sekonopo sa pompo: ga se ise se dirisiwe |
+| `kitTab.line.pump.unconfirmed` | Pump switch: last command not confirmed by the kit | Pompskakelaar: laaste opdrag nie deur die stel bevestig nie | Sekonopo sa pompo: taelo ya bofelo ga e a netefadiwa ke sediriswa |
+| `kitTab.line.pump.waiting` | Pump switch: waiting for the kit to confirm | Pompskakelaar: wag dat die stel bevestig | Sekonopo sa pompo: go emetswe gore sediriswa se netefatse |
+| `kitTab.line.safety.limits` | Safety: each run stops after {minutes} min at most, and the kit stops by itself if it loses connection for {lost} minutes | Veiligheid: elke beurt stop ná hoogstens {minutes} min, en die stel stop vanself as dit {lost} minute lank verbinding verloor | Pabalesego: go nosetsa gongwe le gongwe go emisa morago ga metsotso e le {minutes} fela, mme sediriswa se ema ka bosone fa se latlhegelwa ke kgokagano metsotso e le {lost} |
+| `kitTab.line.soil.none` | Soil sensor: no reading yet | Grondsensor: nog geen lesing nie | Sesupo sa mmu: ga go ise go nne le palo |
+| `kitTab.line.soil.not_reading` | Soil sensor: no recent reading – check the probe | Grondsensor: geen onlangse lesing nie – kyk na die peiler | Sesupo sa mmu: ga go palo ya bosheng – tlhatlhoba sesupo |
+| `kitTab.line.soil.ok` | Soil sensor: OK | Grondsensor: in orde | Sesupo sa mmu: se siame |
+| `kitTab.line.soil.out_of_range` | Soil sensor: reading out of range – check the probe | Grondsensor: lesing buite die bestek – kyk na die peiler | Sesupo sa mmu: palo e feta selekanyo – tlhatlhoba sesupo |
+| `kitTab.line.soil.unknown` | Soil sensor: not known while the kit is not connected | Grondsensor: onbekend terwyl die stel nie gekoppel is nie | Sesupo sa mmu: ga go itsiwe fa sediriswa se sa golaganngwa |
+| `kitTab.line.wifi.ok` | Wi-Fi signal: OK | Wi-Fi-sein: goed genoeg | Sesupo sa Wi-Fi: se siame |
+| `kitTab.line.wifi.strong` | Wi-Fi signal: strong | Wi-Fi-sein: sterk | Sesupo sa Wi-Fi: se nonofile |
+| `kitTab.line.wifi.weak` | Wi-Fi signal: weak – the connection may drop | Wi-Fi-sein: swak – die verbinding kan wegval | Sesupo sa Wi-Fi: se bokoa – kgokagano e ka kgaogana |
+| `kitTab.loading` | Checking your kit… | Kyk na jou stel… | Go tlhatlhoba sediriswa sa gago… |
+| `kitTab.noSetupWifi` | Your kit's setup Wi-Fi appears here once the kit has connected for the first time. | Jou stel se opstel-Wi-Fi verskyn hier sodra die stel die eerste keer gekoppel het. | Wi-Fi ya go baakanya sediriswa e tla bonala fano fa sediriswa se sena go golagana la ntlha. |
+| `kitTab.noZones` | This farm has no zones yet. | Hierdie plaas het nog nie sones nie. | Polase e ga e ise e nne le dikarolo. |
+| `kitTab.noZonesBody` | AgroFlow staff add your zones during setup. A kit is connected to each zone at installation. | AgroFlow-personeel voeg jou sones by tydens opstelling. 'n Stel word by installasie aan elke sone gekoppel. | Badiri ba AgroFlow ba tsenya dikarolo tsa gago fa go baakanngwa. Sediriswa se golaganngwa le karolo nngwe le nngwe fa go tsenngwa. |
+| `kitTab.overall.awaiting_installation` | Awaiting installation | Wag op installasie | Se emetse go tsenngwa |
+| `kitTab.overall.needs_attention` | Needs attention | Het aandag nodig | Se tlhoka tlhokomelo |
+| `kitTab.overall.not_connected` | Not connected | Nie gekoppel nie | Ga se a golaganngwa |
+| `kitTab.overall.working` | Working | Werk | Se a dira |
+| `kitTab.passwordLabel` | Password | Wagwoord | Lefoko la sephiri |
+| `kitTab.pumpNote` | This confirms the switch, not water flow: the kit has no flow meter. | Dit bevestig die skakelaar, nie watervloei nie: die stel het geen vloeimeter nie. | Se se netefatsa sekonopo, e seng go elela ga metsi: sediriswa ga se na selekanyi sa kelelo. |
+| `kitTab.setupWifi` | Your kit's setup Wi-Fi: {name}, password {password} | Jou stel se opstel-Wi-Fi: {name}, wagwoord {password} | Wi-Fi ya go baakanya sediriswa sa gago: {name}, lefoko la sephiri {password} |
+| `kitTab.setupWifiLabel` | Setup Wi-Fi | Opstel-Wi-Fi | Wi-Fi ya go baakanya |
+| `kitTab.title` | Your kit | Jou stel | Sediriswa sa gago |
+| `kitTab.whenNeeded` | When do I need this? | Wanneer het ek dit nodig? | Ke tla e tlhoka leng? |
+| `kitTab.whenNeededBody` | Only if you change your Wi-Fi (a new router, name or password) or move the kit somewhere else. Join this network on your phone and the kit's setup page opens. | Net as jy jou Wi-Fi verander ('n nuwe roeteerder, naam of wagwoord) of die stel ergens anders heen skuif. Sluit op jou foon by hierdie netwerk aan en die stel se opstelblad maak oop. | Fela fa o fetola Wi-Fi ya gago (router e ntšha, leina kgotsa lefoko la sephiri) kgotsa o tsamaisa sediriswa go ya kwa gongwe. Ikamanye le neteweke e ka founo mme tsebe ya go baakanya sediriswa e a bulega. |
+| `more.forecast` | Forecast | Voorspelling | Maemo a loapi a a tlang |
+| `more.forecastBody` | Weather and watering advice for the week | Weer en natleiadvies vir die week | Maemo a loapi le kgakololo ya go nosetsa ya beke |
+| `more.help` | Help | Hulp | Thuso |
+| `more.helpBody` | Short explanations, and how to reach AgroFlow | Kort verduidelikings, en hoe om AgroFlow te bereik | Ditlhaloso tse dikhutshwane, le ka moo o ka bonang AgroFlow |
+| `more.history` | History | Geskiedenis | Hisitori |
+| `more.historyBody` | Watering and what happened on your farm | Natlei en wat op jou plaas gebeur het | Go nosetsa le se se diragetseng mo polaseng ya gago |
+| `more.intro` | Everything else in AgroFlow. | Alles anders in AgroFlow. | Tse dingwe tsotlhe mo AgroFlow. |
+| `more.reports` | Reports | Verslae | Dipego |
+| `more.reportsBody` | Water use, as a PDF you can share | Waterverbruik, as 'n PDF wat jy kan deel | Tiriso ya metsi, jaaka PDF e o ka e abelanang |
+| `more.settings` | Settings | Instellings | Dithulaganyo |
+| `more.settingsBody` | Language, alerts, your account and service | Taal, waarskuwings, jou rekening en diens | Puo, ditlhagiso, akhaonto ya gago le tirelo |
+| `more.tank` | Tank | Tenk | Tanka |
+| `more.tankBody` | How much water is left, and refills | Hoeveel water oor is, en hervullings | Metsi a a setseng, le go tlatsa |
+| `more.title` | More | Meer | Tse dingwe |
+| `tabs.kit` | Kit | Stel | Sediriswa |
+| `tabs.more` | More | Meer | Tse dingwe |
+| `kit.connected` (Telegram, BotText.cs) | Your AgroFlow kit for {zone} is connected. If you ever change your Wi-Fi, its setup network is {name}, password {password}. Open the app → Kit for the steps. | Jou AgroFlow-stel vir {zone} is gekoppel. As jy ooit jou Wi-Fi verander, is sy opstelnetwerk {name}, wagwoord {password}. Maak die toepassing oop → Stel vir die stappe. | Sediriswa sa gago sa AgroFlow sa {zone} se golaganye. Fa o ka fetola Wi-Fi ya gago, neteweke ya sone ya go baakanya ke {name}, lefoko la sephiri {password}. Bula tiriso → Sediriswa go bona dikgato. |
