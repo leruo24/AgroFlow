@@ -47,18 +47,22 @@ public static class HealthEndpoints
         TelegramPollingService poller,
         IConfiguration configuration,
         SchemaCheck schema,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
+        // Technical detail (SQL errors, hosts) goes to this log only; staff get a plain
+        // sentence with a reference they can quote (AF-15).
+        var log = loggerFactory.CreateLogger("AgroFlow.Api.Health");
         var checks = new List<HealthCheck>
         {
             CheckApi(),
             CheckDeployment(),
-            await CheckDatabaseAsync(dataSource, cancellationToken),
+            await CheckDatabaseAsync(dataSource, log, cancellationToken),
             await CheckSchemaAsync(schema, cancellationToken),
             CheckMqtt(mqtt),
             CheckTelegram(telegram.Value, poller),
-            await CheckWeatherAsync(dataSource, cancellationToken),
-            await CheckDevicesAsync(dataSource, cancellationToken),
+            await CheckWeatherAsync(dataSource, log, cancellationToken),
+            await CheckDevicesAsync(dataSource, log, cancellationToken),
         };
 
         // The worst single check sets the overall light.
@@ -167,7 +171,7 @@ public static class HealthEndpoints
     }
 
     private static async Task<HealthCheck> CheckDatabaseAsync(
-        NpgsqlDataSource dataSource, CancellationToken ct)
+        NpgsqlDataSource dataSource, ILogger log, CancellationToken ct)
     {
         var sw = Stopwatch.StartNew();
 
@@ -191,9 +195,10 @@ public static class HealthEndpoints
         }
         catch (Exception ex)
         {
+            log.LogError(ex, "Health check database: could not be reached (reference health-database).");
             return new HealthCheck(
                 "database", "Database", Down,
-                $"Could not be reached: {ex.Message}");
+                "Could not be reached. Check the database connection on Railway (reference health-database in the API log).");
         }
     }
 
@@ -255,14 +260,15 @@ public static class HealthEndpoints
     }
 
     private static async Task<HealthCheck> CheckWeatherAsync(
-        NpgsqlDataSource dataSource, CancellationToken ct)
+        NpgsqlDataSource dataSource, ILogger log, CancellationToken ct)
     {
         try
         {
             await using var connection = await dataSource.OpenConnectionAsync(ct);
 
             await using var cmd = new NpgsqlCommand(
-                "select max(updated_at) from weather_daily", connection);
+                // weather_daily has fetched_at (0016), not updated_at: the old query failed with 42703.
+                "select max(fetched_at) from weather_daily", connection);
 
             var value = await cmd.ExecuteScalarAsync(ct);
 
@@ -284,13 +290,14 @@ public static class HealthEndpoints
         }
         catch (Exception ex)
         {
+            log.LogError(ex, "Health check weather: the query failed (reference health-weather).");
             return new HealthCheck("weather", "Weather", Warning,
-                $"Could not be checked: {ex.Message}");
+                "Weather status unavailable: the check itself failed, so this says nothing about the forecasts. Reference health-weather in the API log.");
         }
     }
 
     private static async Task<HealthCheck> CheckDevicesAsync(
-        NpgsqlDataSource dataSource, CancellationToken ct)
+        NpgsqlDataSource dataSource, ILogger log, CancellationToken ct)
     {
         try
         {
@@ -337,8 +344,9 @@ public static class HealthEndpoints
         }
         catch (Exception ex)
         {
+            log.LogError(ex, "Health check devices: the query failed (reference health-devices).");
             return new HealthCheck("devices", "Kits", Warning,
-                $"Could not be checked: {ex.Message}");
+                "Kit status unavailable: the check itself failed. Reference health-devices in the API log.");
         }
     }
 

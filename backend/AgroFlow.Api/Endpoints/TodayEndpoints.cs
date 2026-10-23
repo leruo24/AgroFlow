@@ -47,6 +47,7 @@ public static class TodayEndpoints
         var today = Fao56EngineController.TodayInSast();
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.Today");
         var cards = new List<object>();
+        var calculatedAt = DateTimeOffset.UtcNow;
 
         // Each zone's maximum run time (0052), so the app can say when the advice is longer
         // than one run ("Recommended 66 min — your pump is limited to 5 min per run").
@@ -92,7 +93,7 @@ public static class TodayEndpoints
                 {
                     zoneId = zone.ZoneId,
                     name = zone.ZoneName,
-                    action = new { kind = action.Kind, text = action.Text },
+                    action = new { kind = action.Kind, text = action.Text, code = action.Code, args = action.Args },
                     // The engine's own runtime, read as it is (the engine is not changed): only
                     // for a "water" card, in whole minutes, null when it has no runtime.
                     recommendedMinutes = action.Kind == "water" && result.RecommendedRuntimeSeconds is { } secs
@@ -106,6 +107,9 @@ public static class TodayEndpoints
                     confidence = new { level = result.Confidence.Key, reason = result.Confidence.Reason },
                     confidenceExplanation = Plain(Explanations.Confidence(result), isAdmin),
                     nextStep = result.NextStep is null ? null : new { field = result.NextStep.Field, ask = result.NextStep.Ask },
+                    // What the advice was worked out from (AF-18): the crop the zone is SET to (never its
+                    // name), the engine's crop model, the weather dates used and when this ran.
+                    provenance = AdviceProvenance.From(input, result, calculatedAt),
                     // The "Finish setup" checklist ticks these off.
                     setup = new
                     {
@@ -137,7 +141,10 @@ public static class TodayEndpoints
             }
         }
 
-        return Results.Ok(new { farmId, day = today.ToString("yyyy-MM-dd"), zones = cards });
+        // Today's weather for the farm: available, missing or stale, never "dry" when unknown (AF-03).
+        var weather = await TodayWeatherAsync(dataSource, farmId, today, ct);
+
+        return Results.Ok(new { farmId, day = today.ToString("yyyy-MM-dd"), calculatedAt, weather, zones = cards });
     }
 
     // Farmers never see the technical line; admins do.
@@ -154,6 +161,21 @@ public static class TodayEndpoints
     {
         if (!isAdmin) e.Technical = string.Empty;
         return e;
+    }
+
+    public static async Task<WeatherAvailability.Status> TodayWeatherAsync(NpgsqlDataSource dataSource, long farmId, DateOnly today, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            "select precipitation_mm, fetched_at from weather_daily where farm_id = $1 and date = $2 limit 1", connection);
+        cmd.Parameters.AddWithValue(farmId);
+        cmd.Parameters.AddWithValue(today);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct)) return WeatherAvailability.Evaluate(false, null, null, DateTimeOffset.UtcNow);
+        return WeatherAvailability.Evaluate(true,
+            r.IsDBNull(0) ? null : Convert.ToDouble(r.GetValue(0)),
+            r.IsDBNull(1) ? null : r.GetFieldValue<DateTimeOffset>(1),
+            DateTimeOffset.UtcNow);
     }
 
     private static async Task<bool> IsAdminAsync(NpgsqlDataSource dataSource, Guid userId, CancellationToken ct)

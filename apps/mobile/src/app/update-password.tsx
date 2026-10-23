@@ -43,6 +43,7 @@ import {
   createUpdatePasswordStyles,
 } from '@/styles/updatePasswordStyles';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
+import { t, useI18n } from '@/i18n';
 
 function getRecoveryParameters(
   url: string
@@ -70,6 +71,8 @@ function getRecoveryParameters(
 }
 
 export default function UpdatePasswordScreen() {
+  // Re-renders in the farmer's language; t() below reads the same choice.
+  useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const {
@@ -197,7 +200,7 @@ export default function UpdatePasswordScreen() {
             !recoveryUrl
           ) {
             throw new Error(
-              'Open the password recovery link from your email.'
+              t('setpw.openLink')
             );
           }
 
@@ -256,7 +259,7 @@ export default function UpdatePasswordScreen() {
               !refreshToken
             ) {
               throw new Error(
-                'This recovery link is invalid or has expired.'
+                t('setpw.linkExpired')
               );
             }
 
@@ -303,7 +306,7 @@ export default function UpdatePasswordScreen() {
             setError(
               caughtError instanceof Error
                 ? caughtError.message
-                : 'The password recovery link could not be verified.'
+                : t('setpw.linkUnverified')
             );
           }
         } finally {
@@ -336,7 +339,7 @@ export default function UpdatePasswordScreen() {
       !recoveryReady
     ) {
       setError(
-        'Open a valid password recovery link first.'
+        t('setpw.openValidLink')
       );
 
       return;
@@ -346,7 +349,7 @@ export default function UpdatePasswordScreen() {
       newPassword.length < 8
     ) {
       setError(
-        'Your new password must contain at least 8 characters.'
+        t('setpw.tooShort')
       );
 
       return;
@@ -357,7 +360,7 @@ export default function UpdatePasswordScreen() {
       confirmPassword
     ) {
       setError(
-        'The passwords do not match.'
+        t('setpw.mismatch')
       );
 
       return;
@@ -397,7 +400,7 @@ export default function UpdatePasswordScreen() {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : 'Your password could not be updated.'
+          : t('setpw.failed')
       );
     } finally {
       setSaving(
@@ -423,7 +426,7 @@ export default function UpdatePasswordScreen() {
         );
 
         setError(
-          'Your password was changed, but the app could not confirm it. Please try again.'
+          t('setpw.notConfirmed')
         );
 
         setSuccess(
@@ -515,7 +518,7 @@ export default function UpdatePasswordScreen() {
                     styles.brandSubtitle
                   }
                 >
-                  Smart Irrigation
+                  {t('signin.tagline')}
                 </Text>
               </View>
             </View>
@@ -526,10 +529,10 @@ export default function UpdatePasswordScreen() {
               }
             >
               {success
-                ? 'Password Updated'
+                ? t('setpw.doneTitle')
                 : openedAsFirstLogin
-                  ? 'Set Your Own Password'
-                  : 'Choose New Password'}
+                  ? t('setpw.firstTitle')
+                  : t('setpw.title')}
             </Text>
 
             <Text
@@ -538,10 +541,10 @@ export default function UpdatePasswordScreen() {
               }
             >
               {success
-                ? 'Your AgroFlow password has been changed successfully.'
+                ? t('setpw.doneBody')
                 : openedAsFirstLogin
-                  ? 'The password you signed in with was a temporary one. Anyone who saw it - or who can scroll back through your Telegram chat - could use it, so please choose your own now.'
-                  : 'Enter and confirm the new password for your account.'}
+                  ? t('setpw.firstBody')
+                  : t('setpw.body')}
             </Text>
 
             {error ? (
@@ -580,8 +583,8 @@ export default function UpdatePasswordScreen() {
                   }
                 >
                   {openedFromProfile
-                    ? 'Return to Profile'
-                    : 'Return to Login'}
+                    ? t('setpw.backProfile')
+                    : t('setpw.backLogin')}
                 </Text>
               </TouchableOpacity>
             ) : (
@@ -595,7 +598,7 @@ export default function UpdatePasswordScreen() {
                     styles.inputLabel
                   }
                 >
-                  New Password
+                  {t('setpw.newLabel')}
                 </Text>
 
                 <TextInput
@@ -608,7 +611,7 @@ export default function UpdatePasswordScreen() {
                   style={
                     styles.input
                   }
-                  placeholder="At least 8 characters"
+                  placeholder={t('setpw.newPlaceholder')}
                   placeholderTextColor={
                     colors.textMuted
                   }
@@ -623,7 +626,7 @@ export default function UpdatePasswordScreen() {
                     styles.confirmLabel
                   }
                 >
-                  Confirm New Password
+                  {t('setpw.againLabel')}
                 </Text>
 
                 <TextInput
@@ -636,7 +639,7 @@ export default function UpdatePasswordScreen() {
                   style={
                     styles.input
                   }
-                  placeholder="Enter the password again"
+                  placeholder={t('setpw.againPlaceholder')}
                   placeholderTextColor={
                     colors.textMuted
                   }
@@ -677,10 +680,10 @@ export default function UpdatePasswordScreen() {
                     }
                   >
                     {checkingLink
-                      ? 'Checking Link...'
+                      ? t('setpw.checking')
                       : saving
-                        ? 'Updating...'
-                        : 'Update Password'}
+                        ? t('setpw.updating')
+                        : t('setpw.update')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -691,7 +694,7 @@ export default function UpdatePasswordScreen() {
                 styles.footer
               }
             >
-              AgroFlow Smart Irrigation System
+              {t('signin.footer')}
             </Text>
           </View>
         </ScrollView>

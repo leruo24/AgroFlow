@@ -238,7 +238,7 @@ content: {
       borderColor: colors.border,
     },
     modeButtonSelected: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.action,
       borderColor: colors.primaryDark,
     },
     modeButtonText: {
@@ -258,7 +258,7 @@ content: {
       paddingHorizontal: Spacing.three,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.action,
       borderRadius: Radius.sm,
     },
     primaryButtonText: {
@@ -267,7 +267,7 @@ content: {
       color: colors.white,
     },
     stopButton: {
-      backgroundColor: colors.error,
+      backgroundColor: colors.dangerAction,
     },
     // Offline: watering needs the kit to hear the command now, so the button is greyed out
     // and the reason is written under it (never a silent dead button).

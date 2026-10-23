@@ -6,7 +6,9 @@ import { Radius, Spacing, Type, type AppColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeContext';
 import { BlurSheet } from '@/components/BlurSheet';
 import { helpFor, type HelpScreen } from '@/constants/helpContent';
+import { FieldGuide } from '@/components/visual/FieldGuide';
 import { useAppPreferences } from '@/hooks/useAppPreferences';
+import { useI18n } from '@/i18n';
 
 type Props = {
   screen: HelpScreen;
@@ -16,6 +18,7 @@ type Props = {
 // Renders nothing when "Show page help" is off. The text lives in constants/helpContent.ts,
 // so there is one file to edit.
 export function HelpButton({ screen }: Props) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createHelpButtonStyles(colors), [colors]);
   const { preferences } = useAppPreferences();
@@ -29,8 +32,8 @@ export function HelpButton({ screen }: Props) {
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Help for this page"
-        accessibilityHint="Opens a short explanation of this page"
+        accessibilityLabel={t('helpButton.label')}
+        accessibilityHint={t('helpButton.hint')}
         onPress={() => setOpen(true)}
         hitSlop={8}
         style={styles.button}
@@ -50,6 +53,7 @@ export function HelpButton({ screen }: Props) {
               {paragraph}
             </Text>
           ))}
+          <FieldGuide />
         </View>
       </BlurSheet>
     </>

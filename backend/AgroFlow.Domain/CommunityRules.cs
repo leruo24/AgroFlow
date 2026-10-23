@@ -298,8 +298,32 @@ namespace AgroFlow.Business
         {
             var t = typed.Trim();
             yield return t;
+            // A former or other name (B3-01): searched too, offered as a suggestion; the farm keeps
+            // whatever staff typed or picked.
+            if (AliasFor(t) is { } alias) yield return alias;
             for (var n = Math.Min(t.Length - 1, 6); n >= 3; n--) yield return t[..n];
         }
+
+        // Former and other names people still use for South African towns. The search finds the
+        // current name for them; it never renames a farm.
+        public static readonly IReadOnlyDictionary<string, string> Aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Mafeking"] = "Mahikeng",
+            ["Mafikeng"] = "Mahikeng",
+            ["Warmbaths"] = "Bela-Bela",
+            ["Bela Bela"] = "Bela-Bela",
+            ["Pietersburg"] = "Polokwane",
+            ["Potgietersrus"] = "Mokopane",
+            ["Louis Trichardt"] = "Makhado",
+            ["Ellisras"] = "Lephalale",
+            ["Nelspruit"] = "Mbombela",
+            ["Port Elizabeth"] = "Gqeberha",
+            ["Grahamstown"] = "Makhanda",
+            ["King William's Town"] = "Qonce",
+        };
+
+        public static string? AliasFor(string typed) =>
+            Aliases.TryGetValue(typed.Trim(), out var current) ? current : null;
 
         public static double Similarity(string typed, string candidate)
         {

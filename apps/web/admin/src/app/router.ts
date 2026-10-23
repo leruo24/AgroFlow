@@ -1,12 +1,12 @@
 /* Typed hash router with animated page transitions. */
 
-import type { NavItem, PageId, PageOptions, PageRenderer, SettingsTab } from "@/types/models";
+import type { NavGroup, NavItem, PageId, PageOptions, PageRenderer, SettingsTab } from "@/types/models";
 import { dashboardPage } from "@/pages/dashboard";
 import { droughtCommunityPage } from "@/pages/droughtCommunity";
 import { usersPage } from "@/pages/users";
 import { farmsPage } from "@/pages/farms";
 import { onboardingPage } from "@/pages/onboarding";
-import { requestsPage } from "@/pages/requests";
+import { requestsPage, setRequestsTab } from "@/pages/requests";
 import { mqttLoginsPage } from "@/pages/mqttLogins";
 import { hardwarePage, alertsPage, maintenancePage } from "@/pages/operations";
 import {
@@ -21,24 +21,39 @@ import { esc } from "@/lib/format";
 import { Icon } from "@/lib/icons";
 import { plainError } from "@/lib/plainError";
 
-/* The sidebar, in the order an admin works: Home (the queue), Requests (incoming work),
- * then farmers, farms and zones, kits, then alerts and maintenance, reports, activity and
- * Settings last. Irrigation data and MQTT logins are not in the sidebar but keep their
- * routes (see PAGES and REDIRECTS), so old links still work. */
-export const NAV: NavItem[] = [
-  { id: "dashboard", label: "Home", icon: Icon.layoutDashboard },
-  { id: "requests", label: "Requests", icon: Icon.inbox },
-  { id: "users", label: "Farmers", icon: Icon.users },
-  { id: "farms", label: "Farms & zones", icon: Icon.tractor },
-  { id: "hardware", label: "Kits", icon: Icon.radio },
-  { id: "alerts", label: "Alerts", icon: Icon.bell },
+/* The sidebar, grouped as the design brief proposes (section 10): Overview / Enquiries /
+ * Farmers & farms / Installations / Support & requests / Reports / Drought & community /
+ * Settings, each mapped to pages that exist. Enquiries and Support & requests are the two
+ * tabs of the Requests page (#enquiries, #requests). A group of one page is shown as that
+ * page alone. Irrigation data and MQTT logins are not in the sidebar but keep their routes
+ * (see PAGES and REDIRECTS), so old links still work. */
+export const NAV_GROUPS: NavGroup[] = [
+  { label: "Overview", items: [{ id: "dashboard", label: "Overview", icon: Icon.layoutDashboard }] },
+  { label: "Enquiries", items: [{ id: "enquiries", label: "Enquiries", icon: Icon.headphones }] },
+  { label: "Farmers & farms", items: [
+    { id: "users", label: "Farmers", icon: Icon.users },
+    { id: "farms", label: "Farms & zones", icon: Icon.tractor },
+  ] },
+  // Installation visits and the installer checklist live in each farm's case (Farms & zones).
+  { label: "Installations", items: [
+    { id: "hardware", label: "Kits", icon: Icon.radio },
+    { id: "maintenance", label: "Maintenance", icon: Icon.wrench },
+  ] },
+  { label: "Support & requests", items: [
+    { id: "requests", label: "Requests", icon: Icon.inbox },
+    { id: "alerts", label: "Alerts", icon: Icon.bell },
+  ] },
+  { label: "Reports", items: [
+    { id: "reports", label: "Reports", icon: Icon.barChart },
+    { id: "activity", label: "Activity", icon: Icon.activity },
+  ] },
   // Drought mode, farmers' location problems and community reports to moderate.
-  { id: "droughtCommunity", label: "Drought & community", icon: Icon.droplet },
-  { id: "maintenance", label: "Maintenance", icon: Icon.wrench },
-  { id: "reports", label: "Reports", icon: Icon.barChart },
-  { id: "activity", label: "Activity", icon: Icon.activity },
-  { id: "settings", label: "Settings", icon: Icon.settings },
+  { label: "Drought & community", items: [{ id: "droughtCommunity", label: "Drought & community", icon: Icon.droplet }] },
+  { label: "Settings", items: [{ id: "settings", label: "Settings", icon: Icon.settings }] },
 ];
+
+/* Every sidebar page in order, for titles and tests. */
+export const NAV: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 /* Old route -> where it lives. Bookmarks, the back button and links in handover notes keep
  * working: go() forwards them instead of dropping the admin on the dashboard. */
@@ -51,7 +66,9 @@ const PAGES: Record<PageId, PageRenderer> = {
   dashboard: () => dashboardPage(),
   users: () => usersPage(),
   onboarding: () => onboardingPage(),
-  requests: () => requestsPage(),
+  // The two tabs of one page: farmers' own requests, and enquiries from people not on AgroFlow.
+  requests: () => { setRequestsTab("requests"); return requestsPage(); },
+  enquiries: () => { setRequestsTab("enquiries"); return requestsPage(); },
   farms: () => farmsPage(),
   hardware: () => hardwarePage(),
   // Opened from a button on the Hardware page, like `requests` and `onboarding`: it is a
@@ -237,8 +254,11 @@ export function positionTabUnderline(): void {
 export function initNav(): void {
   const nav = document.getElementById("nav");
   if (!nav) return;
-  nav.innerHTML = NAV.map(
-    (n) => `<button data-page="${esc(n.id)}"><span class="nav-ico">${n.icon}</span>${esc(n.label)}</button>`,
+  const button = (n: NavItem): string =>
+    `<button data-page="${esc(n.id)}"><span class="nav-ico">${n.icon}</span>${esc(n.label)}</button>`;
+  nav.innerHTML = NAV_GROUPS.map((g, i) => g.items.length === 1
+    ? button(g.items[0]!)
+    : `<div class="nav-group" role="group" aria-labelledby="navGroup${i}"><span class="nav-group-label" id="navGroup${i}">${esc(g.label)}</span>${g.items.map(button).join("")}</div>`,
   ).join("");
   // One delegated listener on the nav for every button in it. The nav is created new with
   // each signed-in shell (app/shell.ts), so listeners cannot pile up across sign-ins.

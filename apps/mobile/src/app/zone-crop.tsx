@@ -17,8 +17,10 @@ import { changeZoneCrop, type RecommendedSettings } from '@/services/agroFlowApi
 import { ZONE_CROPS, dayLabel, shiftDate } from '@/lib/setupHelpers';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { Space } from '@/constants/colors';
+import { useI18n } from '@/i18n';
 
 export default function ZoneCropScreen() {
+  const { t } = useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -59,16 +61,16 @@ export default function ZoneCropScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ padding: Space.md }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('common.back')} onPress={() => router.back()} style={{ padding: Space.md }}>
           <ArrowLeft size={22} color={colors.text} strokeWidth={1.8} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <ScreenHeader title="Crop and planting date" />
+          <ScreenHeader title={t('cropScreen.title')} />
         </View>
       </View>
 
       <ScrollView contentContainerStyle={[{ padding: Space.lg, gap: Space.sm }, { paddingBottom: bottomPad }]}>
-        <Text style={styles.label}>Crop</Text>
+        <Text style={styles.label}>{t('cropScreen.crop')}</Text>
         <View style={styles.choices} accessibilityRole="radiogroup">
           {ZONE_CROPS.map((c) => (
             <Pressable
@@ -84,7 +86,7 @@ export default function ZoneCropScreen() {
         </View>
 
         <View style={styles.item}>
-          <Text style={styles.label}>Planted on</Text>
+          <Text style={styles.label}>{t('cropScreen.planted')}</Text>
           <Text style={styles.action} accessibilityLiveRegion="polite">{planted ? dayLabel(planted) : 'Not set'}</Text>
           <View style={styles.choices}>
             {[
@@ -98,23 +100,23 @@ export default function ZoneCropScreen() {
                 <Text style={styles.choiceText}>{b.label}</Text>
               </Pressable>
             ))}
-            <Pressable accessibilityRole="button" accessibilityLabel="Not sure of the planting date"
+            <Pressable accessibilityRole="button" accessibilityLabel={t('cropScreen.notSureA11y')}
               onPress={() => setPlanted(null)} style={styles.choice}>
-              <Text style={styles.choiceText}>Not sure</Text>
+              <Text style={styles.choiceText}>{t('cropScreen.notSure')}</Text>
             </Pressable>
           </View>
-          <Text style={styles.help}>Not sure? Leave it: the advice then assumes the crop is at its thirstiest.</Text>
+          <Text style={styles.help}>{t('cropScreen.notSureBody')}</Text>
         </View>
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Save crop and planting date"
+          accessibilityLabel={t('cropScreen.saveA11y')}
           accessibilityState={{ disabled: busy || !crop }}
           disabled={busy || !crop}
           onPress={save}
           style={[styles.button, (busy || !crop) && styles.busy]}
         >
-          {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Save</Text>}
+          {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>{t('cropScreen.save')}</Text>}
         </Pressable>
 
         {message ? <Text style={styles.message} accessibilityLiveRegion="polite">{message}</Text> : null}

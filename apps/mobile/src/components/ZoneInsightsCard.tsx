@@ -18,6 +18,7 @@ import { dismissedLine, insightKey, type DismissView } from '@/lib/dismissals';
 import { todayInSast } from '@/services/insightsService';
 import { formatSast } from '@/lib/sastTime';
 import { useAgroFlow } from '@/context/AgroFlowContext';
+import { useI18n } from '@/i18n';
 
 // How sure the advice is, and the one thing that would improve it.
 type Confidence = {
@@ -39,6 +40,7 @@ type Props = {
 // A dismissed insight disappears for the rest of the day. It is removed from the list
 // straight away; if the call fails it comes back.
 export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createZoneInsightsStyles(colors), [colors]);
 
@@ -154,7 +156,7 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
       <View style={styles.card}>
         <View style={styles.headingLeft}>
           <ActivityIndicator color={colors.primaryDark} />
-          <Text style={styles.title}>Advice</Text>
+          <Text style={styles.title}>{t('insights.advice')}</Text>
         </View>
       </View>
     );
@@ -165,7 +167,7 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
       <View style={styles.heading}>
         <View style={styles.headingLeft}>
           <Lightbulb size={20} color={colors.primaryDark} strokeWidth={1.7} />
-          <Text style={styles.title}>Advice</Text>
+          <Text style={styles.title}>{t('insights.advice')}</Text>
         </View>
         {ordered.length > 0 && (
           <Text style={styles.count}>{ordered.length}</Text>
@@ -179,7 +181,7 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
           <WhyLink explanation={confidence.explanation} compact />
           {confidence.nextStep && (
             <View style={styles.improve}>
-              <Text style={styles.improveTitle}>Improve your advice</Text>
+              <Text style={styles.improveTitle}>{t('insights.improve')}</Text>
               <Text style={styles.improveText}>{confidence.nextStep}</Text>
             </View>
           )}
@@ -238,9 +240,9 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
 
       {view !== 'active' && (
         <View style={styles.rowDivider}>
-          <Text style={styles.title}>Dismissed</Text>
+          <Text style={styles.title}>{t('insights.dismissed')}</Text>
           {dismissals.length === 0 ? (
-            <Text style={styles.empty}>No advice has been dismissed for this zone.</Text>
+            <Text style={styles.empty}>{t('insights.noneDismissed')}</Text>
           ) : (
             dismissals.map((d) => (
               <View key={d.id} style={styles.row} testID={`dismissed-insight-${d.id}`}>
@@ -250,7 +252,7 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
                   {d.note ? <Text style={styles.dismissHint}>Note: {d.note}</Text> : null}
                   {!d.restoredAt && (
                     <Pressable accessibilityRole="button" accessibilityLabel={`Restore ${d.title}`} onPress={() => restore(d.id)}>
-                      <Text style={styles.confidenceBadge}>Restore</Text>
+                      <Text style={styles.confidenceBadge}>{t('insights.restore')}</Text>
                     </Pressable>
                   )}
                 </View>

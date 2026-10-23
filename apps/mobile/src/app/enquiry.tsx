@@ -13,8 +13,10 @@ import { ZONE_CROPS } from '@/lib/setupHelpers';
 import { CONSENT_TEXT, PROVINCES, TIMES, enquiryProblem } from '@/lib/enquiryForm';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { Space } from '@/constants/colors';
+import { useI18n } from '@/i18n';
 
 export default function EnquiryScreen() {
+  const { t } = useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -60,11 +62,11 @@ export default function EnquiryScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={['top']}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={{ padding: Space.md }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('common.back')} onPress={() => router.back()} style={{ padding: Space.md }}>
           <ArrowLeft size={22} color={colors.text} strokeWidth={1.8} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <ScreenHeader title="Ask for a call" subtitle="A representative will phone you about AgroFlow." />
+          <ScreenHeader title={t('enquiry.title')} subtitle={t('enquiry.subtitle')} />
         </View>
       </View>
 
@@ -78,7 +80,7 @@ export default function EnquiryScreen() {
           {field('Phone number *', 'phone', { keyboardType: 'phone-pad', placeholder: '082 123 4567' })}
           {field('Email (optional)', 'email', { keyboardType: 'email-address', autoCapitalize: 'none' })}
 
-          <Text style={styles.label}>Province *</Text>
+          <Text style={styles.label}>{t('enquiry.province')}</Text>
           <View style={styles.choices}>
             {PROVINCES.map((p) => (
               <Pressable key={p} accessibilityRole="radio" accessibilityState={{ selected: form.province === p }}
@@ -92,12 +94,12 @@ export default function EnquiryScreen() {
 
           <View style={{ gap: Space.xs }}>
             <Text style={styles.label}>Farm size in hectares (optional)</Text>
-            <TextInput accessibilityLabel="Farm size in hectares" keyboardType="decimal-pad" style={styles.input}
+            <TextInput accessibilityLabel={t('enquiry.sizeA11y')} keyboardType="decimal-pad" style={styles.input}
               value={form.farmSizeHa == null ? '' : String(form.farmSizeHa)}
               onChangeText={(t) => set('farmSizeHa', Number(t.replace(',', '.')) > 0 ? Number(t.replace(',', '.')) : null)} />
           </View>
 
-          <Text style={styles.label}>What do you grow, or want to grow? *</Text>
+          <Text style={styles.label}>{t('enquiry.crops')}</Text>
           <View style={styles.choices}>
             {[...ZONE_CROPS, { value: 'other', label: 'Other' }].map((c) => (
               <Pressable key={c.value} accessibilityRole="checkbox" accessibilityState={{ checked: form.crops.includes(c.value) }}
@@ -107,11 +109,11 @@ export default function EnquiryScreen() {
             ))}
           </View>
           {form.crops.includes('other') && (
-            <TextInput accessibilityLabel="Which other crop?" placeholder="Which other crop?" placeholderTextColor={colors.textMuted}
+            <TextInput accessibilityLabel={t('enquiry.otherCrop')} placeholder={t('enquiry.otherCrop')} placeholderTextColor={colors.textMuted}
               style={styles.input} value={form.cropsOther ?? ''} onChangeText={(t) => set('cropsOther', t || null)} />
           )}
 
-          <Text style={styles.label}>Best time to call *</Text>
+          <Text style={styles.label}>{t('enquiry.bestTime')}</Text>
           <View style={styles.choices}>
             {TIMES.map((t) => (
               <Pressable key={t} accessibilityRole="radio" accessibilityState={{ selected: form.bestTime === t }}
@@ -121,7 +123,7 @@ export default function EnquiryScreen() {
             ))}
           </View>
 
-          <TextInput accessibilityLabel="Anything else?" placeholder="Anything else? (optional)" placeholderTextColor={colors.textMuted}
+          <TextInput accessibilityLabel={t('enquiry.notesA11y')} placeholder={t('enquiry.notes')} placeholderTextColor={colors.textMuted}
             multiline style={[styles.input, { minHeight: 80 }]} value={form.notes ?? ''} onChangeText={(t) => set('notes', t || null)} />
 
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: form.consent }}
@@ -131,9 +133,9 @@ export default function EnquiryScreen() {
 
           {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
 
-          <Pressable accessibilityRole="button" accessibilityLabel="Send enquiry" disabled={busy}
+          <Pressable accessibilityRole="button" accessibilityLabel={t('enquiry.sendA11y')} disabled={busy}
             onPress={send} style={[styles.button, busy && styles.busy]}>
-            {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>Send</Text>}
+            {busy ? <ActivityIndicator color={colors.white} /> : <Text style={styles.buttonText}>{t('enquiry.send')}</Text>}
           </Pressable>
         </ScrollView>
       )}

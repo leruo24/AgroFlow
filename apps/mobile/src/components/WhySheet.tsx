@@ -7,6 +7,7 @@ import type { AppColors } from '@/constants/colors';
 import { useTheme } from '@/context/ThemeContext';
 import type { Explanation } from '@/services/agroFlowApi';
 import { Space } from '@/constants/colors';
+import { useI18n } from '@/i18n';
 
 // "Why am I seeing this?" under every piece of advice, alert, badge and Drip message.
 // The words come from the server (built by the same rule as the message) and are shown as
@@ -61,6 +62,7 @@ export function WhySheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
@@ -71,7 +73,7 @@ export function WhySheet({
 
         {explanation.facts?.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.heading}>What we used</Text>
+            <Text style={styles.heading}>{t('why.used')}</Text>
             {explanation.facts.map((fact) => (
               <View key={`${fact.label}-${fact.value}`} style={styles.fact}>
                 <Text style={styles.factLabel}>{fact.label}</Text>
@@ -84,21 +86,21 @@ export function WhySheet({
 
         {!!explanation.rule && (
           <View style={styles.section}>
-            <Text style={styles.heading}>The rule</Text>
+            <Text style={styles.heading}>{t('why.rule')}</Text>
             <Text style={styles.text}>{explanation.rule}</Text>
           </View>
         )}
 
         {!!explanation.confidence && (
           <View style={styles.section}>
-            <Text style={styles.heading}>How sure we are</Text>
+            <Text style={styles.heading}>{t('why.sure')}</Text>
             <Text style={styles.text}>{explanation.confidence}</Text>
           </View>
         )}
 
         {!!explanation.whatWouldChangeIt && (
           <View style={styles.section}>
-            <Text style={styles.heading}>What would change it</Text>
+            <Text style={styles.heading}>{t('why.change')}</Text>
             <Text style={styles.text}>{explanation.whatWouldChangeIt}</Text>
           </View>
         )}

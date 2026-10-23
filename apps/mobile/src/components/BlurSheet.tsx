@@ -4,6 +4,7 @@
 // Go (SDK 57) on iOS and Android with no JS error. The scrim needs no native module and
 // looks the same everywhere.
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useI18n } from '@/i18n';
 
 import {
   X,
@@ -50,6 +51,7 @@ export function BlurSheet({
   children,
   maxHeightRatio = 0.82,
 }: BlurSheetProps) {
+  const { t } = useI18n();
   const {
     colors,
   } = useTheme();
@@ -73,10 +75,13 @@ export function BlurSheet({
           style={styles.backdropPress}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss"
+          accessibilityLabel={t('sheet.dismiss')}
         />
 
         <View
+          role="dialog"
+          accessibilityLabel={title}
+          accessibilityViewIsModal
           style={[
             styles.sheet,
             { maxHeight: `${Math.round(maxHeightRatio * 100)}%`, paddingBottom: Math.max(insets.bottom, 24) },
@@ -93,7 +98,7 @@ export function BlurSheet({
               hitSlop={8}
               style={styles.closeButton}
               accessibilityRole="button"
-              accessibilityLabel="Close"
+              accessibilityLabel={t('sheet.close')}
             >
               <X size={22} color={colors.textSecondary} strokeWidth={1.8} />
             </TouchableOpacity>

@@ -124,6 +124,13 @@
       var splash = document.getElementById("agroflow-splash");
       var video = document.getElementById("agroflow-splash-video");
       if (!splash || !video) return;
+      // Static public pages have no session/video readiness gate. Keep the existing
+      // staff/recovery boot path; never hide a real authentication check.
+      if (!/\/staff(\/(index\.html)?)?$/.test(location.pathname) &&
+          !new URLSearchParams(location.search).has('reset')) {
+        splash.remove();
+        return;
+      }
 
       // The two things that must BOTH be true before the splash leaves.
       var videoDone = false;

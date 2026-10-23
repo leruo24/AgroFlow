@@ -1,0 +1,19 @@
+PASS  / opens fresh and after refresh - status 200, selected /
+PASS  /experience opens fresh and after refresh - status 200, selected /experience
+PASS  /solutions opens fresh and after refresh - status 200, selected /solutions
+PASS  /how-it-works opens fresh and after refresh - status 200, selected /how-it-works
+PASS  /technology opens fresh and after refresh - status 200, selected /technology
+PASS  /about opens fresh and after refresh - status 200, selected /about
+PASS  /get-the-app opens fresh and after refresh - status 200, selected /get-the-app
+PASS  /contact opens fresh and after refresh - status 200, selected /contact
+PASS  /service-pricing opens fresh and after refresh - status 200, selected /service-pricing
+PASS  /terms opens fresh and after refresh - status 200, selected /terms
+PASS  /privacy opens fresh and after refresh - status 200, selected /privacy
+PASS  /staff/ reaches the staff sign-in, not the product page - landed on /staff/
+PASS  /staff/ survives a refresh and shows the logo
+PASS  /staff reaches the staff sign-in, not the product page - landed on /staff/
+PASS  /admin/ reaches the staff sign-in, not the product page - landed on /staff/
+PASS  /#/admin reaches the staff sign-in, not the product page - landed on /staff/
+PASS  an unknown address is a real 404, not a copy of the homepage
+
+17 passed, 0 failed

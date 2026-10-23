@@ -10,6 +10,8 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export const FAKE_SUPABASE = "https://testproject.supabase.co";
 export const FAKE_API = "https://api.agroflow.test";
+// PW_PORT lets two checkouts (two git worktrees) run their suites at the same time.
+const PORT = Number(process.env["PW_PORT"] ?? 5179);
 
 export default defineConfig({
   testDir: "./tests",
@@ -22,15 +24,15 @@ export default defineConfig({
     ["html", { outputFolder: "../../../docs/test-evidence/admin-playwright", open: "never" }],
   ],
   use: {
-    baseURL: "http://localhost:5179",
+    baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
     viewport: { width: 1366, height: 768 },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1366, height: 768 } } }],
   webServer: {
     // A port of its own, so a developer's `npm run dev` on 5173 is untouched.
-    command: "npx vite --port 5179 --strictPort",
-    url: "http://localhost:5179",
+    command: `npx vite --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 120_000,
     env: {

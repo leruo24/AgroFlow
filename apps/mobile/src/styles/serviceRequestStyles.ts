@@ -201,7 +201,7 @@ export function createServiceRequestStyles(
       borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.primary,
+      backgroundColor: colors.action,
     },
 
     submitButtonDisabled: {

@@ -53,7 +53,7 @@ export function createReportsStyles(colors: AppColors) {
       justifyContent: 'center',
       minHeight: 48,
       borderRadius: Radius.sm,
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.action,
       marginTop: Spacing.two,
     },
     submitBusy: { opacity: 0.6 },

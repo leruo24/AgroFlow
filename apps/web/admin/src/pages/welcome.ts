@@ -7,6 +7,7 @@
  * app/router.ts): it is its own layout, outside the console's shell. */
 
 import { Icon } from "@/lib/icons";
+import { renderPublicSite, wirePublicSite } from "./publicSite";
 
 /* The product page's phone screenshots (taken from the app with the simulated Mahikeng farm by
  * apps/mobile/scripts/visual-polish-screenshots.mjs ... product). Each has its own alt text. */
@@ -60,7 +61,7 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => map[c] ?? c);
 }
 
-export const WELCOME_HTML = `
+const LEGACY_WELCOME_HTML = `
   <div class="landing">
     <!-- Decorative only: hidden from assistive tech, which should hear the
          headline first, not a description of a background. -->
@@ -214,8 +215,9 @@ export const WELCOME_HTML = `
                 </div>
                 <div class="hardware-controls" aria-label="3D view controls">
                   <button type="button" data-hardware-rotate="left" aria-label="Rotate product left">&#8634;</button>
-                  <button type="button" class="hardware-explore" data-hardware-toggle aria-expanded="false">Explore inside</button>
-                  <button type="button" data-hardware-reset aria-label="Reset product view">Reset view</button>
+                  <button type="button" class="hardware-explore" data-hardware-toggle aria-expanded="false">Open enclosure</button>
+                  <button type="button" data-hardware-close>Close enclosure</button>
+                  <button type="button" data-hardware-reset aria-label="Reset view">Reset view</button>
                   <button type="button" data-hardware-rotate="right" aria-label="Rotate product right">&#8635;</button>
                 </div>
               </div>
@@ -312,7 +314,11 @@ export const WELCOME_HTML = `
     </footer>
   </div>`;
 
+export const WELCOME_HTML = /\/staff(\/(index\.html)?)?$/.test(window.location.pathname) ? "" : renderPublicSite(LEGACY_WELCOME_HTML);
+export const publicPageHtml = () => renderPublicSite(LEGACY_WELCOME_HTML);
+
 export function wireWelcome(root: HTMLElement): void {
+  wirePublicSite(root);
   wireEnquiry(root);
   initHardwareShowcase(root);
   root.querySelector<HTMLButtonElement>("[data-experience-launch]")?.addEventListener("click", async (event) => {
@@ -321,7 +327,7 @@ export function wireWelcome(root: HTMLElement): void {
     button.textContent = "Preparing the field…";
     try {
       const { mountExperience } = await import("@/experience/mount");
-      mountExperience();
+      mountExperience(button);
     } finally {
       button.disabled = false;
       button.innerHTML = 'Launch interactive demo <span aria-hidden="true">→</span>';

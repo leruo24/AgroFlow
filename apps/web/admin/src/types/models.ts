@@ -15,6 +15,7 @@ export type PageId =
   | "settings"
   | "onboarding"
   | "requests"
+  | "enquiries"
   | "mqttLogins"
   | "droughtCommunity";
 
@@ -22,6 +23,12 @@ export interface NavItem {
   id: PageId;
   label: string;
   icon: string;
+}
+
+/** A sidebar group: a heading over its pages, or a single page shown on its own. */
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
 }
 
 /** Options passed into a page renderer (e.g. a specific record to open). */
@@ -161,6 +168,8 @@ export interface ServiceRequest extends Handling {
   requestType: ServiceRequestType;
   location: string | null;
   roughSize: number | null;
+  /* AF-19: what the farmer chose; rough_size is always stored in hectares. */
+  roughSizeUnit?: "ha" | "m2" | "unknown" | "unstated" | null;
   cropType: ServiceRequestCrop;
   notes: string | null;
   status: ServiceRequestStatus;
@@ -179,7 +188,7 @@ export interface ServiceRequest extends Handling {
 
 /* farms */
 
-export type FarmHealth = "Healthy" | "Attention Required" | "Critical";
+export type FarmHealth = "Healthy" | "Attention Required" | "Critical" | "Awaiting installation";
 export type FarmStatus = "Active" | "Inactive" | "Pending Approval";
 
 export interface FarmHealthFactors {
@@ -219,6 +228,9 @@ export interface Farm {
   registered: string;
   lastActivity: string;
   healthFactors: FarmHealthFactors;
+  /* The owner and farm members' profile ids (AF-23): the directory count and the drawer list
+   * come from this one list. */
+  memberIds?: string[];
   /** Counts, used in list/export views. */
   users: number;
   devices: number;

@@ -47,6 +47,8 @@ jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ signIn: jest.fn(),
 jest.mock('@/services/insightsService', () => ({ fetchAlertExplanations: jest.fn(() => Promise.resolve({})) }));
 
 jest.mock('@/services/agroFlowApi', () => ({
+  fetchServiceSupport: jest.fn(() => new Promise(() => undefined)),
+  fetchJourney: jest.fn(() => new Promise(() => undefined)),
   fetchFarmToday: jest.fn(),
   saveZoneSetup: jest.fn(() => Promise.resolve({ message: "Saved. Today's advice now uses it." })),
   fetchRecommendedSettings: jest.fn(() => Promise.resolve({ available: false, text: '' })),

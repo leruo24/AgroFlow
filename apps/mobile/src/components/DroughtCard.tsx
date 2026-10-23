@@ -52,7 +52,7 @@ export function DroughtCard() {
   return <View style={[styles.card, view.active && styles.cardOn]} testID="drought-card">
     <Text accessibilityRole="header" style={styles.title}>{view.active ? t('drought.on') : t('drought.budget')}</Text>
     {view.budget ? <Text style={styles.body} testID="drought-budget">{view.budget.text}</Text>
-      : <Text style={styles.help}>{t('drought.noBudget')}</Text>}
+      : <Text style={styles.help} testID="drought-no-budget">{noBudgetText(t, view)}</Text>}
     {view.active ? <>
       <Text style={styles.help} testID="drought-reason">{view.reason}</Text>
       {view.summary ? <Text style={styles.summary} testID="drought-summary">{view.summary}</Text> : null}
@@ -72,6 +72,19 @@ export function DroughtCard() {
 
 type Styles = ReturnType<typeof createStyles>;
 type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+// Why there is no budget, naming the one thing missing (AF-06). A saved tank is never called
+// "not set up" just because the days could not be worked out.
+export function noBudgetText(t: T, view: DroughtView): string {
+  const tank = view.tank;
+  const litres = (n: number | null) => Math.round(n ?? 0).toLocaleString('en-ZA').replace(/,/g, ' ');
+  switch (tank?.state) {
+    case 'not_a_tank_farm': return t('drought.noBudget.notTank');
+    case 'level_unknown': return t('drought.noBudget.level', { capacity: litres(tank.capacityLitres) });
+    case 'use_unknown': return t('drought.noBudget.use', { litres: litres(tank.remainingLitres) });
+    default: return t('drought.noBudget');
+  }
+}
 
 function ZoneRow({ z, styles, t }: { z: DroughtZone; styles: Styles; t: T }) {
   const label = z.priority === 'reduced' ? t('drought.priority.reduced', { pct: Math.round(z.fraction * 100) })
@@ -104,7 +117,7 @@ function createStyles(colors: AppColors) {
     skip: { color: colors.text, backgroundColor: colors.divider },
     modes: { flexDirection: 'row', gap: Spacing.one },
     mode: { flex: 1, minHeight: 44, borderRadius: Radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-    modeOn: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
+    modeOn: { backgroundColor: colors.action, borderColor: colors.primaryDark },
     modeText: { color: colors.text, fontSize: Type.caption, fontWeight: '600' },
     modeTextOn: { color: colors.white },
     error: { color: colors.error, fontSize: Type.body },

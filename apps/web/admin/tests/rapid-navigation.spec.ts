@@ -10,17 +10,20 @@ import { mockBackend, captureErrors } from "./mockBackend";
  * nothing moves afterwards.
  */
 
+// The sidebar in the brief's grouping (2026-10-23): Enquiries and Requests are two tabs of
+// one page with their own addresses, so both are in the rapid-click mix.
 const NAV = [
-  { id: "dashboard", label: "Home" },
-  { id: "requests", label: "Requests" },
+  { id: "dashboard", label: "Overview" },
+  { id: "enquiries", label: "Enquiries" },
   { id: "users", label: "Farmers" },
   { id: "farms", label: "Farms & zones" },
   { id: "hardware", label: "Kits" },
-  { id: "alerts", label: "Alerts" },
-  { id: "droughtCommunity", label: "Drought & community" },
   { id: "maintenance", label: "Maintenance" },
+  { id: "requests", label: "Requests" },
+  { id: "alerts", label: "Alerts" },
   { id: "reports", label: "Reports" },
   { id: "activity", label: "Activity" },
+  { id: "droughtCommunity", label: "Drought & community" },
   { id: "settings", label: "Settings" },
 ];
 

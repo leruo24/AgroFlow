@@ -32,7 +32,7 @@ export function createZoneInsightsStyles(colors: AppColors) {
     severityBar: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
     severityActNow: { backgroundColor: colors.error },
     severityHeadsUp: { backgroundColor: colors.warning },
-    severityInfo: { backgroundColor: colors.primaryDark },
+    severityInfo: { backgroundColor: colors.action },
 
     rowBody: { flex: 1, gap: Spacing.one },
     message: { fontSize: Type.body, lineHeight: 23, color: colors.text },
@@ -76,7 +76,7 @@ export function createZoneInsightsStyles(colors: AppColors) {
       backgroundColor: colors.surfaceSecondary,
       overflow: 'hidden',
     },
-    fill: { height: 8, borderRadius: Radius.sm, backgroundColor: colors.primaryDark },
+    fill: { height: 8, borderRadius: Radius.sm, backgroundColor: colors.action },
     growthCrop: { fontSize: Type.caption, color: colors.textMuted },
 
     // Reset button
@@ -111,7 +111,7 @@ export function createZoneInsightsStyles(colors: AppColors) {
       justifyContent: 'center',
       minHeight: 48,
       borderRadius: Radius.sm,
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.action,
     },
     stepButtonBusy: { opacity: 0.6 },
     stepButtonText: { fontSize: Type.body, fontWeight: '600', color: colors.white },

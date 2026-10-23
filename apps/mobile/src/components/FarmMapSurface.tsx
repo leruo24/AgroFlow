@@ -4,8 +4,10 @@ import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { MapPin } from 'lucide-react-native';
 import { MapChrome } from '@/constants/colors';
 import { farmMapSurfaceStyles as styles } from '@/styles/farmMapSurfaceStyles';
+import { useI18n } from '@/i18n';
 export type FarmMapSurfaceProps = { latitude: number; longitude: number; zoom: number; onFailure: () => void };
 export default function FarmMapSurface({ latitude, longitude, zoom, onFailure }: FarmMapSurfaceProps) {
+  const { t } = useI18n();
   const [width, setWidth] = useState(0);
   const [loadedZoom, setLoadedZoom] = useState<number | null>(null);
   const size = 256, height = 190, scale = 2 ** zoom;
@@ -23,8 +25,8 @@ export default function FarmMapSurface({ latitude, longitude, zoom, onFailure }:
         onLoad={() => setLoadedZoom(zoom)} onError={onFailure} style={{ position: 'absolute', width: size, height: size, left: tx * size - x + width / 2, top: ty * size - y + height / 2 }} />);
     }
   }
-  return <View onLayout={e => setWidth(e.nativeEvent.layout.width)} style={styles.webContainer} accessibilityLabel="Farm location map. Use the zoom buttons to change scale.">
+  return <View onLayout={e => setWidth(e.nativeEvent.layout.width)} style={styles.webContainer} accessibilityLabel={t('map.a11y')}>
     {tiles}<View style={[styles.pinWrapper, { pointerEvents: 'none' }]}><MapPin size={30} color={MapChrome.pinColor} fill={MapChrome.attributionBackground} /></View>
-    <Pressable accessibilityRole="link" onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }} style={styles.attribution}><Text style={styles.attributionText}>© OpenStreetMap contributors</Text></Pressable>
+    <Pressable accessibilityRole="link" onPress={() => { void Linking.openURL('https://www.openstreetmap.org/copyright'); }} style={styles.attribution}><Text style={styles.attributionText}>© OpenStreetMap contributors</Text></Pressable> {/* i18n-ok: the map data licence requires this credit as written */}
   </View>;
 }

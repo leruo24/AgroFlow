@@ -85,8 +85,8 @@ test("the sidebar logo and name go Home", async ({ page }) => {
   await expect(page.locator("#headerTitle")).not.toHaveText("Dashboard", { timeout: 15000 });
   await page.locator("#brandHome").click();
   await expect(page).toHaveURL(/#dashboard$/);
-  await expect(page.locator("#headerTitle")).toHaveText(/Dashboard|Home/);
-  await expect(page.getByRole("link", { name: /AgroFlow Administration/ })).toBeVisible();
+  await expect(page.locator("#headerTitle")).toHaveText(/Dashboard|Home|Overview/);
+  await expect(page.getByRole("link", { name: /AgroFlow Staff/ })).toBeVisible();
 });
 
 for (const where of ["sidebar", "avatar menu"] as const) {
@@ -129,7 +129,7 @@ test("the landing page has no 'Who made this' section and no staff sign-in link"
   await page.route(`${FAKE_SUPABASE}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   await page.route(`${FAKE_API}/**`, (route) => route.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /A smarter way to manage water/ })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: /Smart irrigation for small farms/ })).toBeVisible({ timeout: 15000 });
   await expect(page.getByText("Who made this")).toHaveCount(0);
   await expect(page.locator("#creditsHeading")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Staff sign-in" })).toHaveCount(0);

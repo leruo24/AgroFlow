@@ -1,0 +1,38 @@
+PASS  kit enrols with the one-time code
+PASS  the code works once only - second claim -> 401
+PASS  live readings are stored - {"Humidity":3,"SoilMoisture":3,"Temperature":3}
+PASS  kit shows online - {"status":"Online","enrollment_status":"active","recent":true}
+PASS  a late reading is stored with its own time, once - 1 row(s) at 2026-10-23T09:15:26.000Z
+PASS  a late dry reading does not start automatic watering - 0 new command(s)
+PASS  control: a live dry reading does start automatic watering
+PASS  a Manual zone gets no automatic command from a bone-dry live reading - 0 new command(s)
+PASS  a Manual zone's kit is told not to water by itself offline - {"zoneId":7,"irrigationMode":"manual","autoWateringAllowed":false}
+PASS  ...and an Automatic one is allowed - {"zoneId":7,"irrigationMode":"automatic","autoWateringAllowed":true}
+PASS  the manual 1-minute command reaches the kit - start 60s
+PASS  the command carries the zone's maximum run time (default 5 min) - maxRunSeconds 300
+PASS  the kit acknowledges it - ACK 200, status executed
+PASS  the run is logged as an irrigation event - {"runtime_seconds":60,"trigger_source":"manual","sync_status":"synced","estimated_litres":"1.50"}
+PASS  the run report marks the command finished, and the history links the two - {"status":"executed","finished":true,"linked":1}
+PASS  a zone limited to 3 min: a 10-min scheduled command arrives as 3 min (capped in the database), maxRunSeconds 180 - arrived 180s, max 180s
+PASS  the lost-connection failsafe stops a 2-minute run once MQTT has been gone 3 s, and the run is still reported - lost contact after 4s; finished true
+PASS  a kept pump run uploaded twice is counted once - 1 row(s)
+PASS  the automatic command from section 7 runs at most the zone maximum (5 min) - asked until stopped, the kit stops by 300s
+PASS  a scheduled command asking for 60 min arrives as 5 min (the zone maximum); the hour asked is kept for the record - arrived 300s; row {"duration_seconds":300,"requested_duration_seconds":3600}
+PASS  a auto command asking for 60 min arrives as 5 min (the zone maximum); the hour asked is kept for the record - arrived 300s; row {"duration_seconds":300,"requested_duration_seconds":3600}
+PASS  broker down: the API notices, and a command made meanwhile waits unsent (no "Waiting for kit") - {"noticed":true,"status":"pending","published_at":null}
+PASS  broker back: the API reconnects by itself and the waiting command reaches the kit - delivered 1 time(s)
+PASS  ...and a new command after the restart arrives as normal
+PASS  API restart: a command saved while it was down reaches the kit once it is back - 45s
+PASS  ...and the kit's readings and its login still work after the restart - reading stored true, config 200
+PASS  the demo drought farm near Mahikeng is seeded: tank, 3 zones, drought scenario - {"name":"Mahikeng (Simulated)","latitude":-25.86522,"longitude":25.64421,"sim_scenario":"drought","water_source":"tank","zones":3}
+PASS  the second demo farm (Ottoshoop) is within the 50 km pest and fire radius of Mahikeng - 34.9 km apart
+PASS  the drought check that runs at start-up went through every farm without an error
+PASS  the API database tests pass (no kit, kit offline, over the maximum, sent/started/finished, staff + Telegram, weather in the app) - 54 of 54 passed, 0 failed, 0 skipped
+PASS  double-tapped Irrigate: one command; a second press and two at the same instant get that same one back
+PASS  no acknowledgement: the app reads "Waiting for kit", then "No response" after 60 s
+PASS  cap from the app: "Capped to 3 min (this zone's limit)"; a saved 20-min schedule shows 3 min; every insert path capped
+PASS  scenario, drought: a low tank and a dry forecast turn drought mode on, with the water budget and zone priorities; by hand too
+PASS  scenario, community: 2 reports per 36 hours (confirming does not count); nearby farms told by distance only, never the reporter
+PASS  scenario, fire: downwind farms first, wider radius at 3 confirmations, "out" closes it
+PASS  scenario, moderation: staff hide a report with a reason and it stops notifying; reports expire
+37 passed, 0 failed

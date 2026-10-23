@@ -269,6 +269,19 @@ public class IrrigationCommandNotifyService : BackgroundService
             _logger.LogInformation("Published command {CommandId} to {Topic}", notification.Id, topic);
         }
 
+        // "Waiting for kit" from here on (0057). The first publish counts; a replay keeps it.
+        try
+        {
+            await using var mark = new NpgsqlCommand(
+                "update irrigation_commands set published_at = coalesce(published_at, now()) where id = $1", connection);
+            mark.Parameters.AddWithValue(notification.Id);
+            await mark.ExecuteNonQueryAsync();
+        }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UndefinedColumn)
+        {
+            // Before 0057: the app shows "Request sent" until the kit answers.
+        }
+
         return true;
     }
 

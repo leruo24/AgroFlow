@@ -24,6 +24,7 @@ import { createZoneSoilStyles } from '@/styles/zoneSoilStyles';
 import { saveZoneSoilType, type ZoneSoilType } from '@/services/agroFlowApi';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { Space } from '@/constants/colors';
+import { useI18n } from '@/i18n';
 
 // The "how it feels" lines are the usual field texture check (squeeze a handful), not
 // FAO-56; FAO-56 only supplies the water-holding numbers.
@@ -54,6 +55,7 @@ const SOILS: {
 ];
 
 export default function ZoneSoilScreen() {
+  const { t } = useI18n();
   // The floating tab bar (if any), the bottom safe area and 16 below the last control.
   const bottomPad = useBottomPadding(false);
   const { colors } = useTheme();
@@ -99,7 +101,7 @@ export default function ZoneSoilScreen() {
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('common.back')}
           onPress={() => router.back()}
           style={{ padding: Space.md }}
         >
@@ -107,7 +109,7 @@ export default function ZoneSoilScreen() {
         </Pressable>
         <View style={{ flex: 1 }}>
           <ScreenHeader
-            title="Soil type"
+            title={t('soilScreen.title')}
             subtitle={params.zoneName ? String(params.zoneName) : undefined}
           />
         </View>
@@ -116,7 +118,7 @@ export default function ZoneSoilScreen() {
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}>
         <Text style={styles.hint}>
-          Not sure? Pick <Text style={styles.hintStrong}>Loam</Text>. It&apos;s the
+          {t('soilScreen.notSure')} <Text style={styles.hintStrong}>{t('soilScreen.loam')}</Text>. It&apos;s the
           most common garden soil.
         </Text>
 
@@ -148,7 +150,7 @@ export default function ZoneSoilScreen() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Save soil type"
+          accessibilityLabel={t('soilScreen.save')}
           accessibilityState={{ busy, disabled: busy }}
           disabled={busy}
           onPress={save}
@@ -157,7 +159,7 @@ export default function ZoneSoilScreen() {
           {busy ? (
             <ActivityIndicator color={colors.white} />
           ) : (
-            <Text style={styles.saveButtonText}>Save soil type</Text>
+            <Text style={styles.saveButtonText}>{t('soilScreen.save')}</Text>
           )}
         </Pressable>
 

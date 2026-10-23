@@ -42,7 +42,7 @@ public sealed class SchemaCheck
     private static readonly SchemaObject[] Expected =
     {
         new("0027", "table", "zone_water_balance",
-            "select to_regclass('public.zone_water_balance')",
+            "select to_regclass('public.zone_water_balance')::text",
             "The FAO-56 engine cannot store or read its water balance."),
 
         new("0028", "column", "hardware.device_token_hash",
@@ -50,7 +50,7 @@ public sealed class SchemaCheck
             "Per-device tokens: kits cannot authenticate individually."),
 
         new("0029", "table", "mqtt_credential_pool",
-            "select to_regclass('public.mqtt_credential_pool')",
+            "select to_regclass('public.mqtt_credential_pool')::text",
             "No MQTT logins can be issued to new kits."),
 
         new("0030", "constraint", "irrigation_commands accepts setup commands",
@@ -62,7 +62,7 @@ public sealed class SchemaCheck
             "Admins cannot read the engine's water balance."),
 
         new("0032", "table", "service_request_notification",
-            "select to_regclass('public.service_request_notification')",
+            "select to_regclass('public.service_request_notification')::text",
             "Farmers get no Telegram message when a request changes, or get the same one twice."),
 
         new("0033", "column", "alert.read_at",
@@ -70,11 +70,11 @@ public sealed class SchemaCheck
             "Whether a farmer ever saw an alert is not recorded."),
 
         new("0034", "table", "report_request",
-            "select to_regclass('public.report_request')",
+            "select to_regclass('public.report_request')::text",
             "\"Make me this report\" in the app fails outright - this is the one that caused the 500."),
 
         new("0035", "table", "report_schedule",
-            "select to_regclass('public.report_schedule')",
+            "select to_regclass('public.report_schedule')::text",
             "Automatic weekly and monthly reports never run."),
 
         new("0036", "function", "archive_farm",
@@ -82,7 +82,7 @@ public sealed class SchemaCheck
             "Farms cannot be archived, so test farms stay in every list and total."),
 
         new("0037", "table", "admin_audit_log",
-            "select to_regclass('public.admin_audit_log')",
+            "select to_regclass('public.admin_audit_log')::text",
             "No administrator action is recorded - the Activity page stays empty."),
 
         // A grant, not an object, so we check the privilege itself. Without it every admin
@@ -92,7 +92,7 @@ public sealed class SchemaCheck
             "Admin actions are not recorded if the API does not connect as the table's owner."),
 
         new("0039", "table", "explanation",
-            "select to_regclass('public.explanation')",
+            "select to_regclass('public.explanation')::text",
             "Telegram messages go out without a \"Why am I seeing this?\" button."),
 
         new("0040", "column", "report_schedule.per_zone_pdf",
@@ -104,7 +104,7 @@ public sealed class SchemaCheck
             "Nobody can claim, take over, resolve or complete alerts, requests or maintenance on the record."),
 
         new("0042", "table", "soil_feel_check",
-            "select to_regclass('public.soil_feel_check')",
+            "select to_regclass('public.soil_feel_check')::text",
             "Farmers cannot log \"I watered\" or \"How does the soil feel?\" - farms without a kit get weather-only advice."),
 
         new("0043", "function", "zone_farmer_edit_guard",
@@ -112,15 +112,15 @@ public sealed class SchemaCheck
             "A farmer's own login could change any zone column directly, including the watering thresholds."),
 
         new("0044", "table", "enquiry",
-            "select to_regclass('public.enquiry')",
+            "select to_regclass('public.enquiry')::text",
             "The public \"Get a call back\" form cannot take enquiries, and the Enquiries tab is empty."),
 
         new("0045", "table", "dismissal",
-            "select to_regclass('public.dismissal')",
+            "select to_regclass('public.dismissal')::text",
             "Notifications cannot be dismissed or restored, and there is no notification history."),
 
         new("0046", "table", "tank_refill",
-            "select to_regclass('public.tank_refill')",
+            "select to_regclass('public.tank_refill')::text",
             "Tank estimates, refill logging and pH records are unavailable."),
 
         new("0047", "constraint", "zone_irrigation_mode_check allows manual",
@@ -137,7 +137,7 @@ public sealed class SchemaCheck
             "The app's language choice is not saved, so every Telegram message is sent in English."),
 
         new("0050", "table", "password_reset_code",
-            "select to_regclass('public.password_reset_code')",
+            "select to_regclass('public.password_reset_code')::text",
             "Forgot password over Telegram, the one-tap sign-in link and the 72-hour limit on temporary passwords do not work."),
 
         new("0051", "column", "irrigation_commands.finished_at",
@@ -153,19 +153,31 @@ public sealed class SchemaCheck
             "Province, town, water source and irrigation type cannot be saved, and farmers cannot flag a wrong farm location."),
 
         new("0054", "table", "app_setting",
-            "select to_regclass('public.app_setting')",
+            "select to_regclass('public.app_setting')::text",
             "Drought mode cannot run: its settings and the farm's drought state are missing."),
 
         new("0055", "table", "community_report",
-            "select to_regclass('public.community_report')",
+            "select to_regclass('public.community_report')::text",
             "Community alerts and each farmer's alert choices do not work."),
 
         new("0056", "column", "farm.sim_scenario",
             "select 1 from information_schema.columns where table_name = 'farm' and column_name = 'sim_scenario'",
             "The Mahikeng and Ottoshoop demonstration farms for drought mode and community alerts are missing."),
 
-        new("0057", "index", "uq_sensor_reading_hardware_measured",
-            "select to_regclass('public.uq_sensor_reading_hardware_measured')",
+        new("0057", "table", "onboarding_request",
+            "select to_regclass('public.onboarding_request')::text",
+            "Onboarding cannot be retried safely (a retry may make a second farm), runs are not capped by the database, and request sizes have no unit."),
+
+        new("0058", "table", "service_case",
+            "select to_regclass('public.service_case')::text",
+            "The farmer's four setup tasks, the installation case, visits, the installer checklist, help requests and terms acceptance do not work."),
+
+        new("0059", "policy", "RLS on farm, zone, farm_member, profile",
+            "select 1 where (select bool_and(relrowsecurity) from pg_class where relnamespace = 'public'::regnamespace and relname in ('farm','zone','farm_member','profile'))",
+            "A farmer signed in to the app could read other farmers' farms and zones through the client API."),
+
+        new("0060", "index", "uq_sensor_reading_hardware_measured",
+            "select to_regclass('public.uq_sensor_reading_hardware_measured')::text",
             "Offline reading retries can be stored twice because the per-kit uniqueness key is missing."),
 
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
