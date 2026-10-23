@@ -1,6 +1,20 @@
 // Afrikaans and Setswana are drafts for fluent-speaker review. Existing form,
 // hardware and demo copy remains owned by its original components.
 export const copy = {
+  openFarmerApp: ['Open farmer app', 'Maak boeretoepassing oop', 'Bula tiriso ya molemi'],
+  openEnclosure: ['Open enclosure', 'Maak omhulsel oop', 'Bula khurumelo'],
+  closeEnclosure: ['Close enclosure', 'Maak omhulsel toe', 'Tswala khurumelo'],
+  resetView: ['Reset view', 'Herstel aansig', 'Busetsa pono'],
+  tryIrrigation: ['Try irrigation — simulation', 'Probeer besproeiing — simulasie', 'Leka nosetso — ketsiso'],
+  demoExplanation: ['Illustration only. No kit is connected and no real watering command is sent. Roots, probes and tubing are shown conceptually; no hydraulic quantities are predicted.', 'Slegs ’n illustrasie. Geen stel is gekoppel en geen werklike besproeiingsopdrag word gestuur nie. Wortels, probes en pype is konseptueel; geen hidrouliese hoeveelhede word voorspel nie.', 'Ke setshwantsho fela. Ga go sediriswa se se golaganeng e bile ga go romelwe taelo ya nosetso ya nnete. Medi, disensara le diphaephe di bontsha kgopolo fela; ga go bolelelwe selekanyo sa metsi.'],
+  startDemo: ['Start demo', 'Begin demonstrasie', 'Simolola pontsho'],
+  stopDemo: ['Stop demo', 'Stop demonstrasie', 'Emisa pontsho'],
+  resetDemo: ['Reset demo', 'Herstel demonstrasie', 'Busetsa pontsho'],
+  demoReady: ['Demo ready', 'Demonstrasie gereed', 'Pontsho e siametse'],
+  demoRunning: ['Demo running', 'Demonstrasie loop', 'Pontsho e a dira'],
+  demoStopped: ['Demo stopped', 'Demonstrasie gestop', 'Pontsho e emisitswe'],
+  underground: ['Show roots, probe and tubing', 'Wys wortels, probe en pype', 'Bontsha medi, sensara le diphaephe'],
+  undergroundText: ['The probe sits beside the crop roots. Tubing supplies the illustrated outlet above the soil. This cutaway is explanatory, not a live moisture reading.', 'Die probe sit langs die gewaswortels. Pype voer die geïllustreerde uitlaat bo die grond. Hierdie snit is verduidelikend, nie ’n lewendige voglesing nie.', 'Sensara e gaufi le medi ya dijalo. Diphaephe di isa metsi kwa molomong o o bontshitsweng fa godimo ga mmu. Setshwantsho seno se a tlhalosa, ga se puiso ya bongola ya jaanong.'],
   demoNeed: [
     "Crop water need — not a single watering run",
     "Gewaswaterbehoefte — nie een besproeiingslopie nie",

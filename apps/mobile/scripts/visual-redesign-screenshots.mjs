@@ -20,6 +20,8 @@ const { chromium } = require(
 
 const FAKE_SUPABASE = "https://testproject.supabase.co";
 const FAKE_API = "https://api.agroflow.test";
+const REVIEW_THEME = process.env.VISUAL_THEME === 'dark' ? 'dark' : 'light';
+const themeSuffix = process.env.VISUAL_THEME ? `-${REVIEW_THEME}` : '';
 const FARMER = "00000000-0000-4000-8000-0000000000fa";
 
 const types = {
@@ -324,14 +326,14 @@ async function newPage(signedIn, language = "en") {
     timezoneId: "Africa/Johannesburg",
     reducedMotion: "reduce",
   });
-  await context.addInitScript((language) => {
+  await context.addInitScript(({ language, theme }) => {
     localStorage.setItem("agroflow_language", language);
-    localStorage.setItem("agroflow_theme_preference", "light");
+    localStorage.setItem("agroflow_theme_preference", theme);
     localStorage.setItem(
       "agroflow_app_preferences",
       JSON.stringify({ showPageHelp: true, showRaindropHelper: false }),
     );
-  }, language);
+  }, { language, theme: REVIEW_THEME });
   if (signedIn)
     await context.addInitScript(
       ({ id }) => {
@@ -449,11 +451,15 @@ for (const width of [320, 390, 768, 1366].filter(
       ["zone", "/zone/1"],
       ["tank", "/tank"],
       ["settings", "/settings"],
+      ...(process.env.VISUAL_EXTENDED ? [
+        ['wizard-existing', '/setup?step=location'], ['irrigation', '/irrigation'],
+        ['alerts', '/alerts'], ['history', '/history'], ['reports', '/reports'], ['forecast', '/forecast'],
+      ] : []),
     ]) {
       await page.goto(BASE + url);
       await page.waitForTimeout(2800);
       await page.screenshot({
-        path: path.join(outDir, `mobile-${name}-${language}-${width}.png`),
+        path: path.join(outDir, `mobile-${name}-${language}${themeSuffix}-${width}.png`),
       });
       checks.push({
         language,
@@ -477,7 +483,7 @@ for (const width of [320, 390, 768, 1366].filter(
         await page.goto(BASE + "/");
         await page.waitForTimeout(2000);
         await page.screenshot({
-          path: path.join(outDir, `mobile-simple-${language}-${width}.png`),
+          path: path.join(outDir, `mobile-simple-${language}${themeSuffix}-${width}.png`),
         });
       }
     }
@@ -491,7 +497,7 @@ for (const width of [320, 390, 768, 1366].filter(
       }
     });
     await page.screenshot({
-      path: path.join(outDir, `mobile-home-${language}-${width}-text200.png`),
+      path: path.join(outDir, `mobile-home-${language}${themeSuffix}-${width}-text200.png`),
     });
     await page.context().close();
     console.log(JSON.stringify({ done: width, language }));

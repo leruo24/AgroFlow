@@ -229,15 +229,15 @@ test("staff theme and phone drawer keep existing routes", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(16, 35, 28)",
+    "rgb(16, 28, 37)",
   );
   await expect(page.locator("#avatarMenu")).toHaveCSS(
     "background-color",
-    "rgb(25, 54, 43)",
+    "rgb(25, 43, 55)",
   );
   await expect(page.locator("#avatarMenu a").first()).toHaveCSS(
     "color",
-    "rgb(241, 245, 238)",
+    "rgb(237, 245, 250)",
   );
   await page.screenshot({
     path: path.join(evidence, "staff-390-dark.png"),

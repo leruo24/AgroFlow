@@ -139,7 +139,7 @@ export default function HistoryScreen() {
               />
             ) : (
               <CardList>{ordered.map((item) => (
-                <Card key={item.id}>
+                <Card key={item.id} style={{ borderLeftWidth: 3, borderLeftColor: colors.primaryDark }}>
                   <View style={styles.rowTop}>
                     <Clock3 size={21} color={colors.textSecondary} strokeWidth={1.7} />
                     <Text style={styles.title}>{item.action}</Text>

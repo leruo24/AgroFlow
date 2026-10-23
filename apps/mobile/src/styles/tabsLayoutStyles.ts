@@ -7,7 +7,7 @@ export const FLOATING_TAB_BAR_MARGIN_BOTTOM = Platform.OS === 'ios' ? 8 : 12;
 // The tab icon wrapper, the same for all five tabs. No theme dependency, so a plain
 // constant instead of a colors(...) factory.
 export const tabsLayoutStyles = StyleSheet.create({
-  tabIconWrapper: { width: 38, height: 38, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
+  tabIconWrapper: { width: 44, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' },
   tabBarLabel: { fontSize: Type.label, fontWeight: '600', paddingTop: 3, backgroundColor: 'transparent' },
   tabBarItem: { backgroundColor: 'transparent' },
   tabBarIcon: { marginBottom: 1 },
@@ -27,7 +27,7 @@ export function createTabsLayoutStyles(colors: AppColors) {
       marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM,
       paddingTop: Space.sm,
       paddingBottom: Platform.OS === 'ios' ? 15 : Platform.OS === 'web' ? 10 : 8,
-      borderRadius: Radius.md,
+      borderRadius: 20,
       position: 'absolute',
       backgroundColor: colors.tabBarSurface,
       borderWidth: StyleSheet.hairlineWidth,
@@ -49,7 +49,7 @@ export function createTabsLayoutStyles(colors: AppColors) {
       minWidth: 17,
       height: 17,
       lineHeight: 17,
-      backgroundColor: colors.error,
+      backgroundColor: colors.dangerAction,
       color: colors.white,
     },
   });

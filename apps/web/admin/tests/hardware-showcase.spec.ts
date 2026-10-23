@@ -37,7 +37,7 @@ test("public hardware story is usable and does not block the rest of the landing
     await expect(page.getByRole("button", { name, includeHidden: true })).toHaveCount(1);
   }
   await expect(page.getByRole("button", { name: "Rotate product left" })).toBeAttached();
-  await expect(page.getByRole("button", { name: "Explore inside" })).toBeAttached();
+  await expect(page.getByRole("button", { name: "Open enclosure" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Reset view" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Rotate product right" })).toBeAttached();
 
@@ -46,9 +46,9 @@ test("public hardware story is usable and does not block the rest of the landing
   await expect(page.getByRole("button", { name: "Soil Moisture Sensor" })).toBeVisible();
   await expect(page.getByRole("button", { name: "ESP32 Controller", includeHidden: true })).toBeHidden();
 
-  await page.getByRole("button", { name: "Explore inside" }).click();
+  await page.getByRole("button", { name: "Open enclosure" }).click();
   await expect(viewer).toHaveAttribute("data-enclosure-state", "open");
-  await expect(page.getByRole("button", { name: "Close enclosure" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Open enclosure" })).toHaveAttribute("aria-expanded", "true");
   const esp32Marker = page.getByRole("button", { name: "ESP32 Controller" });
   await expect(esp32Marker).toBeVisible();
   const markerBox = await esp32Marker.boundingBox();
@@ -59,7 +59,7 @@ test("public hardware story is usable and does not block the rest of the landing
   await expect(esp32Marker.locator("span")).toHaveCSS("opacity", "1");
   await page.getByRole("button", { name: "Reset view" }).click();
   await expect(viewer).toHaveAttribute("data-enclosure-state", "closed");
-  await expect(page.getByRole("button", { name: "Explore inside" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "Open enclosure" })).toHaveAttribute("aria-expanded", "false");
 
   await page.getByRole("heading", { name: "Inside AgroFlow" }).scrollIntoViewIfNeeded();
   const stickyBox = await viewer.boundingBox();

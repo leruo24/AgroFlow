@@ -215,7 +215,8 @@ const LEGACY_WELCOME_HTML = `
                 </div>
                 <div class="hardware-controls" aria-label="3D view controls">
                   <button type="button" data-hardware-rotate="left" aria-label="Rotate product left">&#8634;</button>
-                  <button type="button" class="hardware-explore" data-hardware-toggle aria-expanded="false">Explore inside</button>
+                  <button type="button" class="hardware-explore" data-hardware-toggle aria-expanded="false">Open enclosure</button>
+                  <button type="button" data-hardware-close>Close enclosure</button>
                   <button type="button" data-hardware-reset aria-label="Reset view">Reset view</button>
                   <button type="button" data-hardware-rotate="right" aria-label="Rotate product right">&#8635;</button>
                 </div>
@@ -314,6 +315,7 @@ const LEGACY_WELCOME_HTML = `
   </div>`;
 
 export const WELCOME_HTML = /\/staff(\/(index\.html)?)?$/.test(window.location.pathname) ? "" : renderPublicSite(LEGACY_WELCOME_HTML);
+export const publicPageHtml = () => renderPublicSite(LEGACY_WELCOME_HTML);
 
 export function wireWelcome(root: HTMLElement): void {
   wirePublicSite(root);

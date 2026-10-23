@@ -21,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAgroFlow } from '@/context/AgroFlowContext';//gives access to shared agroflow data
 import { useI18n } from '@/i18n';
 import { Space } from '@/constants/colors';
+import { DockSurface, DockIcon } from '@/components/visual/DockSurface';
 import { useTheme } from '@/context/ThemeContext';//contains the colors
 import {
   createTabsLayoutStyles,
@@ -32,11 +33,11 @@ type TabIconProps = { size?: number; color?: ColorValue; strokeWidth?: number };
 
 // One shared render function for the 38x38 chip around each tab icon.
 function TabIcon(Icon: ComponentType<TabIconProps>) {
-  return function RenderTabIcon({ color, size }: { color: ColorValue; size: number; focused: boolean }) {
+  return function RenderTabIcon({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) {
     return (
-      <View style={styles.tabIconWrapper}>
-        <Icon size={size} color={color} strokeWidth={1.8} />
-      </View>
+      <DockIcon selected={focused}>
+        <Icon size={size} color={focused ? '#FFFFFF' : color} strokeWidth={1.8} />
+      </DockIcon>
     );
   };
 }
@@ -54,7 +55,7 @@ export default function TabsLayout() {//creates layout component
   const narrow = useWindowDimensions().width < 360;
   const tabBarStyle = [
     themedStyles.tabBar,
-    Platform.OS === 'web' && bottom > 0 && { marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM + bottom },
+    bottom > 0 && { marginBottom: FLOATING_TAB_BAR_MARGIN_BOTTOM + bottom },
     narrow && { marginHorizontal: Space.sm },
   ];
 
@@ -70,12 +71,13 @@ export default function TabsLayout() {//creates layout component
         tabBarHideOnKeyboard: true,
 
         // Aqua identifies the selected tab against the forest-green bar.
-        tabBarActiveTintColor: colors.secondaryDark,
+        tabBarActiveTintColor: colors.primaryDark,
 
         // Inactive icons and labels stay readable on forest green.
         tabBarInactiveTintColor: colors.textMuted,
 
         tabBarStyle,
+        tabBarBackground: () => <DockSurface />,
 
         tabBarLabelStyle: [styles.tabBarLabel, narrow && { fontSize: 11 }],
         tabBarLabel: ({ children, color }) => <Text style={[styles.tabBarLabel, { color, textAlign: 'center', flexShrink: 1, width: '100%', maxWidth: '100%' }]}>{children}</Text>,

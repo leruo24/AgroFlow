@@ -124,6 +124,8 @@ export const MapChrome = {
 
 export type AppColors = {
   action: string;
+  dangerAction: string;
+  successAction: string;
   primary: string;
   primaryDark: string;
 
@@ -177,31 +179,33 @@ export type AppColors = {
 };
 
 export const lightColors: AppColors = {
-  action: '#143D2A',
-  primary: '#0E6F77',
-  primaryDark: '#0E6F77',
+  action: '#126B91',
+  dangerAction: '#B13B32',
+  successAction: '#28613C',
+  primary: '#126B91',
+  primaryDark: '#126B91',
 
   secondary: '#7FA88A',
   secondaryDark: '#143D2A',
 
   navigation: '#FFFFFF',
-  navigationText: '#253126',
-  navigationMuted: '#637064',
+  navigationText: '#183344',
+  navigationMuted: '#526575',
 
-  // Cream page with white work surfaces; sage supports quiet groups.
-  background: '#F7F5ED',
+  // Neutral page; water interactions are blue, crop/brand details remain green.
+  background: '#F7FAFC',
 
   surface: '#FFFFFF',
-  surfaceSecondary: '#E8EEE5',
+  surfaceSecondary: '#E7F3FA',
   tabBarSurface: '#FFFFFF',
   scrim: 'rgba(0,0,0,0.32)',
 
-  text: '#18342B',
-  textSecondary: '#526359',
-  textMuted: '#526359',
+  text: '#183344',
+  textSecondary: '#526575',
+  textMuted: '#526575',
 
   // A neutral grey for the few real boundaries; `divider` below separates rows.
-  border: '#C7D1C5',
+  border: '#C5D5DF',
   divider: 'rgba(20,26,20,0.08)',
 
   white: '#FFFFFF',
@@ -213,8 +217,8 @@ export const lightColors: AppColors = {
   weatherBackground: '#DFF2F5',
   weatherBorder: '#B5D8DF',
 
-  irrigationBackground: '#E4F0E1',
-  irrigationBorder: '#B9D0B2',
+  irrigationBackground: '#E7F3FA',
+  irrigationBorder: '#B8D5E5',
 
   healthyBackground: '#E1EDDC',
 
@@ -229,29 +233,31 @@ export const lightColors: AppColors = {
 };
 
 export const darkColors: AppColors = {
-  action: '#0E6F77',
+  action: '#126B91',
+  dangerAction: '#B13B32',
+  successAction: '#28613C',
   primary: '#58CDD0',
   primaryDark: '#85D3D8',
 
   secondary: '#8BB697',
   secondaryDark: '#9BC58B',
 
-  navigation: '#123A29',
+  navigation: '#192B37',
   navigationText: '#FFFFFF',
-  navigationMuted: '#B8CEC0',
+  navigationMuted: '#BDCEDA',
 
-  background: '#10231C',
+  background: '#101C25',
 
-  surface: '#19362B',
-  surfaceSecondary: '#234638',
-  tabBarSurface: '#19362B',
+  surface: '#192B37',
+  surfaceSecondary: '#203C4C',
+  tabBarSurface: '#192B37',
   scrim: 'rgba(0,0,0,0.48)',
 
-  text: '#F1F5EE',
-  textSecondary: '#C3D2C6',
-  textMuted: '#C3D2C6',
+  text: '#EDF5FA',
+  textSecondary: '#BDCEDA',
+  textMuted: '#BDCEDA',
 
-  border: '#3A4739',
+  border: '#4D6575',
   divider: 'rgba(241,245,239,0.08)',
 
   white: '#FFFFFF',
@@ -263,8 +269,8 @@ export const darkColors: AppColors = {
   weatherBackground: '#203840',
   weatherBorder: '#34535C',
 
-  irrigationBackground: '#293A2B',
-  irrigationBorder: '#40563F',
+  irrigationBackground: '#203C4C',
+  irrigationBorder: '#416276',
 
   healthyBackground: '#293A2B',
 

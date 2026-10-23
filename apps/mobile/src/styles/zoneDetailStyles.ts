@@ -267,7 +267,7 @@ content: {
       color: colors.white,
     },
     stopButton: {
-      backgroundColor: colors.error,
+      backgroundColor: colors.dangerAction,
     },
     // Offline: watering needs the kit to hear the command now, so the button is greyed out
     // and the reason is written under it (never a silent dead button).

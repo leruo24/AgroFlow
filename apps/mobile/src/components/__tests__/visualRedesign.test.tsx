@@ -2,6 +2,7 @@
 import { fireEvent, render, waitFor } from "@testing-library/react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Text } from "react-native";
+import { DockSurface, DockIcon } from '@/components/visual/DockSurface';
 import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { FarmPostcard } from "@/components/visual/FarmPostcard";
 import { TankIllustration } from "@/components/visual/TankIllustration";
@@ -191,5 +192,26 @@ test.each([lightColors, darkColors])(
     ])
       expect(contrast(foreground, colors.surface)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(colors.white, colors.action)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colors.white, colors.dangerAction)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(colors.white, colors.successAction)).toBeGreaterThanOrEqual(4.5);
   },
 );
+
+test.each(['#126B91', '#087F8C'])('selected dock gradient stop %s has readable white icons', (stop) => {
+  expect(contrast('#FFFFFF', stop)).toBeGreaterThanOrEqual(4.5);
+});
+test('dock background and selected chip have distinct SVG gradient identities', async () => {
+  const view = await render(wrap(<><DockSurface /><DockSurface selected /></>));
+  const gradients = view.getAllByTestId('dock-surface', { includeHiddenElements: true });
+  expect(gradients).toHaveLength(2);
+  expect(new Set(gradients.map(gradient => gradient.props.nativeID)).size).toBe(2);
+});
+test('selected dock icon paints above its decorative SVG background', async () => {
+  const view = await render(wrap(<DockIcon selected><Text>Home icon</Text></DockIcon>));
+  expect(view.getByTestId('dock-icon-foreground').props.style.zIndex).toBe(1);
+  expect(view.getByText('Home icon')).toBeTruthy();
+});
+test.each([lightColors, darkColors])('muted labels remain readable on supporting panels', colors => {
+  expect(contrast(colors.textSecondary, colors.surfaceSecondary)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(colors.textMuted, colors.tabBarSurface)).toBeGreaterThanOrEqual(4.5);
+});

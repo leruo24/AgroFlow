@@ -6,6 +6,7 @@ import { visualCatalogueHtml } from "./visualCatalogue";
 import termsDraft from "@/content/terms-draft.md?raw";
 import privacyDraft from "@/content/privacy-draft.md?raw";
 import { legalDraftHtml } from "@/ui/legalDraft";
+import { irrigationIllustrationHtml, wireIrrigationIllustration } from '@/features/irrigationIllustration';
 
 const routes: readonly [string, CopyKey][] = [
   ["/", "home"],
@@ -87,12 +88,13 @@ export function renderPublicSite(original: string): string {
     case "/experience":
       body =
         hero("experienceTitle", "experienceBody") +
-        `<section class="visual-band"><p class="visual-eyebrow">${t("simulated")}</p><button type="button" class="btn" data-experience-launch>${t("launch")}</button></section>`;
+        irrigationIllustrationHtml() + `<section class="visual-band"><p class="visual-eyebrow">${t("simulated")}</p><button type="button" class="btn" data-experience-launch>${t("launch")}</button></section>`;
       break;
     case "/technology":
       body =
         hero("technology", "projectBody") +
         section("[data-hardware-showcase]") +
+        irrigationIllustrationHtml() +
         section("#technology");
       break;
     case "/get-the-app":
@@ -122,6 +124,7 @@ export function renderPublicSite(original: string): string {
           : hero("missing", "missingBody");
   }
   body = body.replace(/href="#enquire"/g, 'href="/contact#enquire"');
+  body = body.replace('</div></div><div class="visual-field"', `<a class="visual-existing-user" href="${WEB_APP_URL || '/get-the-app'}">${t('openFarmerApp')}</a></div></div><div class="visual-field"`);
   const nav = routes
     .map(
       ([href, key]) =>
@@ -132,6 +135,7 @@ export function renderPublicSite(original: string): string {
 }
 
 export function wirePublicSite(root: HTMLElement): void {
+  wireIrrigationIllustration(root);
   root
     .querySelector("[data-catalogue-back]")
     ?.addEventListener("click", () => history.back());

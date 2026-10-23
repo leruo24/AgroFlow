@@ -107,7 +107,7 @@ export function StickyActionBar({
           onPress={onContinue}
           style={{
             flexGrow: 1,
-            backgroundColor: "#143D2A",
+            backgroundColor: colors.action,
             padding: 16,
             minHeight: 48,
             borderRadius: 12,
