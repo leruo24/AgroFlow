@@ -28,6 +28,8 @@ prints the API's log and the broker's connections.
 | A manual 1-minute command reaches the kit and is acknowledged | an `irrigation_commands` row (what Water now creates) → MQTT → `POST .../executed` → `executed` |
 | The run is logged | `POST /api/irrigation-events`: a `manual` event of 60 s |
 | A pump run kept offline and uploaded twice is counted once | two identical `offline_queued` events: one row |
+| The backlog shows in the kit's status | every replayed reading carries `backlog`; `hardware.offline_backlog` reads 30 halfway through the 60 and 0 at the end |
+| A lost acknowledgement does not water twice | the kit waters, its acknowledgement is dropped, the API resends (replay sweep, 5 s here); the kit acknowledges again with the first time and does not water; a rebooted kit with the same flash also refuses it |
 | A Manual zone is never watered automatically | a bone-dry live reading on a Manual zone: no command; `GET /api/devices/config` says `autoWateringAllowed: false` (true once Automatic) |
 | Every command carries the zone's maximum run time | `maxRunSeconds` 300 by default; a zone limited to 3 min sends 180 for a 600 s request, and the kit runs 180 |
 | A finished run marks its command finished | the run report sets `irrigation_commands.finished_at` and `irrigation_event.command_id` (migration 0051) |

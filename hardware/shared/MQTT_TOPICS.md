@@ -122,6 +122,7 @@ first** on the same topic, with two extra fields:
 |---|---|
 | `recordedAt` | when the board took the reading (UTC, from NTP). Absent on a live reading. |
 | `seq` | the board's own counter, increasing by one per kept reading |
+| `backlog` | readings still waiting to upload after this one (firmware 1.7.0+, on every reading, live or kept). The API keeps the latest on the kit's record (`hardware.offline_backlog`, migration 0060). |
 
 The API (`ReadingAge`, `SensorReadingProcessor`) stores a kept reading with its
 own time. If it is more than **10 minutes** old it is stored only: it never

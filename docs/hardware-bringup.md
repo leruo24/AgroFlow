@@ -78,11 +78,22 @@ from enrollment instead, and are kept in the board's flash (or RAM):
 | Port | the board's COM port |
 | **Serial Monitor** | **115200 baud**, "Both NL & CR" |
 
-The 92% figure is program space. Offline data uses the separate NVS partition: the bounded
-ring holds **180 readings** (`180 × 20 B + 24 B header = 3,624 B`) and **32 pump runs**
-(`32 × 16 B + 24 B header = 536 B`), at most **4,160 B plus NVS overhead**. At one soil,
-temperature and humidity sample every 30 seconds, 180 readings cover about **30 minutes**;
-after that the oldest reading is dropped first.
+The 92% figure is program space. Offline data uses the separate NVS partition:
+
+| Kept in flash (NVS) | Size | Key |
+|---|---|---|
+| Offline readings: a ring of **180 readings** (`READING_BUFFER_CAPACITY`) | `180 × 20 B + 24 B header = 3,624 B` | `readbuf` |
+| Offline pump runs: **32 runs** (`RUN_BUFFER_CAPACITY`) | `32 × 16 B + 24 B header = 536 B` | `runbuf` |
+| Recent command IDs: **32 IDs** (`RECENT_COMMAND_IDS`), each with its first acknowledgement time | `32 × 44 B + 20 B header = 1,428 B` | `cmdids` |
+
+That is at most **5,588 B plus NVS overhead**. At one soil, temperature and humidity sample
+every 30 seconds (3 readings), 180 readings cover **30 minutes** offline; after that the
+oldest reading is dropped first, so the newest 30 minutes always survive. Each kept reading
+has the time it was measured, and after a reconnect they upload **oldest first**, 5 per pass
+of the main loop so watering checks keep running. The API stores a reading from a kit once
+per sensor and measured time (migration 0060), so a reading sent twice is not stored twice.
+Every reading the kit publishes says how many are still waiting (`backlog`); the admin
+**Kits** page and the farmer's kit screen show it while it is above 0.
 
 Open the sketch folder, press **Upload**. Some boards need the **BOOT** button held while
 "Connecting..." shows.
@@ -141,6 +152,7 @@ Sign in at the admin site (**Staff sign-in**).
    Device claimed, zoneId=12 farmId=4 (credentials stored on device)
    MQTT login received from server (held in memory only)
    Connecting to MQTT broker...connected
+   Subscribed to agroflow/farm/4/device/0123456789AB/commands; backlog 0 readings, 0 pump runs to upload
    Soil raw=3120 (38%)
    DHT11 22.0 C 55 %
    ```
@@ -163,8 +175,11 @@ The setup page stays open **5 minutes**; if it times out the kit restarts and op
 | `WARN: API rejected device token (1/3)` ... `(3/3)` then `FACTORY RESET` | the server revoked this board's token | expected after a revoke; enrol it again |
 | `WARN: soil reading 0 out of range - not sent (probe fault?)` | probe not connected, wrong pin, or shorted | check AO → GPIO 32 and 3V3/GND |
 | `WARN: DHT11 TIMEOUT - temperature/humidity not sent` | DHT11 not answering | check DATA → GPIO 27, power, and the pull-up |
-| `Offline: 3 readings kept for upload` | MQTT is down; readings are kept (one set every 10 min) | nothing; they upload when it is back |
+| `Offline: 3 readings kept for upload` | MQTT is down; readings are kept (one set of 3 every 30 s, up to 180) | nothing; they upload when it is back |
+| `WARN: offline reading buffer full, dropped the oldest reading` | offline for more than 30 minutes | nothing; the newest 30 minutes are kept |
+| `Subscribed to ...; backlog 60 readings, 0 pump runs to upload` | reconnected with kept readings | nothing; watch them upload |
 | `Offline readings uploaded - buffer empty` | back online, kept readings sent | nothing |
+| `Command 0f9b952c-... already carried out - acknowledging again, not repeating it` | the API resent a command whose acknowledgement was lost | nothing; the pump does not run a second time |
 | `SAFETY: max run time reached, stopping pump` | a run reached the 5-minute cap | expected; no run is ever longer than 5 min |
 
 ## 9. Checks before you leave the kit
