@@ -1,4 +1,5 @@
-import type { Camera, Material, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import type { Box3, Camera, Material, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import { hardwareEnvelope, fitHardwareCamera } from './viewerFraming';
 import { ENCLOSURE_OPEN_RADIANS, stepHinge } from './enclosureHinge';
 import { text as t } from '@/pages/publicCopy';
 import {
@@ -100,6 +101,25 @@ export function initHardwareShowcase(root: HTMLElement): void {
   const info = root.querySelector<HTMLElement>("#hardwareComponentInfo");
   if (!section || !viewer || !canvasMount || !info || viewer.dataset["initialized"] === "true") return;
   viewer.dataset["initialized"] = "true";
+  const column = viewer.parentElement!;
+  const footer = viewer.querySelector<HTMLElement>('.hardware-viewer-footer');
+  if (footer) column.append(footer); // Controls are outside the clipped viewport.
+  const scenes = [['crop-rows', 'cropRows'], ['drip-irrigation', 'dripScene'], ['open-field', 'openField']] as const;
+  const landscapes = document.createElement('div');
+  landscapes.className = 'hardware-landscapes'; landscapes.setAttribute('aria-hidden', 'true');
+  landscapes.innerHTML = scenes.map(([scene], i) => `<img src="/media/scenes/${scene}.svg" alt="" width="1000" height="600" class="${i === 0 ? 'is-active' : ''}" data-scene-image="${scene}" />`).join('');
+  viewer.prepend(landscapes);
+  const sceneControls = document.createElement('div');
+  sceneControls.className = 'hardware-scenes'; sceneControls.setAttribute('role', 'group'); sceneControls.setAttribute('aria-label', t('sceneBackground'));
+  sceneControls.innerHTML = scenes.map(([scene, label], i) => `<button type="button" data-hardware-scene="${scene}" aria-pressed="${i === 0}">${t(label)}</button>`).join('');
+  viewer.before(sceneControls);
+  const tools = document.createElement('div'); tools.className = 'hardware-demo-controls';
+  tools.innerHTML = `<button type="button" data-hardware-resume>${t('resumeGuide')}</button><button type="button" data-hardware-demo>${t('previewIrrigation')}</button><button type="button" data-hardware-demo-stop>${t('stopDemo')}</button><button type="button" data-hardware-demo-reset>${t('resetDemo')}</button>`;
+  column.append(tools);
+  const caption = column.querySelector('.hardware-caption');
+  if (caption) caption.textContent = t('representative');
+  const fallbackUnit = viewer.querySelector('.hardware-fallback-unit');
+  if (fallbackUnit) { const image = document.createElement('img'); image.src = '/media/scenes/controller-static.svg'; image.alt = ''; image.width = 180; image.height = 165; fallbackUnit.replaceWith(image); }
   const viewerElement: HTMLElement = viewer;
   const mountElement: HTMLElement = canvasMount;
   const infoElement: HTMLElement = info;
@@ -118,7 +138,8 @@ export function initHardwareShowcase(root: HTMLElement): void {
   let loading = false;
   let visible = false;
   let progress = 0;
-  let userRotation = 0;
+  let userRotation: number | null = null;
+  let envelope: Box3 | null = null;
   let activeStage = 0;
   let frameRequest = 0;
   let renderer: WebGLRenderer | null = null;
@@ -251,17 +272,11 @@ export function initHardwareShowcase(root: HTMLElement): void {
 
     if (lidOverride === null) updateOpenUi(renderedLidOpen > 0.5);
 
-    model.root.rotation.y = state.rotation + userRotation;
+    model.root.rotation.y = userRotation ?? state.rotation;
+    viewerElement.dataset['rotation'] = model.root.rotation.y.toFixed(4);
     model.lid.rotation.y = ENCLOSURE_OPEN_RADIANS * renderedLidOpen;
     viewerElement.dataset['hingeAngle'] = model.lid.rotation.y.toFixed(4);
-    const manual = lidOverride !== null;
-    const cameraOpen = manual ? renderedLidOpen : state.lidOpen;
-    const openCameraZ = mountElement.clientWidth < 560 ? 27.0 : 24.5;
-    const cameraZ = manual ? mix(STORY_FRAMES[0]!.cameraZ, openCameraZ, cameraOpen) : mix(state.cameraZ, Math.max(state.cameraZ, openCameraZ), cameraOpen);
-    const cameraX = manual ? mix(STORY_FRAMES[0]!.cameraX, -0.75, cameraOpen) : state.cameraX;
-    const targetX = manual ? mix(0, -1.35, cameraOpen) : mix(state.targetX, Math.min(state.targetX, -1.35), cameraOpen);
-    camera.position.set(cameraX, 0.08 + 0.18 * cameraOpen, cameraZ);
-    camera.lookAt(targetX, 0.08 + 0.22 * cameraOpen, 0);
+    // The fitted camera is updated only by ResizeObserver, never by scroll/pose.
 
     const pulse = (time * 0.00034) % 1;
     if (model.senseSignal.visible) model.sensePath.getPoint(pulse, model.sensePulse.position);
@@ -303,7 +318,9 @@ export function initHardwareShowcase(root: HTMLElement): void {
     renderer.setPixelRatio(adaptivePixelRatio(width));
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    if (THREE && envelope) fitHardwareCamera(THREE, camera, envelope, width, height);
+    else camera.updateProjectionMatrix();
+    viewerElement.dataset['canvasSize'] = `${width}x${height}`;
     requestRender();
   }
 
@@ -334,18 +351,18 @@ export function initHardwareShowcase(root: HTMLElement): void {
   toggleButton?.addEventListener("click", () => animateLid(1), { signal: abort.signal });
   section.querySelector<HTMLButtonElement>('[data-hardware-close]')?.addEventListener('click', () => animateLid(0), { signal: abort.signal });
   section.querySelector<HTMLButtonElement>("[data-hardware-rotate='left']")?.addEventListener("click", () => {
-    userRotation -= 0.24;
+    userRotation = (userRotation ?? model?.root.rotation.y ?? 0) - 0.24;
     requestRender();
   }, { signal: abort.signal });
   section.querySelector<HTMLButtonElement>("[data-hardware-rotate='right']")?.addEventListener("click", () => {
-    userRotation += 0.24;
+    userRotation = (userRotation ?? model?.root.rotation.y ?? 0) + 0.24;
     requestRender();
   }, { signal: abort.signal });
   section.querySelector<HTMLButtonElement>("[data-hardware-reset]")?.addEventListener("click", resetView, { signal: abort.signal });
 
   mountElement.addEventListener("pointerdown", (event) => {
     if (!renderer || event.button !== 0) return;
-    dragStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, rotation: userRotation, horizontal: false };
+    dragStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, rotation: userRotation ?? model?.root.rotation.y ?? 0, horizontal: false };
   }, { signal: abort.signal });
   mountElement.addEventListener("pointermove", (event) => {
     if (!dragStart || dragStart.pointerId !== event.pointerId) return;
@@ -391,8 +408,9 @@ export function initHardwareShowcase(root: HTMLElement): void {
       camera = created.camera;
       renderer = created.renderer;
       model = created.model;
+      envelope = hardwareEnvelope(THREE, model);
       renderer.domElement.setAttribute("role", "img");
-      renderer.domElement.setAttribute("aria-label", "Interactive three-dimensional view of the AgroFlow field controller and connected sensors");
+      renderer.domElement.setAttribute("aria-label", t('controllerView'));
       renderer.domElement.setAttribute("aria-describedby", "hardwareComponentInfo");
       mountElement.append(renderer.domElement);
       viewerElement.classList.add("is-ready");
@@ -405,6 +423,7 @@ export function initHardwareShowcase(root: HTMLElement): void {
     } catch (error) {
       console.warn("AgroFlow hardware visualisation could not start; using the static fallback.", error);
       viewerElement.classList.add("is-fallback");
+      section?.querySelectorAll<HTMLButtonElement>('[data-hardware-rotate], [data-hardware-toggle], [data-hardware-close]').forEach(button => { button.disabled = true; });
       viewerElement.setAttribute("aria-busy", "false");
     }
   }
@@ -440,4 +459,27 @@ export function initHardwareShowcase(root: HTMLElement): void {
   });
   mutationObserver.observe(document.body, { childList: true, subtree: true });
   syncStory();
+  section.querySelectorAll<HTMLButtonElement>('[data-hardware-scene]').forEach(button => {
+    button.addEventListener('click', () => {
+      const selected = button.dataset['hardwareScene'];
+      landscapes.querySelectorAll<HTMLElement>('[data-scene-image]').forEach(image => image.classList.toggle('is-active', image.dataset['sceneImage'] === selected));
+      sceneControls.querySelectorAll<HTMLButtonElement>('button').forEach(option => option.setAttribute('aria-pressed', String(option === button)));
+    }, { signal: abort.signal });
+  });
+  section.querySelector<HTMLButtonElement>('[data-hardware-resume]')?.addEventListener('click', () => {
+    userRotation = null; lidOverride = null; lidAnimation = null; lidVelocity = 0; syncStory();
+  }, { signal: abort.signal });
+  const demoAction = (action: string) => root.querySelector<HTMLButtonElement>(`[data-irrigation-illustration] [data-demo-${action}]`)?.click();
+  section.querySelector<HTMLButtonElement>('[data-hardware-demo]')?.addEventListener('click', () => {
+    demoAction('start'); root.querySelector('[data-irrigation-illustration]')?.scrollIntoView({ block: 'center' });
+  }, { signal: abort.signal });
+  section.querySelector<HTMLButtonElement>('[data-hardware-demo-stop]')?.addEventListener('click', () => demoAction('stop'), { signal: abort.signal });
+  section.querySelector<HTMLButtonElement>('[data-hardware-demo-reset]')?.addEventListener('click', () => demoAction('reset'), { signal: abort.signal });
+  section.querySelectorAll('.hardware-controls,.hardware-hotspots').forEach(group => group.setAttribute('role', 'group'));
+  section.querySelectorAll<HTMLButtonElement>('[data-hardware-rotate]').forEach(button => {
+    const symbol = document.createElement('span'); symbol.setAttribute('aria-hidden', 'true');
+    symbol.textContent = button.textContent; button.replaceChildren(symbol);
+  });
+  section.querySelector<HTMLButtonElement>('[data-hardware-rotate="left"]')?.setAttribute('aria-label', t('rotateLeft'));
+  section.querySelector<HTMLButtonElement>('[data-hardware-rotate="right"]')?.setAttribute('aria-label', t('rotateRight'));
 }

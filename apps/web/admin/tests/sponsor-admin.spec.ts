@@ -155,8 +155,8 @@ test("a farmer who signs in is shown the staff-only message and where the app is
   const notice = page.locator("#loginStaffOnly");
   await expect(notice).toBeVisible();
   await expect(notice).toContainText("This console is for AgroFlow staff. Farmers, please use the AgroFlow app.");
-  // With no download links configured for the test build, it says who to ask instead.
-  await expect(notice.getByRole("link", { name: "request a call" })).toBeVisible();
+  // RET-03: the approved farmer login link is always available, even without an APK.
+  await expect(notice.locator('[data-app-link="web"]')).toHaveAttribute('href', 'https://agroflow-mobile.vercel.app/login');
 
   // Still on the sign-in page, not in the console, and the session is not kept.
   await expect(page.locator("#appShell")).toHaveCount(0);

@@ -59,7 +59,8 @@ export function renderPublicSite(original: string): string {
   const section = (selector: string) =>
     source.querySelector(selector)?.outerHTML ?? "";
   const hero = (title: CopyKey, body: CopyKey) =>
-    `<section class="visual-hero"><div><p class="visual-eyebrow">${t("eyebrow")}</p><h1 id="publicTitle">${t(title)}</h1><p class="visual-lede">${t(body)}</p><div class="visual-actions">${cta()}<a href="/how-it-works">${t("how")} →</a></div></div><div class="visual-field" role="img" aria-label="${t("illustration")}">${fieldArt}<span>${t("illustration")}</span></div></section>`;
+    `<section class="visual-hero"><div><p class="visual-eyebrow">${t("eyebrow")}</p><h1 id="publicTitle">${t(title)}</h1><p class="visual-lede">${t(body)}</p><div class="visual-actions">${cta()}<a href="/how-it-works">${t("how")} →</a><a href="${WEB_APP_URL}">${t('openFarmerApp')}</a></div></div><figure class="visual-landscape"><div class="visual-field" role="img" aria-label="${t("illustration")}">${fieldArt}</div><figcaption>${t('illustration')}</figcaption></figure></section>`;
+  const heading = (title: CopyKey, body: CopyKey) => `<section class="visual-page-heading"><p class="visual-eyebrow">${t('eyebrow')}</p><h1 id="publicTitle">${t(title)}</h1><p class="visual-lede">${t(body)}</p></section>`;
   const outcomes = `<section class="visual-grid" aria-label="${t("field")}">${card("soil", "soilBody")}${card("advice", "adviceBody")}${card("watering", "wateringBody")}</section>`;
   let body = "";
   switch (path) {
@@ -71,62 +72,61 @@ export function renderPublicSite(original: string): string {
       break;
     case "/solutions":
       body =
-        hero("field", "intro") +
+        heading("field", "intro") +
         outcomes +
         `<section class="visual-grid">${card("receive", "receiveBody", "/service-pricing")}${card("requirements", "requirementsBody")}</section>`;
       break;
     case "/how-it-works":
       body =
-        hero("start", "journey") +
+        heading("start", "journey") +
         outcomes +
         `<section class="visual-band"><h2>${t("requirements")}</h2><p>${t("requirementsBody")}</p></section>`;
       break;
     case "/about":
       body =
-        hero("aboutTitle", "purposeBody") +
+        heading("aboutTitle", "purposeBody") +
         `<section class="visual-grid about-grid">${card("purpose", "purposeBody")}${card("who", "whoBody")}${card("roles", "rolesBody")}${card("project", "projectBody")}${card("team", "teamBody")}${card("sponsor", "sponsorBody")}${card("receive", "receiveBody", "/service-pricing")}${card("start", "journey", "/how-it-works")}</section>` +
         `<section class="visual-band" data-about-contact><h2>${t("reach")}</h2><p>${t("reachBody")}</p>${cta()}</section>`;
       break;
     case "/experience":
       body =
-        hero("experienceTitle", "experienceBody") +
+        heading("experienceTitle", "experienceBody") +
         irrigationIllustrationHtml() + `<section class="visual-band"><p class="visual-eyebrow">${t("simulated")}</p><button type="button" class="btn" data-experience-launch>${t("launch")}</button></section>`;
       break;
     case "/technology":
       body =
-        hero("technology", "projectBody") +
+        heading("technology", "projectBody") +
         section("[data-hardware-showcase]") +
         irrigationIllustrationHtml() +
         section("#technology");
       break;
     case "/get-the-app":
       body =
-        hero("app", "intro") +
-        `<section class="visual-band">${appLinksHtml()}<p>${t("signIn")}</p></section>` +
+        heading("app", "intro") +
+        `<section class="visual-band">${appLinksHtml()}<p><a href="${WEB_APP_URL}">${t("signIn")}</a></p></section>` +
         section("#the-app");
       break;
     case "/contact":
-      body = hero("contact", "enquiryNote") + section("#enquire");
+      body = heading("contact", "enquiryNote") + section("#enquire");
       break;
     case "/service-pricing":
       body =
-        hero("pricingTitle", "receiveBody") +
+        heading("pricingTitle", "receiveBody") +
         `<section class="visual-grid"><article class="visual-card"><h2>${t("install")}</h2><p class="visual-price" data-price="installation"><span data-price-amount>R4,000</span></p><p>${t("quote")}</p></article><article class="visual-card"><h2>${t("monthly")}</h2><p class="visual-price" data-price="monthly"><span data-price-amount>R610</span> / ${publicLanguage() === "af" ? "maand" : publicLanguage() === "tn" ? "kgwedi" : "month"}</p><p>${t("quote")}</p></article></section><section class="visual-band"><p>${t("costs")}</p>${cta()}</section>`;
       break;
     case "/terms":
     case "/privacy":
       body =
-        hero(label, "draftBody") +
+        heading(label, "draftBody") +
         `<section class="visual-band" role="status"><h2 data-legal-draft>${t("draft")}</h2><p>${t("legalLanguage")}</p><p data-legal-version>0.1-draft · <time datetime="2026-10-23">2026-10-23</time></p></section><article class="legal-document" lang="en" data-legal-doc="${path === "/terms" ? "terms" : "privacy"}">${legalDraftHtml(path === "/terms" ? termsDraft : privacyDraft)}</article>`;
       break;
     default:
       body =
         import.meta.env.DEV && path === "/component-catalogue"
           ? visualCatalogueHtml()
-          : hero("missing", "missingBody");
+          : heading("missing", "missingBody");
   }
   body = body.replace(/href="#enquire"/g, 'href="/contact#enquire"');
-  body = body.replace('</div></div><div class="visual-field"', `<a class="visual-existing-user" href="${WEB_APP_URL || '/get-the-app'}">${t('openFarmerApp')}</a></div></div><div class="visual-field"`);
   const nav = routes
     .map(
       ([href, key]) =>
@@ -137,6 +137,7 @@ export function renderPublicSite(original: string): string {
 }
 
 export function wirePublicSite(root: HTMLElement): void {
+  root.querySelector('.visual-footer nav')?.setAttribute('aria-label', t('footerNav'));
   wireIrrigationIllustration(root);
   root
     .querySelector("[data-catalogue-back]")
