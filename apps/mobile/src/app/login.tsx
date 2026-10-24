@@ -218,6 +218,7 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView
+      role={Platform.OS === 'web' ? 'main' : undefined}
       style={
         styles.safeArea
       }
@@ -281,6 +282,8 @@ export default function LoginScreen() {
               }
             >
               <Text
+                accessibilityRole="header"
+                aria-level={1}
                 style={
                   styles.title
                 }
@@ -518,6 +521,7 @@ export default function LoginScreen() {
             {/* For someone who is not a farmer on AgroFlow yet. */}
             <TouchableOpacity
               accessibilityRole="link"
+              style={styles.enquiryTarget}
               onPress={() => router.push('/enquiry')}
               activeOpacity={0.7}
             >

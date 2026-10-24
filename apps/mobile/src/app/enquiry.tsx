@@ -81,9 +81,9 @@ export default function EnquiryScreen() {
           {field('Email (optional)', 'email', { keyboardType: 'email-address', autoCapitalize: 'none' })}
 
           <Text style={styles.label}>{t('enquiry.province')}</Text>
-          <View style={styles.choices}>
+          <View accessibilityRole="radiogroup" accessibilityLabel={t('enquiry.province')} style={styles.choices}>
             {PROVINCES.map((p) => (
-              <Pressable key={p} accessibilityRole="radio" accessibilityState={{ selected: form.province === p }}
+              <Pressable key={p} accessibilityRole="radio" aria-checked={form.province === p} accessibilityState={{ checked: form.province === p, selected: form.province === p }}
                 onPress={() => set('province', p)} style={[styles.choice, form.province === p && styles.choiceSelected]}>
                 <Text style={styles.choiceText}>{p}</Text>
               </Pressable>
@@ -114,9 +114,9 @@ export default function EnquiryScreen() {
           )}
 
           <Text style={styles.label}>{t('enquiry.bestTime')}</Text>
-          <View style={styles.choices}>
+          <View accessibilityRole="radiogroup" accessibilityLabel={t('enquiry.bestTime')} style={styles.choices}>
             {TIMES.map((t) => (
-              <Pressable key={t} accessibilityRole="radio" accessibilityState={{ selected: form.bestTime === t }}
+              <Pressable key={t} accessibilityRole="radio" aria-checked={form.bestTime === t} accessibilityState={{ checked: form.bestTime === t, selected: form.bestTime === t }}
                 onPress={() => set('bestTime', t)} style={[styles.choice, form.bestTime === t && styles.choiceSelected]}>
                 <Text style={styles.choiceText}>{t[0].toUpperCase() + t.slice(1)}</Text>
               </Pressable>

@@ -230,13 +230,13 @@ export default function SettingsScreen() {
 
           <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
 
-          <View style={styles.sectionCard}>
+          <View accessibilityRole="radiogroup" accessibilityLabel={t('settings.language')} style={styles.sectionCard}>
             {LANGUAGES.map((option) => {
               const selected = lang === option.value;
               return (
                 <TouchableOpacity
                   key={option.value}
-                  accessibilityRole="radio"
+                  accessibilityRole="radio" aria-checked={selected}
                   accessibilityState={{ checked: selected }}
                   accessibilityLabel={option.beta ? `${option.name} ${t('settings.beta')}` : option.name}
                   testID={`language-${option.value}`}
@@ -261,7 +261,7 @@ export default function SettingsScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}><DayNightMotif /><Text style={[styles.note, { flex: 1 }]}>{t('visual.dayNight')}</Text></View>
           <SimpleViewControl />
 
-          <View style={styles.sectionCard}>
+          <View accessibilityRole="radiogroup" accessibilityLabel={t('settings.appearance')} style={styles.sectionCard}>
             {appearanceOptions.map((option) => {
               const selected =
                 themePreference === option.value;
@@ -269,7 +269,7 @@ export default function SettingsScreen() {
               return (
                 <TouchableOpacity
                   key={option.value}
-                  accessibilityRole="radio"
+                  accessibilityRole="radio" aria-checked={selected}
                   accessibilityState={{ checked: selected }}
                   style={[
                     styles.settingRow,

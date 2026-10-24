@@ -182,6 +182,7 @@ const OFF_NAV_TITLES: Partial<Record<PageId, string>> = {
 };
 
 function setNavigationChrome(id: PageId, title: HTMLElement | null): void {
+  document.title = `${NAV.find(n => n.id === id)?.label ?? OFF_NAV_TITLES[id] ?? 'Overview'} – AgroFlow Staff`;
   if (title) {
     title.textContent = NAV.find((n) => n.id === id)?.label ?? OFF_NAV_TITLES[id] ?? "Home";
   }

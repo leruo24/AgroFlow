@@ -5,7 +5,10 @@
 
 import "@/styles/main.css";
 import "@/styles/visual.css";
+import "@/styles/web-polish.css";
 import { wireAppearance } from "@/ui/appearance";
+import { wireRadioKeyboard } from "@/ui/radioKeyboard";
+import { text as publicText } from "@/pages/publicCopy";
 import { SHELL_HTML } from "@/app/shell";
 import { initNav, bootRouter, setAfterRender } from "@/app/router";
 import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/interactions";
@@ -27,6 +30,7 @@ declare global {
 // Wires up each page's interactions after every in-session navigation (go() ->
 // swapContent -> this). Separate from the state machine below; only fires while signed in.
 setAfterRender(wirePageInteractions);
+wireRadioKeyboard();
 
 type ViewState = "loading" | "welcome" | "signed-out" | "signed-in" | "reset-password";
 
@@ -124,12 +128,14 @@ function render(state: ViewState): void {
   }
 
   if (state === "signed-out") {
+    document.title = `${publicText('staffSignIn')} – AgroFlow Staff`;
     root.innerHTML = LOGIN_HTML;
     wireLogin(root);
     return;
   }
 
   if (state === "reset-password") {
+    document.title = `${publicText('staffReset')} – AgroFlow Staff`;
     root.innerHTML = resetPasswordHtml();
     wireResetPassword(root, () => {
       const changed = root.querySelector("#resetForm") !== null;

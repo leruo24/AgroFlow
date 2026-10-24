@@ -116,7 +116,7 @@ export default function ZoneSoilScreen() {
         <HelpButton screen="zoneSoil" />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}>
+      <ScrollView accessibilityRole="radiogroup" accessibilityLabel={t('soilScreen.title')} contentContainerStyle={[styles.content, { paddingBottom: bottomPad }]}>
         <Text style={styles.hint}>
           {t('soilScreen.notSure')} <Text style={styles.hintStrong}>{t('soilScreen.loam')}</Text>. It&apos;s the
           most common garden soil.
@@ -127,8 +127,8 @@ export default function ZoneSoilScreen() {
           return (
             <Pressable
               key={soil.key}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: isSelected }}
+              accessibilityRole="radio" aria-checked={isSelected}
+              accessibilityState={{ checked: isSelected, selected: isSelected }}
               accessibilityLabel={`${soil.title}. ${soil.feel} ${soil.means}`}
               onPress={() => setSelected(soil.key)}
               style={[styles.card, isSelected && styles.cardSelected]}
