@@ -135,3 +135,26 @@ test("the wizard's Review and success screens show the card, which fills in once
   await expect(page.locator('#kitSetupResult [data-kit-field="password"]')).toHaveText("AF-D4E5F6");
   await expect(page.locator('#kitSetupResult [data-kit-field="code"]')).toHaveCount(0);
 });
+
+test("the kit card has Reconnect or reset, with the printable guide; the label says how to change Wi-Fi", async ({ page }) => {
+  await kitsPage(page);
+  await page.locator('[data-act="view-device"][data-id="5"]').click();
+  const help = page.locator('[data-kit-card][data-hardware-id="5"] [data-kit-help]');
+  await help.locator("summary").click();
+  await expect(help).toContainText("Change Wi-Fi");
+  await expect(help).toContainText("off and on 3 times quickly");
+  await expect(help).toContainText("5 times quickly");
+  await expect(help).toContainText("new enrollment code");
+  const link = help.locator("[data-kit-guide-link]");
+  await expect(link).toHaveAttribute("href", "/guides/reconnect-or-reset-your-kit.html");
+
+  const [guide] = await Promise.all([page.waitForEvent("popup"), link.click()]);
+  await expect(guide.locator("h1")).toHaveText("Reconnect or reset your AgroFlow kit");
+  await expect(guide.locator('[data-guide-section="wifi"]')).toBeVisible();
+  await expect(guide.locator('[data-guide-section="move"]')).toBeVisible();
+  await expect(guide.locator("[data-guide-warning]")).toContainText("does not water until AgroFlow staff");
+
+  const label = await kitLabelHtml({ deviceId: "0123456789AB" }, "https://app.agroflow.test");
+  expect(label).toContain("Changing Wi-Fi? Open the app → Kit, or switch off/on 3 times.");
+  expect(label).not.toMatch(/enrol/i);
+});

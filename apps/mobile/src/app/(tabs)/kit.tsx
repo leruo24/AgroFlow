@@ -20,6 +20,7 @@ import { useBottomPadding } from '@/hooks/useScreenPadding';
 import { createScreenStyles } from '@/styles/screenStyles';
 import { createIrrigationStyles } from '@/styles/irrigationStyles';
 import { copyOrShare, kitLineText } from '@/lib/kitStatus';
+import { KitHelpGuide } from '@/components/KitHelpGuide';
 import { fetchFarmKits, type KitCard, type KitLine } from '@/services/agroFlowApi';
 import type { AppColors } from '@/constants/colors';
 import { Platform } from 'react-native';
@@ -157,6 +158,7 @@ function KitCardView({ card, focused, colors, styles, t, lang }: {
           onPress={() => router.push({ pathname: '/zone-hardware', params: { zoneId: String(card.zoneId), zoneName: card.zoneName } } as never)}>
           <Text style={styles.buttonText}>{t('kitTab.changeWifi')}</Text>
         </Pressable>
+        <KitHelpGuide networkName={card.setupNetworkName} password={card.setupNetworkPassword} testID={`kit-help-${card.zoneId}`} />
       </>}
   </Card>;
 }
