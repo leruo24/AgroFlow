@@ -62,7 +62,7 @@ test("public hardware story is usable and does not block the rest of the landing
   await expect(page.getByRole("button", { name: "Open enclosure" })).toHaveAttribute("aria-expanded", "false");
 
   await page.getByRole("heading", { name: "Inside AgroFlow" }).scrollIntoViewIfNeeded();
-  const stickyBox = await viewer.boundingBox();
+  const stickyBox = await page.locator('.hardware-viewer-column').boundingBox();
   expect(stickyBox).not.toBeNull();
   expect(stickyBox!.y).toBeGreaterThanOrEqual(20);
   expect(stickyBox!.y).toBeLessThanOrEqual(30);

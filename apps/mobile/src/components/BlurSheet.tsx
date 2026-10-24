@@ -5,6 +5,8 @@
 // looks the same everywhere.
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '@/i18n';
+import { useId, useRef } from 'react';
+import { useWebDialogFocus } from '@/hooks/useWebDialogFocus';
 
 import {
   X,
@@ -58,6 +60,9 @@ export function BlurSheet({
 
   const styles = createStyles(colors);
   const insets = useSafeAreaInsets();
+  const panelRef = useRef<View>(null);
+  const headingId = 'sheet-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  useWebDialogFocus(visible, panelRef, onClose);
 
   return (
     <Modal
@@ -80,6 +85,9 @@ export function BlurSheet({
 
         <View
           role="dialog"
+          ref={panelRef}
+          aria-modal={true}
+          aria-labelledby={headingId}
           accessibilityLabel={title}
           accessibilityViewIsModal
           style={[
@@ -89,7 +97,7 @@ export function BlurSheet({
         >
           <View style={styles.header}>
             {/* The title wraps: "How does the soil feel? Spinach bed" must never be cut off. */}
-            <Text style={styles.title} accessibilityRole="header">
+            <Text nativeID={headingId} style={styles.title} accessibilityRole="header">
               {title ?? ''}
             </Text>
 

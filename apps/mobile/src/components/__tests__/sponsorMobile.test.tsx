@@ -197,6 +197,8 @@ describe('language', () => {
   it('Settings lists English, Afrikaans (beta) and Setswana (beta), and switching changes the words', async () => {
     await render(<SettingsScreen />);
     expect(await screen.findByText('English')).toBeTruthy();
+    expect(screen.getByTestId('language-en').props.accessibilityState.checked).toBe(true);
+    expect(screen.getByTestId('language-af').props.accessibilityState.checked).toBe(false);
     expect(screen.getByText('Afrikaans (beta)')).toBeTruthy();
     expect(screen.getByText('Setswana (beta)')).toBeTruthy();
     expect(screen.getByText('Appearance')).toBeTruthy();

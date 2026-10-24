@@ -298,7 +298,7 @@ export default function ServiceRequestScreen() {
             {t('request.type')}
           </Text>
 
-          <View style={styles.optionGroup}>
+          <View accessibilityRole="radiogroup" accessibilityLabel={t('request.type')} style={styles.optionGroup}>
             <Pressable
               style={[
                 styles.option,
@@ -309,7 +309,7 @@ export default function ServiceRequestScreen() {
                 setRequestType('new_farm');
                 setSelectedFarmId('');
               }}
-              accessibilityRole="radio"
+              accessibilityRole="radio" aria-checked={requestType === 'new_farm'}
               accessibilityState={{
                 checked:
                   requestType === 'new_farm',
@@ -336,7 +336,7 @@ export default function ServiceRequestScreen() {
               onPress={() =>
                 setRequestType('new_zone')
               }
-              accessibilityRole="radio"
+              accessibilityRole="radio" aria-checked={requestType === 'new_zone'}
               accessibilityState={{
                 checked:
                   requestType === 'new_zone',
@@ -379,7 +379,7 @@ export default function ServiceRequestScreen() {
                   </Text>
                 </View>
               ) : (
-                <View style={styles.optionGroup}>
+                <View accessibilityRole="radiogroup" accessibilityLabel={t('request.existingFarm')} style={styles.optionGroup}>
                   {farms.map((farm) => {
                     const selected =
                       selectedFarmId ===
@@ -398,7 +398,7 @@ export default function ServiceRequestScreen() {
                             farm.id
                           )
                         }
-                        accessibilityRole="radio"
+                        accessibilityRole="radio" aria-checked={selected}
                         accessibilityState={{
                           checked: selected,
                         }}
@@ -469,7 +469,7 @@ export default function ServiceRequestScreen() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={t('request.sizeUnitLabel')}>
             {(['m2', 'ha', 'unknown'] as const).map(unit => {
               const on = sizeUnit === unit;
-              return <Pressable key={unit} accessibilityRole="radio" accessibilityState={{ checked: on }}
+              return <Pressable key={unit} accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }}
                 onPress={() => setSizeUnit(unit)} testID={`request-size-unit-${unit}`}
                 style={[styles.input, { flexGrow: 1, minWidth: 96, justifyContent: 'center', alignItems: 'center' },
                   on && { borderColor: colors.primaryDark, borderWidth: 2 }]}>
@@ -486,7 +486,7 @@ export default function ServiceRequestScreen() {
             {t('request.crop')}
           </Text>
 
-          <View style={styles.cropGrid}>
+          <View accessibilityRole="radiogroup" accessibilityLabel={t('request.crop')} style={styles.cropGrid}>
             {cropOptions.map((crop) => {
               const selected =
                 cropType === crop.value;
@@ -502,7 +502,7 @@ export default function ServiceRequestScreen() {
                   onPress={() =>
                     setCropType(crop.value)
                   }
-                  accessibilityRole="radio"
+                  accessibilityRole="radio" aria-checked={selected}
                   accessibilityState={{
                     checked: selected,
                   }}

@@ -6,7 +6,8 @@
 import { esc } from "@/lib/format";
 
 export const ANDROID_APK_URL = (import.meta.env["VITE_DOWNLOADS_ANDROID_APK_URL"] ?? "").trim();
-export const WEB_APP_URL = (import.meta.env["VITE_DOWNLOADS_WEB_APP_URL"] ?? "").trim();
+// Registered users go straight to login; Get the app remains the download page.
+export const WEB_APP_URL = 'https://agroflow-mobile.vercel.app/login';
 
 /** The app links as buttons, or a sentence saying who to ask when neither is configured. */
 export function appLinksHtml(): string {

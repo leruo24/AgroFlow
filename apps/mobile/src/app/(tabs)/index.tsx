@@ -59,7 +59,7 @@ export default function HomeScreen() {
   const [tankFor, setTankFor] = useState<{ farmId: string; status: TankStatus } | null>(null);
   const [tankFailed, setTankFailed] = useState(false);
   const tank = tankFor && farm && tankFor.farmId === farm.id ? tankFor.status : null;
-  const tankLoading = !!farm && !tank && !tankFailed;
+  const tankLoading = isFarmLoading || (!!farm && !tank && !tankFailed);
   const loadTank = useCallback(() => {
     if (!farm) return;
     const farmId = farm.id;
