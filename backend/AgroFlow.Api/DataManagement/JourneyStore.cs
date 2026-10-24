@@ -1,5 +1,6 @@
 using AgroFlow.Business;
 using Npgsql;
+using AgroFlow.Api.Services.Notifications;
 using NpgsqlTypes;
 
 namespace AgroFlow.Api.Services;
@@ -111,19 +112,44 @@ public static class JourneyStore
     }
 
     // A pending zone whose four checks are done becomes commissioned (once). Legacy zones are left
-    // alone. Returns true when it changed.
-    public static async Task<bool> RefreshCommissioningAsync(NpgsqlConnection connection, long farmId, CancellationToken ct)
+    // alone. Returns true when it changed. With notifications, each farmer hears "Your kit in
+    // <zone> is working" on Telegram, once, from whichever path finished the checks.
+    public static async Task<bool> RefreshCommissioningAsync(NpgsqlConnection connection, long farmId, CancellationToken ct,
+        INotificationService? notifications = null)
     {
-        var changed = false;
+        var commissioned = new List<long>();
         foreach (var z in await ZonesAsync(connection, farmId, ct))
         {
             if (z.CommissionState != "pending" || !Commissioning.IsCommissioned(z.Facts)) continue;
             await using var cmd = new NpgsqlCommand(
                 "update zone set commission_state = 'commissioned', commissioned_at = now() where id = $1 and commission_state = 'pending'", connection);
             cmd.Parameters.AddWithValue(z.ZoneId);
-            changed |= await cmd.ExecuteNonQueryAsync(ct) > 0;
+            if (await cmd.ExecuteNonQueryAsync(ct) > 0) commissioned.Add(z.ZoneId);
         }
-        return changed;
+        if (notifications is not null)
+            foreach (var zoneId in commissioned) await notifications.NotifyKitWorkingAsync(zoneId, ct);
+        return commissioned.Count > 0;
+    }
+
+    // The farmer's answer to "Turn on automatic watering?", from the app or the Telegram button.
+    // Null when the zone is not commissioned yet or is not on one of the farmer's farms.
+    public static async Task<(long FarmId, string Mode, string ZoneName)?> AnswerAutoOfferOnAccessibleZoneAsync(
+        NpgsqlConnection connection, Guid profileId, long zoneId, string answer, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand("""
+            update zone z set auto_offer_answer = $3, auto_offer_answered_at = now(),
+                   irrigation_mode = case when $3 = 'automatic' then 'automatic' else z.irrigation_mode end,
+                   automation_enabled = case when $3 = 'automatic' then true else z.automation_enabled end
+             where z.id = $2 and z.commission_state = 'commissioned'
+               and (exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $1)
+                    or exists (select 1 from farm_member m where m.farm_id = z.farm_id and m.profile_id = $1))
+            returning z.farm_id, z.irrigation_mode, coalesce(nullif(z.name, ''), 'your zone')
+            """, connection);
+        cmd.Parameters.AddWithValue(profileId);
+        cmd.Parameters.AddWithValue(zoneId);
+        cmd.Parameters.AddWithValue(answer);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct) ? (r.GetInt64(0), r.GetString(1), r.GetString(2)) : null;
     }
 
     public sealed record CaseRow(long Id, long FarmId, string FarmName, Guid? OwnerId, string? OwnerName, string? NextAction,

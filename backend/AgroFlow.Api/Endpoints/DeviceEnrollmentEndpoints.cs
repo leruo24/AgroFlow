@@ -1,5 +1,5 @@
-using System.Security.Cryptography;
 using AgroFlow.Api.Auth;
+using AgroFlow.Api.Mqtt;
 using AgroFlow.Api.Services;
 using AgroFlow.Business;
 using Npgsql;
@@ -23,19 +23,25 @@ internal static class EnrollableKitTypes
 // Optional so older boards can still claim.
 public record ClaimDeviceRequest(string DeviceId, string EnrollmentCode, string? FirmwareVersion);
 
-// FarmId is returned with ZoneId because the firmware needs both for its MQTT
-// topics (see hardware/shared/MQTT_TOPICS.md).
-// Security: DeviceToken is returned only once, here. The server keeps only its
-// SHA-256 hash, so a board that loses it needs a new enrollment code.
-// The MQTT login may be empty if the pool is used up; the board then asks
-// GET /api/devices/mqtt-credentials on first connect.
+// FarmId is returned with ZoneId because firmware up to 1.7.1 needs both for its MQTT
+// topics (see hardware/shared/MQTT_TOPICS.md). Firmware 1.7.2 uses Topics instead.
+// Security: DeviceToken is returned only once per claim. The server keeps only its
+// SHA-256 hash. The MQTT login is AgroFlow's existing one (Mqtt:Username/Password, the same
+// the API connects with): nothing is created in the HiveMQ console. The kit keeps it in NVS
+// and never prints it.
 public record ClaimDeviceResponse(
     long ZoneId,
     long FarmId,
     long HardwareId,
     string DeviceToken,
     string MqttUsername,
-    string MqttPassword);
+    string MqttPassword,
+    string? MqttHost = null,
+    int? MqttPort = null,
+    bool MqttTls = true,
+    KitLink.Topics? Topics = null,
+    string? FarmName = null,
+    string? ZoneName = null);
 
 // MqttHost/MqttPort are optional: the server leaves them out when Mqtt:Host /
 // Mqtt:Port are unset, and the board then uses its compiled-in broker.
@@ -53,14 +59,6 @@ public record FirmwareCheckResponse(bool UpdateAvailable, string? LatestVersion,
 
 public static class DeviceEnrollmentEndpoints
 {
-    // Security: how long an unused enrollment code stays valid. Codes are single-use
-    // anyway; this limits how long a code on a stored kit remains a live secret.
-    private static readonly TimeSpan EnrollmentCodeLifetime = TimeSpan.FromHours(24);
-
-    // No 0/O/1/I/L, which are easy to confuse when copying a code by hand.
-    private const string CodeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-    private const int CodeLength = 8;
-
     public static void MapDeviceEnrollmentEndpoints(this WebApplication app)
     {
         // Security: admin only (Supabase JWT + profile.role = 'admin' via
@@ -69,10 +67,10 @@ public static class DeviceEnrollmentEndpoints
             .RequireAuthorization()
             .AddEndpointFilter<AdminOnlyFilter>();
 
-        // Security: device-facing, and the enrollment code is the only authorisation.
+        // Security: device-facing, and the setup code is the only authorisation.
         // A newly flashed board has no credentials until this call answers, so we cannot
-        // require a device key. The code is one-time and expires after 24 hours, and
-        // ClaimRateLimiter protects against brute force.
+        // require a device key. The code links one kit, expires after 30 minutes, and
+        // ClaimRateLimiter protects against guessing.
         app.MapPost("/api/devices/claim", ClaimAsync);
 
         // Called on every boot, so a new MQTT password reaches all boards without a
@@ -106,21 +104,12 @@ public static class DeviceEnrollmentEndpoints
             });
         }
 
-        var code = GenerateEnrollmentCode();
-        var expiresAt = DateTimeOffset.UtcNow.Add(EnrollmentCodeLifetime);
-
         await using var connection = await dataSource.OpenConnectionAsync();
-        await using var cmd = new NpgsqlCommand(
-            "insert into hardware (device_name, device_type, zone_id, device_id, enrollment_status, enrollment_code, enrollment_code_expires_at) " +
-            "values ($1, $2, $3, $4, 'enrolled', $5, $6) returning hardware_id", connection);
-        cmd.Parameters.AddWithValue(request.DeviceName ?? $"Zone {request.ZoneId} {deviceType}");
-        cmd.Parameters.AddWithValue(deviceType);
-        cmd.Parameters.AddWithValue(request.ZoneId);
-        cmd.Parameters.AddWithValue((object?)request.DeviceId?.Trim().ToUpperInvariant() ?? DBNull.Value);
-        cmd.Parameters.AddWithValue(code);
-        cmd.Parameters.AddWithValue(expiresAt);
-
-        var hardwareId = (long)(await cmd.ExecuteScalarAsync())!;
+        var issued = await KitCodes.IssueAsync(connection, request.ZoneId,
+            request.DeviceName ?? $"Zone {request.ZoneId} {deviceType}", deviceType,
+            request.DeviceId?.Trim().ToUpperInvariant());
+        if (issued is null) return Results.NotFound(new { error = "No such zone." });
+        var (hardwareId, code, expiresAt) = issued.Value;
 
         // Security: the code itself is never logged, because it is a live credential.
         // We log who created it, for which zone and when.
@@ -136,10 +125,11 @@ public static class DeviceEnrollmentEndpoints
         ClaimDeviceRequest request,
         HttpContext context,
         NpgsqlDataSource dataSource,
-        MqttCredentialPoolService pool,
+        IConfiguration configuration,
         ClaimRateLimiter rateLimiter,
+        KitLinkAttempts attempts,
+        IMqttPublisher mqtt,
         ILoggerFactory loggerFactory,
-        AgroFlow.Api.Services.Notifications.INotificationService notifications,
         CancellationToken cancellationToken)
     {
         var logger = loggerFactory.CreateLogger("AgroFlow.Api.DeviceClaim");
@@ -150,7 +140,7 @@ public static class DeviceEnrollmentEndpoints
         if (rateLimiter.IsBlocked(address, now))
         {
             return Results.Json(
-                new { error = "Too many failed enrollment codes from this address. Try again in a few minutes." },
+                new { error = "Too many wrong codes from this network. Wait 15 minutes and try again.", code = "rate_limited" },
                 statusCode: StatusCodes.Status429TooManyRequests);
         }
 
@@ -161,121 +151,141 @@ public static class DeviceEnrollmentEndpoints
             return Results.BadRequest("deviceId and enrollmentCode are required.");
         }
 
+        // The kit gets AgroFlow's existing MQTT login and broker: the ones the API itself uses.
+        var mqttUser = configuration["Mqtt:Username"];
+        var mqttPass = configuration["Mqtt:Password"];
+        if (string.IsNullOrWhiteSpace(mqttUser) || string.IsNullOrWhiteSpace(mqttPass))
+        {
+            logger.LogError("A kit tried to link but Mqtt:Username/Mqtt:Password are not set on the API.");
+            return Results.Json(new { error = "AgroFlow's MQTT login is not set up. Tell AgroFlow staff.", code = "mqtt_not_configured" },
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        var (brokerHost, brokerPort) = MqttBrokerAddress.Resolve(configuration["Mqtt:Host"], configuration["Mqtt:Port"]);
+        var useTls = !string.Equals(configuration["Mqtt:UseTls"], "false", StringComparison.OrdinalIgnoreCase);
+
+        var code = KitLink.NormaliseCode(request.EnrollmentCode);
+        var deviceId = request.DeviceId.Trim().ToUpperInvariant();
+
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        long hardwareId;
-        long zoneId;
-        long farmId;
-        string? existingDeviceId;
-
-        // Row lock so two claims with the same code (e.g. a retry) cannot both succeed.
-        // Joined to zone for farm_id, which the firmware needs for its MQTT topics.
-        await using (var lookupCmd = new NpgsqlCommand(
-            "select h.hardware_id, h.zone_id, z.farm_id, h.device_id " +
-            "from hardware h join zone z on z.id = h.zone_id " +
-            "where h.enrollment_code = $1 and h.enrollment_status = 'enrolled' " +
-            "and h.enrollment_code_expires_at > now() for update", connection, transaction))
+        // The code's row, even when expired or used, so the kit can say which. Locked, so two
+        // claims with the same code (a retry) run one after the other.
+        long hardwareId = 0, zoneId = 0, farmId = 0;
+        string farmName = "", zoneName = "";
+        KitLink.CodeRow? row = null;
+        await using (var lookup = new NpgsqlCommand("""
+            select h.hardware_id, h.zone_id, z.farm_id, h.device_id, h.enrollment_status, h.enrollment_code_expires_at,
+                   f.name, coalesce(nullif(z.name, ''), 'Zone ' || z.id)
+              from hardware h join zone z on z.id = h.zone_id join farm f on f.farm_id = z.farm_id
+             where h.enrollment_code = $1
+             for update of h
+            """, connection, transaction))
         {
-            lookupCmd.Parameters.AddWithValue(request.EnrollmentCode.Trim().ToUpperInvariant());
-            await using var reader = await lookupCmd.ExecuteReaderAsync(cancellationToken);
-            if (!await reader.ReadAsync(cancellationToken))
+            lookup.Parameters.AddWithValue(code);
+            await using var reader = await lookup.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
             {
-                await reader.CloseAsync();
-                await transaction.RollbackAsync(cancellationToken);
-
-                rateLimiter.RecordFailure(address, now);
-
-                return Results.Json(new { error = "Invalid, expired, or already-used enrollment code." },
-                    statusCode: StatusCodes.Status401Unauthorized);
+                hardwareId = reader.GetInt64(0);
+                zoneId = reader.GetInt64(1);
+                farmId = reader.GetInt64(2);
+                farmName = reader.GetString(6);
+                zoneName = reader.GetString(7);
+                row = new KitLink.CodeRow(
+                    reader.GetString(4),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(5) ? null : reader.GetFieldValue<DateTimeOffset>(5),
+                    farmId);
             }
-
-            hardwareId = reader.GetInt64(0);
-            zoneId = reader.GetInt64(1);
-            farmId = reader.GetInt64(2);
-            existingDeviceId = reader.IsDBNull(3) ? null : reader.GetString(3);
         }
 
-        var claimedDeviceId = request.DeviceId.Trim().ToUpperInvariant();
+        // Where this kit is linked now (another row), if anywhere.
+        long? currentFarmId = null;
+        string? currentFarmName = null;
+        await using (var current = new NpgsqlCommand("""
+            select z.farm_id, f.name from hardware h join zone z on z.id = h.zone_id join farm f on f.farm_id = z.farm_id
+             where h.device_id = $1 and h.enrollment_status = 'active' and h.hardware_id <> $2
+             limit 1
+            """, connection, transaction))
+        {
+            current.Parameters.AddWithValue(deviceId);
+            current.Parameters.AddWithValue(hardwareId);
+            await using var reader = await current.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                currentFarmId = reader.GetInt64(0);
+                currentFarmName = reader.GetString(1);
+            }
+        }
 
-        // Security: if the admin entered the device ID when enrolling, it must match, so
-        // a leaked code cannot be used by a different board. If they used a placeholder
-        // (the usual case, since ESP32 IDs are not printed on the board), we store the ID
-        // the device sends.
-        if (existingDeviceId is not null && existingDeviceId != claimedDeviceId)
+        var outcome = KitLink.Decide(row, deviceId, currentFarmId, now);
+        if (outcome is not (KitLink.ClaimOutcome.Link or KitLink.ClaimOutcome.Retry))
         {
             await transaction.RollbackAsync(cancellationToken);
-
-            rateLimiter.RecordFailure(address, now);
-
-            return Results.Json(new { error = "Device ID does not match the device this code was issued for." },
-                statusCode: StatusCodes.Status401Unauthorized);
+            // A wrong, expired or wrong-kit code counts towards the limit. A real code that is used,
+            // or a kit still linked elsewhere, does not: the installer has the right code.
+            if (outcome is KitLink.ClaimOutcome.CodeInvalid or KitLink.ClaimOutcome.CodeExpired or KitLink.ClaimOutcome.WrongKit)
+                rateLimiter.RecordFailure(address, now);
+            var (status, reason, message) = KitLink.Refusal(outcome, currentFarmName);
+            if (row is not null) attempts.Record(hardwareId, reason, message, deviceId, now);
+            logger.LogInformation("Kit {DeviceId} claim refused: {Reason}.", deviceId, reason);
+            return Results.Json(new { error = message, code = reason }, statusCode: status);
         }
 
-        // Security: the token is created here, returned once and stored only as a hash.
+        // Security: a new token on every claim, returned once and stored only as a hash.
         var deviceToken = DeviceToken.Generate();
-        var deviceTokenHash = DeviceToken.Hash(deviceToken);
+        var replacedKits = new List<string>();
 
-        await using (var updateCmd = new NpgsqlCommand(
-            "update hardware set device_id = $1, enrollment_status = 'active', " +
-            "enrollment_code = null, enrollment_code_expires_at = null, status = 'Online', last_seen = now(), " +
-            // A re-enrolled board gets a new token and its revocation is cleared. The old
-            // token stops working as soon as this row changes.
-            "device_token_hash = $3, token_issued_at = now(), token_revoked_at = null, " +
-            "firmware_version = coalesce($4, firmware_version) " +
-            "where hardware_id = $2", connection, transaction))
+        if (outcome == KitLink.ClaimOutcome.Link)
         {
-            updateCmd.Parameters.AddWithValue(claimedDeviceId);
-            updateCmd.Parameters.AddWithValue(hardwareId);
-            updateCmd.Parameters.AddWithValue(deviceTokenHash);
-            updateCmd.Parameters.AddWithValue((object?)request.FirmwareVersion?.Trim() ?? DBNull.Value);
-            await updateCmd.ExecuteNonQueryAsync(cancellationToken);
+            // The links this one ends: this kit elsewhere on the same farm (moved), and another kit
+            // on this zone (replaced). Their rows, readings and history stay; their tokens stop working.
+            await using var end = new NpgsqlCommand("""
+                update hardware set enrollment_status = 'replaced', status = 'Offline', token_revoked_at = now()
+                 where enrollment_status = 'active' and hardware_id <> $1 and (device_id = $2 or zone_id = $3)
+                returning device_id
+                """, connection, transaction);
+            end.Parameters.AddWithValue(hardwareId);
+            end.Parameters.AddWithValue(deviceId);
+            end.Parameters.AddWithValue(zoneId);
+            await using var reader = await end.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                if (!reader.IsDBNull(0) && reader.GetString(0) != deviceId) replacedKits.Add(reader.GetString(0));
         }
 
-        // The MQTT login is assigned in the same transaction as the claim, so either
-        // both are saved or neither is.
-        MqttCredential? assigned = null;
-        try
+        // The code stays on the row until it expires, so the same kit sending it again (its page
+        // retried, or the answer was lost) is answered again instead of told "already used".
+        await using (var link = new NpgsqlCommand("""
+            update hardware set device_id = $1, enrollment_status = 'active', status = 'Online', last_seen = now(),
+                   status_reported_at = case when enrollment_status = 'active' then status_reported_at end,
+                   device_token_hash = $3, token_issued_at = now(), token_revoked_at = null,
+                   firmware_version = coalesce($4, firmware_version)
+             where hardware_id = $2
+            """, connection, transaction))
         {
-            assigned = await pool.AssignToDeviceAsync(connection, transaction, claimedDeviceId, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            // The claim must not fail. A board without a pooled login still works on the
-            // shared login and can get its own later; a board that cannot enrol needs a site visit.
-            logger.LogError(ex,
-                "Could not assign a pooled MQTT login to device {DeviceId}; completing the claim with the " +
-                "shared credential.", claimedDeviceId);
+            link.Parameters.AddWithValue(deviceId);
+            link.Parameters.AddWithValue(hardwareId);
+            link.Parameters.AddWithValue(DeviceToken.Hash(deviceToken));
+            link.Parameters.AddWithValue((object?)request.FirmwareVersion?.Trim() ?? DBNull.Value);
+            await link.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await transaction.CommitAsync(cancellationToken);
-
         rateLimiter.RecordSuccess(address);
+        attempts.Clear(hardwareId);
 
-        // Once per claim (a code works once): the zone's farmers learn the kit is connected and
-        // its setup Wi-Fi. Never the enrollment code.
-        await notifications.NotifyKitConnectedAsync(zoneId, claimedDeviceId, cancellationToken);
-
-        // Falls back to the shared login outside the transaction (it is only a config read).
-        var credential = assigned;
-        if (credential is null)
-        {
-            credential = await pool.ResolveForDeviceAsync(claimedDeviceId, cancellationToken);
-
-            // Admin warning when the pool is used up, worded like the admin page so
-            // searching one finds the other.
-            logger.LogWarning(
-                "ADMIN ALERT: {Alert} Device {DeviceId} on zone {ZoneId} enrolled with the shared MQTT " +
-                "credential. Create logins in the HiveMQ console and paste them into the admin MQTT logins page.",
-                MqttCredentialResolution.PoolEmptyAlert, claimedDeviceId, zoneId);
-        }
+        // The replaced kit forgets its link and reopens its setup hotspot (firmware 1.7.2). An older
+        // kit ignores the message; its revoked token makes it reset itself after three refusals.
+        foreach (var old in replacedKits) await KitCommands.SendUnlinkAsync(mqtt, old, logger);
 
         logger.LogInformation(
-            "Device {DeviceId} claimed zone {ZoneId} on farm {FarmId}, firmware {Firmware}, MQTT login from {Source}.",
-            claimedDeviceId, zoneId, farmId, request.FirmwareVersion ?? "unreported", credential.Source);
+            "Kit {DeviceId} {Outcome} zone {ZoneId} on farm {FarmId}, firmware {Firmware}.",
+            deviceId, outcome == KitLink.ClaimOutcome.Retry ? "re-confirmed on" : "linked to", zoneId, farmId,
+            request.FirmwareVersion ?? "unreported");
 
         return Results.Ok(new ClaimDeviceResponse(
-            zoneId, farmId, hardwareId, deviceToken, credential.Username, credential.Password));
+            zoneId, farmId, hardwareId, deviceToken, mqttUser, mqttPass,
+            brokerHost, brokerPort, useTls, KitLink.TopicsFor(deviceId), farmName, zoneName));
     }
 
     // Security: the board asks for this on every boot and keeps it in RAM only.
@@ -354,15 +364,5 @@ public static class DeviceEnrollmentEndpoints
             updateAvailable,
             latestVersion,
             updateAvailable ? downloadUrl : null));
-    }
-
-    private static string GenerateEnrollmentCode()
-    {
-        Span<char> code = stackalloc char[CodeLength];
-        for (var i = 0; i < code.Length; i++)
-        {
-            code[i] = CodeAlphabet[RandomNumberGenerator.GetInt32(CodeAlphabet.Length)];
-        }
-        return new string(code);
     }
 }

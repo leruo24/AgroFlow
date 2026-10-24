@@ -88,6 +88,11 @@ public interface INotificationService
     // Never the enrollment code. Default: nothing, so test doubles need no change.
     Task NotifyKitConnectedAsync(long zoneId, string deviceId, CancellationToken cancellationToken) => Task.CompletedTask;
 
+    // The installer commissioned the zone: "Your kit in <zone> is working", with a button to turn
+    // on automatic watering. Farmers with a linked chat, even with alerts muted (they asked for
+    // the kit). Default: nothing, so test doubles need no change.
+    Task NotifyKitWorkingAsync(long zoneId, CancellationToken cancellationToken) => Task.CompletedTask;
+
     // A possible sensor or water supply fault (MoistureFaultService), to every farm member.
     Task NotifyPossibleFaultAsync(long farmId, long zoneId, string message, CancellationToken cancellationToken)
         => Task.CompletedTask;

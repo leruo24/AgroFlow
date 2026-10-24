@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using AgroFlow.Api.Auth;
 using AgroFlow.Api.Services;
+using AgroFlow.Api.Services.Notifications;
 using AgroFlow.Business;
 using Npgsql;
 using NpgsqlTypes;
@@ -76,13 +77,13 @@ public static class JourneyEndpoints
     // Farmer
     // ---------------------------------------------------------------------------------------
 
-    private static async Task<IResult> GetJourneyAsync(long farmId, ClaimsPrincipal user, NpgsqlDataSource dataSource, AppSettingsStore settings, HttpRequest request, CancellationToken ct)
+    private static async Task<IResult> GetJourneyAsync(long farmId, ClaimsPrincipal user, NpgsqlDataSource dataSource, AppSettingsStore settings, HttpRequest request, INotificationService notifications, CancellationToken ct)
     {
         if (!TryUser(user, out var userId)) return Results.Unauthorized();
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         if (!await JourneyStore.FarmerCanAccessFarmAsync(connection, farmId, userId, ct)) return Results.NotFound(new { error = "Farm not found." });
         if (!await JourneyStore.ReadyAsync(connection, ct)) return Results.Json(new { error = JourneyStore.NeedsMigration }, statusCode: StatusCodes.Status409Conflict);
-        await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct);
+        await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct, notifications);
         return Results.Ok(await JourneyViewAsync(connection, farmId, userId, forStaff: false, request, await settings.TermsAcceptanceOpenAsync(ct), ct));
     }
 
@@ -429,23 +430,9 @@ public static class JourneyEndpoints
         var answer = body.Answer?.Trim().ToLowerInvariant();
         if (answer is not ("automatic" or "manual")) return Results.BadRequest(new { error = "Answer automatic (Yes) or manual (Keep manual)." });
         await using var connection = await dataSource.OpenConnectionAsync(ct);
-        await using var cmd = new NpgsqlCommand("""
-            update zone z set auto_offer_answer = $3, auto_offer_answered_at = now(),
-                   irrigation_mode = case when $3 = 'automatic' then 'automatic' else z.irrigation_mode end,
-                   automation_enabled = case when $3 = 'automatic' then true else z.automation_enabled end
-             where z.id = $2 and z.commission_state = 'commissioned'
-               and (exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $1)
-                    or exists (select 1 from farm_member m where m.farm_id = z.farm_id and m.profile_id = $1))
-            returning z.farm_id, z.irrigation_mode
-            """, connection);
-        cmd.Parameters.AddWithValue(userId);
-        cmd.Parameters.AddWithValue(zoneId);
-        cmd.Parameters.AddWithValue(answer);
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        if (!await r.ReadAsync(ct)) return Results.NotFound(new { error = "This zone is not commissioned yet, or is not yours." });
-        var farmId = r.GetInt64(0);
-        var mode = r.GetString(1);
-        await r.CloseAsync();
+        if (await JourneyStore.AnswerAutoOfferOnAccessibleZoneAsync(connection, userId, zoneId, answer, ct) is not { } answered)
+            return Results.NotFound(new { error = "This zone is not commissioned yet, or is not yours." });
+        var (farmId, mode, _) = answered;
         await audit.WriteAsync(userId, "zone.auto_offer_answered", "zone", zoneId.ToString(), farmId, new { answer }, ct);
         return Results.Ok(new { zoneId, answer, irrigationMode = mode });
     }
@@ -492,11 +479,11 @@ public static class JourneyEndpoints
     // Staff
     // ---------------------------------------------------------------------------------------
 
-    private static async Task<IResult> GetCaseAsync(long farmId, NpgsqlDataSource dataSource, AppSettingsStore settings, HttpRequest request, CancellationToken ct)
+    private static async Task<IResult> GetCaseAsync(long farmId, NpgsqlDataSource dataSource, AppSettingsStore settings, HttpRequest request, INotificationService notifications, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         if (!await JourneyStore.ReadyAsync(connection, ct)) return Results.Json(new { error = JourneyStore.NeedsMigration }, statusCode: StatusCodes.Status409Conflict);
-        await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct);
+        await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct, notifications);
         var c = await JourneyStore.CaseAsync(connection, farmId, ct);
         if (c is null) return Results.NotFound(new { error = "No such farm." });
         var journey = await JourneyViewAsync(connection, farmId, c.FarmerId, forStaff: true, request, await settings.TermsAcceptanceOpenAsync(ct), ct);
@@ -539,7 +526,7 @@ public static class JourneyEndpoints
 
     public static readonly string[] ServiceStatuses = { "not_agreed", "sponsored", "paying", "trial", "paused", "ended" };
 
-    private static async Task<IResult> UpdateCaseAsync(long farmId, CaseUpdateBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AppSettingsStore settings, AuditLog audit, HttpRequest request, CancellationToken ct)
+    private static async Task<IResult> UpdateCaseAsync(long farmId, CaseUpdateBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AppSettingsStore settings, AuditLog audit, HttpRequest request, INotificationService notifications, CancellationToken ct)
     {
         if (body.NextAction is { Length: > 300 }) return Results.BadRequest(new { error = "Keep the next action under 300 characters." });
         if (body.ServiceStatus is { } st && !ServiceStatuses.Contains(st)) return Results.BadRequest(new { error = "Unknown service status." });
@@ -579,7 +566,7 @@ public static class JourneyEndpoints
             await cmd.ExecuteNonQueryAsync(ct);
         }
         await audit.WriteAsync(user, "case.updated", "service_case", caseId.ToString(), farmId, body, ct);
-        return await GetCaseAsync(farmId, dataSource, settings, request, ct);
+        return await GetCaseAsync(farmId, dataSource, settings, request, notifications, ct);
     }
 
     private static async Task<IResult> BookVisitAsync(long farmId, VisitBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AuditLog audit, HttpRequest request, CancellationToken ct)
@@ -641,7 +628,7 @@ public static class JourneyEndpoints
     // calibration are only recorded once the data is really there (an active kit; both readings
     // from the kit); test_start_stop only when the kit acknowledged a start AND a stop on this zone
     // in the last hour, so it cannot be ticked without a real test.
-    private static async Task<IResult> RecordCheckAsync(long zoneId, string item, CheckBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AuditLog audit, CancellationToken ct)
+    private static async Task<IResult> RecordCheckAsync(long zoneId, string item, CheckBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AuditLog audit, INotificationService notifications, CancellationToken ct)
     {
         TryUser(user, out var staffId);
         if (!Commissioning.ChecklistItems.Contains(item)) return Results.BadRequest(new { error = "Unknown checklist item." });
@@ -729,7 +716,7 @@ public static class JourneyEndpoints
             cmd.Parameters.AddWithValue(NpgsqlDbType.Array | NpgsqlDbType.Uuid, (object?)commands ?? DBNull.Value);
             await cmd.ExecuteNonQueryAsync(ct);
         }
-        var commissioned = await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct);
+        var commissioned = await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct, notifications);
         await audit.WriteAsync(user, "checklist." + item, "zone", zoneId.ToString(), farmId, new { provenance, value }, ct);
         return Results.Ok(new { zoneId, item, provenance, value, doneBy = name, commissionedNow = commissioned });
     }

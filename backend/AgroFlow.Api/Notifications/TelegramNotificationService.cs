@@ -193,6 +193,25 @@ public sealed class TelegramNotificationService : INotificationService
         }
     }
 
+    // The zone was commissioned: the kit works. The button turns on automatic watering.
+    public async Task NotifyKitWorkingAsync(long zoneId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var zone = await GetZoneContextAsync(zoneId, cancellationToken);
+            if (zone is null) return;
+            await BroadcastToFarmAsync(zone.FarmId,
+                lang => Compose(BotText.Get(lang, "kit.working", ("zone", zone.ZoneName)), "",
+                    BotText.Get(lang, "kit.auto.offer", ("zone", zone.ZoneName))),
+                alertsOnly: false, cancellationToken,
+                button: lang => (BotText.Get(lang, "kit.auto.button"), TelegramClient.AutoCallbackPrefix + zoneId));
+        }
+        catch (Exception ex)
+        {
+            LogSwallowed(ex, "kit-working", zoneId.ToString());
+        }
+    }
+
     // A zone AgroFlow could not water itself
 
     public async Task NotifyZoneCriticalAsync(
@@ -655,7 +674,8 @@ public sealed class TelegramNotificationService : INotificationService
         Func<string, string> messageFor,
         bool alertsOnly,
         CancellationToken cancellationToken,
-        long? whyExplanationId = null)
+        long? whyExplanationId = null,
+        Func<string, (string Text, string Data)>? button = null)
     {
         const string sqlTemplate =
             """
@@ -701,7 +721,16 @@ public sealed class TelegramNotificationService : INotificationService
         // has only a few members, so sending in parallel gains nothing and risks 429s.
         foreach (var (chatId, lang) in chatIds)
         {
-            await _client.SendMessageAsync(chatId, messageFor(BotText.Normalise(lang)), whyExplanationId, cancellationToken);
+            var language = BotText.Normalise(lang);
+            if (button is not null)
+            {
+                var (text, data) = button(language);
+                await _client.SendMessageWithCallbackAsync(chatId, messageFor(language), text, data, cancellationToken);
+            }
+            else
+            {
+                await _client.SendMessageAsync(chatId, messageFor(language), whyExplanationId, cancellationToken);
+            }
         }
     }
 

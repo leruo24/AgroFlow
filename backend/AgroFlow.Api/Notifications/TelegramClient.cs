@@ -69,6 +69,21 @@ public sealed class TelegramClient
             inline_keyboard = new[] { new[] { new { text = buttonText, url } } },
         }, cancellationToken);
 
+    // A message with one button that answers back to the bot, e.g. "Turn on automatic watering"
+    // (callback data "auto:<zoneId>", handled in TelegramPollingService).
+    public const string AutoCallbackPrefix = "auto:";
+
+    public Task<bool> SendMessageWithCallbackAsync(
+        long chatId,
+        string text,
+        string buttonText,
+        string callbackData,
+        CancellationToken cancellationToken) =>
+        SendWithMarkupAsync(chatId, text, new
+        {
+            inline_keyboard = new[] { new[] { new { text = buttonText, callback_data = callbackData } } },
+        }, cancellationToken);
+
     private async Task<bool> SendWithMarkupAsync(
         long chatId,
         string text,
