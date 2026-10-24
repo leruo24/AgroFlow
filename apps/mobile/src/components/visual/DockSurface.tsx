@@ -18,8 +18,8 @@ export function DockSurface({ selected = false }: { selected?: boolean }) {
   // the dock's pale background gradient (which makes its white icon disappear).
   const gradientId = 'dock-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const stops = selected
-    ? ['#126B91', '#087F8C', '#087F8C']
-    : isDark ? ['#192B37', '#192B37', '#183D43'] : ['#EDF6FC', '#FFFFFF', '#EAF5F1'];
+    ? ['#176B45', '#104B38', '#104B38']
+    : isDark ? ['#1B2C22', '#1B2C22', '#203D2A'] : ['#EFF5EC', '#FFFFFF', '#F7F8F4'];
   return <View testID="dock-surface" nativeID={gradientId} pointerEvents="none" accessible={false} accessibilityElementsHidden
     importantForAccessibility="no-hide-descendants"
     style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: selected ? 12 : 20, backgroundColor: selected ? colors.action : colors.tabBarSurface }]}>

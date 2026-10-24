@@ -5,6 +5,7 @@
     "needs_review": true
   },
   "strings": {
+    "visual.representativePhoto": "Verteenwoordigende beeld",
     "visual.phase.request_sent": "Versoek gestuur",
     "visual.phase.waiting_for_kit": "Wag op stel",
     "visual.phase.kit_confirmed_start": "Stel het begin bevestig",

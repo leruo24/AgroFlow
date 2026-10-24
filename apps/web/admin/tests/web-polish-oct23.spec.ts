@@ -63,7 +63,7 @@ for (const width of [390,1366]) for (const theme of ['light','dark']) {
     await expect(viewer).not.toHaveAttribute('data-rotation','6.4800');
     const rotation=await viewer.getAttribute('data-rotation');
     const requests:string[]=[];
-    page.on('request',request=>{if(request.url().includes('/media/scenes/'))requests.push(request.url());});
+    page.on('request',request=>{if(request.url().includes('/images/agroflow/optimized/'))requests.push(request.url());});
     await page.locator('[data-hardware-scene="drip-irrigation"]').click();
     await page.locator('[data-hardware-scene="open-field"]').click();
     await page.locator('[data-hardware-stage="3"]').scrollIntoViewIfNeeded();

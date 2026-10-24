@@ -2,6 +2,7 @@ import { dismissButton, hiddenBy, historyList, viewOf, viewToggle, type Dismissa
 import { getAdminDismissals } from "@/services/agroFlowApi";
 import { api } from "@/data/api";
 import { getAdminProfile } from "@/app/auth";
+import { contextPhotoHtml } from '@/ui/agroflowImages';
 import { handlingCell } from "@/ui/patterns";
 import { esc, fmtInt, fmtDate, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters } from "@/lib/filters";
@@ -225,6 +226,7 @@ export async function maintenancePage(): Promise<string> {
   return `
   ${pageHeader("Maintenance", "Coordinate technician visits, hardware servicing and completion reports.",
     `<button class="btn" data-act="schedule-maint">+ Schedule Maintenance</button>`)}
+  ${contextPhotoHtml('tanks')}
 
   <div class="grid kpis four">
     ${kpiCard({ label: "Scheduled", value: scheduled, icon: Icon.calendar, why: { counts: "maintenance jobs are scheduled", rule: "Jobs whose status is Scheduled.", query: "maintenance.status = Scheduled" } })}

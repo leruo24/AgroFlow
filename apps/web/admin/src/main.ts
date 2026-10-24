@@ -6,6 +6,7 @@
 import "@/styles/main.css";
 import "@/styles/visual.css";
 import "@/styles/web-polish.css";
+import "@/styles/premium.css";
 import { wireAppearance } from "@/ui/appearance";
 import { wireRadioKeyboard } from "@/ui/radioKeyboard";
 import { text as publicText } from "@/pages/publicCopy";

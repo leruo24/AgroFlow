@@ -1,4 +1,5 @@
 /* Event wiring: filter toolbar, admin actions, detail views, exports. */
+import { contextPhotoHtml, farmImageKey } from '@/ui/agroflowImages';
 
 import { api, getFarmAlertHistory, getShowArchivedFarms, setShowArchivedFarms, findAttentionGroup } from "@/data/api";
 import { openCaseDrawer, handleCaseAction } from "@/app/caseView";
@@ -634,6 +635,7 @@ async function openFarmDetail(id: number): Promise<void> {
     wide: true,
     bodyHtml: [
       section("Farm summary", `
+        ${contextPhotoHtml(farmImageKey(f.id))}
         <div class="detail-list">
           <div class="detail-row"><span>Health status</span><b>${esc(f.health)}</b></div>
           <div class="detail-row"><span>Account status</span><b>${esc(f.status)}</b></div>

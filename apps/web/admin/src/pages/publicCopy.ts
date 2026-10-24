@@ -1,6 +1,7 @@
 // Afrikaans and Setswana are drafts for fluent-speaker review. Existing form,
 // hardware and demo copy remains owned by its original components.
 export const copy = {
+  representativePhoto: ['Representative image', 'Verteenwoordigende beeld', 'Setshwantsho sa sekai'],
   staffSignIn: ['Sign in', 'Meld aan', 'Tsena'],
   staffReset: ['Reset password', 'Herstel wagwoord', 'Busetsa khunololamoraba'],
   footerNav: ['Footer navigation', 'Voettekstnavigasie', 'Lenane la kwa tlase'],

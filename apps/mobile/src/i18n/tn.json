@@ -5,6 +5,7 @@
     "needs_review": true
   },
   "strings": {
+    "visual.representativePhoto": "Setshwantsho sa sekai",
     "visual.phase.request_sent": "Kopo e rometswe",
     "visual.phase.waiting_for_kit": "Go emetswe sediriswa",
     "visual.phase.kit_confirmed_start": "Sediriswa se netefaditse tshimologo",

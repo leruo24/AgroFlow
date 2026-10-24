@@ -1,0 +1,13 @@
+{
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "targets": [
+        [
+          "a[href$=\"service-pricing\"] > span[aria-hidden=\"true\"]"
+        ]
+      ]
+    }
+  ]
+}
