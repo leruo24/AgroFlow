@@ -51,6 +51,8 @@ public sealed class AppSettingsStore
             return value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var zar) && zar is >= 0 and <= 1_000_000 ? null : "Use an amount in rand between 0 and 1 000 000.";
         if (key == "service.example_zones")
             return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var zones) && zones is >= 1 and <= 50 ? null : "Use a number of zones between 1 and 50.";
+        if (key == TermsAcceptanceKey)
+            return value.ValueKind is JsonValueKind.True or JsonValueKind.False ? null : "Use true (on) or false (off).";
         if (key == "fire.emergency_text")
             return value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 2 and <= 200 } ? null : "Type the emergency number text (3 to 200 characters).";
         if (value.ValueKind != JsonValueKind.Number || !value.TryGetDouble(out var n)) return "This setting must be a number.";
@@ -127,6 +129,17 @@ public sealed class AppSettingsStore
             (int)Num(v, "service.example_zones", 2),
             string.IsNullOrWhiteSpace(label) ? "example for a 2-zone farm; final quote after a site visit" : label);
     }
+
+    // RET-02: whether farmers are asked to accept the terms and the privacy notice. Off unless
+    // staff switch it on (0062 adds the row); a missing row is off.
+    public const string TermsAcceptanceKey = "terms.acceptance_enabled";
+
+    public async Task<bool> TermsAcceptanceEnabledAsync(CancellationToken ct) =>
+        (await ValuesAsync(ct)).TryGetValue(TermsAcceptanceKey, out var e) && e.ValueKind == JsonValueKind.True;
+
+    // What the farmer's screens and the accept route go by: the setting AND approved documents.
+    public async Task<bool> TermsAcceptanceOpenAsync(CancellationToken ct) =>
+        LegalDocuments.AcceptanceOpen(await TermsAcceptanceEnabledAsync(ct));
 
     private static double Num(Dictionary<string, JsonElement> v, string key, double fallback) =>
         v.TryGetValue(key, out var e) && e.ValueKind == JsonValueKind.Number && e.TryGetDouble(out var n) && double.IsFinite(n) ? n : fallback;

@@ -156,7 +156,7 @@ public static class JourneyStore
 
     // Everything Journey.Describe needs for one farm. person: whose terms and tasks count (the
     // farmer looking, or the farm's owner for staff).
-    public static async Task<Journey.Facts> FactsAsync(NpgsqlConnection connection, long farmId, Guid? person, CancellationToken ct)
+    public static async Task<Journey.Facts> FactsAsync(NpgsqlConnection connection, long farmId, Guid? person, bool termsRequired, CancellationToken ct)
     {
         var c = await CaseAsync(connection, farmId, ct);
         var zones = await ZonesAsync(connection, farmId, ct);
@@ -203,7 +203,8 @@ public static class JourneyStore
             // A checklist only exists for zones commissioned through the journey.
             ChecklistDone: checklistDone,
             ChecklistTotal: checklistTotal,
-            OwnerName: c?.OwnerName);
+            OwnerName: c?.OwnerName,
+            TermsRequired: termsRequired);
     }
 
     // Who a "help me" goes to: the case owner, else the staff member who onboarded the farm.

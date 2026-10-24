@@ -112,7 +112,7 @@ public static class Fao56EngineEndpoints
             sensorDomain = result.SensorDomain.ToString(),
             sensorModifier = result.SensorModifier,
             balanceRan = result.BalanceRan,
-            confidence = new { level = result.Confidence.Key, reason = result.Confidence.Reason },
+            confidence = new { level = result.Confidence.Key, reason = result.Confidence.Reason, code = result.Confidence.Code, args = result.Confidence.Args },
 
             outlook = result.Outlook.Select(d => new
             {
