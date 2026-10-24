@@ -1,7 +1,7 @@
 // A zone's maximum run time (zone.max_run_minutes, migration 0052): the longest single pump
 // run, 1 to 120 minutes, set by AgroFlow staff, 5 by default. The server refuses a longer
 // Water now and the kit stops every run there (docs/irrigate-path.md). The server's twin is
-// IrrigationRunRules (backend/AgroFlow.Domain/IrrigationRunRules.cs).
+// IrrigationRunRules (backend/AgroFlow.Domain/IrrigationControl/IrrigationRunRules.cs).
 
 export const DEFAULT_MAX_RUN_MINUTES = 5;
 export const LOWEST_MAX_RUN_MINUTES = 1;

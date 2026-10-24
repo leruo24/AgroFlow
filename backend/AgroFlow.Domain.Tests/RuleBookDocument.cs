@@ -80,7 +80,7 @@ public static class RuleBookDocument
         L("# AgroFlow rule book");
         L("");
         L("Every piece of advice AgroFlow gives comes from a small, named rule in");
-        L("`backend/AgroFlow.Domain/Agronomy/RuleBook/`. This page is **generated from");
+        L("`backend/AgroFlow.Domain/IrrigationControl/Agronomy/RuleBook/`. This page is **generated from");
         L("those rules** by `RuleBookDocument.cs`: every outcome and every farmer sentence");
         L("below is what the code returns for those inputs. A test fails if this page and");
         L("the code disagree. Regenerate with:");

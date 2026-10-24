@@ -242,7 +242,7 @@ describe('fire update directions match the API', () => {
   const repo = path.resolve(__dirname, '../../../../..');
   // Every quoted word in the given text: "north-east" in C#, 'north-east' in SQL.
   const words = (text: string) => [...text.matchAll(/["']([a-z]+(?:-[a-z]+)?)["']/g)].map(m => m[1]);
-  const rules = fs.readFileSync(path.join(repo, 'backend/AgroFlow.Domain/CommunityRules.cs'), 'utf8');
+  const rules = fs.readFileSync(path.join(repo, 'backend/AgroFlow.Domain/Notifications/CommunityRules.cs'), 'utf8');
   const apiWords = new Set(words(rules.slice(rules.indexOf('IReadOnlyList<string> Directions'), rules.indexOf('};', rules.indexOf('IReadOnlyList<string> Directions')))));
   const sql = fs.readFileSync(path.join(repo, 'supabase/migrations/0055_community_reports.sql'), 'utf8');
   const line = sql.split(/\r?\n/).find(l => /direction\s+text check/.test(l)) ?? '';
