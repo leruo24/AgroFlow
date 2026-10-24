@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@/context/ThemeContext";
 import { useI18n, type TranslationKey } from "@/i18n";
 import { FieldArtwork } from "./FieldArtwork";
+import { KitHelpGuide } from "@/components/KitHelpGuide";
 const topics: TranslationKey[] = [
   "visual.zone",
   "visual.soil",
@@ -79,6 +80,19 @@ export function FieldGuide() {
                   </Text>
                 </View>
               ))}
+              {/* Reconnect or reset the kit: the same guide as on the Kit tab. */}
+              <View
+                style={{
+                  padding: 16,
+                  marginTop: 16,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 12,
+                  backgroundColor: colors.surface,
+                }}
+              >
+                <KitHelpGuide testID="field-guide-kit-help" />
+              </View>
             </ScrollView>
           </View>
         </SafeAreaView>

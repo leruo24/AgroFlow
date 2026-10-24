@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reconnect or reset your AgroFlow kit</title>
+<!-- One printable page. The same file is in the staff site (apps/web/admin/public/guides) and the
+     farmer web app (apps/mobile/public/guides); a test keeps the two identical. It describes what
+     firmware 1.7.1 already does. It never holds a kit's own password or enrollment code. -->
+<style>
+@page { size: A4 portrait; margin: 14mm; }
+:root { --text: #183344; --muted: #4a5d6c; --line: #c9d3db; --warn: #a3261b; --bg: #ffffff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --text: #e8eef3; --muted: #b6c4cf; --line: #3a4a57; --warn: #ff9b8f; --bg: #101c25; } }
+@media print { :root { --text: #000; --muted: #333; --line: #999; --warn: #a3261b; --bg: #fff; } }
+body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); margin: 0; padding: 16px; line-height: 1.45; font-size: 15px; }
+main { max-width: 760px; margin: 0 auto; }
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 18px 0 6px; border-top: 1px solid var(--line); padding-top: 12px; }
+p, li { margin: 4px 0; }
+ol, ul { padding-left: 22px; margin: 4px 0; }
+.lead { color: var(--muted); }
+.mono { font-family: ui-monospace, Consolas, monospace; font-weight: 700; }
+.warn { border: 2px solid var(--warn); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+.warn strong { color: var(--warn); }
+.foot { color: var(--muted); font-size: 13px; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 8px; }
+</style>
+</head>
+<body>
+<main data-kit-guide>
+<h1>Reconnect or reset your AgroFlow kit</h1>
+<p class="lead">Keep this page with the kit. Your kit's own Wi-Fi name and password are on the label on the kit and in the app (Kit tab).</p>
+
+<h2 data-guide-section="wifi">1. Changed your Wi-Fi? Connect the kit again</h2>
+<p>First open the kit's setup page, in one of three ways:</p>
+<ul>
+  <li>In the app: <b>Kit</b>, then <b>Change Wi-Fi</b>.</li>
+  <li>Or switch the kit <b>off and on 3 times quickly</b>. Each time, switch it off again within 10 seconds.</li>
+  <li>Or wait: after <b>15 minutes</b> without its Wi-Fi, the kit opens the setup page by itself.</li>
+</ul>
+<p>Then:</p>
+<ol>
+  <li>On your phone, join the Wi-Fi <span class="mono">AgroFlow-Setup-XXXX</span> with the password on the label (it starts with <span class="mono">AF-</span>).</li>
+  <li>A setup page opens. If it does not, type <span class="mono">192.168.4.1</span> in your phone's browser.</li>
+  <li>Choose your Wi-Fi, type its password and press <b>Save</b>. The setup page stays open for 5 minutes, and opens again later if you miss it.</li>
+</ol>
+<p>Your kit stays linked to your farm and keeps watering by its own rules meanwhile. <b>You do not need a new code.</b></p>
+
+<h2 data-guide-section="move">2. Moving the kit to another field or farm</h2>
+<p>Only AgroFlow staff can do this. Ask them: they make a new enrollment code and connect the kit to its new place.</p>
+
+<h2 data-guide-section="reset">3. Full reset: only if AgroFlow staff ask you</h2>
+<p>Switch the kit <b>off and on 5 times quickly</b>. Each time, switch it off again within 10 seconds.</p>
+<p class="warn" data-guide-warning><strong>Warning:</strong> this wipes the kit's Wi-Fi and unlinks it from your farm. The kit does not water until AgroFlow staff make a new enrollment code and connect it again.</p>
+
+<p class="foot">Need help? Open the AgroFlow app and tap Help, or ask AgroFlow staff.</p>
+</main>
+</body>
+</html>

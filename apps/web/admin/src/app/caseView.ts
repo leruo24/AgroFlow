@@ -8,6 +8,7 @@ import { openDrawer } from "@/lib/drawer";
 import { esc, fmtDateTimeSast } from "@/lib/format";
 import { toast } from "@/lib/toast";
 import { plainError } from "@/lib/plainError";
+import { KIT_GUIDE_PATH } from "@/ui/kitSetupCard";
 import {
   bookVisit, getCase, recordCheck, resolveHelpRequest, setZoneModeAsStaff, updateCase, updateVisit,
   type JourneyCheck, type ServiceCase,
@@ -103,7 +104,7 @@ export function caseHtml(c: ServiceCase): string {
     <button class="btn sm" data-act="case-book-visit" data-id="${c.farmId}">${c.visits.some((v) => v.kind === "first_installation") ? "Book a visit" : "Book first installation"}</button>
     <p class="muted">A first installation needs no kit: the farm, a date and the installer are enough.</p>`;
 
-  const checklist = c.journey.zones.map((z) => `
+  const checklist = (c.journey.zones.map((z) => `
     <div class="drawer-subsection" data-case-zone="${z.zoneId}">
       <p><b>${esc(z.name)}</b> · ${esc(z.commissionState === "legacy" ? "In use before the checklist" : z.commissionState === "commissioned" ? `Commissioned ${esc(fmtDateTimeSast(z.commissionedAt))}` : "Not commissioned yet")}
         · mode <b>${esc(z.irrigationMode)}</b>
@@ -111,7 +112,8 @@ export function caseHtml(c: ServiceCase): string {
       ${z.commissionState === "legacy" ? "" : `<div class="table-wrap"><table><thead><tr><th>Check</th><th>Status</th><th>Who / when</th><th>Record</th></tr></thead><tbody>
         ${z.installerChecks.map((k) => checkRow(z.zoneId, k)).join("")}
       </tbody></table></div>`}
-    </div>`).join("") || `<p class="muted">This farm has no zones.</p>`;
+    </div>`).join("") || `<p class="muted">This farm has no zones.</p>`) +
+    `<p class="muted" data-case-kit-help>Changing Wi-Fi later needs no new code: the farmer uses Kit → Change Wi-Fi or switches the kit off and on 3 times. Moving or fully resetting a kit (5 times) needs a new enrollment code. <a href="${KIT_GUIDE_PATH}" target="_blank" rel="noopener">Printable guide: reconnect or reset the kit</a></p>`;
 
   const help = c.journey.helpRequests.length
     ? `<ul class="drawer-list">${c.journey.helpRequests.map((h) => `<li data-help="${h.id}">
