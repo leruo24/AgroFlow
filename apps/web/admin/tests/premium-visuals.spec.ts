@@ -3,7 +3,7 @@ import {mockBackend} from './mockBackend';
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),axePath=require.resolve('axe-core/axe.min.js');
 const out=path.resolve('../../../docs/test-evidence/premium-visuals');
-const publicRoutes=['/','/experience','/solutions','/how-it-works','/technology','/about','/get-the-app','/contact','/service-pricing','/terms','/privacy'];
+const publicRoutes=['/','/solutions','/how-it-works','/technology','/about','/get-the-app','/contact','/service-pricing','/terms','/privacy'];
 const staffRoutes=['dashboard','users','farms','hardware','maintenance','reports','alerts','activity','requests','enquiries','settings','droughtCommunity','onboarding','mqttLogins'];
 async function scan(page:any,name:string,width:number,theme:string) {
   await page.addScriptTag({path:axePath});

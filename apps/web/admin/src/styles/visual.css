@@ -31,17 +31,16 @@
 .visual-header > * {
   max-width: 100%;
 }
-.appearance-control svg {
-  flex-shrink: 0;
-  transform: rotate(0deg);
-}
-:root[data-theme="dark"] .appearance-control svg {
-  transform: rotate(18deg);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .appearance-control svg {
-    transition: transform 0.25s ease-out;
-  }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .visual-site {
   --flow-accent: #ad563a;
@@ -338,6 +337,47 @@ img {
   border-bottom: 2px solid var(--brand);
   font-weight: 700;
 }
+.public-service-menu { position: relative; }
+.public-service-menu summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: 4px;
+  color: var(--brand);
+  cursor: pointer;
+  font-size: 0.9rem;
+  list-style: none;
+}
+.public-service-menu summary::-webkit-details-marker { display: none; }
+.public-service-menu summary::after {
+  content: "⌄";
+  margin-left: 6px;
+  transition: transform 0.18s ease-out;
+}
+.public-service-menu[open] summary::after { transform: rotate(180deg); }
+.public-service-menu.is-current summary { font-weight: 700; }
+.public-service-menu > div {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 50%;
+  display: grid;
+  width: max-content;
+  min-width: 210px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 18px 50px rgba(12, 40, 54, 0.16);
+  transform: translateX(-50%);
+}
+.public-service-menu > div a {
+  min-height: 44px;
+  padding: 11px 12px;
+  border-radius: 9px;
+}
+.public-service-menu > div a:hover { background: var(--surface-2); }
+.public-menu-close { display: none; }
 .visual-preferences {
   display: flex;
   flex-wrap: wrap;
@@ -346,17 +386,64 @@ img {
   align-items: center;
   font-size: 0.875rem;
 }
-.visual-preferences label,
-.appearance-control {
+.visual-preferences label {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
 .appearance-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
   font-size: 0.875rem;
 }
-.appearance-control select,
+.appearance-control legend {
+  float: left;
+  padding: 0;
+  color: var(--text-2);
+}
+.appearance-options {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.appearance-options button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+}
+.appearance-options button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(12, 40, 54, 0.12);
+  font-weight: 700;
+}
+.appearance-options svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .visual-preferences select {
   background: var(--surface);
   color: var(--text);
@@ -368,6 +455,35 @@ img {
 }
 [data-public-menu] {
   display: none;
+}
+.visual-site .btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.visual-site .btn::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.32);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+  pointer-events: none;
+}
+.visual-site .btn:active::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(14);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .visual-site .btn::after,
+  .public-service-menu summary::after {
+    transition: transform 0.35s ease-out, opacity 0.35s ease-out;
+  }
 }
 .visual-hero {
   display: grid;
@@ -632,9 +748,14 @@ img {
   color: #fff;
 }
 .menu .appearance-control {
-  padding: 16px;
+  display: grid;
+  padding: 10px 14px;
   color: var(--text);
 }
+.menu .appearance-control legend { float: none; margin-bottom: 6px; }
+.menu .appearance-options { width: 100%; border-radius: 12px; }
+.menu .appearance-options button { flex: 1; padding-inline: 6px; }
+.menu .appearance-options button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 .drawer {
   background: var(--surface);
   color: var(--text);
@@ -685,6 +806,32 @@ img {
   }
   .visual-header nav.is-open {
     display: flex;
+  }
+  .public-menu-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: flex-end;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .public-service-menu { width: 100%; }
+  .public-service-menu summary { min-height: 48px; padding-inline: 0; }
+  .public-service-menu > div {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    padding: 4px 0 4px 12px;
+    border: 0;
+    border-left: 2px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
   }
   .visual-header nav a {
     min-height: 48px;
@@ -741,6 +888,14 @@ img {
   .visual-preferences {
     font-size: 0.8rem;
   }
+  .appearance-control {
+    align-items: flex-start;
+    flex-direction: column;
+    width: 100%;
+  }
+  .appearance-options { width: 100%; }
+  .appearance-options button { flex: 1; min-width: 44px; }
+  .appearance-options button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
   .visual-card,
   .visual-band,
   .visual-summary {
@@ -834,11 +989,8 @@ img {
 [data-demo-state="running"] .demo-drops { visibility: visible; }
 .demo-start { position: relative; overflow: hidden; isolation: isolate; }
 .demo-start svg { flex-shrink: 0; }
-.demo-start::after { content: ''; position: absolute; inset: 0; background: #ffffff33; border-radius: inherit; opacity: 0; }
-.demo-start:active::after { opacity: 1; }
 @media (prefers-reduced-motion: no-preference) {
   [data-demo-state="running"] .demo-water { transition: stroke-dashoffset 0.6s ease-out; }
   [data-demo-state="running"] .demo-drops { animation: demo-outlet 0.8s linear infinite; }
-  .demo-start::after { transition: opacity 0.2s ease-out; }
   @keyframes demo-outlet { from { transform: translateY(-3px); opacity: .8; } to { transform: translateY(5px); opacity: .3; } }
 }

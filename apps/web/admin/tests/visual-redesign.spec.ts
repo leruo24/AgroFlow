@@ -5,7 +5,6 @@ test.describe.configure({ mode: "parallel" });
 const evidence = path.resolve("../../../docs/test-evidence/visual-redesign");
 const routes = [
   "/",
-  "/experience",
   "/solutions",
   "/how-it-works",
   "/technology",
@@ -24,7 +23,7 @@ async function publicMocks(page: Page) {
     route.fulfill({ status: 200, contentType: "application/json", body: "[]" }),
   );
 }
-test("public deep links refresh independently and preserve browser Back and legacy staff entries", async ({
+test("public deep links refresh independently, redirect Experience and preserve browser Back and legacy staff entries", async ({
   page,
 }) => {
   test.setTimeout(120000);
@@ -32,9 +31,14 @@ test("public deep links refresh independently and preserve browser Back and lega
   for (const route of routes) {
     await page.goto(route);
     await expect(page.locator("#publicTitle")).toBeVisible();
-    await expect(
-      page.locator('.visual-header a[aria-current="page"]'),
-    ).toHaveAttribute("href", route);
+    if (route === "/terms" || route === "/privacy")
+      await expect(
+        page.locator(`.visual-footer a[href="${route}"]`),
+      ).toBeVisible();
+    else
+      await expect(
+        page.locator('.visual-header a[aria-current="page"]'),
+      ).toHaveAttribute("href", route);
     await page.reload();
     await expect(page.locator("#publicTitle")).toBeVisible();
     if (route === "/terms" || route === "/privacy") {
@@ -54,7 +58,12 @@ test("public deep links refresh independently and preserve browser Back and lega
         ),
     ).toBe(true);
   }
+  await page.goto("/experience");
+  await expect(page).toHaveURL(/\/get-the-app$/);
+  await expect(page.locator("#publicTitle")).toHaveText("Get the app");
+  await expect(page.getByRole("link", { name: "Experience", exact: true })).toHaveCount(0);
   await page.goto("/about");
+  await page.locator("[data-service-menu] summary").click();
   await page.locator('.visual-header a[href="/solutions"]').click();
   await expect(page).toHaveURL(/\/solutions$/);
   await page.goBack();
@@ -78,7 +87,7 @@ test("phone menu opens with keyboard, focuses a destination and closes with Esca
   await menu.focus();
   await page.keyboard.press("Enter");
   await expect(menu).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#publicNav a").first()).toBeFocused();
+  await expect(page.locator("[data-public-menu-close]")).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(menu).toHaveAttribute("aria-expanded", "false");
   await expect(menu).toBeFocused();
@@ -90,11 +99,17 @@ test("theme persists locally, follows System and honours reduced motion", async 
   await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page.locator("[data-appearance]").selectOption("light");
+  await page.locator('[data-appearance-choice="light"]').click();
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  await page.locator("[data-appearance]").selectOption("system");
+  await page.locator('[data-appearance-choice="system"]').click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  await page.locator('[data-appearance-choice="light"]').focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('[data-appearance-choice="system"]')).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator('[data-appearance-choice="dark"]')).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".visual-hero .premium-photo img")).toHaveCSS(
     "animation-name",
     "none",
@@ -118,18 +133,22 @@ test("gallery opens by keyboard, names its dialog and returns focus", async ({
   await page.keyboard.press("Escape");
   await expect(trigger).toBeFocused();
 });
-test("2D demo uses existing simulated moisture and does not require a WebGL canvas", async ({
+test("technology preview is isolated, simulated and stops automatically", async ({
   page,
 }) => {
+  const actionRequests: string[] = [];
   await publicMocks(page);
-  await page.goto("/experience");
-  await page.locator("[data-experience-launch]").click();
-  await expect(page.locator(".soil-cutaway")).toContainText("Simulated");
-  await expect(page.locator(".soil-cutaway")).toContainText("34%");
-  await expect(page.getByText(/min at 20 L\/min/)).toHaveCount(0);
-  await expect(page.locator(".experience-stage canvas")).toHaveCount(0);
-  await page.getByRole("button", { name: "Close Experience AgroFlow" }).click();
-  await expect(page.locator("[data-experience-launch]")).toBeFocused();
+  page.on("request", (request) => {
+    if (request.method() !== "GET") actionRequests.push(request.url());
+  });
+  await page.goto("/technology");
+  const preview = page.locator("[data-irrigation-illustration]");
+  await expect(preview).toContainText("Preview irrigation — simulated");
+  await preview.locator("[data-demo-start]").click();
+  await expect(preview).toHaveAttribute("data-demo-state", "running");
+  await expect(preview).toHaveAttribute("data-demo-state", "stopped", { timeout: 9_000 });
+  await expect(preview.locator("[data-demo-status]")).toContainText("finished automatically");
+  expect(actionRequests).toEqual([]);
 });
 test("catalogue marks simulation, leaves acceptance unchecked and blocks fake continuation", async ({
   page,
@@ -225,19 +244,19 @@ test("staff theme and phone drawer keep existing routes", async ({ page }) => {
   await page.goto("/staff/#dashboard");
   await expect(page.locator(".sidebar")).toContainText("AgroFlow Staff");
   await page.locator("#avatarBtn").click();
-  await page.locator("[data-appearance]").selectOption("dark");
+  await page.locator('[data-appearance-choice="dark"]').click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(17, 29, 23)",
+    "rgb(13, 27, 36)",
   );
   await expect(page.locator("#avatarMenu")).toHaveCSS(
     "background-color",
-    "rgb(27, 44, 34)",
+    "rgb(23, 42, 54)",
   );
   await expect(page.locator("#avatarMenu a").first()).toHaveCSS(
     "color",
-    "rgb(243, 247, 238)",
+    "rgb(237, 246, 250)",
   );
   await page.screenshot({
     path: path.join(evidence, "staff-390-dark.png"),

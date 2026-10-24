@@ -14,14 +14,16 @@ test('public first load needs no auth or branded gate; header survives Back and 
   await expect(page.locator('#agroflow-splash')).toHaveCount(0);
   await page.locator('.visual-header').evaluate(node => node.setAttribute('data-review-identity', 'same-node'));
   const origin = await page.evaluate(() => performance.timeOrigin);
-  for (const route of ['/about', '/technology', '/experience', '/get-the-app']) {
+  for (const route of ['/about', '/technology', '/get-the-app']) {
+    if (route === '/technology')
+      await page.locator('[data-service-menu] summary').click();
     await page.locator(`.visual-header a[href="${route}"]`).click();
     await expect(page).toHaveURL(new RegExp(route + '$'));
     await expect(page.locator('#publicTitle')).toBeVisible();
     await expect(page.locator('.visual-header')).toHaveAttribute('data-review-identity', 'same-node');
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(origin);
   }
-  await page.goBack(); await expect(page).toHaveURL(/\/experience$/);
+  await page.goBack(); await expect(page).toHaveURL(/\/technology$/);
   await page.goForward(); await expect(page).toHaveURL(/\/get-the-app$/);
   await page.goto('/not-a-real-page');
   await expect(page.locator('#publicTitle')).toHaveText('Page not found');
@@ -53,11 +55,11 @@ for (const language of ['en', 'af', 'tn']) for (const theme of ['light', 'dark']
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const forbidden: string[] = [];
       page.on('request', request => { const url = new URL(request.url()); if (url.pathname.startsWith('/api/') || (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1')) forbidden.push(request.url()); });
-      for (const [name, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology'], ['experience', '/experience']]) {
+      for (const [name, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology'], ['get-the-app', '/get-the-app']]) {
         await page.goto(route);
         await expect(page.locator('#publicTitle')).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-        if (name === 'experience') {
+        if (name === 'technology') {
           const panel = page.locator('[data-irrigation-illustration]');
           await panel.locator('[data-demo-start]').click();
           await expect(panel).toHaveAttribute('data-demo-state', 'running');
@@ -100,10 +102,10 @@ test('physical lid keeps the hinge attached and its free edge opens outward at s
 
 test('doubled public text retains menu, content and simulation controls', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto('/experience');
+  await page.goto('/technology');
   await page.addStyleTag({ content: 'html {font-size:200%} .visual-site :is(p,a,button,select,summary,label){font-size:1rem;line-height:1.5}' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.locator('[data-demo-start]').click();
   await expect(page.locator('[data-irrigation-illustration]')).toHaveAttribute('data-demo-state', 'running');
-  await page.screenshot({ path: path.join(evidence, 'experience-en-light-320-text200.png'), fullPage: true });
+  await page.screenshot({ path: path.join(evidence, 'technology-en-light-320-text200.png'), fullPage: true });
 });

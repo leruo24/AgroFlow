@@ -21,11 +21,25 @@ export function wireIrrigationIllustration(root: HTMLElement): void {
   const start = panel.querySelector<HTMLButtonElement>('[data-demo-start]')!;
   const stop = panel.querySelector<HTMLButtonElement>('[data-demo-stop]')!;
   const status = panel.querySelector<HTMLElement>('[data-demo-status]')!;
-  const set = (state: 'ready' | 'running' | 'stopped') => {
+  let automaticStop: number | undefined;
+  const clearAutomaticStop = () => {
+    if (automaticStop !== undefined) window.clearTimeout(automaticStop);
+    automaticStop = undefined;
+  };
+  const set = (state: 'ready' | 'running' | 'stopped', automatic = false) => {
+    clearAutomaticStop();
     panel.dataset['demoState'] = state;
-    status.textContent = t(state === 'running' ? 'demoRunning' : state === 'stopped' ? 'demoStopped' : 'demoReady');
+    status.textContent = t(
+      state === 'running'
+        ? 'demoRunning'
+        : state === 'stopped'
+          ? automatic ? 'demoFinished' : 'demoStopped'
+          : 'demoReady',
+    );
     start.disabled = state === 'running';
     stop.disabled = state !== 'running';
+    if (state === 'running')
+      automaticStop = window.setTimeout(() => set('stopped', true), 8_000);
   };
   start.onclick = () => set('running');
   stop.onclick = () => set('stopped');

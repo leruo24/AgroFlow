@@ -321,16 +321,4 @@ export function wireWelcome(root: HTMLElement): void {
   wirePublicSite(root);
   wireEnquiry(root);
   initHardwareShowcase(root);
-  root.querySelector<HTMLButtonElement>("[data-experience-launch]")?.addEventListener("click", async (event) => {
-    const button = event.currentTarget as HTMLButtonElement;
-    button.disabled = true;
-    button.textContent = "Preparing the field…";
-    try {
-      const { mountExperience } = await import("@/experience/mount");
-      mountExperience(button);
-    } finally {
-      button.disabled = false;
-      button.innerHTML = 'Launch interactive demo <span aria-hidden="true">→</span>';
-    }
-  });
 }

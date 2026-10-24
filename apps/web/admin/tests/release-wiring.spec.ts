@@ -25,6 +25,7 @@ test("Service & pricing shows the staff-edited price, on a fresh load and after 
   await expect(page.locator('[data-price="monthly"]')).toContainText("R650");
 
   await page.goto("/about");
+  await page.locator("[data-service-menu] summary").click();
   await page.locator('.visual-header a[href="/service-pricing"]').click();
   await expect(page).toHaveURL(/\/service-pricing$/);
   await expect(page.locator('[data-price="installation"]')).toContainText("R4,500");

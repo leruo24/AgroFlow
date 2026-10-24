@@ -92,7 +92,11 @@ test("the installer checklist records a measured flow and shows who and when", a
   await page.locator('[data-act="open-case"][data-id="77"]').click();
   const row = page.locator('[data-check="25-flow_measured"]');
   await expect(row).toContainText("To do", { timeout: 15000 });
-  await row.locator('[data-field="flow_25"]').fill("6");
+  const flow = row.locator('[data-field="flow_25"]');
+  await flow.fill("6");
+  // The case drawer is rendered from async API state. Confirm that the current input—not a
+  // just-replaced drawer node—holds the measurement before submitting it.
+  await expect(flow).toHaveValue("6");
   await row.locator('[data-act="case-check"]').click();
   await expect(page.locator('[data-check="25-flow_measured"]')).toContainText("6 L/min", { timeout: 15000 });
   await expect(page.locator('[data-check="25-flow_measured"]')).toContainText("measured");

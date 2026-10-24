@@ -35,7 +35,7 @@ try {
       await page.locator('[data-hardware-reset]').click();
       await page.waitForTimeout(1000);
     } else {
-      await page.goto('http://localhost:5183/experience');
+      await page.goto('http://localhost:5183/technology');
       const panel = page.locator('[data-irrigation-illustration]');
       await panel.scrollIntoViewIfNeeded();
       await page.locator('[data-demo-start]').click();

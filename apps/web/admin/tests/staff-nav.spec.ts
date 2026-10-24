@@ -41,3 +41,36 @@ test("Enquiries and Support & requests open the two tabs of Requests, each with 
   await page.reload();
   await expect(page.getByRole("tab", { name: /Enquiries/ })).toHaveAttribute("aria-selected", "true", { timeout: 15000 });
 });
+
+test("sidebar groups collapse and the phone drawer has close and Escape behaviour", async ({ page }) => {
+  await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/staff/#dashboard");
+
+  const toggle = page.locator("#sidebarToggle");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#sidebarClose")).toBeFocused();
+  await page.locator("#sidebarClose").click();
+  await expect(toggle).toBeFocused();
+
+  await toggle.click();
+  await page.keyboard.press("Escape");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(toggle).toBeFocused();
+
+  await toggle.click();
+  const group = page.getByRole("group", { name: "Installations" });
+  await group.locator("summary").click();
+  await expect(group).not.toHaveAttribute("open", "");
+  await group.locator("summary").click();
+  await expect(group).toHaveAttribute("open", "");
+  await expect(page.locator(".sidebar .sub")).toHaveCount(0);
+  await expect(page.locator(".side-account")).toContainText("Profile");
+  await expect(page.locator(".side-account")).toContainText("Notifications");
+  await expect(page.locator(".side-account")).toContainText("Log out");
+
+  await page.setViewportSize({ width: 390, height: 500 });
+  await page.locator("#sidebar").evaluate((sidebar) => sidebar.scrollTo(0, sidebar.scrollHeight));
+  await expect(page.locator(".side-account")).toBeVisible();
+});

@@ -179,33 +179,33 @@ export type AppColors = {
 };
 
 export const lightColors: AppColors = {
-  action: '#176B45',
+  action: '#0B607D',
   dangerAction: '#B13B32',
   successAction: '#28613C',
-  primary: '#176B45',
-  primaryDark: '#104B38',
+  primary: '#126B91',
+  primaryDark: '#0B4F6C',
 
-  secondary: '#7FA88A',
-  secondaryDark: '#143D2A',
+  secondary: '#5F8F70',
+  secondaryDark: '#2F6B4B',
 
-  navigation: '#FFFFFF',
-  navigationText: '#172822',
-  navigationMuted: '#4D6255',
+  navigation: '#0B2A3A',
+  navigationText: '#FFFFFF',
+  navigationMuted: '#D0E3EB',
 
-  // 24 Oct 2026: green branding, warm neutral surfaces, blue only a water accent.
-  background: '#F7F8F4',
+  // Warm neutral surfaces with navy text; blue identifies actions and irrigation.
+  background: '#FBFAF6',
 
   surface: '#FFFFFF',
-  surfaceSecondary: '#EAF0E7',
-  tabBarSurface: '#FFFFFF',
+  surfaceSecondary: '#EDF5F7',
+  tabBarSurface: '#0B2A3A',
   scrim: 'rgba(0,0,0,0.32)',
 
-  text: '#172822',
-  textSecondary: '#4D6255',
-  textMuted: '#4D6255',
+  text: '#132F42',
+  textSecondary: '#526575',
+  textMuted: '#526575',
 
   // A neutral grey for the few real boundaries; `divider` below separates rows.
-  border: '#C3D1C4',
+  border: '#C6D7DF',
   divider: 'rgba(20,26,20,0.08)',
 
   white: '#FFFFFF',
@@ -233,31 +233,31 @@ export const lightColors: AppColors = {
 };
 
 export const darkColors: AppColors = {
-  action: '#176B45',
+  action: '#0B607D',
   dangerAction: '#B13B32',
   successAction: '#28613C',
-  primary: '#A8DFB6',
-  primaryDark: '#BDE7C7',
+  primary: '#8BD3ED',
+  primaryDark: '#A7DCF0',
 
-  secondary: '#8BB697',
-  secondaryDark: '#9BC58B',
+  secondary: '#82B98E',
+  secondaryDark: '#A0D8AD',
 
-  navigation: '#1B2C22',
+  navigation: '#071D2B',
   navigationText: '#FFFFFF',
-  navigationMuted: '#C1D3C3',
+  navigationMuted: '#C5DAE4',
 
-  background: '#111D17',
+  background: '#0D1B24',
 
-  surface: '#1B2C22',
-  surfaceSecondary: '#2A3D2F',
-  tabBarSurface: '#1B2C22',
+  surface: '#172A36',
+  surfaceSecondary: '#203B4A',
+  tabBarSurface: '#071D2B',
   scrim: 'rgba(0,0,0,0.48)',
 
-  text: '#F3F7EE',
-  textSecondary: '#C1D3C3',
-  textMuted: '#C1D3C3',
+  text: '#EDF6FA',
+  textSecondary: '#BFD0DA',
+  textMuted: '#BFD0DA',
 
-  border: '#5D7763',
+  border: '#526B79',
   divider: 'rgba(241,245,239,0.08)',
 
   white: '#FFFFFF',
