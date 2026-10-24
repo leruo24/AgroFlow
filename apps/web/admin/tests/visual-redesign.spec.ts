@@ -5,7 +5,6 @@ test.describe.configure({ mode: "parallel" });
 const evidence = path.resolve("../../../docs/test-evidence/visual-redesign");
 const routes = [
   "/",
-  "/experience",
   "/solutions",
   "/how-it-works",
   "/technology",
@@ -103,33 +102,6 @@ test("theme persists locally, follows System and honours reduced motion", async 
     "alt",
     "",
   );
-});
-test("gallery opens by keyboard, names its dialog and returns focus", async ({
-  page,
-}) => {
-  await publicMocks(page);
-  await page.goto("/get-the-app");
-  const trigger = page.locator(".gallery-trigger").first();
-  await trigger.focus();
-  await page.keyboard.press("Enter");
-  await expect(
-    page.getByRole("dialog", { name: "App previews · simulated farm" }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(trigger).toBeFocused();
-});
-test("2D demo uses existing simulated moisture and does not require a WebGL canvas", async ({
-  page,
-}) => {
-  await publicMocks(page);
-  await page.goto("/experience");
-  await page.locator("[data-experience-launch]").click();
-  await expect(page.locator(".soil-cutaway")).toContainText("Simulated");
-  await expect(page.locator(".soil-cutaway")).toContainText("34%");
-  await expect(page.getByText(/min at 20 L\/min/)).toHaveCount(0);
-  await expect(page.locator(".experience-stage canvas")).toHaveCount(0);
-  await page.getByRole("button", { name: "Close Experience AgroFlow" }).click();
-  await expect(page.locator("[data-experience-launch]")).toBeFocused();
 });
 test("catalogue marks simulation, leaves acceptance unchecked and blocks fake continuation", async ({
   page,

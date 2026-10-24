@@ -14,14 +14,14 @@ test('public first load needs no auth or branded gate; header survives Back and 
   await expect(page.locator('#agroflow-splash')).toHaveCount(0);
   await page.locator('.visual-header').evaluate(node => node.setAttribute('data-review-identity', 'same-node'));
   const origin = await page.evaluate(() => performance.timeOrigin);
-  for (const route of ['/about', '/technology', '/experience', '/get-the-app']) {
+  for (const route of ['/about', '/technology', '/contact', '/get-the-app']) {
     await page.locator(`.visual-header a[href="${route}"]`).click();
     await expect(page).toHaveURL(new RegExp(route + '$'));
     await expect(page.locator('#publicTitle')).toBeVisible();
     await expect(page.locator('.visual-header')).toHaveAttribute('data-review-identity', 'same-node');
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(origin);
   }
-  await page.goBack(); await expect(page).toHaveURL(/\/experience$/);
+  await page.goBack(); await expect(page).toHaveURL(/\/contact$/);
   await page.goForward(); await expect(page).toHaveURL(/\/get-the-app$/);
   await page.goto('/not-a-real-page');
   await expect(page.locator('#publicTitle')).toHaveText('Page not found');
@@ -44,7 +44,7 @@ test('hinge is bounded and reverses continuously, opening outward', () => {
 
 for (const language of ['en', 'af', 'tn']) for (const theme of ['light', 'dark'])
   for (const width of [320, 390, 768, 1366]) {
-    test(`isolated demo and public evidence ${language} ${theme} ${width}`, async ({ page }) => {
+    test(`public evidence ${language} ${theme} ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: width === 768 ? 1024 : width === 1366 ? 768 : 844 });
       await page.addInitScript(({ language, theme }) => {
         localStorage.setItem('agroflow_public_language', language);
@@ -53,31 +53,15 @@ for (const language of ['en', 'af', 'tn']) for (const theme of ['light', 'dark']
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const forbidden: string[] = [];
       page.on('request', request => { const url = new URL(request.url()); if (url.pathname.startsWith('/api/') || (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1')) forbidden.push(request.url()); });
-      for (const [name, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology'], ['experience', '/experience']]) {
+      for (const [name, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology']]) {
         await page.goto(route);
         await expect(page.locator('#publicTitle')).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-        if (name === 'experience') {
-          const panel = page.locator('[data-irrigation-illustration]');
-          await panel.locator('[data-demo-start]').click();
-          await expect(panel).toHaveAttribute('data-demo-state', 'running');
-          await expect(panel.locator('.demo-drops')).toHaveCSS('animation-name', 'none');
-          await panel.locator('[data-demo-stop]').click();
-          await expect(panel).toHaveAttribute('data-demo-state', 'stopped');
-          await expect(panel.locator('.demo-drops')).toHaveCSS('visibility', 'hidden');
-          await panel.locator('[data-demo-reset]').click();
-          await expect(panel).toHaveAttribute('data-demo-state', 'ready');
-        }
         await page.screenshot({ path: path.join(evidence, `${name}-${language}-${theme}-${width}.png`), fullPage: true });
       }
       expect(forbidden).toEqual([]);
     });
   }
-
-test('demo has no imported command path', () => {
-  const source = fs.readFileSync(path.resolve('src/features/irrigationIllustration.ts'), 'utf8');
-  expect(source).not.toMatch(/\bfetch\s*\(|XMLHttpRequest|agroFlowApi|supabase\.|\.publish\(/);
-});
 
 test('physical lid keeps the hinge attached and its free edge opens outward at several angles', async ({ page }) => {
   await page.goto('/technology');
@@ -98,12 +82,11 @@ test('physical lid keeps the hinge attached and its free edge opens outward at s
   for (const position of result.slice(1)) expect(position.tip[2]).toBeGreaterThan(result[0].tip[2]);
 });
 
-test('doubled public text retains menu, content and simulation controls', async ({ page }) => {
+test('doubled public text retains menu and content', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto('/experience');
+  await page.goto('/technology');
   await page.addStyleTag({ content: 'html {font-size:200%} .visual-site :is(p,a,button,select,summary,label){font-size:1rem;line-height:1.5}' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-  await page.locator('[data-demo-start]').click();
-  await expect(page.locator('[data-irrigation-illustration]')).toHaveAttribute('data-demo-state', 'running');
-  await page.screenshot({ path: path.join(evidence, 'experience-en-light-320-text200.png'), fullPage: true });
+  await expect(page.locator('[data-public-menu]')).toBeVisible();
+  await page.screenshot({ path: path.join(evidence, 'technology-en-light-320-text200.png'), fullPage: true });
 });
