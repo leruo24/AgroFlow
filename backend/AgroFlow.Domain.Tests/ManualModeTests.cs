@@ -76,7 +76,7 @@ public class ManualModeTests : IClassFixture<ApiHost>
     [Fact]
     public void The_processor_uses_the_rule_and_checks_the_mode_first()
     {
-        var src = File.ReadAllText(Path.Combine(RepoRoot(), "backend", "AgroFlow.Api", "Services", "SensorReadingProcessor.cs"));
+        var src = File.ReadAllText(Path.Combine(RepoRoot(), "backend", "AgroFlow.Api", "SensorMonitoring", "SensorReadingProcessor.cs"));
         var gate = src.IndexOf("if (!IrrigationMode.AllowsAutoCommands(irrigationMode))", StringComparison.Ordinal);
         var decide = src.IndexOf("AutoIrrigationDecision.Decide(", StringComparison.Ordinal);
         var insert = src.IndexOf("await InsertAutoCommandAsync(connection, zoneId, desired);", StringComparison.Ordinal);

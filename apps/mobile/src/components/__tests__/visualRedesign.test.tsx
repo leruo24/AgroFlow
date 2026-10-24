@@ -61,17 +61,11 @@ test("journey labels can be displayed exactly as supplied by the server", async 
   expect(view.getByRole("progressbar").props.accessibilityValue.now).toBe(3);
 });
 
-test("postcard uses the supplied farm name and hides decorative field art", async () => {
+test("postcard uses the supplied farm name and labels representative imagery", async () => {
   const screen = await render(wrap(<FarmPostcard name="Sesobe" />));
   await screen.findByText("Sesobe");
-  expect(
-    screen.getByTestId("field-art", { includeHiddenElements: true }).props
-      .accessible,
-  ).toBe(false);
-  expect(
-    screen.getByTestId("field-art", { includeHiddenElements: true }).props
-      .importantForAccessibility,
-  ).toBe("no-hide-descendants");
+  expect(screen.getByTestId('representative-photo')).toBeTruthy();
+  expect(screen.getByText('Representative image')).toBeTruthy();
 });
 test("unknown tank has no fill; measured zero remains a value", async () => {
   const screen = await render(
@@ -197,7 +191,7 @@ test.each([lightColors, darkColors])(
   },
 );
 
-test.each(['#126B91', '#087F8C'])('selected dock gradient stop %s has readable white icons', (stop) => {
+test.each(['#176B45', '#104B38'])('selected dock gradient stop %s has readable white icons', (stop) => {
   expect(contrast('#FFFFFF', stop)).toBeGreaterThanOrEqual(4.5);
 });
 test('dock background and selected chip have distinct SVG gradient identities', async () => {

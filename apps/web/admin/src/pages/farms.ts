@@ -7,11 +7,14 @@ import {
 } from "@/ui/components";
 import type { Farm } from "@/types/models";
 import { Icon } from "@/lib/icons";
+import { imageHtml, farmImageKey } from '@/ui/agroflowImages';
+import { text as publicText } from '@/pages/publicCopy';
 
 function farmCard(f: Farm): string {
   const hf = f.healthFactors;
 
   return `<article class="farm-card reveal" data-act="view-farm" data-id="${f.id}">
+    <figure class="premium-farm-cover">${imageHtml(farmImageKey(f.id))}<figcaption>${publicText('representativePhoto')}</figcaption></figure>
     <div class="farm-card-top">
       <div>
         <h5>${esc(f.name)} ${f.isSimulated ? badge("Simulated", "warn") : ""}</h5>

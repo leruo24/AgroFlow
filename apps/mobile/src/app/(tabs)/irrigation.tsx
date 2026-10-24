@@ -18,6 +18,8 @@ import { createIrrigationStyles } from '@/styles/irrigationStyles';
 import { soilReadingText } from '@/lib/moistureDisplay';
 import { cropLabel, healthLabel, placeLabel } from '@/lib/labels';
 import { dayLabel } from '@/lib/setupHelpers';
+import { FarmPhoto } from '@/components/visual/FarmPhoto';
+import { zoneImageKey } from '@/components/visual/agroflowImages';
 
 // A zone has (or had) a kit when any of its sensors has reported.
 export const zoneHasKit = (z: Zone) => z.sensors.soilMoisture.status === 'Online' || z.sensors.temperatureHumidity.status === 'Online';
@@ -61,6 +63,7 @@ export default function IrrigationScreen() {
         const kit = zoneHasKit(zone);
         const place = [placeLabel(zone.location), cropLabel(t, zone.crop)].filter(Boolean).join(' · ');
         return <Card key={zone.id} testID={`irrigation-zone-${zone.id}`}>
+          <FarmPhoto image={zoneImageKey(zone.id,zone.crop)} height={72}/>
           <TouchableOpacity accessibilityRole="button" accessibilityLabel={t('irrigation.open', { zone: zone.name })} onPress={() => openZone(zone.id)} style={[styles.rowTop, { minHeight: 48 }]}>
             <Droplets size={23} color={colors.textSecondary} strokeWidth={1.7} /><Text style={styles.title} numberOfLines={2}>{zone.name}</Text><ChevronRight size={20} color={colors.textSecondary} />
           </TouchableOpacity>

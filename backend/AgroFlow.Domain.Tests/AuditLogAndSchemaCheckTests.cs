@@ -239,7 +239,7 @@ public class AuditLogAndSchemaCheckTests
         // and the whole schema check reported "could not be checked". A probe that selects a
         // to_regclass / to_regprocedure / to_regtype value must cast it to text. (Used inside a
         // condition, "... is null", the answer is a boolean and needs no cast.)
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "backend", "AgroFlow.Api", "Services", "SchemaCheck.cs"));
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "backend", "AgroFlow.Api", "DataManagement", "SchemaCheck.cs"));
         var probes = Regex.Matches(source, @"select\s+to_reg(class|procedure|proc|type|namespace)\('[^']*'\)(::text)?");
         Assert.NotEmpty(probes);
         var uncast = probes.Where(m => !m.Groups[2].Success).Select(m => m.Value).ToList();

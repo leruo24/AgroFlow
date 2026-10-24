@@ -2,6 +2,10 @@
 
 22 October 2026 | Recommendations and implementation handoff | Updated with Bugs 3 notes
 
+**Colour decision — 24 Oct 2026: switched to the green palette.** Primary #176B45,
+dark green #104B38 and warm off-white #F7F8F4; earth/gold/sky are accents. Status
+colours keep their meaning, and dark-theme foregrounds are contrast-adjusted.
+
 **Keep AgroFlow recognisable. Make the public site inviting, the farmer app reassuring and the staff console organised.** The strongest direction is the ZIP's green, cream and sage palette, with AgroFlow's existing teal retained as a supporting colour. Borrow HiveMind's consistency, helpful personality and theme switch, then adapt them to water and small-scale farming.
 
 This is a proposed design specification, not an implemented redesign or a new system test. It reviews the supplied ZIP, builds on the consolidated audit and separates visual implementation for Codex from behavioural work for Claude Code. No application code, settings, accounts or Git branches were changed for this brief. Prices, service coverage, subscription terms and legal wording need team approval.

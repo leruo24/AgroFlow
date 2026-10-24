@@ -1,0 +1,100 @@
+{
+  "violations": [
+    {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": [
+        {
+          "target": [
+            "h1"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-hbpseb"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-mtuc2h"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(5)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(6)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(7)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(8)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(9)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-ndvcnb"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "aria-prohibited-attr",
+      "targets": [
+        [
+          ".r-mtuc2h"
+        ],
+        [
+          ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(5)"
+        ],
+        [
+          ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(6)"
+        ],
+        [
+          ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(7)"
+        ],
+        [
+          ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(8)"
+        ],
+        [
+          ".r-qklmqi.r-1habvwh.r-6g5kqj:nth-child(9)"
+        ],
+        [
+          ".r-ndvcnb"
+        ]
+      ]
+    },
+    {
+      "id": "label-content-name-mismatch",
+      "targets": [
+        [
+          ".r-1rto3yg"
+        ]
+      ]
+    }
+  ]
+}

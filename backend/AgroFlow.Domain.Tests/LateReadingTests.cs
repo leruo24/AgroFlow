@@ -64,7 +64,7 @@ public class LateReadingTests
     public void The_processor_classifies_before_it_can_issue_a_command()
     {
         // Source-level guard: the late path returns before the insert of an auto command.
-        var src = File.ReadAllText(Path.Combine(RepoRoot(), "backend", "AgroFlow.Api", "Services", "SensorReadingProcessor.cs"));
+        var src = File.ReadAllText(Path.Combine(RepoRoot(), "backend", "AgroFlow.Api", "SensorMonitoring", "SensorReadingProcessor.cs"));
         var classify = src.IndexOf("ReadingAge.Classify(", StringComparison.Ordinal);
         var lateReturn = src.IndexOf("!ReadingAge.MayDriveLiveDecisions(timing)", StringComparison.Ordinal);
         var command = src.IndexOf("await InsertAutoCommandAsync(", StringComparison.Ordinal);
@@ -128,7 +128,7 @@ public class LateReadingTests
     {
         var root = RepoRoot();
         var migration = File.ReadAllText(Path.Combine(root, "supabase", "migrations", "0060_sensor_reading_device_dedupe.sql"));
-        var processor = File.ReadAllText(Path.Combine(root, "backend", "AgroFlow.Api", "Services", "SensorReadingProcessor.cs"));
+        var processor = File.ReadAllText(Path.Combine(root, "backend", "AgroFlow.Api", "SensorMonitoring", "SensorReadingProcessor.cs"));
         Assert.Contains("add column if not exists hardware_id", migration);
         Assert.Contains("on sensor_reading (hardware_id, sensor_type, recorded_at)", migration);
         Assert.Contains("where hardware_id is not null", migration);

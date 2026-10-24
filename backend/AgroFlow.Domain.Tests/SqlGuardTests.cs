@@ -86,7 +86,7 @@ public class SqlGuardTests
     [Fact]
     public void The_zone_access_check_is_owner_member_or_admin_and_nothing_wider()
     {
-        var xdb = File.ReadAllText(Path.Combine(Root(), "backend", "AgroFlow.Domain", "Fao56EngineXDB.cs"));
+        var xdb = File.ReadAllText(Path.Combine(Root(), "backend", "AgroFlow.Domain", "DataManagement", "Fao56EngineXDB.cs"));
         var body = xdb[xdb.IndexOf("public bool CanAccessZone", StringComparison.Ordinal)..];
         body = body[..body.IndexOf("ExecuteScalar", StringComparison.Ordinal)];
         Assert.Contains("f.owner_id = $2", body);
@@ -112,7 +112,7 @@ public class SqlGuardTests
         Assert.Contains("a.farm_id = f.farm_id", dashboard);
         Assert.Contains("exists (select 1 from selected_zones z where z.id = a.zone_id)", dashboard);
 
-        var telegram = Api(Path.Combine("Services", "Notifications", "TelegramNotificationService.cs"));
+        var telegram = Api(Path.Combine("Notifications", "TelegramNotificationService.cs"));
         var broadcast = telegram[telegram.IndexOf(
             "private async Task BroadcastToFarmAsync", StringComparison.Ordinal)..];
         broadcast = broadcast[..broadcast.IndexOf("private sealed record ZoneContext", StringComparison.Ordinal)];
@@ -134,7 +134,7 @@ public class SqlGuardTests
     {
         // `for update skip locked` in one transaction: the second claimant skips
         // the row the first has locked and falls back to the shared login.
-        var src = Api(Path.Combine("Services", "MqttCredentialPoolService.cs"));
+        var src = Api(Path.Combine("SensorMonitoring", "MqttCredentialPoolService.cs"));
         Assert.Contains("for update skip locked limit 1", src);
         Assert.Contains("NpgsqlTransaction transaction", src);   // inside the claim's transaction
     }
@@ -142,7 +142,7 @@ public class SqlGuardTests
     [Fact]
     public void The_report_queue_never_hands_one_request_to_two_workers()
     {
-        Assert.Contains("for update skip locked", Api(Path.Combine("Services", "ReportGenerationService.cs")));
+        Assert.Contains("for update skip locked", Api(Path.Combine("DataManagement", "ReportGenerationService.cs")));
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class SqlGuardTests
     {
         // The ledger's insert claims (request, stage, audience) once; a second
         // send of the same finds it taken.
-        var ledger = Api(Path.Combine("Services", "Notifications", "NotificationLedger.cs"));
+        var ledger = Api(Path.Combine("Notifications", "NotificationLedger.cs"));
         Assert.Matches(new Regex("on conflict[^;]*do nothing", RegexOptions.IgnoreCase), ledger);
     }
 

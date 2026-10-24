@@ -5,6 +5,7 @@
     "needs_review": false
   },
   "strings": {
+    "visual.representativePhoto": "Representative image",
     "visual.phase.request_sent": "Request sent",
     "visual.phase.waiting_for_kit": "Waiting for kit",
     "visual.phase.kit_confirmed_start": "Kit confirmed start",
