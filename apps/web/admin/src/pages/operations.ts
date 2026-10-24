@@ -78,7 +78,7 @@ export async function hardwarePage(): Promise<string> {
 
   ${panel("Hardware Inventory", "Registered controllers, pumps, sensors, stations and gateways",
     resultCount(filtered.length, total, "devices"),
-    table(["Device ID", "Type", "Farm", "Firmware", "Connection", "Last seen", "Token", "MQTT login", "Status", "Actions"],
+    table(["Device ID", "Type", "Farm", "Firmware", "Connection", "Last seen", "Token", "MQTT login", "Actions"],
       filtered, (h) => [
         `<span class="mono">${esc(h.deviceId ?? h.id)}</span>`,
         esc(h.type),
@@ -86,9 +86,8 @@ export async function hardwarePage(): Promise<string> {
         // firmware_version, reported by the board on claim and on every 4-hourly firmware check.
         // Blank until a board on 1.3.0 has called in.
         `<span class="mono sm">${esc(h.firmware || "—")}</span>`,
-        // Separate from `status` below on purpose. This is the 5-minute "is it listening now"
-        // answer that decides whether a command will arrive; `status` is
-        // DeviceStatusMonitorService's 30-minute alerting judgement. They can disagree.
+        // The one connectivity badge: the 5-minute "is it listening now" answer that decides
+        // whether a command will arrive (api.ts derives h.status from the same value).
         h.online === undefined
           ? `<span class="muted">Unknown</span>`
           : badge(h.online ? "Online" : "Offline", h.online ? "good" : "warn"),
@@ -103,7 +102,6 @@ export async function hardwarePage(): Promise<string> {
         h.mqttUsername
           ? `<span class="mono sm">${esc(h.mqttUsername)}</span>`
           : `<span class="muted">Shared</span>`,
-        badge(h.status),
         // These actions go by zone, not hardware id: the commands go into irrigation_commands,
         // which is keyed on zone. A board with no zone cannot be commanded, so the links are left out.
         `<span class="row-act">

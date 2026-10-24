@@ -32,3 +32,41 @@ The admin "Add kit" panel UI, onboarding QR UI, farmer Kit-tab changes and the m
 that job were paused for this overnight brief.
 
 ## Log
+
+### Item 1: "Connection: Online" next to "Status: Offline". Starting the fix.
+
+Diagnosis (from reading the code):
+- "Connection" (Kits table, `apps/web/admin/src/pages/operations.ts` ~line 92) is `h.online`.
+  - The API computes it on every request in `ZoneHardwareEndpoints.ListAllHardwareAsync`:
+    `DeviceLiveness.IsOnline(newest contact, now)`.
+  - Newest contact is `last_seen` or the zone's newest reading, within 5 minutes
+    (`backend/AgroFlow.Domain/SensorMonitoring/DeviceSetupCommands.cs:71`).
+- "Status" (same table, the "Status" column, and the device drawer at
+  `apps/web/admin/src/app/interactions.ts` ~line 1660) is the stored `hardware.status` column.
+  - It is read straight from Supabase in `apps/web/admin/src/data/api.ts` ~line 550.
+  - Writers: the claim, and `DeviceStatusMonitorService`'s periodic sweep, which uses its own
+    longer `OfflineAfterMinutes` threshold and exists to send "kit offline" alerts.
+- Both are connectivity: the same concept with two thresholds and two update times. So right
+  after a kit goes quiet, or comes back, they disagree.
+- Neither is equipment health. The table's "Maintenance" field is the separate health concept,
+  and it has no real source today (always "OK"; see the comment in `api.ts`).
+
+Plan:
+- In the admin data layer, `Hardware.status` comes from the API's live `online` whenever the
+  API answered. It falls back to the stored column only when that call failed.
+- The duplicate "Status" column in the Kits table goes, and the drawer says "Connection".
+- `hardware.status` stays in the database as the monitor's alerting state (it decides when to
+  send "kit offline"); it is no longer shown as a second connectivity badge.
+
+Item 1: changed (commit after this note).
+- `apps/web/admin/src/data/api.ts` (`getHardware`): `status` now comes from the API's live
+  `online`, falling back to the stored column only if that call fails.
+- `apps/web/admin/src/pages/operations.ts`: the duplicate "Status" column is removed from the
+  Kits table.
+- `apps/web/admin/src/app/interactions.ts`: the device drawer and the CSV header say
+  "Connection".
+
+Verification: `tsc` only. Not run in a browser, and no Playwright test added yet, because you
+asked me to stop fixing and report on the installation flow first.
+
+Item 2 (enrollment reads as finished): NOT started.
