@@ -1,4 +1,5 @@
 import { getAdminProfile } from "@/app/auth";
+import { contextPhotoHtml } from '@/ui/agroflowImages';
 import { api } from "@/data/api";
 import { esc, fmtInt, fmtDate, fmtLitres, fmtDateTimeSast } from "@/lib/format";
 import { getFilter, applyFilters, rangeLabel } from "@/lib/filters";
@@ -344,6 +345,7 @@ export async function reportsPage(): Promise<string> {
 
   return `
   ${pageHeader("Reports", "Farm reports, automatic reports, and the farms that need attention this week.")}
+  ${contextPhotoHtml('reservoir')}
 
   ${farmReportsPanel(farms, chosen)}
 

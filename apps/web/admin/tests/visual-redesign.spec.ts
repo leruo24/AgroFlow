@@ -95,13 +95,13 @@ test("theme persists locally, follows System and honours reduced motion", async 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.locator("[data-appearance]").selectOption("system");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect(page.locator(".field-lines")).toHaveCSS(
+  await expect(page.locator(".visual-hero .premium-photo img")).toHaveCSS(
     "animation-name",
     "none",
   );
-  await expect(page.locator(".field-lines")).toHaveAttribute(
-    "aria-hidden",
-    "true",
+  await expect(page.locator(".visual-hero .premium-photo img")).toHaveAttribute(
+    "alt",
+    "",
   );
 });
 test("gallery opens by keyboard, names its dialog and returns focus", async ({
@@ -229,15 +229,15 @@ test("staff theme and phone drawer keep existing routes", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("body")).toHaveCSS(
     "background-color",
-    "rgb(16, 28, 37)",
+    "rgb(17, 29, 23)",
   );
   await expect(page.locator("#avatarMenu")).toHaveCSS(
     "background-color",
-    "rgb(25, 43, 55)",
+    "rgb(27, 44, 34)",
   );
   await expect(page.locator("#avatarMenu a").first()).toHaveCSS(
     "color",
-    "rgb(237, 245, 250)",
+    "rgb(243, 247, 238)",
   );
   await page.screenshot({
     path: path.join(evidence, "staff-390-dark.png"),

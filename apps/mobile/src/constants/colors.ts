@@ -179,33 +179,33 @@ export type AppColors = {
 };
 
 export const lightColors: AppColors = {
-  action: '#126B91',
+  action: '#176B45',
   dangerAction: '#B13B32',
   successAction: '#28613C',
-  primary: '#126B91',
-  primaryDark: '#126B91',
+  primary: '#176B45',
+  primaryDark: '#104B38',
 
   secondary: '#7FA88A',
   secondaryDark: '#143D2A',
 
   navigation: '#FFFFFF',
-  navigationText: '#183344',
-  navigationMuted: '#526575',
+  navigationText: '#172822',
+  navigationMuted: '#4D6255',
 
-  // Neutral page; water interactions are blue, crop/brand details remain green.
-  background: '#F7FAFC',
+  // 24 Oct 2026: green branding, warm neutral surfaces, blue only a water accent.
+  background: '#F7F8F4',
 
   surface: '#FFFFFF',
-  surfaceSecondary: '#E7F3FA',
+  surfaceSecondary: '#EAF0E7',
   tabBarSurface: '#FFFFFF',
   scrim: 'rgba(0,0,0,0.32)',
 
-  text: '#183344',
-  textSecondary: '#526575',
-  textMuted: '#526575',
+  text: '#172822',
+  textSecondary: '#4D6255',
+  textMuted: '#4D6255',
 
   // A neutral grey for the few real boundaries; `divider` below separates rows.
-  border: '#C5D5DF',
+  border: '#C3D1C4',
   divider: 'rgba(20,26,20,0.08)',
 
   white: '#FFFFFF',
@@ -233,31 +233,31 @@ export const lightColors: AppColors = {
 };
 
 export const darkColors: AppColors = {
-  action: '#126B91',
+  action: '#176B45',
   dangerAction: '#B13B32',
   successAction: '#28613C',
-  primary: '#58CDD0',
-  primaryDark: '#85D3D8',
+  primary: '#A8DFB6',
+  primaryDark: '#BDE7C7',
 
   secondary: '#8BB697',
   secondaryDark: '#9BC58B',
 
-  navigation: '#192B37',
+  navigation: '#1B2C22',
   navigationText: '#FFFFFF',
-  navigationMuted: '#BDCEDA',
+  navigationMuted: '#C1D3C3',
 
-  background: '#101C25',
+  background: '#111D17',
 
-  surface: '#192B37',
-  surfaceSecondary: '#203C4C',
-  tabBarSurface: '#192B37',
+  surface: '#1B2C22',
+  surfaceSecondary: '#2A3D2F',
+  tabBarSurface: '#1B2C22',
   scrim: 'rgba(0,0,0,0.48)',
 
-  text: '#EDF5FA',
-  textSecondary: '#BDCEDA',
-  textMuted: '#BDCEDA',
+  text: '#F3F7EE',
+  textSecondary: '#C1D3C3',
+  textMuted: '#C1D3C3',
 
-  border: '#4D6575',
+  border: '#5D7763',
   divider: 'rgba(241,245,239,0.08)',
 
   white: '#FFFFFF',

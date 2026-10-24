@@ -6,6 +6,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { createFarmSelectorStyles } from '@/styles/farmSelectorStyles';
 import { BlurSheet } from './BlurSheet';
 import { useI18n } from '@/i18n';
+import { FarmPhoto } from './visual/FarmPhoto';
+import { farmImageKey } from './visual/agroflowImages';
 
 export function FarmSelector() {
   const { farm, farms, isFarmLoading, farmError, selectFarm, refreshFarms } = useAgroFlow();
@@ -31,8 +33,11 @@ export function FarmSelector() {
       {farms.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityState={{ selected: item.id === farm?.id }}
         onPress={() => { selectFarm(item.id); setOpen(false); }}
         style={styles.option}>
+        <View style={{width:64}}><FarmPhoto image={farmImageKey(item.id)} height={56} compact/></View>
         <View style={styles.optionTextColumn}><Text style={[styles.optionName, item.id === farm?.id && styles.optionNameSelected]}>{item.name}</Text>
           {!!item.location && <Text style={styles.optionLocation}>{item.location}</Text>}
+          {!!item.status && <Text style={styles.optionLocation}>{item.status}</Text>}
+          <Text style={styles.optionLocation}>{t('visual.representativePhoto')}</Text>
         </View>
         {item.isSimulated && <Text style={styles.simulatedBadge}>{t('farm.simulated')}</Text>}
         {item.id === farm?.id && <Check size={22} color={colors.primaryDark} />}

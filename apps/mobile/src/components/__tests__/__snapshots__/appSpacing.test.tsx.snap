@@ -6,7 +6,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
     [
       {
         "backgroundColor": "#FFFFFF",
-        "borderColor": "#C5D5DF",
+        "borderColor": "#C3D1C4",
         "borderRadius": 12,
         "borderWidth": 1,
         "gap": 8,
@@ -46,7 +46,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={1}
         style={
           {
-            "color": "#183344",
+            "color": "#172822",
             "fontSize": 24,
             "fontWeight": "600",
           }
@@ -58,7 +58,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 13,
             "lineHeight": 18,
           }
@@ -86,7 +86,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={1}
         style={
           {
-            "color": "#183344",
+            "color": "#172822",
             "fontSize": 24,
             "fontWeight": "600",
           }
@@ -98,7 +98,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 13,
             "lineHeight": 18,
           }
@@ -110,7 +110,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 11,
             "lineHeight": 16,
           }
@@ -138,7 +138,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={1}
         style={
           {
-            "color": "#183344",
+            "color": "#172822",
             "fontSize": 24,
             "fontWeight": "600",
           }
@@ -150,7 +150,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 13,
             "lineHeight": 18,
           }
@@ -184,7 +184,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 13,
             "lineHeight": 18,
           }
@@ -199,7 +199,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#172822",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,
@@ -226,7 +226,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 13,
             "lineHeight": 18,
           }
@@ -241,7 +241,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#172822",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,
@@ -268,7 +268,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 13,
             "lineHeight": 18,
           }
@@ -283,13 +283,13 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#172822",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,
             },
             {
-              "color": "#526575",
+              "color": "#4D6255",
               "fontWeight": "400",
             },
           ]
@@ -313,7 +313,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={2}
         style={
           {
-            "color": "#526575",
+            "color": "#4D6255",
             "fontSize": 13,
             "lineHeight": 18,
           }
@@ -328,7 +328,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#172822",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,

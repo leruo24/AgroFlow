@@ -1,7 +1,7 @@
 import { Text, View } from "react-native";
 import { useTheme } from "@/context/ThemeContext";
 import { useI18n } from "@/i18n";
-import { FieldArtwork } from "./FieldArtwork";
+import { FarmPhoto } from './FarmPhoto';
 export function FarmPostcard({ name }: { name: string }) {
   const { colors } = useTheme();
   const { t } = useI18n();
@@ -12,8 +12,8 @@ export function FarmPostcard({ name }: { name: string }) {
         borderRadius: 12,
         borderWidth: 1,
         borderColor: colors.border,
-        padding: 16,
-        marginVertical: 16,
+        padding: 12,
+        marginVertical: 12,
         overflow: "hidden",
       }}
     >
@@ -31,7 +31,7 @@ export function FarmPostcard({ name }: { name: string }) {
       >
         {name}
       </Text>
-      <FieldArtwork color={colors.secondaryDark} height={48} />
+      <FarmPhoto image="aerial" height={76}/>
     </View>
   );
 }

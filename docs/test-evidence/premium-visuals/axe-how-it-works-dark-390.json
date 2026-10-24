@@ -1,0 +1,13 @@
+{
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "targets": [
+        [
+          "article:nth-child(1) > p"
+        ]
+      ]
+    }
+  ]
+}
