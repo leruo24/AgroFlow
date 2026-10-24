@@ -547,16 +547,7 @@ export const api = {
         // No battery/uptime telemetry column exists on hardware.
         battery: null,
         uptimePct: 0,
-        // Connectivity has ONE source: the API's live answer (newest contact within 5 minutes,
-        // DeviceLiveness), the same one that decides whether a command will arrive. The stored
-        // hardware.status column is the quiet-device monitor's alerting state, on a longer
-        // threshold, so showing both made a kit read "Online" and "Offline" at once. It is only
-        // used here when the API call failed.
-        status: (() => {
-          const live = extra.get(String(h.hardware_id))?.online;
-          if (live !== undefined) return live ? "Online" : "Offline";
-          return (h.status as Hardware["status"]) ?? "Offline";
-        })(),
+        status: (h.status as Hardware["status"]) ?? "Offline",
         // enrollment_status is the real lifecycle column. maintenanceState (OK/Due/Overdue/
         // Scheduled) has no real source, so it defaults to OK instead of a made-up signal.
         maintenanceState: "OK",

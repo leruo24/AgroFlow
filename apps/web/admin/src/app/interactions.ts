@@ -352,7 +352,7 @@ async function exportCurrent(kind: string): Promise<void> {
       }).map((h) => [h.id, h.type, h.farm, h.province, h.firmware,
                      h.battery === null ? "Not reported" : h.battery,
                      "Not measured", h.status, h.maintenanceState, h.installed]);
-      downloadExcelSafeCsv("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime", "Connection", "Maintenance", "Installed"], rows));
+      downloadExcelSafeCsv("agroflow-hardware.csv", toCSV(["Device", "Type", "Farm", "Province", "Firmware", "Battery", "Uptime", "Status", "Maintenance", "Installed"], rows));
       break;
     }
     case "alerts": {
@@ -1657,7 +1657,7 @@ async function handleAction(el: HTMLElement): Promise<void> {
           enrollmentExpiresAt: h.enrollmentCodeExpiresAt ?? null,
         }),
         fields: [
-          { label: "Connection", value: h.status },
+          { label: "Status", value: h.status },
           { label: "Maintenance", value: h.maintenanceState },
           { label: "Firmware", value: h.firmware },
           { label: "Battery", value: h.battery === null ? "Mains powered" : `${h.battery}%` },
