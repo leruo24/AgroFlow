@@ -35,6 +35,7 @@ const settings = [
   { key: "community.report_limit", value: 2, description: "Reports per farmer in the window", source: "AgroFlow setting", updatedAt: "2026-10-20T00:00:00Z" },
   { key: "community.radius_km.fire", value: 50, description: "Fire alert radius (km)", source: "AgroFlow setting", updatedAt: "2026-10-20T00:00:00Z" },
   { key: "fire.emergency_text", value: "your local emergency number (112 from a mobile phone)", description: "Who to call, in every fire message", source: "Set by staff", updatedAt: "2026-10-20T00:00:00Z" },
+  { key: "terms.acceptance_enabled", value: false, description: "Ask farmers to accept the terms and the privacy notice.", source: "Live web retest RET-02 (team decision)", updatedAt: "2026-10-24T00:00:00Z" },
 ];
 
 type Write = { method: string; path: string; body: unknown };
@@ -198,4 +199,17 @@ test.describe("on a phone", () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   });
+});
+
+test("RET-02: the farmer terms setting is an on/off box, off by default, saved as true or false", async ({ page }) => {
+  const writes: Write[] = [];
+  await open(page, writes);
+  const box = page.locator('[data-setting="terms.acceptance_enabled"]');
+  await expect(box).toHaveAttribute("type", "checkbox");
+  await expect(box).not.toBeChecked();
+  await expect(page.locator("#content")).toContainText("Farmer terms");
+  await box.check();
+  await page.locator('[data-act="save-dc-settings"]').click();
+  await expect.poll(() => writes.find((w) => w.path === "/api/admin/settings/drought-community")?.body)
+    .toEqual({ settings: [{ key: "terms.acceptance_enabled", value: true }] });
 });

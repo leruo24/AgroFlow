@@ -100,11 +100,17 @@ function settingsHtml(settings: AppSetting[]): string {
     { title: "Drought mode", prefix: "drought." },
     { title: "Community reports", prefix: "community." },
     { title: "Fire", prefix: "fire." },
+    // RET-02 (0062): off by default; a draft document is never accepted even when it is on.
+    { title: "Farmer terms", prefix: "terms." },
   ];
   return groups.map((g) => {
     const rows = settings.filter((s) => s.key.startsWith(g.prefix));
     if (!rows.length) return "";
-    return `<h5 class="settings-group">${esc(g.title)}</h5><div class="fields dc-settings">${rows.map((s) => `
+    return `<h5 class="settings-group">${esc(g.title)}</h5><div class="fields dc-settings">${rows.map((s) => typeof s.value === "boolean" ? `
+      <label class="f check-row"><input type="checkbox" data-setting="${esc(s.key)}" data-kind="boolean"${s.value ? " checked" : ""} />
+        ${esc(s.description)}
+        <small class="muted">${esc(s.key)} · ${esc(s.source)}</small>
+      </label>` : `
       <label class="f">${esc(s.description)}
         <input type="${typeof s.value === "number" ? "number" : "text"}" step="any" data-setting="${esc(s.key)}"
           data-kind="${typeof s.value}" value="${esc(String(s.value))}" />
@@ -114,10 +120,14 @@ function settingsHtml(settings: AppSetting[]): string {
 }
 
 /* The settings form's changes, typed as the saved values are. */
-export function changedSettings(root: ParentNode): { key: string; value: number | string }[] | string {
-  const out: { key: string; value: number | string }[] = [];
+export function changedSettings(root: ParentNode): { key: string; value: number | string | boolean }[] | string {
+  const out: { key: string; value: number | string | boolean }[] = [];
   for (const input of Array.from(root.querySelectorAll<HTMLInputElement>("[data-setting]"))) {
     const key = input.dataset["setting"] ?? "";
+    if (input.dataset["kind"] === "boolean") {
+      if (input.checked !== input.defaultChecked) out.push({ key, value: input.checked });
+      continue;
+    }
     const raw = input.value.trim();
     if (raw === input.defaultValue.trim()) continue;
     if (input.dataset["kind"] === "number") {

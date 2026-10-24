@@ -999,7 +999,7 @@ namespace AgroFlow.Business.Agronomy
                 && result.Confidence.Level == ConfidenceLevel.High)
             {
                 result.Confidence = new Confidence(ConfidenceLevel.Medium,
-                    "Medium: the crop/weather balance and local field sensor disagree; inspect the zone before acting.");
+                    "Medium: the crop/weather balance and local field sensor disagree; inspect the zone before acting.", "sensor_disagree");
             }
             foreach (var day in result.Outlook) day.Confidence = result.Confidence.Key;
             result.NextStep = ConfidenceRules.NextStep(result.Setup);

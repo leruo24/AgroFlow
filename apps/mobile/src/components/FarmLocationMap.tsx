@@ -25,14 +25,14 @@ export function FarmLocationMap({ farm }: { farm: Farm }) {
   const text = location || `${farm.latitude!.toFixed(4)}, ${farm.longitude!.toFixed(4)}`;
   const canShow = valid && !failed;
   return <View style={styles.container}>
-    <Pressable accessibilityRole={canShow ? 'button' : 'text'} accessibilityLabel={`${text}${canShow ? (collapsed ? ', expand map' : ', collapse map') : ''}`} accessibilityState={{ expanded: canShow && !collapsed }} disabled={!canShow} onPress={() => setCollapsed(v => !v)} style={styles.row}>
+    <Pressable accessibilityRole={canShow ? 'button' : 'text'} accessibilityLabel={`${text}${canShow ? (collapsed ? t('map.expand') : t('map.collapse')) : ''}`} accessibilityState={{ expanded: canShow && !collapsed }} disabled={!canShow} onPress={() => setCollapsed(v => !v)} style={styles.row}>
       <MapPin size={20} color={colors.textSecondary} /><Text style={styles.rowText}>{text}</Text>
       {canShow && (collapsed ? <ChevronDown size={20} color={colors.textSecondary} /> : <ChevronUp size={20} color={colors.textSecondary} />)}
     </Pressable>
     {canShow && !collapsed && <View style={styles.mapWrapper}>
       <FarmMapSurface latitude={farm.latitude!} longitude={farm.longitude!} zoom={zoom} onFailure={onFailure} />
       <View style={styles.zoomControls}>
-        {[{ Icon: Plus, step: 1, label: 'Zoom in' }, { Icon: Minus, step: -1, label: 'Zoom out' }].map(({ Icon, step, label }) => {
+        {[{ Icon: Plus, step: 1, label: t('map.zoomIn') }, { Icon: Minus, step: -1, label: t('map.zoomOut') }].map(({ Icon, step, label }) => {
           const disabled = zoom + step < 4 || zoom + step > 17;
           return <Pressable key={label} accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={() => setZoom(z => Math.min(17, Math.max(4, z + step)))} style={[styles.zoomButton, { opacity: disabled ? 0.35 : 1 }]}><Icon size={21} color={colors.text} /></Pressable>;
         })}

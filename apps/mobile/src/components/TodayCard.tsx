@@ -8,6 +8,7 @@ import type { AdviceProvenance, TodayZone } from '@/services/agroFlowApi';
 import { useI18n, type TranslationKey } from '@/i18n';
 import { adviceOverLimit, zoneMaxRunMinutes } from '@/lib/runLimit';
 import { adviceText } from '@/lib/advice';
+import { confidenceText } from '@/lib/confidenceText';
 import { useSimpleView } from '@/components/visual/AppearanceControls';
 
 const LEVEL_LABEL: Record<'high' | 'medium' | 'low', TranslationKey> = {
@@ -64,7 +65,7 @@ export function TodayCard({ zone, onLogged }: Props) {
       {zone.confidence && (
         <View
           style={styles.badgeRow}
-          accessibilityLabel={t('today.confidenceA11y', { level: t(LEVEL_LABEL[zone.confidence.level]), reason: zone.confidence.reason })}
+          accessibilityLabel={t('today.confidenceA11y', { level: t(LEVEL_LABEL[zone.confidence.level]), reason: confidenceText(t, zone.confidence) })}
         >
           <Text style={styles.badge}>{t(LEVEL_LABEL[zone.confidence.level])}</Text>
           <WhyLink explanation={zone.confidenceExplanation} compact />

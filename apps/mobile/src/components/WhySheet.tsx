@@ -14,6 +14,7 @@ import { useI18n } from '@/i18n';
 // they are: summary, what we used, the rule, how sure, what would change it. The technical
 // line is never shown here. No explanation means no link, never a generic text.
 
+// The English, for tests and older callers; the screens use t('why.link') (RET-06).
 export const WHY_LINK_TEXT = 'Why am I seeing this?';
 
 export function WhyLink({
@@ -27,6 +28,7 @@ export function WhyLink({
   onOpen?: () => void;
 }) {
   const { colors } = useTheme();
+  const { t } = useI18n();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
 
@@ -36,7 +38,7 @@ export function WhyLink({
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={WHY_LINK_TEXT}
+        accessibilityLabel={t('why.link')}
         hitSlop={8}
         onPress={() => {
           onOpen?.();
@@ -45,7 +47,7 @@ export function WhyLink({
         style={[styles.link, compact && styles.linkCompact]}
       >
         <HelpCircle size={14} color={colors.primaryDark} strokeWidth={1.8} />
-        <Text style={styles.linkText}>{WHY_LINK_TEXT}</Text>
+        <Text style={styles.linkText}>{t('why.link')}</Text>
       </Pressable>
 
       <WhySheet explanation={explanation} visible={open} onClose={() => setOpen(false)} />
@@ -67,7 +69,7 @@ export function WhySheet({
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   return (
-    <BlurSheet visible={visible} onClose={onClose} title={WHY_LINK_TEXT}>
+    <BlurSheet visible={visible} onClose={onClose} title={t('why.link')}>
       <View style={styles.body}>
         <Text style={styles.summary}>{explanation.summary}</Text>
 

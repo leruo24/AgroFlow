@@ -184,6 +184,10 @@ public sealed class SchemaCheck
             "select 1 from information_schema.columns where table_name = 'hardware' and column_name = 'wifi_rssi'",
             "The Kit tab cannot show the Wi-Fi signal or a soil probe reading out of range."),
 
+        new("0062", "setting", "terms.acceptance_enabled",
+            "select 1 from app_setting where key = 'terms.acceptance_enabled'",
+            "Staff cannot switch on terms acceptance (it stays off, and the documents stay a preview)."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

@@ -644,7 +644,7 @@ export function fetchZoneInsights(zoneId: number) {
     insights: ZoneInsight[];
     growth: ZoneGrowth | null;
     // Optional: older APIs do not send them.
-    confidence?: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+    confidence?: { level: 'high' | 'medium' | 'low'; reason: string; code?: string; args?: Record<string, string> } | null;
     nextStep?: { field: string; ask: string } | null;
     stageAssumed?: boolean | null;
     confidenceExplanation?: Explanation | null;
@@ -675,7 +675,8 @@ export type TodayZone = {
   recommendedMinutes?: number | null;
   maxRunMinutes?: number;
   why: Explanation | null;
-  confidence: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+  // code + args (RET-06): the reason in the farmer's language (lib/confidenceText.ts); reason is the English.
+  confidence: { level: 'high' | 'medium' | 'low'; reason: string; code?: string; args?: Record<string, string> } | null;
   confidenceExplanation: Explanation | null;
   nextStep: { field: string; ask: string } | null;
   setup?: ZoneSetupFacts | null;
@@ -1424,7 +1425,9 @@ export type LegalDocument = {
 export type Journey = {
   farmId: number;
   setupProgress: { done: number; total: number; label: string; tasks: { key: FarmerTaskKey; done: boolean; doneAt: string | null }[] };
-  installation: { stage: JourneyStage; label: string; text: string; live: boolean };
+  // RET-10: the account on its own (older servers leave it out).
+  account?: { status: AccountStatus; label: string };
+  installation: { stage: JourneyStage; label: string; text: string; live: boolean; status?: InstallationStatus };
   whereYouAreNow: {
     stage: JourneyStage; stageLabel: string; stageNumber: number; stageCount: number;
     steps: { key: string; label: string; done: boolean }[];
@@ -1437,8 +1440,12 @@ export type Journey = {
     irrigationMode: string; offerAutomatic: boolean; autoOfferAnswer: 'automatic' | 'manual' | null; installerChecks: InstallerCheck[];
   }[];
   helpRequests: { id: number; topic: HelpTopic; zoneId: number | null; status: 'open' | 'resolved'; createdAt: string; ownerName: string | null }[];
-  terms: { accepted: { all: boolean; termsAcceptedAt: string | null; privacyAcceptedAt: string | null }; documents: LegalDocument[] };
+  // acceptanceEnabled (RET-02): false, or missing on an older server, means a preview: no box, nothing recorded.
+  terms: { acceptanceEnabled?: boolean; accepted: { all: boolean; termsAcceptedAt: string | null; privacyAcceptedAt: string | null }; documents: LegalDocument[] };
 };
+
+export type AccountStatus = 'not_created' | 'needs_password' | 'needs_terms' | 'active';
+export type InstallationStatus = 'not_booked' | 'waiting_for_booking' | 'visit_booked' | 'installing' | 'commissioned';
 
 export function fetchJourney(farmId: string | number) {
   return authorizedRequest<Journey>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/journey`);
