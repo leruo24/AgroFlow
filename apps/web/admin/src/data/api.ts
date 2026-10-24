@@ -563,6 +563,9 @@ export const api = {
         mqttUsername: extra.get(String(h.hardware_id))?.mqttUsername ?? null,
         enrollmentStatus: extra.get(String(h.hardware_id))?.enrollmentStatus,
         offlineBacklog: extra.get(String(h.hardware_id))?.offlineBacklog ?? null,
+        enrollmentCode: extra.get(String(h.hardware_id))?.enrollmentCode ?? null,
+        enrollmentCodeExpiresAt: extra.get(String(h.hardware_id))?.enrollmentCodeExpiresAt ?? null,
+        farmId: extra.get(String(h.hardware_id))?.farmId ?? null,
       };
     });
     return hardware;

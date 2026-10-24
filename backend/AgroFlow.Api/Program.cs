@@ -362,6 +362,7 @@ app.MapDeviceEnrollmentEndpoints();
 app.MapDeviceCommandEndpoints();
 app.MapDeviceConfigEndpoints();
 app.MapZoneHardwareEndpoints();
+app.MapKitStatusEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 app.MapCommandStatusEndpoints();   // Irrigate: sent -> started -> finished

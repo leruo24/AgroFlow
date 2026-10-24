@@ -60,6 +60,7 @@ public static class BotText
                 ["zone.pump.action"] = "Please check the pump, and water the zone yourself if you can.",
 
                 ["tank.low"] = "Your tank is getting low — refill and log the reading.",
+                ["kit.connected"] = "Your AgroFlow kit for {zone} is connected. If you ever change your Wi-Fi, its setup network is {name}, password {password}. Open the app → Kit for the steps.",
 
                 ["rain.title"] = "Heavy rain expected",
                 ["rain.value"] = "Expected rainfall: {value} mm",
@@ -103,6 +104,7 @@ public static class BotText
                 ["zone.pump.action"] = "Kyk asseblief na die pomp, en gee die sone self water as jy kan.",
 
                 ["tank.low"] = "Jou tenk raak leeg — vul dit en teken die lesing aan.",
+                ["kit.connected"] = "Jou AgroFlow-stel vir {zone} is gekoppel. As jy ooit jou Wi-Fi verander, is sy opstelnetwerk {name}, wagwoord {password}. Maak die toepassing oop → Stel vir die stappe.",
 
                 ["rain.title"] = "Swaar reën verwag",
                 ["rain.value"] = "Verwagte reënval: {value} mm",
@@ -146,6 +148,7 @@ public static class BotText
                 ["zone.pump.action"] = "Tswee-tswee tlhola pompo, mme o nosetse karolo ka bowena fa o kgona.",
 
                 ["tank.low"] = "Tanka ya gago e a fela — e tlatse mme o kwale palo.",
+                ["kit.connected"] = "Sediriswa sa gago sa AgroFlow sa {zone} se golaganye. Fa o ka fetola Wi-Fi ya gago, neteweke ya sone ya go baakanya ke {name}, lefoko la sephiri {password}. Bula tiriso → Sediriswa go bona dikgato.",
 
                 ["rain.title"] = "Go lebeletswe pula e ntsi",
                 ["rain.value"] = "Pula e e lebeletsweng: {value} mm",

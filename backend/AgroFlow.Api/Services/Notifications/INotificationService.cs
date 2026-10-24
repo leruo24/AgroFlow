@@ -83,6 +83,11 @@ public interface INotificationService
     // The default body does nothing, so test doubles need no change; Telegram overrides it.
     Task NotifyAdminsAsync(string message, CancellationToken cancellationToken) => Task.CompletedTask;
 
+    // A kit was claimed for this zone (firmware enrollment). Farmers only, linked and opted in,
+    // in their language: the zone name and the kit's setup Wi-Fi, for when their Wi-Fi changes.
+    // Never the enrollment code. Default: nothing, so test doubles need no change.
+    Task NotifyKitConnectedAsync(long zoneId, string deviceId, CancellationToken cancellationToken) => Task.CompletedTask;
+
     // A possible sensor or water supply fault (MoistureFaultService), to every farm member.
     Task NotifyPossibleFaultAsync(long farmId, long zoneId, string message, CancellationToken cancellationToken)
         => Task.CompletedTask;

@@ -85,7 +85,7 @@ public class FirmwareContractTests
     public void MQTT_topics_and_payloads_match()
     {
         var sketch = Sketch();
-        Assert.Contains("FIRMWARE_VERSION = \"1.7.0\"", sketch);
+        Assert.Contains("FIRMWARE_VERSION = \"1.7.1\"", sketch);
         Assert.Contains("\"/device/\" + deviceId + \"/sensors\"", sketch);
         Assert.Contains("\"/device/\" + deviceId + \"/commands\"", sketch);
         Assert.Equal("agroflow/farm/+/device/+/sensors", MqttTopics.SensorTopicFilter);
@@ -146,6 +146,33 @@ public class FirmwareContractTests
         Assert.True(Index("saveRecentCommands()") < Index("startPumpCycle("));
         // The IDs are loaded from flash at boot.
         Assert.Contains("loadRecentCommands();", sketch);
+    }
+
+    [Fact]
+    public void The_setup_details_are_printed_at_boot_and_when_the_setup_page_opens_and_never_a_secret()
+    {
+        var sketch = Sketch().Replace("\r\n", "\n");
+        var block = sketch[sketch.IndexOf("void printKitSetupInfo() {", StringComparison.Ordinal)..];
+        block = block[..block.IndexOf("\n}", StringComparison.Ordinal)];
+        foreach (var line in new[] { "===== AgroFlow kit =====", "Device ID: %s", "Setup Wi-Fi: %s", "Password: %s", "Setup page: 192.168.4.1", "=======================" })
+            Assert.Contains(line, block);
+        // The device token and the MQTT login are never printed.
+        foreach (var secret in new[] { "deviceToken", "mqttPass", "mqttUser" }) Assert.DoesNotContain(secret, block);
+
+        var setup = sketch[sketch.IndexOf("void setup() {", StringComparison.Ordinal)..];
+        Assert.Contains("printKitSetupInfo();", setup[..setup.IndexOf("if (!isClaimed)", StringComparison.Ordinal)]);   // at boot
+        var portal = sketch[sketch.IndexOf("void openSetupPortal(const char *reason) {", StringComparison.Ordinal)..];
+        Assert.Contains("printKitSetupInfo();", portal[..portal.IndexOf("\n}", StringComparison.Ordinal)]);             // whenever it opens
+    }
+
+    [Fact]
+    public void Every_reading_carries_the_Wi_Fi_signal_and_soil_probe_check_and_the_server_reads_them()
+    {
+        var sketch = Sketch();
+        Assert.Contains("doc[\"rssi\"] = WiFi.RSSI();", sketch);
+        Assert.Contains("doc[\"soilProbeOk\"] = moistureValid(lastSoilRaw);", sketch);
+        Assert.Contains("rssi", Fields(typeof(SensorMqttPayload)));
+        Assert.Contains("soilProbeOk", Fields(typeof(SensorMqttPayload)));
     }
 
     [Fact]

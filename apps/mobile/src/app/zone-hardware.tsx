@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { copyOrShare } from '@/lib/kitStatus';
 import { router } from '@/lib/router';
 
 import { useTheme } from '@/context/ThemeContext';
@@ -206,6 +207,24 @@ export default function ZoneHardwareScreen() {
                 </Text>
               ) : null}
             </View>
+
+            {/* The kit's setup Wi-Fi, always: online or not, because it is needed exactly when the
+                kit cannot reach the internet. Low-sensitivity, like the sticker on the box. */}
+            {kit.setupNetworkName && kit.setupNetworkPassword ? (
+              <View style={styles.section} testID="kit-setup-wifi">
+                <Text selectable style={styles.rowNote}>
+                  {t('kitTab.setupWifi', { name: kit.setupNetworkName, password: kit.setupNetworkPassword })}
+                </Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('kitTab.copyPassword')}
+                  onPress={() => { void copyOrShare(`${kit.setupNetworkName} / ${kit.setupNetworkPassword}`); }}
+                  style={{ minHeight: 44, justifyContent: 'center' }} testID="kit-setup-wifi-copy">
+                  <Text style={[styles.rowNote, { color: colors.primaryDark, fontWeight: '600' }]}>
+                    {Platform.OS === 'web' ? t('kitTab.copy') : t('kitTab.copyOrShare')}
+                  </Text>
+                </Pressable>
+                <Text style={styles.footnote}>{t('kitTab.whenNeededBody')}</Text>
+              </View>
+            ) : null}
 
             {/* 2. Sensors */}
             {/* Per sensor, because they fail separately. A dead temperature

@@ -48,7 +48,16 @@ public record AdminHardwareRow(
     string EnrollmentStatus,
     string TokenStatus,
     string? MqttUsername,
-    int? OfflineBacklog = null);
+    int? OfflineBacklog = null,
+    // The kit's own setup hotspot, worked out from its device ID like the firmware does. Low
+    // sensitivity (a sticker on the box). Null until the device ID is known (at its claim).
+    string? SetupNetworkName = null,
+    string? SetupNetworkPassword = null,
+    // Staff and installers only: the enrollment code, while the kit has not claimed it and it
+    // has not expired. Gone as soon as the kit claims (the claim clears it in the database).
+    string? EnrollmentCode = null,
+    DateTimeOffset? EnrollmentCodeExpiresAt = null,
+    long? FarmId = null);
 
 // Device commands (change WiFi, open setup) and the screens that use them.
 public static class ZoneHardwareEndpoints
@@ -105,7 +114,12 @@ public static class ZoneHardwareEndpoints
                    greatest(h.last_seen, coalesce(r.recorded_at, h.last_seen)),
                    h.firmware_version, h.enrollment_status,
                    h.device_token_hash is not null, h.token_revoked_at,
-                   p.username, {backlog}
+                   p.username, {backlog},
+                   case when h.enrollment_status = 'enrolled' and h.enrollment_code_expires_at > now()
+                        then h.enrollment_code end,
+                   case when h.enrollment_status = 'enrolled' and h.enrollment_code_expires_at > now()
+                        then h.enrollment_code_expires_at end,
+                   z.farm_id
               from hardware h
               left join zone z on z.id = h.zone_id
               left join farm f on f.farm_id = z.farm_id
@@ -127,10 +141,11 @@ public static class ZoneHardwareEndpoints
             var lastSeen = reader.IsDBNull(6) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(6);
             var hasToken = !reader.IsDBNull(9) && reader.GetBoolean(9);
             var revokedAt = reader.IsDBNull(10) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(10);
+            var deviceId = reader.IsDBNull(1) ? null : reader.GetString(1);
 
             rows.Add(new AdminHardwareRow(
                 hardwareId,
-                reader.IsDBNull(1) ? null : reader.GetString(1),
+                deviceId,
                 reader.IsDBNull(2) ? "" : reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetInt64(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4),
@@ -141,7 +156,12 @@ public static class ZoneHardwareEndpoints
                 reader.IsDBNull(8) ? "unregistered" : reader.GetString(8),
                 DescribeTokenStatus(hardwareId, hasToken, revokedAt),
                 reader.IsDBNull(11) ? null : reader.GetString(11),
-                reader.IsDBNull(12) ? null : reader.GetInt32(12)));
+                reader.IsDBNull(12) ? null : reader.GetInt32(12),
+                deviceId is null ? null : DeviceSetupCommands.SetupNetworkName(deviceId),
+                deviceId is null ? null : DeviceSetupCommands.SetupNetworkPassword(deviceId),
+                reader.IsDBNull(13) ? null : reader.GetString(13),
+                reader.IsDBNull(14) ? null : reader.GetFieldValue<DateTimeOffset>(14),
+                reader.IsDBNull(15) ? null : reader.GetInt64(15)));
         }
 
         return Results.Ok(rows);

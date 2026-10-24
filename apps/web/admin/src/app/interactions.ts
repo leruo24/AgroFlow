@@ -81,7 +81,8 @@ import { plainError } from "@/lib/plainError";
 import { getAdminProfile, refreshAdminProfile, changeMyPassword } from "@/app/auth";
 import { initBell } from "@/app/bell";
 import { isStaffRole } from "@/lib/staff";
-import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace, setFarmDroughtMode, resolveStaffNotice, hideCommunityReport, saveDroughtCommunitySettings } from "@/services/agroFlowApi";
+import { dismissNotification, restoreDismissal, getEnquiries, getEnquirySummary, getEnquiryCalls, claimEnquiry, takeOverEnquiry, logEnquiryCall, closeEnquiry, anonymiseEnquiry, type Enquiry, getHandling, addZonesToFarm, getFarmToday, getRecommendedSettings, previewRecommendedSettings, useRecommendedSettings, getReportZones, setZoneMaxRun, fetchReportPdfBlob, downloadReportPdf, downloadSummaryPdf, downloadReportFile, setFarmPlace, getFarmPlace, setFarmDroughtMode, resolveStaffNotice, hideCommunityReport, saveDroughtCommunitySettings, getAdminHardware } from "@/services/agroFlowApi";
+import { kitSetupCardHtml, printKitLabel, copyText, normaliseDeviceId, DEVICE_ID_PATTERN } from "@/ui/kitSetupCard";
 
 
 /* Pickers */
@@ -662,8 +663,20 @@ async function openFarmDetail(id: number): Promise<void> {
         : `<p class="muted">Tank and pH details are unavailable.</p>`),
       section(`Users (${farmUsers.length})`, list(farmUsers.map((u) =>
         `${esc(u.name)} <span class="muted">${esc(u.email)}</span> — <b>${esc(u.status)}</b>`))),
-      section(`Installed hardware (${farmHw.length})`, list(farmHw.map((h) =>
-        `<span class="mono">${esc(h.id)}</span> ${esc(h.type)} — <b>${esc(h.status)}</b>`))),
+      section(`Installed hardware (${farmHw.length})`, farmHw.length
+        ? farmHw.map((h) => kitSetupCardHtml({
+            hardwareId: h.id,
+            deviceId: h.deviceId ?? null,
+            zoneId: h.zoneId ?? null,
+            zoneName: h.zoneName ?? null,
+            farmName: h.farm,
+            status: h.status,
+            lastSeen: h.lastSeen || null,
+            enrollmentCode: h.enrollmentCode ?? null,
+            enrollmentExpiresAt: h.enrollmentCodeExpiresAt ?? null,
+            showSteps: false,
+          })).join("")
+        : `<p class="muted">None recorded.</p>`),
       section(`Irrigation schedules (${farmSched.length})`, list(farmSched.map((s) =>
         `${esc(s.zone)} · ${esc(s.crop)} — ${esc(s.cadence)}`))),
       section(`Maintenance history (${farmJobs.length})`, list(farmJobs.map((m) =>
@@ -1256,6 +1269,20 @@ async function handleAction(el: HTMLElement): Promise<void> {
      * else's crop.
      * Each picker narrows the next: the farmer's farms, then that farm's zones. Farms are
      * filtered on ownerId, not the owner's name, because two farmers can share a name. */
+    case "copy-text": {
+      const ok = await copyText(el.dataset["copy"] ?? "");
+      return void toast(ok ? "Copied." : "Could not copy. Select the text and copy it instead.", ok ? "success" : "warn");
+    }
+    case "print-kit-label": {
+      const ok = await printKitLabel({
+        deviceId: el.dataset["deviceId"] ?? "",
+        zoneId: Number(el.dataset["zoneId"]) || null,
+        zoneName: el.dataset["zoneName"] || null,
+        farmName: el.dataset["farmName"] || null,
+      });
+      if (!ok) toast("Allow pop-ups for this site to print the label.", "warn");
+      return;
+    }
     case "register-hardware": {
       let farmers;
       let farms;
@@ -1347,6 +1374,13 @@ async function handleAction(el: HTMLElement): Promise<void> {
                   Name for this kit (optional)
                   <input type="text" data-field="kitName" placeholder="e.g. North Block controller" />
                   <span class="muted">Left blank, it is named after its zone.</span>
+                </label>
+                <label class="f">
+                  Device ID (optional)
+                  <input type="text" data-field="kitDeviceId" maxlength="12" autocomplete="off" spellcheck="false"
+                    placeholder="e.g. 0123456789AB" class="mono" />
+                  <span class="muted">12 characters. The kit prints it in Serial Monitor at boot ("Device ID: …").
+                    Leave it blank if you do not have it: it is filled in when the kit first connects.</span>
                 </label>`,
             },
             {
@@ -1369,25 +1403,23 @@ async function handleAction(el: HTMLElement): Promise<void> {
       const v = collectFields();
       const zoneId = Number(v["kitZoneId"]);
       if (!zoneId) return void toast("Choose the zone this kit will water.", "warn");
+      const deviceId = normaliseDeviceId(v["kitDeviceId"]);
+      if (deviceId && !DEVICE_ID_PATTERN.test(deviceId)) {
+        return void toast("A device ID is 12 characters, 0-9 and A-F. Leave it blank if you do not have it.", "warn");
+      }
 
       try {
         const result = await createEnrollmentCode({
           zoneId,
           deviceName: v["kitName"]?.trim() || undefined,
           deviceType: v["kitType"] || KIT_TYPES[0].value,
+          deviceId: deviceId || undefined,
         });
 
         closeDrawer();
-
-        // A modal, not a toast: this is a credential the installer has to write down, and a toast
-        // disappears while they look for a pen.
-        showErrorModal(
-          "Enrollment code",
-          `${result.enrollmentCode}\n\n` +
-            `Give this to the installer. They enter it on the kit's setup page, once.\n` +
-            `It expires ${fmtDate(result.expiresAt)} and cannot be shown again - nothing stores it in a readable form.`,
-        );
-
+        // The installer's card: the code, its expiry and the steps. A drawer, not a toast: it is a
+        // credential the installer has to write down. It fills in by itself when the kit claims.
+        openKitSetupResult(result, { deviceId: deviceId || null, zoneId, ...kitWizardNames() });
         return void refresh();
       } catch (e) {
         showErrorModal(
@@ -1611,6 +1643,17 @@ async function handleAction(el: HTMLElement): Promise<void> {
       return openDrawer({
         title: h.id,
         subtitle: `${h.type} · ${h.farm}`,
+        bodyHtml: kitSetupCardHtml({
+          hardwareId: h.id,
+          deviceId: h.deviceId ?? null,
+          zoneId: h.zoneId ?? null,
+          zoneName: h.zoneName ?? null,
+          farmName: h.farm,
+          status: h.status,
+          lastSeen: h.lastSeen || null,
+          enrollmentCode: h.enrollmentCode ?? null,
+          enrollmentExpiresAt: h.enrollmentCodeExpiresAt ?? null,
+        }),
         fields: [
           { label: "Status", value: h.status },
           { label: "Maintenance", value: h.maintenanceState },
@@ -3410,6 +3453,49 @@ function wireRegisterFarmZones(): void {
 /* The kit wizard's two dependent steps. Each is rebuilt when the step before it changes, so
  * a farm list never shows the previous farmer's farms. Rebuilding also clears the hidden
  * field, so a stale zone id cannot be submitted. */
+/* The farm and zone names the wizard showed, for the result card and the label. */
+let lastKitWizardNames: { zoneName: string; farmName: string } = { zoneName: "", farmName: "" };
+const kitWizardNames = () => ({ ...lastKitWizardNames });
+
+/* After "Create the enrollment code": the kit setup card with the code, its expiry and the
+ * three steps. Until the kit claims, it asks the API every 5 s; once the kit has a device ID the
+ * card fills in its hotspot (and the code is gone, as the claim cleared it). */
+function openKitSetupResult(
+  result: { hardwareId: number; enrollmentCode: string; expiresAt: string },
+  known: { deviceId: string | null; zoneId: number; zoneName: string; farmName: string },
+): void {
+  const card = (deviceId: string | null, claimed: boolean): string => `
+    <div id="kitSetupResult" data-hardware-id="${result.hardwareId}">
+      ${claimed
+        ? `<p class="ok" data-kit-claimed>The kit is connected. Its setup details are below for later (a new router or a move).</p>`
+        : `<p class="muted">Give this card to the installer. The enrollment code works once, on this kit's setup page.</p>`}
+      ${kitSetupCardHtml({
+        hardwareId: result.hardwareId,
+        deviceId,
+        zoneId: known.zoneId,
+        zoneName: known.zoneName,
+        farmName: known.farmName,
+        enrollmentCode: claimed ? null : result.enrollmentCode,
+        enrollmentExpiresAt: claimed ? null : result.expiresAt,
+      })}
+    </div>`;
+
+  openDrawer({ title: "Kit setup card", subtitle: [known.farmName, known.zoneName].filter(Boolean).join(" · "), wide: true, bodyHtml: card(known.deviceId, false) });
+
+  const poll = window.setInterval(() => {
+    const host = document.getElementById("kitSetupResult");
+    if (!host || host.dataset["hardwareId"] !== String(result.hardwareId)) return void window.clearInterval(poll);
+    void getAdminHardware()
+      .then((rows) => {
+        const row = rows.find((r) => r.hardwareId === result.hardwareId);
+        if (!row?.deviceId || row.enrollmentStatus === "enrolled") return;
+        window.clearInterval(poll);
+        host.outerHTML = card(row.deviceId, true);
+      })
+      .catch(() => undefined);   // try again in 5 s
+  }, 5000);
+}
+
 function wireKitWizard(farms: Farm[]): void {
   const wiz = document.querySelector<HTMLElement>('[data-wizard="register-hardware"]');
   if (!wiz) return;
@@ -3433,6 +3519,7 @@ function wireKitWizard(farms: Farm[]): void {
   const renderReview = (): void => {
     const v = collectFields();
     const kit = KIT_TYPES.find((k) => k.value === v["kitType"]);
+    lastKitWizardNames = { zoneName: chosenZoneName, farmName: chosenFarmName };
 
     review.innerHTML = detailList([
       ["Farm", esc(chosenFarmName || "Not chosen")],
@@ -3443,7 +3530,13 @@ function wireKitWizard(farms: Farm[]): void {
       <p class="muted">
         Creating the code does not install anything. It makes a single-use credential,
         valid for 24 hours, that the installer enters on the kit once.
-      </p>`;
+      </p>` + kitSetupCardHtml({
+        deviceId: normaliseDeviceId(v["kitDeviceId"]) || null,
+        zoneId: Number(v["kitZoneId"]) || null,
+        zoneName: chosenZoneName,
+        farmName: chosenFarmName,
+        codePending: true,
+      });
   };
 
   wiz.addEventListener("picker:change", (event) => {

@@ -122,6 +122,8 @@ first** on the same topic, with two extra fields:
 |---|---|
 | `recordedAt` | when the board took the reading (UTC, from NTP). Absent on a live reading. |
 | `seq` | the board's own counter, increasing by one per kept reading |
+| `rssi` | the kit's Wi-Fi signal in dBm when it sent this (firmware 1.7.1+). The API keeps the latest as `hardware.wifi_rssi` (migration 0061) for the Kit tab. |
+| `soilProbeOk` | whether the kit's last soil sample was inside the valid raw range, 200..4095 (firmware 1.7.1+). An out-of-range sample is never sent as a reading, so this is how the Kit tab can say "check the probe". Kept as `hardware.soil_probe_ok`. |
 | `backlog` | readings still waiting to upload after this one (firmware 1.7.0+, on every reading, live or kept). The API keeps the latest on the kit's record (`hardware.offline_backlog`, migration 0060). |
 
 The API (`ReadingAge`, `SensorReadingProcessor`) stores a kept reading with its

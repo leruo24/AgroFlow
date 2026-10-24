@@ -623,6 +623,13 @@ export type AdminHardwareRow = {
   mqttUsername: string | null;
   /** Readings still waiting to upload on the kit (firmware 1.7.0+, migration 0060); null if not reported. */
   offlineBacklog?: number | null;
+  /** The kit's setup hotspot, from its device ID; null until the kit has claimed. */
+  setupNetworkName?: string | null;
+  setupNetworkPassword?: string | null;
+  /** Staff only: the enrollment code while it is valid and unused. */
+  enrollmentCode?: string | null;
+  enrollmentCodeExpiresAt?: string | null;
+  farmId?: number | null;
 };
 
 export function getAdminHardware(): Promise<AdminHardwareRow[]> {
@@ -749,8 +756,8 @@ export type EnrollmentCodeResult = {
 };
 
 /* The code the installer types into the kit's setup page. Single-use, 24 hours, and the
- * only authorisation /api/devices/claim needs, so there is no "show it again": this response
- * is the only time it exists. */
+ * only authorisation /api/devices/claim needs. Staff can see it again on the kit's card while
+ * it is valid and unused (GET /api/admin/hardware); the claim clears it. */
 /* The kit types the claim flow can finish. One entry on purpose: only the ESP32 irrigation
  * node's firmware claims a hardware row, so other types would stay enrolled forever and
  * never come online. A new kind of board goes here and the wizard picks it up. */
@@ -766,6 +773,9 @@ export function createEnrollmentCode(input: {
   zoneId: number;
   deviceName?: string;
   deviceType?: string;
+  /** Optional: when the installer already has it (Serial Monitor prints it at boot). The kit's
+   *  claim must then match it. */
+  deviceId?: string;
 }): Promise<EnrollmentCodeResult> {
   return authorizedJson<EnrollmentCodeResult>("/api/devices/enroll", "POST", input);
 }

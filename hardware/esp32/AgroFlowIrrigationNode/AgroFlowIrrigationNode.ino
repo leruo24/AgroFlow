@@ -1,4 +1,4 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.7.0).
+// AgroFlow irrigation node - ESP32 firmware (v1.7.1).
 //
 // WiFiManager setup portal + one-time enrollment code -> /api/devices/claim.
 // MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors as
@@ -55,6 +55,11 @@
 //      the pump moves, so a reboot mid-run cannot repeat it either. Logic: CommandIds.h.
 //  13. Backlog in the kit's status (v1.7.0): every published reading carries "backlog", the
 //      number of readings still waiting to upload. The API keeps it on the kit's record.
+//  14. Setup details on Serial Monitor (v1.7.1): at boot and whenever the setup page opens, the
+//      kit prints its device ID, setup Wi-Fi name and password and the setup page address, so
+//      nobody has to work them out. Every reading also carries "rssi" (the Wi-Fi signal, dBm)
+//      and "soilProbeOk" (its last soil sample was inside the valid raw range), for the farmer's
+//      Kit tab. Reporting only: nothing about watering or the setup page changes.
 //
 // Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
 // DHTesp ("DHT sensor library for ESPx", beegee_tokyo).
@@ -89,7 +94,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Update this and Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json each release.
-const char *FIRMWARE_VERSION = "1.7.0";
+const char *FIRMWARE_VERSION = "1.7.1";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -371,6 +376,18 @@ String apPassword() {
   return "AF-" + id.substring(id.length() - 6);
 }
 
+// The details an installer or farmer needs to reach the setup page, printed at boot and
+// whenever the setup page opens (14. above). The hotspot password is low-sensitivity, like the
+// sticker on the box; the device token and MQTT login are never printed.
+void printKitSetupInfo() {
+  Serial.println("===== AgroFlow kit =====");
+  Serial.printf("Device ID: %s\n", getDeviceId().c_str());
+  Serial.printf("Setup Wi-Fi: %s\n", apName().c_str());
+  Serial.printf("Password: %s\n", apPassword().c_str());
+  Serial.println("Setup page: 192.168.4.1");
+  Serial.println("=======================");
+}
+
 void buildMqttTopics() {
   String deviceId = getDeviceId();
   mqttSensorsTopic  = "agroflow/farm/" + String(FARM_ID) + "/device/" + deviceId + "/sensors";
@@ -543,6 +560,10 @@ bool postSensorReading(const char *sensorType, float value, uint32_t recordedEpo
   // Readings still waiting after this one: a replayed reading is still in the ring.
   size_t waiting = readingBuffer.size();
   doc["backlog"] = (unsigned)(recordedEpoch > 0 && waiting > 0 ? waiting - 1 : waiting);
+  // The kit's state now, sent with every reading (14. above): Wi-Fi signal, and whether its last
+  // soil sample was in range. An out-of-range sample is never sent as a reading.
+  if (WiFi.status() == WL_CONNECTED) doc["rssi"] = WiFi.RSSI();
+  if (lastSoilRaw >= 0) doc["soilProbeOk"] = moistureValid(lastSoilRaw);
   String body;
   serializeJson(doc, body);
   return mqttClient.publish(mqttSensorsTopic.c_str(), body.c_str());
@@ -1016,6 +1037,7 @@ void bindLocalRoutes() {
 void openSetupPortal(const char *reason) {
   if (portalActive) return;
   Serial.printf("Opening setup page (%s): join WiFi \"%s\"\n", reason, apName().c_str());
+  printKitSetupInfo();
   wm.setConfigPortalBlocking(false);
   wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_SECONDS);
   wm.startConfigPortal(apName().c_str(), apPassword().c_str());
@@ -1147,6 +1169,7 @@ void setup() {
   Serial.print(FIRMWARE_VERSION);
   Serial.print(" - device ");
   Serial.println(getDeviceId());
+  printKitSetupInfo();
 
   if (!isClaimed) {
     // First-time setup (or after factory reset): blocking portal with the enrollment code field.
