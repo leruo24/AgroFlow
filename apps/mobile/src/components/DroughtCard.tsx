@@ -51,7 +51,7 @@ export function DroughtCard() {
 
   return <View style={[styles.card, view.active && styles.cardOn]} testID="drought-card">
     <Text accessibilityRole="header" style={styles.title}>{view.active ? t('drought.on') : t('drought.budget')}</Text>
-    {view.budget ? <Text style={styles.body} testID="drought-budget">{view.budget.text}</Text>
+    {view.budget ? <Text style={styles.body} testID="drought-budget">{budgetText(t, view.budget)}</Text>
       : <Text style={styles.help} testID="drought-no-budget">{noBudgetText(t, view)}</Text>}
     {view.active ? <>
       <Text style={styles.help} testID="drought-reason">{view.reason}</Text>
@@ -66,12 +66,21 @@ export function DroughtCard() {
       </Pressable>)}
     </View>
     {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
-    <Text style={styles.help} testID="drought-honesty">{view.honesty}</Text>
+    {/* RET-06: the disclaimer in the farmer's language (the server's DroughtEvaluator.Honesty is the English). */}
+    <Text style={styles.help} testID="drought-honesty">{t('drought.honesty')}</Text>
   </View>;
 }
 
 type Styles = ReturnType<typeof createStyles>;
 type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+// RET-06: "You have about X L. At normal watering that lasts N days; in drought mode it lasts M days."
+// from the numbers, in the farmer's language (DroughtRules.BudgetText is the English).
+const LONG_TIME = 2147483647;   // int.MaxValue on the server: no use to divide by
+export function budgetText(t: T, b: { litresLeft: number; normalDays: number; droughtDays: number }): string {
+  const days = (n: number) => n >= LONG_TIME ? t('drought.days.long') : n === 1 ? t('drought.days.one') : t('drought.days.many', { n });
+  return t('drought.budgetText', { litres: String(Math.round(b.litresLeft)).replace(/\B(?=(\d{3})+(?!\d))/g, ' '), normal: days(b.normalDays), drought: days(b.droughtDays) });
+}
 
 // Why there is no budget, naming the one thing missing (AF-06). A saved tank is never called
 // "not set up" just because the days could not be worked out.

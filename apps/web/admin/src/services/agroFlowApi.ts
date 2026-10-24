@@ -765,7 +765,7 @@ export const KIT_TYPES = [
   {
     value: "ESP32",
     label: "ESP32 irrigation node",
-    secondary: "Soil moisture, valve control and flow metering on one board",
+    secondary: "Soil moisture, temperature and humidity, and a pump switch on one board",
   },
 ] as const;
 
