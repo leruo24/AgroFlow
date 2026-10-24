@@ -83,13 +83,15 @@ public static class JourneyEndpoints
         if (!await JourneyStore.FarmerCanAccessFarmAsync(connection, farmId, userId, ct)) return Results.NotFound(new { error = "Farm not found." });
         if (!await JourneyStore.ReadyAsync(connection, ct)) return Results.Json(new { error = JourneyStore.NeedsMigration }, statusCode: StatusCodes.Status409Conflict);
         await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct);
-        return Results.Ok(await JourneyViewAsync(connection, farmId, userId, forStaff: false, request, ct));
+        return Results.Ok(await JourneyViewAsync(connection, farmId, userId, forStaff: false, request, await settings.TermsAcceptanceOpenAsync(ct), ct));
     }
 
     // The shape both the farmer's Home and the staff case read (docs/audit/ui-contracts.md).
-    internal static async Task<object> JourneyViewAsync(NpgsqlConnection connection, long farmId, Guid? person, bool forStaff, HttpRequest request, CancellationToken ct)
+    // termsOpen: staff have switched acceptance on and no document is a draft (RET-02). While it is
+    // off the terms are a preview: shown, never asked for, never recorded.
+    internal static async Task<object> JourneyViewAsync(NpgsqlConnection connection, long farmId, Guid? person, bool forStaff, HttpRequest request, bool termsOpen, CancellationToken ct)
     {
-        var facts = await JourneyStore.FactsAsync(connection, farmId, person, ct);
+        var facts = await JourneyStore.FactsAsync(connection, farmId, person, termsOpen, ct);
         var view = Journey.Describe(facts);
         var zones = await JourneyStore.ZonesAsync(connection, farmId, ct);
         var tasks = await TasksAsync(connection, farmId, ct);
@@ -111,11 +113,24 @@ public static class JourneyEndpoints
                     doneAt = tasks.TryGetValue(t, out var at) ? at : (DateTimeOffset?)null,
                 }),
             },
+            // RET-10: the account, the farmer's details and the installation are three separate things.
+            account = new
+            {
+                status = Journey.AccountStatus(facts),
+                label = Journey.AccountStatus(facts) switch
+                {
+                    Journey.AccountActiveStatus => "Account: active",
+                    Journey.AccountNeedsPassword => "Account: choose your own password",
+                    Journey.AccountNeedsTerms => "Account: accept the terms",
+                    _ => "Account: not created yet",
+                },
+            },
             installation = new
             {
+                status = Journey.InstallationStatus(view.Stage),
                 stage = view.Stage,
                 label = view.StageLabel,
-                text = $"Installation: {InstallationText(view.Stage)}",
+                text = $"Installation: {InstallationText(Journey.InstallationStatus(view.Stage))}",
                 live = view.Live,
             },
             whereYouAreNow = new
@@ -148,19 +163,21 @@ public static class JourneyEndpoints
             helpRequests = help,
             terms = new
             {
+                // false: the documents are a preview ("not yet in effect"): no checkbox, nothing recorded.
+                acceptanceEnabled = termsOpen,
                 accepted = termsAccepted,
                 documents = LegalDocuments.All.Select(d => LegalDocuments.Describe(d, PublicBase(request))),
             },
         };
     }
 
-    private static string InstallationText(string stage) => stage switch
+    private static string InstallationText(string status) => status switch
     {
-        Journey.Enquiry or Journey.Details or Journey.ServiceAgreed or Journey.AccountActive => "not booked yet",
-        Journey.ReadyForInstallation => "waiting for booking",
-        Journey.VisitBooked => "visit booked",
-        Journey.Installing => "installing",
-        _ => "commissioned",
+        "waiting_for_booking" => "waiting for booking",
+        "visit_booked" => "visit booked",
+        "installing" => "installing",
+        "commissioned" => "commissioned",
+        _ => "not booked yet",
     };
 
     private static object CheckView(string item, JourneyStore.ZoneRow z, bool forStaff)
@@ -246,15 +263,15 @@ public static class JourneyEndpoints
 
     // A task is finished only when its saved data is there (or a help request covers the gap), so
     // "Your details: X of 4" is never just a button press.
-    internal static async Task<string?> TaskProblemAsync(NpgsqlConnection connection, long farmId, Guid userId, string task, CancellationToken ct)
+    internal static async Task<string?> TaskProblemAsync(NpgsqlConnection connection, long farmId, Guid userId, string task, bool termsOpen, CancellationToken ct)
     {
         string sql = task switch
         {
             "preferences" => """
                 select case
                   when coalesce((select must_change_password from profile where id = $2), true) then 'Choose your own password first.'
-                  when not exists (select 1 from terms_acceptance where profile_id = $2 and document = 'terms' and version = $3)
-                    or not exists (select 1 from terms_acceptance where profile_id = $2 and document = 'privacy' and version = $4)
+                  when $5 and (not exists (select 1 from terms_acceptance where profile_id = $2 and document = 'terms' and version = $3)
+                    or not exists (select 1 from terms_acceptance where profile_id = $2 and document = 'privacy' and version = $4))
                     then 'Read and accept the terms and the privacy notice first.'
                   end
                 """,
@@ -281,17 +298,19 @@ public static class JourneyEndpoints
         cmd.Parameters.AddWithValue(userId);
         cmd.Parameters.AddWithValue(LegalDocuments.Terms.Version);
         cmd.Parameters.AddWithValue(LegalDocuments.Privacy.Version);
+        cmd.Parameters.AddWithValue(termsOpen);
         return await cmd.ExecuteScalarAsync(ct) as string;
     }
 
-    private static async Task<IResult> FinishTaskAsync(long farmId, string task, ClaimsPrincipal user, NpgsqlDataSource dataSource, HttpRequest request, CancellationToken ct)
+    private static async Task<IResult> FinishTaskAsync(long farmId, string task, ClaimsPrincipal user, NpgsqlDataSource dataSource, AppSettingsStore settings, HttpRequest request, CancellationToken ct)
     {
         if (!TryUser(user, out var userId)) return Results.Unauthorized();
         if (!Journey.FarmerTasks.Contains(task)) return Results.BadRequest(new { error = "The tasks are preferences, farm, water and crops." });
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         if (!await JourneyStore.FarmerCanAccessFarmAsync(connection, farmId, userId, ct)) return Results.NotFound(new { error = "Farm not found." });
         if (!await JourneyStore.ReadyAsync(connection, ct)) return Results.Json(new { error = JourneyStore.NeedsMigration }, statusCode: StatusCodes.Status409Conflict);
-        if (await TaskProblemAsync(connection, farmId, userId, task, ct) is { } problem)
+        var termsOpen = await settings.TermsAcceptanceOpenAsync(ct);
+        if (await TaskProblemAsync(connection, farmId, userId, task, termsOpen, ct) is { } problem)
             return Results.BadRequest(new { error = problem, task });
 
         // Saying it twice is fine: the first time is kept.
@@ -303,7 +322,7 @@ public static class JourneyEndpoints
             cmd.Parameters.AddWithValue(task);
             await cmd.ExecuteNonQueryAsync(ct);
         }
-        return Results.Ok(await JourneyViewAsync(connection, farmId, userId, forStaff: false, request, ct));
+        return Results.Ok(await JourneyViewAsync(connection, farmId, userId, forStaff: false, request, termsOpen, ct));
     }
 
     public static readonly string[] HelpTopics =
@@ -364,9 +383,12 @@ public static class JourneyEndpoints
         });
     }
 
-    private static async Task<IResult> AcceptTermsAsync(TermsAcceptBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AuditLog audit, CancellationToken ct)
+    private static async Task<IResult> AcceptTermsAsync(TermsAcceptBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AppSettingsStore settings, AuditLog audit, CancellationToken ct)
     {
         if (!TryUser(user, out var userId)) return Results.Unauthorized();
+        // RET-02: a preview (acceptance switched off, or a draft document) is never recorded.
+        if (!await settings.TermsAcceptanceOpenAsync(ct))
+            return Results.Conflict(new { error = "The terms and the privacy notice are a preview and not yet in effect, so there is nothing to accept yet.", preview = true });
         if (body.Accepted is not true) return Results.BadRequest(new { error = "Tick the box to accept the terms and the privacy notice." });
         // Only the current versions can be accepted: an older screen cannot record a version the
         // server no longer shows.
@@ -470,14 +492,14 @@ public static class JourneyEndpoints
     // Staff
     // ---------------------------------------------------------------------------------------
 
-    private static async Task<IResult> GetCaseAsync(long farmId, NpgsqlDataSource dataSource, HttpRequest request, CancellationToken ct)
+    private static async Task<IResult> GetCaseAsync(long farmId, NpgsqlDataSource dataSource, AppSettingsStore settings, HttpRequest request, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         if (!await JourneyStore.ReadyAsync(connection, ct)) return Results.Json(new { error = JourneyStore.NeedsMigration }, statusCode: StatusCodes.Status409Conflict);
         await JourneyStore.RefreshCommissioningAsync(connection, farmId, ct);
         var c = await JourneyStore.CaseAsync(connection, farmId, ct);
         if (c is null) return Results.NotFound(new { error = "No such farm." });
-        var journey = await JourneyViewAsync(connection, farmId, c.FarmerId, forStaff: true, request, ct);
+        var journey = await JourneyViewAsync(connection, farmId, c.FarmerId, forStaff: true, request, await settings.TermsAcceptanceOpenAsync(ct), ct);
         var visits = new List<object>();
         await using (var cmd = new NpgsqlCommand("""
             select id, kind, scheduled_for, installer_name, installer_profile_id, status, notes, created_at, started_at, completed_at
@@ -517,7 +539,7 @@ public static class JourneyEndpoints
 
     public static readonly string[] ServiceStatuses = { "not_agreed", "sponsored", "paying", "trial", "paused", "ended" };
 
-    private static async Task<IResult> UpdateCaseAsync(long farmId, CaseUpdateBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AuditLog audit, HttpRequest request, CancellationToken ct)
+    private static async Task<IResult> UpdateCaseAsync(long farmId, CaseUpdateBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AppSettingsStore settings, AuditLog audit, HttpRequest request, CancellationToken ct)
     {
         if (body.NextAction is { Length: > 300 }) return Results.BadRequest(new { error = "Keep the next action under 300 characters." });
         if (body.ServiceStatus is { } st && !ServiceStatuses.Contains(st)) return Results.BadRequest(new { error = "Unknown service status." });
@@ -557,7 +579,7 @@ public static class JourneyEndpoints
             await cmd.ExecuteNonQueryAsync(ct);
         }
         await audit.WriteAsync(user, "case.updated", "service_case", caseId.ToString(), farmId, body, ct);
-        return await GetCaseAsync(farmId, dataSource, request, ct);
+        return await GetCaseAsync(farmId, dataSource, settings, request, ct);
     }
 
     private static async Task<IResult> BookVisitAsync(long farmId, VisitBody body, ClaimsPrincipal user, NpgsqlDataSource dataSource, AuditLog audit, HttpRequest request, CancellationToken ct)

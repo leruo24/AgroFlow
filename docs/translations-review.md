@@ -1092,3 +1092,77 @@ The guide on the Kit tab and in the pocket field guide. Afrikaans and Setswana a
 | `kitHelp.resetHow` | Switch the kit off and on 5 times quickly. Each time, switch it off again within 10 seconds. | Skakel die stel 5 keer vinnig af en aan. Skakel dit elke keer binne 10 sekondes weer af. | Tima o bo o tshuba sediriswa ga 5 ka bonako. Nako nngwe le nngwe, se time gape mo metsotswaneng e le 10. |
 | `kitHelp.resetWarn` | Warning: this wipes the kit's Wi-Fi and unlinks it from your farm. The kit does not water until AgroFlow staff make a new enrollment code and connect it again. | Waarskuwing: dit vee die stel se Wi-Fi uit en ontkoppel dit van jou plaas. Die stel lei nie nat nie totdat AgroFlow-personeel 'n nuwe registrasiekode maak en dit weer koppel. | Tlhokomeliso: se se phimola Wi-Fi ya sediriswa mme se se kgaola mo polaseng ya gago. Sediriswa ga se nosetse go fitlha badiri ba AgroFlow ba dira khoutu e ntšha ya kwadiso mme ba se golaganya gape. |
 | `kitHelp.print` | Open the printable guide | Maak die drukbare gids oop | Bula kaedi e e ka gatisiwang |
+
+## Live web retest fixes, 24 October 2026 (fix/retest-logic)
+
+RET-01 (Drip and the Home summary follow the real state), RET-02 (terms shown as a preview while acceptance is off), RET-06 (the confidence reason, "Why am I seeing this?", the weather words, the map controls and the drought disclaimer as catalogue strings), RET-10 (Account, Your details and Installation as three lines), and the water-use wording. Afrikaans and Setswana are drafts. `usage.estimate` replaces the earlier wording in all three languages. The confidence sentence is assembled as "{level}: {basis}; {because}.", so please check that the parts read naturally together in Afrikaans and Setswana. `confidence.level.medium` is "Medium" in Afrikaans on purpose (the app's existing word); change it if a better one is preferred.
+
+| Key | English | Afrikaans (draft) | Setswana (draft) |
+|---|---|---|---|
+| `terms.preview` | Preview – not yet in effect | Voorskou – nog nie van krag nie | Ponelopele – ga e ise e simolole go dira |
+| `terms.previewBody` | These documents are a preview and not yet in effect. You do not need to accept anything now: AgroFlow will ask you when the approved versions are ready. | Hierdie dokumente is 'n voorskou en nog nie van krag nie. Jy hoef nou niks te aanvaar nie: AgroFlow sal jou vra wanneer die goedgekeurde weergawes gereed is. | Dikwalo tse ke ponelopele mme ga di ise di simolole go dira. Ga o tlhoke go amogela sepe jaanong: AgroFlow e tla go botsa fa dikgatiso tse di dumeletsweng di siametse. |
+| `journey.account.not_created` | Account: not created yet | Rekening: nog nie geskep nie | Akhaonto: ga e ise e dirwe |
+| `journey.account.needs_password` | Account: choose your own password | Rekening: kies jou eie wagwoord | Akhaonto: tlhopha lefoko la gago la sephiri |
+| `journey.account.needs_terms` | Account: accept the terms | Rekening: aanvaar die bepalings | Akhaonto: amogela dipeelo |
+| `journey.account.active` | Account: active | Rekening: aktief | Akhaonto: e a dira |
+| `journey.install.not_booked` | not booked yet | nog nie bespreek nie | ga e ise e bukiwe |
+| `journey.install.waiting_for_booking` | waiting for booking | wag vir bespreking | e emetse go bukiwa |
+| `journey.install.visit_booked` | visit booked | besoek bespreek | ketelo e bukilwe |
+| `journey.install.installing` | installing | word geïnstalleer | go a tsenngwa |
+| `journey.install.commissioned` | connected and tested | gekoppel en getoets | e golaganye e bile e lekilwe |
+| `farmState.checking` | Checking your zones… | Kyk na jou sones… | Go tlhatlhoba dikarolo tsa gago… |
+| `farmState.unknown` | Your zones could not be checked just now. Open Kit to try again. | Jou sones kon nie nou nagegaan word nie. Maak Stel oop om weer te probeer. | Dikarolo tsa gago ga di a kgona go tlhatlhobiwa jaanong. Bula Sediriswa go leka gape. |
+| `farmState.fault` | {zone}: the kit needs attention. Open Kit to see what. | {zone}: die stel het aandag nodig. Maak Stel oop om te sien wat. | {zone}: sediriswa se tlhoka tlhokomelo. Bula Sediriswa go bona gore ke eng. |
+| `farmState.no_kit` | {zone} has no kit yet. Your installer connects it at the installation visit. | {zone} het nog nie 'n stel nie. Jou installeerder koppel dit by die installasiebesoek. | {zone} ga e ise e nne le sediriswa. Motsenyi wa gago o se golaganya ka ketelo ya go tsenya. |
+| `farmState.no_readings` | {zone}: waiting for the kit's first soil reading. | {zone}: wag vir die stel se eerste grondlesing. | {zone}: go emetswe palo ya ntlha ya mmu go tswa mo sedirisweng. |
+| `farmState.stale` | {zone}: no recent readings from the kit. Check it has power and Wi-Fi. | {zone}: geen onlangse lesings van die stel nie. Kyk of dit krag en Wi-Fi het. | {zone}: ga go na dipalo tsa bosheng go tswa mo sedirisweng. Tlhatlhoba gore se na le motlakase le Wi-Fi. |
+| `farmState.low_confidence` | Advice for {zone} is a rough estimate for now. Tap to see what would make it better. | Advies vir {zone} is vir nou 'n rowwe skatting. Tik om te sien wat dit beter sal maak. | Kgakololo ya {zone} ke kakanyo fela ka nako e. Tobetsa go bona se se ka e tokafatsang. |
+| `farmState.normal` | All your zones look good today. | Al jou sones lyk goed vandag. | Dikarolo tsotlhe tsa gago di lebega sentle gompieno. |
+| `drip.unread` | You have {count} new alerts. Tap to check. | Jy het {count} nuwe waarskuwings. Tik om te kyk. | O na le ditlhagiso tse dintšha di le {count}. Tobetsa go tlhatlhoba. |
+| `drip.unreadOne` | You have 1 new alert. Tap to check. | Jy het 1 nuwe waarskuwing. Tik om te kyk. | O na le tlhagiso e ntšha e le 1. Tobetsa go tlhatlhoba. |
+| `confidence.level.high` | High | Hoog | Kwa godimo |
+| `confidence.level.medium` | Medium | Medium | Magareng |
+| `confidence.level.low` | Low | Laag | Kwa tlase |
+| `confidence.no_crop` | Low: no crop is set, so its water use is unknown. | Laag: geen gewas is gekies nie, so sy waterverbruik is onbekend. | Kwa tlase: ga go a tlhophiwa jalo, ka jalo tiriso ya yone ya metsi ga e itsiwe. |
+| `confidence.no_weather` | Low: there is no weather for this farm yet. | Laag: daar is nog geen weer vir hierdie plaas nie. | Kwa tlase: ga go ise go nne le maemo a loapi a polase e. |
+| `confidence.all_agree` | High: your sensor, setup and the weather all agree. | Hoog: jou sensor, opstelling en die weer stem almal saam. | Kwa godimo: sesupo sa gago, dipeakanyo le maemo a loapi di dumalana. |
+| `confidence.sensor_disagree` | Medium: the crop and weather balance and the field sensor disagree; check the zone before acting. | Medium: die gewas- en weerbalans en die veldsensor stem nie saam nie; kyk na die sone voor jy iets doen. | Magareng: tekatekano ya jalo le maemo a loapi le sesupo sa tshimo ga di dumalane; tlhatlhoba karolo pele o dira sepe. |
+| `confidence.sentence.full` | {level}: {basis}; {because}. | {level}: {basis}; {because}. | {level}: {basis}; {because}. |
+| `confidence.sentence.basisOnly` | {level}: {basis}. | {level}: {basis}. | {level}: {basis}. |
+| `confidence.basis.weather` | based on the weather | gebaseer op die weer | go ikaegile ka maemo a loapi |
+| `confidence.basis.own_check` | based on the weather and your own soil check | gebaseer op die weer en jou eie grondtoets | go ikaegile ka maemo a loapi le tlhatlhobo ya gago ya mmu |
+| `confidence.because.no_readings` | based on the weather and your crop; no soil readings yet | gebaseer op die weer en jou gewas; nog geen grondlesings nie | go ikaegile ka maemo a loapi le jalo ya gago; ga go ise go nne le dipalo tsa mmu |
+| `confidence.because.kit_quiet` | your kit hasn't sent data since {date} | jou stel het sedert {date} nie data gestuur nie | sediriswa sa gago ga se a romela tshedimosetso go tloga ka {date} |
+| `confidence.because.kit_never` | your kit hasn't sent any data yet | jou stel het nog geen data gestuur nie | sediriswa sa gago ga se ise se romele tshedimosetso |
+| `confidence.because.crop` | no crop is set | geen gewas is gekies nie | ga go a tlhophiwa jalo |
+| `confidence.because.planting_date` | the planting date is missing, so peak growth is assumed | die plantdatum ontbreek, so piekgroei word aanvaar | letlha la go jala ga le yo, ka jalo go akanngwa kgolo e e kwa godimo |
+| `confidence.because.flow_rate` | the pump's flow rate is missing | die pomp se vloeitempo ontbreek | lebelo la go elela la pompo ga le yo |
+| `confidence.because.area` | the size of this zone is missing | die grootte van hierdie sone ontbreek | bogolo jwa karolo e ga bo yo |
+| `confidence.because.soil` | the soil type is missing, so loam is assumed | die grondsoort ontbreek, so leem word aanvaar | mofuta wa mmu ga o yo, ka jalo go akanngwa mmu o o tlhakaneng |
+| `confidence.because.calibration` | the soil sensor has not been set up | die grondsensor is nog nie opgestel nie | sesupo sa mmu ga se ise se baakanngwe |
+| `insights.confidenceBadge` | {level} confidence | {level} vertroue | Boikanyo jo bo {level} |
+| `insights.confidenceA11y` | Advice confidence: {level}. {reason} | Advies se vertroue: {level}. {reason} | Boikanyo jwa kgakololo: {level}. {reason} |
+| `why.link` | Why am I seeing this? | Hoekom sien ek dit? | Ke bonela eng se? |
+| `weatherWord.clear` | Clear sky | Helder lug | Loapi lo lo phepa |
+| `weatherWord.partlyCloudy` | Partly cloudy | Gedeeltelik bewolk | Maru a le mannye |
+| `weatherWord.cloudy` | Cloudy | Bewolk | Go na le maru |
+| `weatherWord.fog` | Fog | Mis | Mouwane |
+| `weatherWord.rain` | Rain | Reën | Pula |
+| `weatherWord.snow` | Snow | Sneeu | Kapoko |
+| `weatherWord.showers` | Rain showers | Reënbuie | Dipula tse dikhutshwane |
+| `weatherWord.thunder` | Thunderstorms | Donderstorms | Dikgadima le maru a pula |
+| `weatherWord.unavailable` | Conditions unavailable | Toestande nie beskikbaar nie | Maemo ga a bonale |
+| `weatherWord.humidity` | Humidity {pct}% | Humiditeit {pct}% | Bongola {pct}% |
+| `weatherWord.wind` | Wind {kmh} km/h | Wind {kmh} km/h | Phefo {kmh} km/h |
+| `weatherWord.rainChance` | Rain chance {pct}% | Kans vir reën {pct}% | Kgonagalo ya pula {pct}% |
+| `weatherWord.updated` | Updated {time} | Bygewerk {time} | E ntšhafaditswe ka {time} |
+| `map.zoomIn` | Zoom in | Zoem in | Godisa |
+| `map.zoomOut` | Zoom out | Zoem uit | Fokotsa |
+| `map.expand` | , expand map | , vou kaart oop | , atolosa mmapa |
+| `map.collapse` | , collapse map | , vou kaart toe | , phutha mmapa |
+| `drought.honesty` | Worked out from your farm's own tank estimate, soil readings and weather forecast. It is not a drought prediction or an official drought declaration. | Uitgewerk uit jou plaas se eie tenkskatting, grondlesings en weervoorspelling. Dit is nie 'n droogtevoorspelling of 'n amptelike droogteverklaring nie. | Go dirilwe go tswa mo kakanyong ya tanka ya polase ya gago, dipalo tsa mmu le ponelopele ya maemo a loapi. Ga se ponelopele ya leuba kgotsa kitsiso ya semmuso ya leuba. |
+| `drought.budgetText` | You have about {litres} L. At normal watering that lasts {normal}; in drought mode it lasts {drought}. | Jy het omtrent {litres} L. Met gewone natlei hou dit {normal}; in droogtemodus hou dit {drought}. | O na le e ka nna {litres} L. Ka go nosetsa ka tlwaelo a fela ka {normal}; mo mokgweng wa leuba a fela ka {drought}. |
+| `drought.days.one` | 1 day | 1 dag | letsatsi le le 1 |
+| `drought.days.many` | {n} days | {n} dae | malatsi a le {n} |
+| `drought.days.long` | a long time | 'n lang tyd | lobaka lo loleele |
+| `usage.estimate` | Estimated from run time × the zone's measured flow rate; there is no water meter. | Geskat uit looptyd × die sone se gemete vloeitempo; daar is geen watermeter nie. | Go akantswe go tswa mo nakong ya go bereka × lebelo le le lekantsweng la go elela la karolo; ga go na sebali sa metsi. |

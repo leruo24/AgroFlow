@@ -46,11 +46,24 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
     public sealed class Confidence
     {
-        public Confidence(ConfidenceLevel level, string reason)
+        public Confidence(ConfidenceLevel level, string reason, string code = "other", IReadOnlyDictionary<string, string>? args = null)
         {
             Level = level;
             Reason = reason;
+            Code = code;
+            Args = args ?? new Dictionary<string, string>();
         }
+
+        /// <summary>
+        /// RET-06: a stable message code, so the apps can say the reason in the farmer's language
+        /// (Reason stays the English). no_crop, no_weather, all_agree, sensor_disagree, or partial
+        /// with Args basis (weather / own_check) and because (own_check, kit_quiet, kit_never,
+        /// no_readings, or the missing field: planting_date, flow_rate, area, soil, calibration),
+        /// and date ("17 Sep", SAST) for kit_quiet.
+        /// </summary>
+        public string Code { get; }
+
+        public IReadOnlyDictionary<string, string> Args { get; }
 
         public ConfidenceLevel Level { get; }
 
@@ -140,12 +153,12 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
             if (!s.CropKnown)
             {
-                return new Confidence(ConfidenceLevel.Low, "Low: no crop is set, so its water use is unknown.");
+                return new Confidence(ConfidenceLevel.Low, "Low: no crop is set, so its water use is unknown.", "no_crop");
             }
 
             if (!s.WeatherAvailable)
             {
-                return new Confidence(ConfidenceLevel.Low, "Low: there is no weather for this farm yet.");
+                return new Confidence(ConfidenceLevel.Low, "Low: there is no weather for this farm yet.", "no_weather");
             }
 
             var missing = Steps.Where(step => step.IsMissing(s)).ToList();
@@ -156,7 +169,7 @@ namespace AgroFlow.Business.Agronomy.RuleBook
 
             if (missing.Count == 0 && s.ReadingFresh)
             {
-                return new Confidence(ConfidenceLevel.High, "High: your sensor, setup and the weather all agree.");
+                return new Confidence(ConfidenceLevel.High, "High: your sensor, setup and the weather all agree.", "all_agree");
             }
 
             var level = missing.Count <= MaxMissingForMedium ? ConfidenceLevel.Medium : ConfidenceLevel.Low;
@@ -167,25 +180,32 @@ namespace AgroFlow.Business.Agronomy.RuleBook
             var basis = s.ManualCheckFresh ? "based on the weather and your own soil check" : "based on the weather";
 
             string because;
+            var args = new Dictionary<string, string> { ["basis"] = s.ManualCheckFresh ? "own_check" : "weather" };
             if (missing.Count == 0 && s.ManualCheckFresh)
             {
                 because = basis;
+                args["because"] = "own_check";
             }
             else if (missing.Count == 0 && staleKit)
             {
                 because = basis + "; " + KitQuiet(s.LastReadingAtUtc);
+                args["because"] = s.LastReadingAtUtc.HasValue ? "kit_quiet" : "kit_never";
+                if (s.LastReadingAtUtc.HasValue)
+                    args["date"] = s.LastReadingAtUtc.Value.AddHours(2).ToString("d MMM", System.Globalization.CultureInfo.InvariantCulture);
             }
             else if (missing.Count == 0)
             {
                 // Fully set up, but no kit has ever reported: weather-only.
                 because = "based on the weather and your crop; no soil readings yet";
+                args["because"] = "no_readings";
             }
             else
             {
                 because = basis + "; " + missing[0].Because;
+                args["because"] = missing[0].Field;
             }
 
-            return new Confidence(level, label + ": " + because + ".");
+            return new Confidence(level, label + ": " + because + ".", "partial", args);
         }
 
         /// <summary>The one step that would most improve this zone's advice, or null if none.</summary>

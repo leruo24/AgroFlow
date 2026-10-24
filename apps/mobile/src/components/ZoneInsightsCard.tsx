@@ -18,17 +18,19 @@ import { dismissedLine, insightKey, type DismissView } from '@/lib/dismissals';
 import { todayInSast } from '@/services/insightsService';
 import { formatSast } from '@/lib/sastTime';
 import { useAgroFlow } from '@/context/AgroFlowContext';
-import { useI18n } from '@/i18n';
+import { useI18n, type TranslationKey } from '@/i18n';
+import { confidenceText } from '@/lib/confidenceText';
 
 // How sure the advice is, and the one thing that would improve it.
 type Confidence = {
   level: 'high' | 'medium' | 'low';
   reason: string;
+  code?: string;
+  args?: Record<string, string>;
   explanation: Explanation | null;
   nextStep: string | null;
 };
 
-const LEVEL_LABEL = { high: 'High', medium: 'Medium', low: 'Low' } as const;
 
 type Props = {
   zoneId: number;
@@ -68,6 +70,8 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
             ? {
                 level: result.confidence.level,
                 reason: result.confidence.reason,
+                code: result.confidence.code,
+                args: result.confidence.args,
                 explanation: result.confidenceExplanation ?? null,
                 nextStep: result.nextStep?.ask ?? null,
               }
@@ -175,9 +179,9 @@ export function ZoneInsightsCard({ zoneId, insights: provided }: Props) {
       </View>
 
       {confidence && (
-        <View style={styles.confidence} accessibilityLabel={`Advice confidence: ${LEVEL_LABEL[confidence.level]}. ${confidence.reason}`}>
-          <Text style={styles.confidenceBadge}>{LEVEL_LABEL[confidence.level]} confidence</Text>
-          <Text style={styles.confidenceReason}>{confidence.reason}</Text>
+        <View style={styles.confidence} accessibilityLabel={t('insights.confidenceA11y', { level: t(`confidence.level.${confidence.level}` as TranslationKey), reason: confidenceText(t, confidence) })}>
+          <Text style={styles.confidenceBadge}>{t('insights.confidenceBadge', { level: t(`confidence.level.${confidence.level}` as TranslationKey) })}</Text>
+          <Text style={styles.confidenceReason}>{confidenceText(t, confidence)}</Text>
           <WhyLink explanation={confidence.explanation} compact />
           {confidence.nextStep && (
             <View style={styles.improve}>

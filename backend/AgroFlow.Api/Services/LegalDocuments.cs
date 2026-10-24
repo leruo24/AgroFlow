@@ -17,6 +17,12 @@ public static class LegalDocuments
 
     public const string DraftLabel = "Draft – needs approval";
 
+    public static bool AnyDraft => All.Any(d => d.Status == "draft");
+
+    // RET-02: acceptance is asked for and recorded only when staff have switched it on
+    // (terms.acceptance_enabled) AND every document is approved. A draft is never accepted.
+    public static bool AcceptanceOpen(bool settingOn) => settingOn && !AnyDraft;
+
     public static Document? Find(string key) => All.FirstOrDefault(d => d.Key == key);
 
     public static string Text(Document document)

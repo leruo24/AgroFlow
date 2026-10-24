@@ -85,7 +85,7 @@ async function replayOnce(port) {
       (select string_agg(commission_state, ',' order by id) from zone) as commission_states`;
     const beforeAudit = { ...(await client.query(SNAPSHOT)).rows[0], ...(await client.query(AUDIT)).rows[0] };
     const rerunAudit = [];
-    for (const file of files.filter(f => /^00(5[789]|6[01])_/.test(f))) rerunAudit.push(await run(client, file) ?? `${file}: ok`);
+    for (const file of files.filter(f => /^00(5[789]|6[012])_/.test(f))) rerunAudit.push(await run(client, file) ?? `${file}: ok`);
     const afterAudit = { ...(await client.query(SNAPSHOT)).rows[0], ...(await client.query(AUDIT)).rows[0] };
     out.rerun0057to0059 = rerunAudit;
     out.schemaChangedByAuditRerun = Object.keys(beforeAudit).filter(k => beforeAudit[k] !== afterAudit[k]);

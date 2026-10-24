@@ -104,7 +104,7 @@ public static class TodayEndpoints
                     grossLitres,
                     irrigationType = zoneIrrigation,
                     efficiencyNote = ApplicationEfficiency.Explain(zoneIrrigation),
-                    confidence = new { level = result.Confidence.Key, reason = result.Confidence.Reason },
+                    confidence = new { level = result.Confidence.Key, reason = result.Confidence.Reason, code = result.Confidence.Code, args = result.Confidence.Args },
                     confidenceExplanation = Plain(Explanations.Confidence(result), isAdmin),
                     nextStep = result.NextStep is null ? null : new { field = result.NextStep.Field, ask = result.NextStep.Ask },
                     // What the advice was worked out from (AF-18): the crop the zone is SET to (never its

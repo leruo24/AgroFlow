@@ -354,16 +354,20 @@ function PasswordScreen({ t, styles, register, draftFor, setDraft }: ScreenProps
   </>;
 }
 
-// "Before you start": the draft terms and privacy notice, their version and date, and an
-// unticked box. Accepted only when the server recorded it (who, which version, when).
+// "Before you start": the terms and privacy notice, their version and date, and an unticked box.
+// Accepted only when the server recorded it (who, which version, when). RET-02: until staff switch
+// acceptance on and the documents are approved (terms.acceptanceEnabled), they are a preview, "not
+// yet in effect": no box, and nothing is sent. An older server that does not say is a preview too,
+// so a draft is never accepted.
 function TermsScreen({ t, styles, register, draftFor, setDraft, journey }: ScreenProps) {
   const ticked = draftFor('terms.ticked', false);
   const accepted = journey?.terms.accepted;
+  const open = journey?.terms.acceptanceEnabled === true;
   const docs = journey?.terms.documents ?? [];
   const terms = docs.find(d => d.key === 'terms');
   const privacy = docs.find(d => d.key === 'privacy');
   useSave(register, async () => {
-    if (accepted?.all) return { ok: true };
+    if (accepted?.all || !open) return { ok: true };
     if (!terms || !privacy) return { ok: false, error: t('terms.unavailable') };
     if (!ticked) return { ok: false, error: t('terms.tickFirst') };
     await acceptTerms(terms.version, privacy.version);
@@ -378,10 +382,12 @@ function TermsScreen({ t, styles, register, draftFor, setDraft, journey }: Scree
     </View>
     {[terms, privacy].map(d => d ? <Pressable key={d.key} accessibilityRole="link" onPress={() => router.push(`/legal?doc=${d.key}` as never)} style={styles.linkButton} testID={`terms-open-${d.key}`}>
       <Text style={styles.link}>{t('terms.read', { title: t(`terms.doc.${d.key}` as TranslationKey) })}</Text>
-      <Text style={styles.help}>{t('terms.version', { version: d.version, date: dayLabel(d.date) })} · {d.status === 'draft' ? t('terms.draft') : ''}</Text>
+      <Text style={styles.help} testID={`terms-status-${d.key}`}>{t('terms.version', { version: d.version, date: dayLabel(d.date) })} · {!open ? t('terms.preview') : d.status === 'draft' ? t('terms.draft') : ''}</Text>
     </Pressable> : null)}
     {accepted?.all
       ? <Text style={styles.ok} testID="terms-accepted">{t('terms.acceptedOn', { date: formatSast(accepted.termsAcceptedAt ?? '') ?? '' })}</Text>
+      : !open
+      ? <Text style={styles.help} testID="terms-preview">{t('terms.previewBody')}</Text>
       : <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: ticked }} onPress={() => setDraft('terms.ticked', !ticked)}
           style={styles.checkRow} testID="terms-checkbox">
           <View style={[styles.checkbox, ticked && styles.checkboxOn]}>{ticked ? <Text style={styles.checkMark}>✓</Text> : null}</View>
