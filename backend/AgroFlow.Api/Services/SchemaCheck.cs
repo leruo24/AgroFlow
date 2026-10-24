@@ -180,6 +180,10 @@ public sealed class SchemaCheck
             "select to_regclass('public.uq_sensor_reading_hardware_measured')::text",
             "Offline reading retries can be stored twice because the per-kit uniqueness key is missing."),
 
+        new("0061", "column", "hardware.wifi_rssi",
+            "select 1 from information_schema.columns where table_name = 'hardware' and column_name = 'wifi_rssi'",
+            "The Kit tab cannot show the Wi-Fi signal or a soil probe reading out of range."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

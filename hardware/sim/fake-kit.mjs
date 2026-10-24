@@ -1,4 +1,4 @@
-// A pretend AgroFlow irrigation kit (firmware 1.7.0's contract) for the simulation. It talks
+// A pretend AgroFlow irrigation kit (firmware 1.7.1's contract) for the simulation. It talks
 // to the real AgroFlow.Api exactly as the ESP32 sketch does:
 //   POST /api/devices/claim                    one-time enrollment code -> device token
 //   GET  /api/devices/mqtt-credentials         X-Device-Token -> MQTT login
@@ -29,7 +29,7 @@ export function runLimitSeconds(command) {
 }
 
 export class FakeKit {
-  constructor({ apiBase, mqttUrl, deviceId, firmwareVersion = '1.7.0', log = () => {}, flash = { commandIds: [] } }) {
+  constructor({ apiBase, mqttUrl, deviceId, firmwareVersion = '1.7.1', log = () => {}, flash = { commandIds: [] } }) {
     Object.assign(this, { apiBase, mqttUrl, deviceId, firmwareVersion, log, flash });
     this.commands = [];
     this.seq = 1;
@@ -74,8 +74,11 @@ export class FakeKit {
     this.log(`MQTT connected as ${creds.body.mqttUsername}, subscribed to ${this.commandsTopic}`);
   }
 
-  async publish(sensorType, value, recordedAt = null, { backlog = null } = {}) {
+  // rssi and soilProbeOk: the kit's own report on every reading from 1.7.1.
+  async publish(sensorType, value, recordedAt = null, { backlog = null, rssi = null, soilProbeOk = null } = {}) {
     const payload = { sensorType, value };
+    if (rssi !== null) payload.rssi = rssi;
+    if (soilProbeOk !== null) payload.soilProbeOk = soilProbeOk;
     if (recordedAt) {
       payload.recordedAt = recordedAt.toISOString().replace(/\.\d{3}Z$/, 'Z');
       payload.seq = this.seq++;

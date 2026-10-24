@@ -279,6 +279,10 @@ export interface Hardware {
   enrollmentStatus?: string;
   /** Readings the kit still had waiting to upload at its latest reading (firmware 1.7.0+). */
   offlineBacklog?: number | null;
+  /** The kit's setup card (ui/kitSetupCard.ts). The enrollment code only while valid and unused. */
+  enrollmentCode?: string | null;
+  enrollmentCodeExpiresAt?: string | null;
+  farmId?: number | null;
 }
 
 /* alerts */

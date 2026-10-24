@@ -3,10 +3,10 @@ import { Tabs } from 'expo-router';
 
 import {//importing icons for the bottom navigation bar
   Bell,//alerts
+  Cpu,//kit
   Droplets,//irrigation
-  History,
   House,//home
-  Settings,
+  Menu,//more
 } from 'lucide-react-native';
 import { useMemo, type ComponentType } from 'react';
 import {
@@ -101,6 +101,15 @@ export default function TabsLayout() {//creates layout component
         }}
       />
 
+      {/* The kit: its status, what is working, and its setup Wi-Fi. */}
+      <Tabs.Screen
+        name="kit"
+        options={{
+          title: t('tabs.kit'),
+          tabBarIcon: TabIcon(Cpu),
+        }}
+      />
+
       <Tabs.Screen
         name="alerts"
         options={{
@@ -114,11 +123,22 @@ export default function TabsLayout() {//creates layout component
         }}
       />
 
+      {/* History, Reports, Tank, Forecast, Settings and Help. */}
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: t('tabs.more'),
+          tabBarIcon: TabIcon(Menu),
+        }}
+      />
+
+      {/* No longer buttons in the bar (they are under More), but still tab screens, so /history
+          and /settings and every link to them open the same screens with the bar underneath. */}
       <Tabs.Screen
         name="history"
         options={{
           title: t('tabs.history'),
-          tabBarIcon: TabIcon(History),
+          href: null,
         }}
       />
 
@@ -126,7 +146,7 @@ export default function TabsLayout() {//creates layout component
         name="settings"
         options={{
           title: t('tabs.settings'),
-          tabBarIcon: TabIcon(Settings),
+          href: null,
         }}
       />
 

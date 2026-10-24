@@ -2,7 +2,7 @@
 
 Runs the **real** `AgroFlow.Api` against a throwaway local Postgres with **every migration
 applied** and a local MQTT broker, and drives it with a pretend kit that follows firmware
-1.7.0's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
+1.7.1's contract. Nothing reaches the live database, HiveMQ, Supabase or Telegram.
 
 ```bash
 cd hardware/sim
