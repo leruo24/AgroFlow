@@ -1293,6 +1293,25 @@
     "kitTab.copyName": "Copy the setup Wi-Fi name",
     "kitTab.copyPassword": "Copy the setup Wi-Fi password",
     "kitTab.changeWifi": "Change Wi-Fi",
-    "kitTab.details": "Kit details"
+    "kitTab.details": "Kit details",
+    "kitHelp.open": "Reconnect or reset your kit",
+    "kitHelp.title": "Reconnect or reset your kit",
+    "kitHelp.wifiTitle": "Changed your Wi-Fi? Connect the kit again",
+    "kitHelp.wifiWays": "First open the kit's setup page, in one of three ways:",
+    "kitHelp.wifiWayApp": "In the app: Kit, then Change Wi-Fi.",
+    "kitHelp.wifiWayPower": "Or switch the kit off and on 3 times quickly. Each time, switch it off again within 10 seconds.",
+    "kitHelp.wifiWayWait": "Or wait: after 15 minutes without its Wi-Fi, the kit opens the setup page by itself.",
+    "kitHelp.wifiThen": "Then:",
+    "kitHelp.wifiJoin": "On your phone, join the Wi-Fi AgroFlow-Setup-XXXX. Its name and password are on the Kit tab and on the label on the kit.",
+    "kitHelp.wifiJoinKnown": "On your phone, join the Wi-Fi {name}, password {password}. They are also on the label on the kit.",
+    "kitHelp.wifiPage": "A setup page opens. If it does not, type {address} in your phone's browser.",
+    "kitHelp.wifiSave": "Choose your Wi-Fi, type its password and press Save. The setup page stays open for 5 minutes, and opens again later if you miss it.",
+    "kitHelp.wifiKeep": "Your kit stays linked to your farm and keeps watering by its own rules meanwhile. You do not need a new code.",
+    "kitHelp.moveTitle": "Moving the kit to another field or farm",
+    "kitHelp.moveBody": "Only AgroFlow staff can do this. Ask them: they make a new enrollment code and connect the kit to its new place.",
+    "kitHelp.resetTitle": "Full reset: only if AgroFlow staff ask you",
+    "kitHelp.resetHow": "Switch the kit off and on 5 times quickly. Each time, switch it off again within 10 seconds.",
+    "kitHelp.resetWarn": "Warning: this wipes the kit's Wi-Fi and unlinks it from your farm. The kit does not water until AgroFlow staff make a new enrollment code and connect it again.",
+    "kitHelp.print": "Open the printable guide"
   }
 }

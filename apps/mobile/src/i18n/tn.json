@@ -1293,6 +1293,25 @@
     "kitTab.copyName": "Kopolola leina la Wi-Fi ya go baakanya",
     "kitTab.copyPassword": "Kopolola lefoko la sephiri la Wi-Fi ya go baakanya",
     "kitTab.changeWifi": "Fetola Wi-Fi",
-    "kitTab.details": "Dintlha tsa sediriswa"
+    "kitTab.details": "Dintlha tsa sediriswa",
+    "kitHelp.open": "Golaganya gape kgotsa simolodisa sediriswa sa gago sesha",
+    "kitHelp.title": "Golaganya gape kgotsa simolodisa sediriswa sa gago sesha",
+    "kitHelp.wifiTitle": "O fetotse Wi-Fi ya gago? Golaganya sediriswa gape",
+    "kitHelp.wifiWays": "Pele bula tsebe ya go baakanya ya sediriswa, ka tsela nngwe ya tse tharo:",
+    "kitHelp.wifiWayApp": "Mo tirisong: Sediriswa, morago Fetola Wi-Fi.",
+    "kitHelp.wifiWayPower": "Kgotsa tima o bo o tshuba sediriswa ga 3 ka bonako. Nako nngwe le nngwe, se time gape mo metsotswaneng e le 10.",
+    "kitHelp.wifiWayWait": "Kgotsa ema: morago ga metsotso e le 15 e se na Wi-Fi ya yone, sediriswa se bula tsebe ya go baakanya ka bosone.",
+    "kitHelp.wifiThen": "Morago:",
+    "kitHelp.wifiJoin": "Mo mogaleng wa gago, tsena mo Wi-Fi ya AgroFlow-Setup-XXXX. Leina la yone le lefoko la sephiri di mo karolong ya Sediriswa le mo leibeleng mo sediriswa.",
+    "kitHelp.wifiJoinKnown": "Mo mogaleng wa gago, tsena mo Wi-Fi ya {name}, lefoko la sephiri {password}. Di bonala gape mo leibeleng mo sediriswa.",
+    "kitHelp.wifiPage": "Tsebe ya go baakanya e a bulega. Fa e sa bulege, kwala {address} mo sebading sa mogala wa gago.",
+    "kitHelp.wifiSave": "Tlhopha Wi-Fi ya gago, kwala lefoko la yone la sephiri o bo o tobetsa Boloka. Tsebe ya go baakanya e nna e buletswe metsotso e le 5, e bo e buloga gape morago fa o e tlodisitse.",
+    "kitHelp.wifiKeep": "Sediriswa sa gago se nna se golaganye le polase ya gago mme se tswelela go nosetsa ka melao ya sone. Ga o tlhoke khoutu e ntšha.",
+    "kitHelp.moveTitle": "Go tlosa sediriswa go ya tshimong kgotsa polaseng e nngwe",
+    "kitHelp.moveBody": "Ke badiri ba AgroFlow fela ba ba ka dirang se. Ba kope: ba dira khoutu e ntšha ya kwadiso mme ba golaganya sediriswa le lefelo la sone le lesha.",
+    "kitHelp.resetTitle": "Go simolola sesha ka botlalo: fela fa badiri ba AgroFlow ba go kopa",
+    "kitHelp.resetHow": "Tima o bo o tshuba sediriswa ga 5 ka bonako. Nako nngwe le nngwe, se time gape mo metsotswaneng e le 10.",
+    "kitHelp.resetWarn": "Tlhokomeliso: se se phimola Wi-Fi ya sediriswa mme se se kgaola mo polaseng ya gago. Sediriswa ga se nosetse go fitlha badiri ba AgroFlow ba dira khoutu e ntšha ya kwadiso mme ba se golaganya gape.",
+    "kitHelp.print": "Bula kaedi e e ka gatisiwang"
   }
 }

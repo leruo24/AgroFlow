@@ -95,7 +95,30 @@ export function kitSetupCardHtml(k: KitCardData): string {
       <div class="detail-list">${rows.join("")}</div>
       ${steps}
       ${print}
+      ${kitHelpHtml()}
     </section>`;
+}
+
+/* "Reconnect or reset": what the farmer (or an installer on site) can do without staff, and what
+ * needs staff. It describes firmware 1.7.1 as it is: 3 quick power cycles or 15 minutes without
+ * Wi-Fi open the setup page and keep the enrollment; 5 quick power cycles wipe it. The printable
+ * page is public/guides (the farmer web app has the same file). */
+export const KIT_GUIDE_PATH = "/guides/reconnect-or-reset-your-kit.html";
+
+export function kitHelpHtml(): string {
+  return `
+    <details class="kit-help" data-kit-help>
+      <summary>Reconnect or reset</summary>
+      <p><b>New Wi-Fi (no code needed, the kit stays linked):</b> the farmer taps Kit → Change Wi-Fi in the app,
+        or switches the kit off and on 3 times quickly (off again within 10 s each time), or waits 15 minutes
+        without Wi-Fi. Then join <span class="mono">AgroFlow-Setup-XXXX</span> (password on this card or the label),
+        open <span class="mono">${SETUP_PAGE_ADDRESS}</span> and choose the Wi-Fi. The kit keeps watering meanwhile.</p>
+      <p><b>Move to another zone or farm:</b> staff only. Register the kit again with a new enrollment code.</p>
+      <p class="kit-help-warn"><b>Full reset:</b> off and on 5 times quickly. This wipes the Wi-Fi and the enrollment:
+        the kit stops watering until staff create a new enrollment code and it claims again. Only ask a farmer to do
+        this when you will create that code.</p>
+      <p><a href="${KIT_GUIDE_PATH}" target="_blank" rel="noopener" data-kit-guide-link>Printable guide for the farmer</a></p>
+    </details>`;
 }
 
 /* The label: sticker-size (A6) with the device ID, the setup Wi-Fi and its password, and a QR
@@ -131,6 +154,7 @@ ${where ? `<p class="small" style="text-align:left">${esc(where)}</p>` : ""}
 <p><span class="k">Setup Wi-Fi</span><span class="v" data-label-field="network">${esc(setupNetworkName(id))}</span></p>
 <p><span class="k">Password</span><span class="v" data-label-field="password">${esc(setupNetworkPassword(id))}</span></p>
 <p><span class="k">Setup page</span><span class="v">${SETUP_PAGE_ADDRESS}</span></p>
+<p class="small" style="text-align:left" data-label-wifi-help>Changing Wi-Fi? Open the app → Kit, or switch off/on 3 times.</p>
 ${qr ? `<img src="${qr}" alt="QR code: open this kit in the AgroFlow app" data-label-qr><p class="small">Scan to open this kit in the AgroFlow app</p>`
       : `<p class="small">Open the AgroFlow app, then Kit.</p>`}
 </div></body></html>`;

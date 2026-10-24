@@ -1293,6 +1293,25 @@
     "kitTab.copyName": "Kopieer die opstel-Wi-Fi se naam",
     "kitTab.copyPassword": "Kopieer die opstel-Wi-Fi se wagwoord",
     "kitTab.changeWifi": "Verander Wi-Fi",
-    "kitTab.details": "Stelbesonderhede"
+    "kitTab.details": "Stelbesonderhede",
+    "kitHelp.open": "Koppel jou stel weer of stel dit terug",
+    "kitHelp.title": "Koppel jou stel weer of stel dit terug",
+    "kitHelp.wifiTitle": "Jou Wi-Fi verander? Koppel die stel weer",
+    "kitHelp.wifiWays": "Maak eers die stel se opstelblad oop, op een van drie maniere:",
+    "kitHelp.wifiWayApp": "In die toepassing: Stel, dan Verander Wi-Fi.",
+    "kitHelp.wifiWayPower": "Of skakel die stel 3 keer vinnig af en aan. Skakel dit elke keer binne 10 sekondes weer af.",
+    "kitHelp.wifiWayWait": "Of wag: ná 15 minute sonder sy Wi-Fi maak die stel self die opstelblad oop.",
+    "kitHelp.wifiThen": "Dan:",
+    "kitHelp.wifiJoin": "Sluit op jou foon by die Wi-Fi AgroFlow-Setup-XXXX aan. Die naam en wagwoord is op die Stel-oortjie en op die etiket op die stel.",
+    "kitHelp.wifiJoinKnown": "Sluit op jou foon by die Wi-Fi {name} aan, wagwoord {password}. Dit is ook op die etiket op die stel.",
+    "kitHelp.wifiPage": "'n Opstelblad gaan oop. As dit nie oopgaan nie, tik {address} in jou foon se blaaier.",
+    "kitHelp.wifiSave": "Kies jou Wi-Fi, tik sy wagwoord en druk Stoor. Die opstelblad bly 5 minute oop, en gaan later weer oop as jy dit mis.",
+    "kitHelp.wifiKeep": "Jou stel bly aan jou plaas gekoppel en lei intussen volgens sy eie reëls nat. Jy het nie 'n nuwe kode nodig nie.",
+    "kitHelp.moveTitle": "Skuif die stel na 'n ander land of plaas",
+    "kitHelp.moveBody": "Net AgroFlow-personeel kan dit doen. Vra hulle: hulle maak 'n nuwe registrasiekode en koppel die stel aan sy nuwe plek.",
+    "kitHelp.resetTitle": "Volle terugstelling: net as AgroFlow-personeel jou vra",
+    "kitHelp.resetHow": "Skakel die stel 5 keer vinnig af en aan. Skakel dit elke keer binne 10 sekondes weer af.",
+    "kitHelp.resetWarn": "Waarskuwing: dit vee die stel se Wi-Fi uit en ontkoppel dit van jou plaas. Die stel lei nie nat nie totdat AgroFlow-personeel 'n nuwe registrasiekode maak en dit weer koppel.",
+    "kitHelp.print": "Maak die drukbare gids oop"
   }
 }
