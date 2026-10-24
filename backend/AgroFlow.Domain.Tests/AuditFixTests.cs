@@ -284,7 +284,7 @@ public class AuditFixTests
     [Fact]
     public void Every_advice_code_has_an_app_sentence_in_english_afrikaans_and_setswana()
     {
-        var source = File.ReadAllText(Path.Combine(RepoRoot(), "backend", "AgroFlow.Domain", "Agronomy", "RuleBook", "TodayRules.cs"));
+        var source = File.ReadAllText(Path.Combine(RepoRoot(), "backend", "AgroFlow.Domain", "IrrigationControl", "Agronomy", "RuleBook", "TodayRules.cs"));
         var fixedCodes = System.Text.RegularExpressions.Regex.Matches(source, "\"((?:none|skip|kit|soon|setup)\\.[a-z_]+)\"")
             .Select(m => m.Groups[1].Value).Where(c => c != "setup.next").Distinct().ToList();
         var amounts = new[] { "minutes", "seconds", "litres", "per_m2", "mm", "usual" };

@@ -1,0 +1,236 @@
+[
+  {
+    "original": "agroflow_farm_aerial.png",
+    "bytes": 431230,
+    "width": 512,
+    "height": 512,
+    "variants": [
+      {
+        "file": "agroflow_farm_aerial-480.webp",
+        "width": 480,
+        "height": 480,
+        "bytes": 32672
+      },
+      {
+        "file": "agroflow_farm_aerial-512.webp",
+        "width": 512,
+        "height": 512,
+        "bytes": 37374
+      }
+    ],
+    "mobileBytes": 37374
+  },
+  {
+    "original": "agroflow_field_irrigation.png",
+    "bytes": 437273,
+    "width": 512,
+    "height": 512,
+    "variants": [
+      {
+        "file": "agroflow_field_irrigation-480.webp",
+        "width": 480,
+        "height": 480,
+        "bytes": 39548
+      },
+      {
+        "file": "agroflow_field_irrigation-512.webp",
+        "width": 512,
+        "height": 512,
+        "bytes": 44544
+      }
+    ],
+    "mobileBytes": 44544
+  },
+  {
+    "original": "agroflow_hero_farm.jpg",
+    "bytes": 600635,
+    "width": 1672,
+    "height": 941,
+    "variants": [
+      {
+        "file": "agroflow_hero_farm-480.webp",
+        "width": 480,
+        "height": 270,
+        "bytes": 32720
+      },
+      {
+        "file": "agroflow_hero_farm-960.webp",
+        "width": 960,
+        "height": 540,
+        "bytes": 110712
+      },
+      {
+        "file": "agroflow_hero_farm-1600.webp",
+        "width": 1600,
+        "height": 900,
+        "bytes": 240706
+      }
+    ],
+    "mobileBytes": 110712
+  },
+  {
+    "original": "agroflow_more_field_sensor.jpg",
+    "bytes": 165213,
+    "width": 1134,
+    "height": 660,
+    "variants": [
+      {
+        "file": "agroflow_more_field_sensor-480.webp",
+        "width": 480,
+        "height": 279,
+        "bytes": 19658
+      },
+      {
+        "file": "agroflow_more_field_sensor-960.webp",
+        "width": 960,
+        "height": 559,
+        "bytes": 40036
+      },
+      {
+        "file": "agroflow_more_field_sensor-1134.webp",
+        "width": 1134,
+        "height": 660,
+        "bytes": 48612
+      }
+    ],
+    "mobileBytes": 40036
+  },
+  {
+    "original": "agroflow_more_leafy_crops.jpg",
+    "bytes": 170242,
+    "width": 1134,
+    "height": 660,
+    "variants": [
+      {
+        "file": "agroflow_more_leafy_crops-480.webp",
+        "width": 480,
+        "height": 279,
+        "bytes": 19826
+      },
+      {
+        "file": "agroflow_more_leafy_crops-960.webp",
+        "width": 960,
+        "height": 559,
+        "bytes": 41648
+      },
+      {
+        "file": "agroflow_more_leafy_crops-1134.webp",
+        "width": 1134,
+        "height": 660,
+        "bytes": 50418
+      }
+    ],
+    "mobileBytes": 41648
+  },
+  {
+    "original": "agroflow_more_water_tanks.jpg",
+    "bytes": 174218,
+    "width": 1134,
+    "height": 660,
+    "variants": [
+      {
+        "file": "agroflow_more_water_tanks-480.webp",
+        "width": 480,
+        "height": 279,
+        "bytes": 20638
+      },
+      {
+        "file": "agroflow_more_water_tanks-960.webp",
+        "width": 960,
+        "height": 559,
+        "bytes": 43670
+      },
+      {
+        "file": "agroflow_more_water_tanks-1134.webp",
+        "width": 1134,
+        "height": 660,
+        "bytes": 52226
+      }
+    ],
+    "mobileBytes": 43670
+  },
+  {
+    "original": "agroflow_planting_seedling.png",
+    "bytes": 418991,
+    "width": 512,
+    "height": 512,
+    "variants": [
+      {
+        "file": "agroflow_planting_seedling-480.webp",
+        "width": 480,
+        "height": 480,
+        "bytes": 30800
+      },
+      {
+        "file": "agroflow_planting_seedling-512.webp",
+        "width": 512,
+        "height": 512,
+        "bytes": 34162
+      }
+    ],
+    "mobileBytes": 34162
+  },
+  {
+    "original": "agroflow_sprinkler_closeup.png",
+    "bytes": 448536,
+    "width": 512,
+    "height": 512,
+    "variants": [
+      {
+        "file": "agroflow_sprinkler_closeup-480.webp",
+        "width": 480,
+        "height": 480,
+        "bytes": 38870
+      },
+      {
+        "file": "agroflow_sprinkler_closeup-512.webp",
+        "width": 512,
+        "height": 512,
+        "bytes": 42444
+      }
+    ],
+    "mobileBytes": 42444
+  },
+  {
+    "original": "agroflow_tomato_greenhouse_evening.png",
+    "bytes": 501960,
+    "width": 512,
+    "height": 512,
+    "variants": [
+      {
+        "file": "agroflow_tomato_greenhouse_evening-480.webp",
+        "width": 480,
+        "height": 480,
+        "bytes": 53566
+      },
+      {
+        "file": "agroflow_tomato_greenhouse_evening-512.webp",
+        "width": 512,
+        "height": 512,
+        "bytes": 60318
+      }
+    ],
+    "mobileBytes": 60318
+  },
+  {
+    "original": "agroflow_water_reservoir.png",
+    "bytes": 428926,
+    "width": 512,
+    "height": 512,
+    "variants": [
+      {
+        "file": "agroflow_water_reservoir-480.webp",
+        "width": 480,
+        "height": 480,
+        "bytes": 32846
+      },
+      {
+        "file": "agroflow_water_reservoir-512.webp",
+        "width": 512,
+        "height": 512,
+        "bytes": 37424
+      }
+    ],
+    "mobileBytes": 37424
+  }
+]

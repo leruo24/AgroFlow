@@ -15,6 +15,7 @@ import { useI18n, type TranslationKey } from '@/i18n';
 import { fetchTankStatus, type TankStatus } from '@/services/agroFlowApi';
 import { cropLabel, modeLabel, placeLabel, soilLabel } from '@/lib/labels';
 import { dayLabel } from '@/lib/setupHelpers';
+import { FarmPhoto } from './visual/FarmPhoto';
 
 type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
 export type TileStatus = 'good' | 'normal' | 'low' | 'high' | 'check' | null;
@@ -97,6 +98,7 @@ export function SensorReadingsCard({ zone }: { zone: Zone }) {
   });
   const ago = agoText(t, zone.lastReadingAt);
   return <View style={styles.card} testID="sensor-readings">
+    <FarmPhoto image="sensor" height={64}/>
     <View style={styles.head}>
       <View style={{ flex: 1 }}>
         <Text accessibilityRole="header" style={styles.title}>{t('sensor.title')}</Text>

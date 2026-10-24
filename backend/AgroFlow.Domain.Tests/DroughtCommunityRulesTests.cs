@@ -118,7 +118,7 @@ public class DroughtCommunityRulesTests
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "backend", "AgroFlow.Domain"))) dir = dir.Parent;
-        var agronomy = Path.Combine(dir!.FullName, "backend", "AgroFlow.Domain", "Agronomy");
+        var agronomy = Path.Combine(dir!.FullName, "backend", "AgroFlow.Domain", "IrrigationControl", "Agronomy");
         foreach (var file in new[] { "Fao56Engine.cs", Path.Combine("RuleBook", "TodayRules.cs"), "IrrigationAdvisor.cs", "SoilWaterBalance.cs" })
         {
             var src = File.ReadAllText(Path.Combine(agronomy, file));

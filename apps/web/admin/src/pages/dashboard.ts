@@ -1,4 +1,5 @@
 import { countExplanation } from "@/lib/why";
+import { contextPhotoHtml } from '@/ui/agroflowImages';
 import { api, getFarmsNeedingSetup, getMqttPoolHealth, getFailedReportCount } from "@/data/api";
 import { getEnquirySummary, getAdminDismissals, clearDismissalCondition, getDroughtFarms, getStaffNotices } from "@/services/agroFlowApi";
 import { clearedConditions, viewOf, viewToggle } from "@/lib/dismiss";
@@ -197,6 +198,7 @@ async function renderDashboard(): Promise<string> {
   ${pageHeader("Home", "What needs attention today, across every farm.",
     `<button class="btn ghost" data-act="export-dashboard">Export to Excel</button>
      <button class="btn ghost" data-act="export-dashboard-pdf">Export PDF</button>`)}
+  ${contextPhotoHtml('aerial')}
 
   <section class="attn-section" aria-labelledby="attnHeading">
     <div class="section-heading-row">

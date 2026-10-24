@@ -1,7 +1,7 @@
 # AgroFlow rule book
 
 Every piece of advice AgroFlow gives comes from a small, named rule in
-`backend/AgroFlow.Domain/Agronomy/RuleBook/`. This page is **generated from
+`backend/AgroFlow.Domain/IrrigationControl/Agronomy/RuleBook/`. This page is **generated from
 those rules** by `RuleBookDocument.cs`: every outcome and every farmer sentence
 below is what the code returns for those inputs. A test fails if this page and
 the code disagree. Regenerate with:

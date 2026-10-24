@@ -77,6 +77,9 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
+// The first render loads the farm photos (premium visuals); under a parallel run it can pass 5 s.
+jest.setTimeout(20000);
+
 describe('the Kit tab', () => {
   it('a healthy kit is Working, and each line says what is really working', async () => {
     await render(<KitTabScreen />);

@@ -2,6 +2,7 @@ import type { Box3, Camera, Material, PerspectiveCamera, Scene, WebGLRenderer } 
 import { hardwareEnvelope, fitHardwareCamera } from './viewerFraming';
 import { ENCLOSURE_OPEN_RADIANS, stepHinge } from './enclosureHinge';
 import { text as t } from '@/pages/publicCopy';
+import { imageHtml } from '@/ui/agroflowImages';
 import {
   adaptivePixelRatio,
   createHardwareScene,
@@ -107,7 +108,8 @@ export function initHardwareShowcase(root: HTMLElement): void {
   const scenes = [['crop-rows', 'cropRows'], ['drip-irrigation', 'dripScene'], ['open-field', 'openField']] as const;
   const landscapes = document.createElement('div');
   landscapes.className = 'hardware-landscapes'; landscapes.setAttribute('aria-hidden', 'true');
-  landscapes.innerHTML = scenes.map(([scene], i) => `<img src="/media/scenes/${scene}.svg" alt="" width="1000" height="600" class="${i === 0 ? 'is-active' : ''}" data-scene-image="${scene}" />`).join('');
+  const scenePhotos = ['crops','irrigation','aerial'] as const;
+  landscapes.innerHTML = scenes.map(([scene], i) => imageHtml(scenePhotos[i]!).replace('<img ',`<img class="${i === 0 ? 'is-active' : ''}" data-scene-image="${scene}" `)).join('');
   viewer.prepend(landscapes);
   const sceneControls = document.createElement('div');
   sceneControls.className = 'hardware-scenes'; sceneControls.setAttribute('role', 'group'); sceneControls.setAttribute('aria-label', t('sceneBackground'));
@@ -117,7 +119,7 @@ export function initHardwareShowcase(root: HTMLElement): void {
   tools.innerHTML = `<button type="button" data-hardware-resume>${t('resumeGuide')}</button><button type="button" data-hardware-demo>${t('previewIrrigation')}</button><button type="button" data-hardware-demo-stop>${t('stopDemo')}</button><button type="button" data-hardware-demo-reset>${t('resetDemo')}</button>`;
   column.append(tools);
   const caption = column.querySelector('.hardware-caption');
-  if (caption) caption.textContent = t('representative');
+  if (caption) caption.textContent = t('representativePhoto');
   const fallbackUnit = viewer.querySelector('.hardware-fallback-unit');
   if (fallbackUnit) { const image = document.createElement('img'); image.src = '/media/scenes/controller-static.svg'; image.alt = ''; image.width = 180; image.height = 165; fallbackUnit.replaceWith(image); }
   const viewerElement: HTMLElement = viewer;

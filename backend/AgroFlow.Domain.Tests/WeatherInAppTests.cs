@@ -34,7 +34,7 @@ public class WeatherInAppTests
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "backend", "AgroFlow.Api"))) dir = dir.Parent;
-        var src = File.ReadAllText(Path.Combine(dir!.FullName, "backend", "AgroFlow.Api", "Services", "Notifications", "WeatherAlertService.cs"));
+        var src = File.ReadAllText(Path.Combine(dir!.FullName, "backend", "AgroFlow.Api", "Notifications", "WeatherAlertService.cs"));
 
         Assert.DoesNotContain("telegram_chat_id is not null", src);   // no longer only farms with Telegram
         Assert.Contains("insert into alert (zone_id, farm_id, severity, message) values (null, $1, 'Warning', $2)", src);
