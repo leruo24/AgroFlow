@@ -362,7 +362,7 @@ public class DroughtCommunityDbTests : IClassFixture<SimDbHost>
     {
         var dir = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null && !System.IO.Directory.Exists(System.IO.Path.Combine(dir.FullName, "backend", "AgroFlow.Api"))) dir = dir.Parent;
-        var src = System.IO.File.ReadAllText(System.IO.Path.Combine(dir!.FullName, "backend", "AgroFlow.Api", "Services", "AppSettingsStore.cs"));
+        var src = System.IO.File.ReadAllText(System.IO.Path.Combine(dir!.FullName, "backend", "AgroFlow.Api", "DataManagement", "AppSettingsStore.cs"));
         Assert.Contains("p.telegram_alerts_enabled and {StaffTelegram.NotStaffSql}", src);
         Assert.Contains("coalesce(np.community_opt_in, true)", src);
         var nine = DateTimeOffset.Parse("2026-10-20T19:30:00Z");   // 21:30 in South Africa

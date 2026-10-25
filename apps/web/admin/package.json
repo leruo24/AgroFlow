@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "AgroFlow Admin Dashboard \u2014 TypeScript + Vite (vanilla, no framework)",
+  "description": "AgroFlow Admin Dashboard — TypeScript + Vite (vanilla, no framework)",
   "scripts": {
     "dev": "vite",
     "prebuild": "node scripts/make-staff-page.mjs",
@@ -16,6 +16,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",
+    "axe-core": "^4.14.0",
+    "sharp": "^0.35.5",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
   },

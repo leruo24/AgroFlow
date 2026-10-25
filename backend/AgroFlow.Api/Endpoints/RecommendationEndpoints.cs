@@ -73,7 +73,7 @@ public static class RecommendationEndpoints
         litres = r.Litres is { } l ? Math.Round(l, 1) : (double?)null,
         etoBasis = r.EtoBasis,
         text = r.Text,
-        confidence = new { level = r.Confidence.Key, reason = r.Confidence.Reason },
+        confidence = new { level = r.Confidence.Key, reason = r.Confidence.Reason, code = r.Confidence.Code, args = r.Confidence.Args },
         // "Use these settings" saves thresholds in the sensor's own units, which needs
         // the wet/dry setup. Without it the button explains that.
         canApply = calibrated,

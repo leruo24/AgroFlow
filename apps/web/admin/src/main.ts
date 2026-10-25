@@ -5,7 +5,11 @@
 
 import "@/styles/main.css";
 import "@/styles/visual.css";
+import "@/styles/web-polish.css";
+import "@/styles/premium.css";
 import { wireAppearance } from "@/ui/appearance";
+import { wireRadioKeyboard } from "@/ui/radioKeyboard";
+import { text as publicText } from "@/pages/publicCopy";
 import { SHELL_HTML } from "@/app/shell";
 import { initNav, bootRouter, setAfterRender } from "@/app/router";
 import { wirePageInteractions, initHeader, updateHeaderIdentity } from "@/app/interactions";
@@ -27,6 +31,7 @@ declare global {
 // Wires up each page's interactions after every in-session navigation (go() ->
 // swapContent -> this). Separate from the state machine below; only fires while signed in.
 setAfterRender(wirePageInteractions);
+wireRadioKeyboard();
 
 type ViewState = "loading" | "welcome" | "signed-out" | "signed-in" | "reset-password";
 
@@ -100,8 +105,11 @@ function currentState(): ViewState {
 /* The state #root is currently showing. render() records it, so an auth event
    that does not change it can be told apart from one that does. */
 let shownState: ViewState | null = null;
+let removeSidebarKeyHandler: (() => void) | null = null;
 
 function render(state: ViewState): void {
+  removeSidebarKeyHandler?.();
+  removeSidebarKeyHandler = null;
   shownState = state;
   const root = getRoot();
   root.innerHTML = ""; // unconditional clear - the only way any state's markup ends up in #root
@@ -124,12 +132,14 @@ function render(state: ViewState): void {
   }
 
   if (state === "signed-out") {
+    document.title = `${publicText('staffSignIn')} – AgroFlow Staff`;
     root.innerHTML = LOGIN_HTML;
     wireLogin(root);
     return;
   }
 
   if (state === "reset-password") {
+    document.title = `${publicText('staffReset')} – AgroFlow Staff`;
     root.innerHTML = resetPasswordHtml();
     wireResetPassword(root, () => {
       const changed = root.querySelector("#resetForm") !== null;
@@ -146,9 +156,52 @@ function render(state: ViewState): void {
   // binding themselves (see app/router.ts and app/interactions.ts).
   root.innerHTML = SHELL_HTML;
   wireAppearance(root);
-  document.getElementById("sidebarToggle")?.addEventListener("click", () => {
-    document.getElementById("sidebar")?.classList.toggle("open");
+  const sidebar = document.getElementById("sidebar");
+  const sidebarToggle = document.getElementById("sidebarToggle");
+  const closeSidebar = (restoreFocus = false) => {
+    sidebar?.classList.remove("open");
+    sidebarToggle?.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("sidebar-open");
+    if (restoreFocus) sidebarToggle?.focus();
+  };
+  const openSidebar = () => {
+    sidebar?.classList.add("open");
+    sidebarToggle?.setAttribute("aria-expanded", "true");
+    document.body.classList.add("sidebar-open");
+    document.getElementById("sidebarClose")?.focus();
+  };
+  sidebarToggle?.setAttribute("aria-controls", "sidebar");
+  sidebarToggle?.setAttribute("aria-expanded", "false");
+  sidebarToggle?.addEventListener("click", () =>
+    sidebar?.classList.contains("open") ? closeSidebar() : openSidebar(),
+  );
+  document
+    .getElementById("sidebarClose")
+    ?.addEventListener("click", () => closeSidebar(true));
+  document
+    .getElementById("sidebarScrim")
+    ?.addEventListener("click", () => closeSidebar(true));
+  document.getElementById("nav")?.addEventListener("click", (event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest("button[data-page]") &&
+      matchMedia("(max-width: 860px)").matches
+    )
+      closeSidebar();
   });
+  document
+    .getElementById("sidebarNotifications")
+    ?.addEventListener("click", () => {
+      closeSidebar();
+      document.getElementById("bellBtn")?.click();
+    });
+  const onSidebarKeydown = (event: KeyboardEvent) => {
+    if (event.key === "Escape" && sidebar?.classList.contains("open"))
+      closeSidebar(true);
+  };
+  window.addEventListener("keydown", onSidebarKeydown);
+  removeSidebarKeyHandler = () =>
+    window.removeEventListener("keydown", onSidebarKeydown);
   initNav();
   initHeader();
   // Log out, in the sidebar footer and the avatar menu: ends the Supabase session, then shows

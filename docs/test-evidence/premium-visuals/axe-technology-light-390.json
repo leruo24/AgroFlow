@@ -1,0 +1,27 @@
+{
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "targets": [
+        [
+          "button[data-hardware-rotate=\"left\"] > span[aria-hidden=\"true\"]"
+        ],
+        [
+          "button[data-hardware-rotate=\"right\"] > span[aria-hidden=\"true\"]"
+        ]
+      ]
+    },
+    {
+      "id": "label-content-name-mismatch",
+      "targets": [
+        [
+          "button[data-hardware-rotate=\"left\"]"
+        ],
+        [
+          "button[data-hardware-rotate=\"right\"]"
+        ]
+      ]
+    }
+  ]
+}

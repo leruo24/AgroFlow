@@ -5,7 +5,7 @@
 // moisture (Low / Good / High), the tank's low line (Low / Good), and "Check sensor" when a
 // kit has gone quiet. Temperature, humidity and flow have no thresholds in AgroFlow, so they
 // show their value without a status word rather than an invented one.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Container, Droplet, Droplets, Gauge, RefreshCw, Thermometer } from 'lucide-react-native';
 import { useTheme } from '@/context/ThemeContext';
@@ -15,6 +15,7 @@ import { useI18n, type TranslationKey } from '@/i18n';
 import { fetchTankStatus, type TankStatus } from '@/services/agroFlowApi';
 import { cropLabel, modeLabel, placeLabel, soilLabel } from '@/lib/labels';
 import { dayLabel } from '@/lib/setupHelpers';
+import { FarmPhoto } from './visual/FarmPhoto';
 
 type T = (key: TranslationKey, params?: Record<string, string | number>) => string;
 export type TileStatus = 'good' | 'normal' | 'low' | 'high' | 'check' | null;
@@ -67,27 +68,41 @@ const ICON = { soil: Droplets, temp: Thermometer, hum: Droplet, tank: Container,
 export function SensorReadingsCard({ zone }: { zone: Zone }) {
   const { colors } = useTheme();
   const { t } = useI18n();
-  const { farm, refreshZones } = useAgroFlow();
+  const { farm, refreshZones, isFarmLoading, isZonesLoading } = useAgroFlow();
   const farmId = farm?.id ?? null;
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const [tank, setTank] = useState<TankStatus | null>(null);
+  const [tankFor, setTankFor] = useState<{ farmId: string; value?: TankStatus; failed?: boolean } | null>(null);
+  const request = useRef(0);
+  const answer = tankFor?.farmId === farmId ? tankFor : null;
+  const tank = answer?.value ?? null;
+  const dataLoading = !!isFarmLoading || !!isZonesLoading;
+  const tankPhase = dataLoading ? 'loading' : !farmId ? 'error' : !answer ? 'loading' : answer.failed ? 'error' : 'value';
   const [refreshing, setRefreshing] = useState(false);
   const loadTank = useCallback(() => {
+    const sequence = ++request.current;
     if (!farmId) return;
-    fetchTankStatus(farmId).then(setTank).catch(() => setTank(null));
+    setTankFor(null);
+    return fetchTankStatus(farmId).then(value => { if (request.current === sequence) setTankFor({ farmId, value }); })
+      .catch(() => { if (request.current === sequence) setTankFor({ farmId, failed: true }); });
   }, [farmId]);
-  useEffect(loadTank, [loadTank]);
+  useEffect(() => { void loadTank(); return () => { request.current++; }; }, [loadTank]);
   const refresh = async () => {
     setRefreshing(true);
-    try { await Promise.resolve(refreshZones()); loadTank(); } finally { setRefreshing(false); }
+    try { await Promise.resolve(refreshZones()); await loadTank(); } finally { setRefreshing(false); }
   };
-  const tiles = sensorTiles(t, zone, tank);
+  const tiles = sensorTiles(t, zone, tank).map(tile => {
+    const pending = tile.key === 'tank' ? tankPhase === 'loading' : dataLoading;
+    if (pending) return { ...tile, value: t('common.loading'), unit: undefined, status: null, note: undefined };
+    if (tile.key === 'tank' && tankPhase === 'error') return { ...tile, value: '—', unit: undefined, status: null, note: t('home.tankUnavailable') };
+    return tile;
+  });
   const ago = agoText(t, zone.lastReadingAt);
   return <View style={styles.card} testID="sensor-readings">
+    <FarmPhoto image="sensor" height={64}/>
     <View style={styles.head}>
       <View style={{ flex: 1 }}>
         <Text accessibilityRole="header" style={styles.title}>{t('sensor.title')}</Text>
-        <Text style={styles.sub} testID="sensor-age">{ago ? t('sensor.updated', { ago }) : t('sensor.noReading')}</Text>
+        <Text style={styles.sub} testID="sensor-age">{dataLoading ? t('common.loading') : ago ? t('sensor.updated', { ago }) : t('sensor.noReading')}</Text>
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={t('sensor.refresh')} accessibilityState={{ busy: refreshing }}
         onPress={() => { void refresh(); }} style={styles.refresh} testID="sensor-refresh" hitSlop={8}>
@@ -116,6 +131,8 @@ export function SensorReadingsCard({ zone }: { zone: Zone }) {
 export function WaterUsageCard({ zone }: { zone: Zone }) {
   const { colors } = useTheme();
   const { t } = useI18n();
+  const { isFarmLoading, isZonesLoading } = useAgroFlow();
+  const loading = !!isFarmLoading || !!isZonesLoading;
   const styles = useMemo(() => createStyles(colors), [colors]);
   const litres = (n: number | null | undefined) => (n == null ? null : `${Math.round(n).toLocaleString('en-ZA').replace(/,/g, ' ')} L`);
   const rows = [
@@ -128,7 +145,7 @@ export function WaterUsageCard({ zone }: { zone: Zone }) {
     <View style={styles.tiles}>
       {rows.map(r => <View key={r.key} style={styles.usage} testID={`usage-${r.key}`}>
         <Text style={styles.tileLabel}>{r.label}</Text>
-        <Text style={/^\d/.test(r.value) ? styles.value : styles.muted}>{r.value}</Text>
+        <Text style={!loading && /^\d/.test(r.value) ? styles.value : styles.muted}>{loading ? t('common.loading') : r.value}</Text>
       </View>)}
     </View>
     <Text style={styles.note}>{t('usage.estimate')}</Text>
@@ -138,6 +155,8 @@ export function WaterUsageCard({ zone }: { zone: Zone }) {
 export function ZoneDetailsCard({ zone, onEdit }: { zone: Zone; onEdit: () => void }) {
   const { colors } = useTheme();
   const { t } = useI18n();
+  const { isFarmLoading, isZonesLoading } = useAgroFlow();
+  const loading = !!isFarmLoading || !!isZonesLoading;
   const styles = useMemo(() => createStyles(colors), [colors]);
   const rows = [
     { label: t('details.crop'), value: cropLabel(t, zone.crop) },
@@ -159,7 +178,7 @@ export function ZoneDetailsCard({ zone, onEdit }: { zone: Zone; onEdit: () => vo
     </View>
     {rows.map((r, i) => <View key={r.label} style={[styles.row, i === rows.length - 1 && styles.rowLast]}>
       <Text style={styles.rowLabel}>{r.label}</Text>
-      <Text style={styles.rowValue}>{r.value}</Text>
+      <Text style={styles.rowValue}>{loading ? t('common.loading') : r.value}</Text>
     </View>)}
   </View>;
 }

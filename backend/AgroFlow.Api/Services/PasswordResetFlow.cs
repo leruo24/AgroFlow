@@ -184,12 +184,19 @@ public sealed class PasswordResetFlow
 
     // The welcome after a farmer links Telegram: a temporary password, plus a one-tap
     // "Sign in to AgroFlow" link when SignIn:LinkBaseUrl is set (the farmer web app).
-    public async Task<bool> SendWelcomeAsync(Guid profileId, string farmName, string farmLocation, string? appLink, CancellationToken ct)
+    // issuePassword: false when the farmer already has their password (they chose one, or the
+    // welcome web page showed it), so the message never changes a password they are using.
+    public async Task<bool> SendWelcomeAsync(Guid profileId, string farmName, string farmLocation, string? appLink, CancellationToken ct,
+        bool issuePassword = true)
     {
         var account = await _store.FindByIdAsync(profileId, ct);
         if (account?.ChatId is not { } chat) return false;
-        var password = await IssueTemporaryAsync(profileId, ct);
-        if (password is null) return false;
+        string? password = null;
+        if (issuePassword)
+        {
+            password = await IssueTemporaryAsync(profileId, ct);
+            if (password is null) return false;
+        }
 
         var lang = account.Language;
         var lines = new List<string>
@@ -201,11 +208,26 @@ public sealed class PasswordResetFlow
             "",
             BotText.Get(lang, "welcome.signin"),
             BotText.Get(lang, "welcome.email", ("email", account.Email)),
-            BotText.Get(lang, "welcome.password", ("password", EasyPassword.Display(password))),
-            "",
-            BotText.Get(lang, "welcome.change"),
         };
+        if (password is not null)
+        {
+            lines.Add(BotText.Get(lang, "welcome.password", ("password", EasyPassword.Display(password))));
+            lines.Add("");
+            lines.Add(BotText.Get(lang, "welcome.change"));
+        }
+        else
+        {
+            lines.Add(BotText.Get(lang, "welcome.password.kept"));
+        }
+        // The Android app and the web app (our existing addresses), then what happens next.
         if (!string.IsNullOrWhiteSpace(appLink)) { lines.Add(""); lines.Add(BotText.Get(lang, "welcome.app", ("link", appLink))); }
+        if (!string.IsNullOrWhiteSpace(_signInBaseUrl))
+        {
+            if (string.IsNullOrWhiteSpace(appLink)) lines.Add("");
+            lines.Add(BotText.Get(lang, "welcome.webapp", ("link", _signInBaseUrl.TrimEnd('/') + "/login")));
+        }
+        lines.Add("");
+        lines.Add(BotText.Get(lang, "welcome.installer"));
 
         var link = await NewSignInLinkAsync(profileId, ct);
         if (link is null) return await _messenger.SendAsync(chat, string.Join("\n", lines), ct);

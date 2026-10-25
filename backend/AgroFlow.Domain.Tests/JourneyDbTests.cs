@@ -78,19 +78,32 @@ public class JourneyDbTests : IClassFixture<SimDbHost>
         await Send(ApiHost.Admin, HttpMethod.Put, $"/api/admin/farms/{farmId}/case", new { serviceAgreed = true, serviceStatus = "sponsored", payer = "Sponsor" });
         Assert.Equal("service_agreed", Stage((await Send(Farmer, HttpMethod.Get, $"/api/farmer/farms/{farmId}/journey")).Body));
 
-        // The preferences task needs the password changed and the terms accepted first.
+        // RET-10: account, details and installation are three separate lines.
+        var (_, agreed) = await Send(Farmer, HttpMethod.Get, $"/api/farmer/farms/{farmId}/journey");
+        Assert.Equal("needs_password", agreed.GetProperty("account").GetProperty("status").GetString());
+        Assert.Equal("not_booked", agreed.GetProperty("installation").GetProperty("status").GetString());
+        Assert.Equal("Installation: not booked yet", agreed.GetProperty("installation").GetProperty("text").GetString());
+
+        // The preferences task needs the password changed first.
         var (early, earlyBody) = await Send(Farmer, HttpMethod.Post, $"/api/farmer/farms/{farmId}/tasks/preferences");
         Assert.Equal(HttpStatusCode.BadRequest, early);
         Assert.Contains("password", earlyBody.GetProperty("error").GetString());
         await Q("update profile set must_change_password = false where id = $1", Farmer);
-        var (stale, _) = await Send(Farmer, HttpMethod.Post, "/api/farmer/terms/accept", new { accepted = true, termsVersion = "0.0", privacyVersion = "0.0" });
-        Assert.Equal(HttpStatusCode.Conflict, stale);
-        var (ok, okBody) = await Send(Farmer, HttpMethod.Post, "/api/farmer/terms/accept", new { accepted = true, termsVersion = "0.1-draft", privacyVersion = "0.1-draft" });
-        Assert.Equal(HttpStatusCode.OK, ok);
-        Assert.True(okBody.GetProperty("accepted").GetBoolean());
-        Assert.Equal(2L, await Q("select count(*) from terms_acceptance where profile_id = $1", Farmer));
+        // RET-02: acceptance is off (the default) and the documents are drafts: a preview, never
+        // recorded, and not needed for an active account.
+        var (preview, previewBody) = await Send(Farmer, HttpMethod.Post, "/api/farmer/terms/accept", new { accepted = true, termsVersion = "0.1-draft", privacyVersion = "0.1-draft" });
+        Assert.Equal(HttpStatusCode.Conflict, preview);
+        Assert.True(previewBody.GetProperty("preview").GetBoolean());
+        Assert.Equal(0L, await Q("select count(*) from terms_acceptance where profile_id = $1", Farmer));
         Assert.Equal(HttpStatusCode.OK, (await Send(Farmer, HttpMethod.Post, $"/api/farmer/farms/{farmId}/tasks/preferences")).Status);
-        Assert.Equal("account_active", Stage((await Send(Farmer, HttpMethod.Get, $"/api/farmer/farms/{farmId}/journey")).Body));
+        var (_, active) = await Send(Farmer, HttpMethod.Get, $"/api/farmer/farms/{farmId}/journey");
+        Assert.Equal("account_active", Stage(active));
+        Assert.False(active.GetProperty("terms").GetProperty("acceptanceEnabled").GetBoolean());
+        Assert.Equal("active", active.GetProperty("account").GetProperty("status").GetString());
+        Assert.Equal("Account: active", active.GetProperty("account").GetProperty("label").GetString());
+        // RET-10: an active account is not an installation.
+        Assert.Equal("not_booked", active.GetProperty("installation").GetProperty("status").GetString());
+        Assert.Equal("Your details: 1 of 4", active.GetProperty("setupProgress").GetProperty("label").GetString());
 
         // Water: refused without a source, accepted once "I don't know - help me" covers it.
         Assert.Equal(HttpStatusCode.BadRequest, (await Send(Farmer, HttpMethod.Post, $"/api/farmer/farms/{farmId}/tasks/water")).Status);
@@ -156,6 +169,37 @@ public class JourneyDbTests : IClassFixture<SimDbHost>
         Assert.Equal("automatic", yesBody.GetProperty("irrigationMode").GetString());
         var (_, after) = await Send(Farmer, HttpMethod.Get, $"/api/farmer/farms/{farmId}/journey");
         Assert.False(after.GetProperty("zones").EnumerateArray().Single(z => z.GetProperty("zoneId").GetInt64() == zoneId).GetProperty("offerAutomatic").GetBoolean());
+    }
+
+    [SimDbFact]
+    public async Task A_draft_is_never_accepted_even_with_acceptance_switched_on()
+    {
+        await SeedAsync(Guid.NewGuid().ToString()[..6]);
+        await Q("update profile set must_change_password = false where id = $1", Farmer);
+        await Q("delete from terms_acceptance where profile_id = $1", Farmer);
+        Assert.Equal("false", await Q("select value::text from app_setting where key = 'terms.acceptance_enabled'"));   // 0062: off by default
+
+        // Staff switch it on in Settings; it is saved, but both documents are still drafts.
+        var (on, _) = await Send(ApiHost.Admin, HttpMethod.Put, "/api/admin/settings/drought-community",
+            new { settings = new[] { new { key = "terms.acceptance_enabled", value = (object)true } } });
+        Assert.Equal(HttpStatusCode.OK, on);
+        try
+        {
+            Assert.Equal("true", await Q("select value::text from app_setting where key = 'terms.acceptance_enabled'"));
+            var (refused, body) = await Send(Farmer, HttpMethod.Post, "/api/farmer/terms/accept", new { accepted = true, termsVersion = "0.1-draft", privacyVersion = "0.1-draft" });
+            Assert.Equal(HttpStatusCode.Conflict, refused);
+            Assert.True(body.GetProperty("preview").GetBoolean());
+            Assert.Equal(0L, await Q("select count(*) from terms_acceptance where profile_id = $1", Farmer));
+            // A setting that is not true or false is refused.
+            var (bad, _) = await Send(ApiHost.Admin, HttpMethod.Put, "/api/admin/settings/drought-community",
+                new { settings = new[] { new { key = "terms.acceptance_enabled", value = (object)"yes" } } });
+            Assert.Equal(HttpStatusCode.BadRequest, bad);
+        }
+        finally
+        {
+            await Send(ApiHost.Admin, HttpMethod.Put, "/api/admin/settings/drought-community",
+                new { settings = new[] { new { key = "terms.acceptance_enabled", value = (object)false } } });
+        }
     }
 
     [SimDbFact]

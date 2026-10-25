@@ -168,7 +168,7 @@ public class SponsorMobileApiTests : IClassFixture<ApiHost>
         var root = RepoRoot();
         var manual = File.ReadAllText(Path.Combine(root, "backend", "AgroFlow.Api", "Endpoints", "ManualLogEndpoints.cs"));
         Assert.Contains("where not exists (select 1 from existing)", manual);
-        var tank = File.ReadAllText(Path.Combine(root, "backend", "AgroFlow.Domain", "TankPhController.cs"));
+        var tank = File.ReadAllText(Path.Combine(root, "backend", "AgroFlow.Domain", "IrrigationControl", "TankPhController.cs"));
         Assert.Contains("db.RefillAlreadyLogged(farmId, at, litres)", tank);
         Assert.Contains("db.FindSoilPh(zoneId, at, ph) ?? db.InsertSoilPh(", tank);
     }

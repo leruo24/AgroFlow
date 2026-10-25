@@ -180,7 +180,8 @@ try {
   check('kit enrols with the one-time code', claim.zoneId === Number(zoneId) && claim.farmId === Number(farmId) && !!claim.deviceToken);
   const reuse = await new FakeKit({ apiBase, mqttUrl: '', deviceId: 'OTHERKIT0001' }).http('POST', '/api/devices/claim',
     { deviceId: 'OTHERKIT0001', enrollmentCode: ENROLLMENT_CODE }, false);
-  check('the code works once only', reuse.status === 401, `second claim -> ${reuse.status}`);
+  check('the code links one kit only (another kit is told it is used)', reuse.status === 409 && reuse.body?.code === 'code_used',
+    `second claim -> ${reuse.status} ${reuse.body?.code}`);
   await kit.connectMqtt();
 
   // 6. Live readings every couple of seconds.
@@ -196,6 +197,22 @@ try {
   check('live readings are stored', !!stored, JSON.stringify(stored));
   const hw = (await q("select hardware_id, status, enrollment_status, last_seen > now() - interval '1 minute' as recent from hardware where device_id = $1", [DEVICE_ID])).rows[0];
   check('kit shows online', hw?.status === 'Online' && hw?.enrollment_status === 'active' && hw?.recent === true, JSON.stringify(hw));
+
+  // 6b. The kit's own report on every reading (firmware 1.7.1): Wi-Fi signal and soil-probe check,
+  //     kept on its record for the farmer's Kit tab (migration 0061).
+  await kit.publish('Temperature', 21.5, null, { rssi: -58, soilProbeOk: true });
+  const reported = await poll(async () => {
+    const r = (await q('select wifi_rssi, soil_probe_ok, kit_report_at is not null as at from hardware where device_id = $1', [DEVICE_ID])).rows[0];
+    return r?.wifi_rssi === -58 && r?.soil_probe_ok === true ? r : null;
+  });
+  await kit.publish('Humidity', 58, null, { rssi: -81, soilProbeOk: false });
+  const probeOut = await poll(async () => {
+    const r = (await q('select wifi_rssi, soil_probe_ok from hardware where device_id = $1', [DEVICE_ID])).rows[0];
+    return r?.soil_probe_ok === false && r?.wifi_rssi === -81 ? r : null;
+  });
+  check("the kit's Wi-Fi signal and soil-probe check reach its record (1.7.1), latest wins",
+    !!reported && !!probeOut, JSON.stringify({ reported, probeOut }));
+  await kit.publish('Temperature', 21.5, null, { rssi: -58, soilProbeOk: true });   // healthy again for the rest
 
   // 7. The broker drops for a logical 10 minutes. Like the firmware, the fake kit keeps
   //    every 30-second three-sensor sample with its measured time, then replays oldest first.
@@ -459,6 +476,73 @@ try {
   check('...and after a reboot (the IDs are kept in flash) the same command is still not carried out again',
     afterReboot?.repeated === true && rebooted.runs.length === 0);
   if (firstRun) await kit.reportRun({ runtimeSeconds: 30, triggerSource: 'manual', startedAt: (() => { const d = new Date(firstRun.ackedAt); d.setMilliseconds(0); return d; })() });
+
+  // 9f. Kit linking (firmware 1.7.2, October 2026). A kit that was linked before goes onto an EXISTING
+  //     farmer's Live zone: the reported bug (the claim answered 503 because hardware.device_id was
+  //     unique across all rows, migration 0063). The claim hands over AgroFlow's existing MQTT login
+  //     and the kit's own topics; the kit reports online/offline itself and acknowledges over MQTT.
+  const LINK_KIT = 'SIMKIT172B01';
+  const existingFarmer = (await q(
+    "insert into auth.users (email, raw_user_meta_data) values ('sim-existing@example.org', '{}') returning id")).rows[0].id;
+  await q("insert into profile (id, name, email, role) values ($1, 'Existing Farmer', 'sim-existing@example.org', 'farm_user') on conflict (id) do nothing", [existingFarmer]);
+  const liveFarm = (await q("insert into farm (owner_id, name, location) values ($1, 'Existing Live Farm', 'Nowhere') returning farm_id", [existingFarmer])).rows[0].farm_id;
+  const liveZone = (await q(`insert into zone (farm_id, name, crop_type, irrigation_mode, commission_state, flow_rate_lpm)
+     values ($1, 'Existing bed', 'spinach', 'manual', 'commissioned', 2) returning id`, [liveFarm])).rows[0].id;
+  // Its earlier link, on the simulation farm, with a reading in its history.
+  const oldLink = (await q(`insert into hardware (device_name, device_type, zone_id, device_id, enrollment_status, status, last_seen)
+     values ('Test kit', 'ESP32', $1, $2, 'active', 'Offline', now() - interval '1 day') returning hardware_id`, [zoneId, LINK_KIT])).rows[0].hardware_id;
+  await q("insert into sensor_reading (zone_id, hardware_id, sensor_type, value, recorded_at) values ($1, $2, 'Humidity', 50, now() - interval '1 day')", [zoneId, oldLink]);
+  // "Add kit" on the existing farmer's zone (KitCodes.IssueAsync's effect): a 6-digit code, 30 minutes.
+  const linkCode = String(Math.floor(Math.random() * 1e6)).padStart(6, '0');
+  await q(`insert into hardware (device_name, device_type, zone_id, enrollment_status, enrollment_code, enrollment_code_expires_at)
+     values ('Existing bed kit', 'ESP32', $1, 'enrolled', $2, now() + interval '30 minutes')`, [liveZone, linkCode]);
+  const kit172 = new FakeKit({ apiBase, mqttUrl: `mqtt://127.0.0.1:${MQTT_PORT}`, deviceId: LINK_KIT, firmwareVersion: '1.7.2', log });
+  const elsewhere = await kit172.http('POST', '/api/devices/claim', { deviceId: LINK_KIT, enrollmentCode: linkCode, firmwareVersion: '1.7.2' }, false);
+  check('a kit still linked to another farm is refused clearly (409 kit_linked_elsewhere, naming the farm), not a 503',
+    elsewhere.status === 409 && elsewhere.body?.code === 'kit_linked_elsewhere' && /Simulation Farm/.test(elsewhere.body?.error ?? ''),
+    `${elsewhere.status} ${JSON.stringify(elsewhere.body)}`);
+  await q("update hardware set enrollment_status = 'replaced', status = 'Offline', token_revoked_at = now() where hardware_id = $1", [oldLink]);   // staff: Unlink
+  const linked172 = await kit172.claim(linkCode);
+  const retried = await kit172.http('POST', '/api/devices/claim', { deviceId: LINK_KIT, enrollmentCode: linkCode, firmwareVersion: '1.7.2' }, false);
+  check("after Unlink the kit links to the existing farmer's Live zone, and its old link's history stays",
+    linked172.zoneId === Number(liveZone) && linked172.farmName === 'Existing Live Farm' &&
+    (await q('select count(*)::int n from sensor_reading where hardware_id = $1', [oldLink])).rows[0].n === 1,
+    JSON.stringify({ zone: linked172.zoneId, farm: linked172.farmName }));
+  check('the same kit retrying the same code is answered again (no "already used")', retried.status === 200 && retried.body.zoneId === Number(liveZone));
+  kit172.token = retried.body.deviceToken; kit172.linked = retried.body;
+  check("the claim answer carries the existing MQTT login and broker, and the kit's own four topics",
+    linked172.mqttUsername === MQTT_USER && linked172.mqttPassword === MQTT_PASS && linked172.mqttHost === '127.0.0.1' &&
+    linked172.mqttPort === MQTT_PORT && linked172.mqttTls === false &&
+    linked172.topics?.telemetry === `agroflow/${LINK_KIT}/telemetry` && linked172.topics?.cmd === `agroflow/${LINK_KIT}/cmd` &&
+    linked172.topics?.ack === `agroflow/${LINK_KIT}/ack` && linked172.topics?.status === `agroflow/${LINK_KIT}/status`,
+    JSON.stringify({ ...linked172, deviceToken: '(hidden)', mqttPassword: '(hidden)' }));
+
+  await kit172.connectMqtt({ rssi: -63 });
+  const online172 = await poll(async () => {
+    const r = (await q("select status, status_reported_at is not null as reported, firmware_version, wifi_rssi from hardware where device_id = $1 and enrollment_status = 'active'", [LINK_KIT])).rows[0];
+    return r?.status === 'Online' && r.reported && r.firmware_version === '1.7.2' && r.wifi_rssi === -63 ? r : null;
+  });
+  check('on connect the kit publishes "online" (retained) with firmware and signal on its status topic', !!online172, JSON.stringify(online172));
+  await kit172.publishReadings({ soil: 37, temperature: 23, humidity: 55 });
+  const telemetry = await poll(async () =>
+    (await q('select count(*)::int n from sensor_reading where zone_id = $1', [liveZone])).rows[0].n >= 3);
+  check("its readings on agroflow/<id>/telemetry land on the existing farmer's zone", !!telemetry);
+  const testCmd = (await q("insert into irrigation_commands (zone_id, command, source, duration_seconds) values ($1, 'start', 'manual', 10) returning id", [liveZone])).rows[0].id;
+  const got172 = await kit172.waitForCommand(c => String(c.id) === String(testCmd)).catch(() => null);
+  if (got172) await kit172.ack(got172.id);
+  const acked172 = await poll(async () => (await q('select status from irrigation_commands where id = $1', [testCmd])).rows[0]?.status === 'executed');
+  check('a command reaches it on agroflow/<id>/cmd and its acknowledgement on /ack marks it done', !!got172 && !!acked172,
+    `received ${!!got172}, executed ${!!acked172}`);
+
+  kit172.dropConnection();
+  const offline172 = await poll(async () =>
+    (await q("select status from hardware where device_id = $1 and enrollment_status = 'active'", [LINK_KIT])).rows[0]?.status === 'Offline', 15000);
+  await kit172.connectMqtt({ rssi: -58 });
+  const back172 = await poll(async () =>
+    (await q("select status from hardware where device_id = $1 and enrollment_status = 'active'", [LINK_KIT])).rows[0]?.status === 'Online');
+  check('power cut: the last will marks it offline; when it reconnects it is online again', !!offline172 && !!back172,
+    `offline ${!!offline172}, online again ${!!back172}`);
+  await kit172.close();
 
   // 9b. Drought mode and community alerts: the demo farms (0056) and the start-up drought check.
   const demo = (await q(`select f.name, f.latitude, f.longitude, f.sim_scenario, f.water_source,

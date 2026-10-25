@@ -15,6 +15,10 @@ export function mountPublicNavigation(root: HTMLElement): void {
       if (link.pathname === location.pathname) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
+    const serviceMenu = root.querySelector<HTMLDetailsElement>('[data-service-menu]');
+    const serviceCurrent = Boolean(serviceMenu?.querySelector('a[aria-current="page"]'));
+    serviceMenu?.classList.toggle('is-current', serviceCurrent);
+    if (serviceMenu) serviceMenu.open = false;
     const menu = root.querySelector<HTMLButtonElement>('[data-public-menu]');
     if (menu?.getAttribute('aria-expanded') === 'true') menu.click();
     wireWelcome(next);

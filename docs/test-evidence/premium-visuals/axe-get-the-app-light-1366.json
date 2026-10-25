@@ -1,0 +1,13 @@
+{
+  "violations": [],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "targets": [
+        [
+          "#appShotsHeading"
+        ]
+      ]
+    }
+  ]
+}

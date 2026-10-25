@@ -6,7 +6,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
     [
       {
         "backgroundColor": "#FFFFFF",
-        "borderColor": "#C5D5DF",
+        "borderColor": "#C6D7DF",
         "borderRadius": 12,
         "borderWidth": 1,
         "gap": 8,
@@ -46,7 +46,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={1}
         style={
           {
-            "color": "#183344",
+            "color": "#132F42",
             "fontSize": 24,
             "fontWeight": "600",
           }
@@ -86,7 +86,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={1}
         style={
           {
-            "color": "#183344",
+            "color": "#132F42",
             "fontSize": 24,
             "fontWeight": "600",
           }
@@ -138,7 +138,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         numberOfLines={1}
         style={
           {
-            "color": "#183344",
+            "color": "#132F42",
             "fontSize": 24,
             "fontWeight": "600",
           }
@@ -199,7 +199,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#132F42",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,
@@ -241,7 +241,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#132F42",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,
@@ -283,7 +283,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#132F42",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,
@@ -328,7 +328,7 @@ exports[`shared components (snapshots) Card, InfoGrid and StatsRow 1`] = `
         style={
           [
             {
-              "color": "#183344",
+              "color": "#132F42",
               "fontSize": 16,
               "fontWeight": "600",
               "lineHeight": 22,

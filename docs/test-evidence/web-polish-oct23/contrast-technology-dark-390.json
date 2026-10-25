@@ -1,0 +1,78 @@
+[
+  {
+    "text": "01",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Built for the field",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "A protected field unit brings sensing, connectivity and irrigation control together close to the crop.",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "02",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Connected to the crop",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "The soil probe enters the root zone, the DHT11 measures the crop microclimate, and protected connections carry power and the pump output.",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "03",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Inside AgroFlow",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Open the weatherproof side-hinged lid to reveal the ESP32, 5 V relay, soil-sensor interface, protected terminals and routed wiring.",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "04",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Sense",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "The soil probe and DHT11 measure field conditions. The ESP32 reads those sensors and reports their measurements to the AgroFlow platform.",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "05",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Act",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Irrigation decisions are sent to the field controller, which uses its relay module to switch the connected pump output.",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "06",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "From field conditions to irrigation action.",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "One connected unit closes the loop between the crop zone, the AgroFlow platform and controlled watering.",
+    "ratio": 10.508300539522526
+  },
+  {
+    "text": "Technology",
+    "ratio": 10.508300539522526
+  }
+]

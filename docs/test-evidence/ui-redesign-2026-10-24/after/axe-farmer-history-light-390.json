@@ -1,0 +1,130 @@
+{
+  "violations": [
+    {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": [
+        {
+          "target": [
+            ".r-zz5t5d"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-hbpseb"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1w6e6rj"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-6g5kqj"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-11c0sde"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1cmwbt1.r-18u37iz.r-1awozwy > .r-1i10wst.r-ksidj5.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-7ptqe7"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-rjixqe.r-1nqh75p.r-n6v787:nth-child(3)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-rjixqe.r-1nqh75p.r-n6v787:nth-child(4)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href=\"/\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"irrigation\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"kit\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-dnmrzs"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"alerts\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"more\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "color-contrast",
+      "targets": [
+        [
+          "a[href=\"/\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"irrigation\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"kit\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"alerts\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"more\"] > .r-1enofrn.r-15zeulg.r-1kfrs79"
+        ]
+      ]
+    },
+    {
+      "id": "label-content-name-mismatch",
+      "targets": [
+        [
+          ".r-1cgepjk"
+        ]
+      ]
+    }
+  ]
+}

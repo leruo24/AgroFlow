@@ -22,7 +22,7 @@ public sealed class SimulationTests
     [Fact]
     public void Database_guards_both_target_selection_and_insert_against_real_farms()
     {
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "backend", "AgroFlow.Domain", "SimulationXDB.cs"));
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "backend", "AgroFlow.Domain", "DataManagement", "SimulationXDB.cs"));
         Assert.True(source.Split("f.is_simulated = true", StringSplitOptions.None).Length >= 3,
             "Both SELECT and INSERT must independently require a simulated farm.");
         Assert.Contains("r.simulated = true", source);

@@ -64,7 +64,10 @@ public static class Journey
         int ActiveKits,
         int ChecklistDone,
         int ChecklistTotal,
-        string? OwnerName);
+        string? OwnerName,
+        // RET-02: whether accepting the terms is part of an active account. False while staff have
+        // acceptance switched off or a document is still a draft (LegalDocuments.AcceptanceOpen).
+        bool TermsRequired = true);
 
     public sealed record Step(string Key, string Label, bool Done);
 
@@ -82,7 +85,30 @@ public static class Journey
         string DateLabel,
         bool Live);
 
-    public static bool AccountActiveNow(Facts f) => f.HasFarmerAccount && f.PasswordChanged && f.TermsAccepted;
+    public static bool AccountActiveNow(Facts f) => f.HasFarmerAccount && f.PasswordChanged && (f.TermsAccepted || !f.TermsRequired);
+
+    // RET-10: the account on its own, apart from the installation. "active" is the farmer's own
+    // password (and accepted terms, when acceptance is switched on).
+    public const string AccountNotCreated = "not_created";
+    public const string AccountNeedsPassword = "needs_password";
+    public const string AccountNeedsTerms = "needs_terms";
+    public const string AccountActiveStatus = "active";
+
+    public static string AccountStatus(Facts f) =>
+        !f.HasFarmerAccount ? AccountNotCreated
+        : !f.PasswordChanged ? AccountNeedsPassword
+        : f.TermsRequired && !f.TermsAccepted ? AccountNeedsTerms
+        : AccountActiveStatus;
+
+    // RET-10: the installation on its own: the account stages are all "not booked yet".
+    public static string InstallationStatus(string stage) => stage switch
+    {
+        ReadyForInstallation => "waiting_for_booking",
+        VisitBooked => "visit_booked",
+        Installing => "installing",
+        Commissioned => "commissioned",
+        _ => "not_booked",
+    };
 
     // A farm whose zones all existed before the journey (legacy) and that has a working kit is
     // already live: it is never sent back to "Ready for installation".
@@ -111,7 +137,7 @@ public static class Journey
             new("enquiry", "AgroFlow has your request", f.HasEnquiry || f.HasFarm),
             new("details", "Your farm and contact details are with AgroFlow", f.HasFarm),
             new("service_agreed", "The service and its cost are agreed", f.ServiceAgreed),
-            new("account_active", "Your account is active (own password, terms accepted)", AccountActiveNow(f)),
+            new("account_active", f.TermsRequired ? "Your account is active (own password, terms accepted)" : "Your account is active (own password)", AccountActiveNow(f)),
             new("farmer_details", $"Your details: {Math.Min(f.FarmerTasksDone, FarmerTaskCount)} of {FarmerTaskCount}", f.FarmerTasksDone >= FarmerTaskCount),
             new("visit_booked", "The installation visit is booked", f.NextVisitAt is not null || f.VisitInProgress || f.ChecklistDone > 0 || IsLive(f)),
             new("installing", f.ChecklistTotal > 0 ? $"Installer checks: {f.ChecklistDone} of {f.ChecklistTotal}" : "Installer checks", f.ChecklistTotal > 0 && f.ChecklistDone >= f.ChecklistTotal || IsLive(f)),
@@ -137,7 +163,7 @@ public static class Journey
                 who = Staff; dateLabel = "Waiting for AgroFlow staff";
                 break;
             case ServiceAgreed:
-                next = "Sign in, choose your own password and accept the terms.";
+                next = f.TermsRequired ? "Sign in, choose your own password and accept the terms." : "Sign in and choose your own password.";
                 who = You; dateLabel = "Whenever you are ready";
                 break;
             case AccountActive:

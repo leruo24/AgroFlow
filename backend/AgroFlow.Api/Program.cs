@@ -93,6 +93,8 @@ builder.Services.AddAgroFlowCors(builder.Configuration, builder.Environment);
 // never in appsettings.json.
 builder.Services.AddSingleton<DeviceAuthService>();
 builder.Services.AddSingleton<ClaimRateLimiter>();
+// The last refused kit-link attempt per waiting code, for the admin's live Add kit panel.
+builder.Services.AddSingleton<KitLinkAttempts>();
 // Per-IP limit on the public enquiry form.
 builder.Services.AddSingleton<EnquiryRateLimiter>();
 builder.Services.AddSingleton<AgroFlow.Api.Auth.IProfileRoles, AgroFlow.Api.Auth.DbProfileRoles>();
@@ -362,6 +364,7 @@ app.MapDeviceEnrollmentEndpoints();
 app.MapDeviceCommandEndpoints();
 app.MapDeviceConfigEndpoints();
 app.MapZoneHardwareEndpoints();
+app.MapKitStatusEndpoints();
 app.MapFarmerOnboardingEndpoints();
 app.MapFarmerEndpoints();
 app.MapCommandStatusEndpoints();   // Irrigate: sent -> started -> finished
@@ -403,6 +406,8 @@ app.MapEnquiryAdminEndpoints();
 app.MapEnquiryReportEndpoints();
 app.MapDismissalEndpoints();
 app.MapMqttPoolEndpoints();
+app.MapKitLinkEndpoints();
+app.MapWelcomeEndpoints();
 app.MapPasswordResetEndpoints();
 // The enquiry-to-installation journey (Part B of the 22 October audit fixes).
 app.MapJourneyEndpoints();

@@ -275,7 +275,7 @@ function HelpLink({ t, styles, sent, onPress, testID }: { t: T; styles: Styles; 
 }
 
 function Choice({ label, hint, on, onPress, styles, testID }: { label: string; hint?: string; on: boolean; onPress: () => void; styles: Styles; testID?: string }) {
-  return <Pressable accessibilityRole="radio" accessibilityState={{ checked: on }} onPress={onPress} style={[styles.choice, on && styles.choiceOn]} testID={testID}>
+  return <Pressable accessibilityRole="radio" aria-checked={on} accessibilityState={{ checked: on }} onPress={onPress} style={[styles.choice, on && styles.choiceOn]} testID={testID}>
     <Text style={[styles.choiceText, on && styles.choiceTextOn]}>{label}</Text>
     {hint ? <Text style={styles.help}>{hint}</Text> : null}
   </Pressable>;
@@ -354,16 +354,20 @@ function PasswordScreen({ t, styles, register, draftFor, setDraft }: ScreenProps
   </>;
 }
 
-// "Before you start": the draft terms and privacy notice, their version and date, and an
-// unticked box. Accepted only when the server recorded it (who, which version, when).
+// "Before you start": the terms and privacy notice, their version and date, and an unticked box.
+// Accepted only when the server recorded it (who, which version, when). RET-02: until staff switch
+// acceptance on and the documents are approved (terms.acceptanceEnabled), they are a preview, "not
+// yet in effect": no box, and nothing is sent. An older server that does not say is a preview too,
+// so a draft is never accepted.
 function TermsScreen({ t, styles, register, draftFor, setDraft, journey }: ScreenProps) {
   const ticked = draftFor('terms.ticked', false);
   const accepted = journey?.terms.accepted;
+  const open = journey?.terms.acceptanceEnabled === true;
   const docs = journey?.terms.documents ?? [];
   const terms = docs.find(d => d.key === 'terms');
   const privacy = docs.find(d => d.key === 'privacy');
   useSave(register, async () => {
-    if (accepted?.all) return { ok: true };
+    if (accepted?.all || !open) return { ok: true };
     if (!terms || !privacy) return { ok: false, error: t('terms.unavailable') };
     if (!ticked) return { ok: false, error: t('terms.tickFirst') };
     await acceptTerms(terms.version, privacy.version);
@@ -378,10 +382,12 @@ function TermsScreen({ t, styles, register, draftFor, setDraft, journey }: Scree
     </View>
     {[terms, privacy].map(d => d ? <Pressable key={d.key} accessibilityRole="link" onPress={() => router.push(`/legal?doc=${d.key}` as never)} style={styles.linkButton} testID={`terms-open-${d.key}`}>
       <Text style={styles.link}>{t('terms.read', { title: t(`terms.doc.${d.key}` as TranslationKey) })}</Text>
-      <Text style={styles.help}>{t('terms.version', { version: d.version, date: dayLabel(d.date) })} · {d.status === 'draft' ? t('terms.draft') : ''}</Text>
+      <Text style={styles.help} testID={`terms-status-${d.key}`}>{t('terms.version', { version: d.version, date: dayLabel(d.date) })} · {!open ? t('terms.preview') : d.status === 'draft' ? t('terms.draft') : ''}</Text>
     </Pressable> : null)}
     {accepted?.all
       ? <Text style={styles.ok} testID="terms-accepted">{t('terms.acceptedOn', { date: formatSast(accepted.termsAcceptedAt ?? '') ?? '' })}</Text>
+      : !open
+      ? <Text style={styles.help} testID="terms-preview">{t('terms.previewBody')}</Text>
       : <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: ticked }} onPress={() => setDraft('terms.ticked', !ticked)}
           style={styles.checkRow} testID="terms-checkbox">
           <View style={[styles.checkbox, ticked && styles.checkboxOn]}>{ticked ? <Text style={styles.checkMark}>✓</Text> : null}</View>
@@ -461,7 +467,7 @@ function CommunityScreen({ t, styles, register, setup }: ScreenProps) {
     <Text style={styles.help}>{t('tasks.optional')}</Text>
     <Text style={styles.help}>{t('setup.community.limit')}</Text>
     <Text style={styles.help}>{t('setup.community.unverified')}</Text>
-    <View accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
+    <View accessibilityLabel={t('setup.community.title')} accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
       <Choice styles={styles} on={prefs.communityOptIn} onPress={() => setPrefs({ ...prefs, communityOptIn: true })} label={t('setup.community.on')} testID="setup-community-on" />
       <Choice styles={styles} on={!prefs.communityOptIn} onPress={() => setPrefs({ ...prefs, communityOptIn: false })} label={t('setup.community.off')} testID="setup-community-off" />
     </View>
@@ -508,7 +514,7 @@ function LocationScreen({ t, styles, register, draftFor, setDraft, setup }: Scre
           <FarmMapSurface latitude={f!.latitude!} longitude={f!.longitude!} zoom={13} onFailure={() => undefined} />
         </View>
       : <Text style={styles.help}>{t('setup.location.noPoint')}</Text>}
-    <View accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
+    <View accessibilityLabel={t('setup.location.title')} accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
       <Choice styles={styles} on={choice === 'right'} onPress={() => setDraft('location', 'right')} label={t('setup.looksRight')} testID="setup-location-right" />
       <Choice styles={styles} on={choice === 'wrong'} onPress={() => setDraft('location', 'wrong')} label={t('setup.location.wrong')} testID="setup-location-wrong" />
     </View>
@@ -530,7 +536,7 @@ function WaterScreen({ t, styles, register, draftFor, setDraft, setup }: ScreenP
   });
   return <>
     <Intro styles={styles} title={t('setup.water.title')} why={t('setup.water.why')} />
-    <View accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
+    <View accessibilityLabel={t('setup.water.title')} accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
       {WATER_SOURCES.map(s => <Choice key={s} styles={styles} on={source === s} onPress={() => setDraft('water', s)}
         label={t(`setup.water.${s}` as TranslationKey)} testID={`setup-water-${s}`} />)}
     </View>
@@ -564,8 +570,8 @@ function TankScreen({ t, styles, register, draftFor, setDraft, setup }: ScreenPr
       {savedLeft != null ? ` · ${t('home.tankLeft', { litres: Math.round(savedLeft) })}` : ''}
     </Text> : null}
     <Text style={styles.label}>{t('setup.tank.size')}</Text>
-    <View style={styles.chips} accessibilityRole="radiogroup">
-      {TANK_SIZES.map(s => <Pressable key={s} accessibilityRole="radio" accessibilityState={{ checked: size === s }}
+    <View accessibilityLabel={t('setup.tank.size')} style={styles.chips} accessibilityRole="radiogroup">
+      {TANK_SIZES.map(s => <Pressable key={s} accessibilityRole="radio" aria-checked={size === s} accessibilityState={{ checked: size === s }}
         onPress={() => { setDraft('tank.size', s); setDraft('tank.custom', ''); }} style={[styles.chip, size === s && styles.chipOn]} testID={`setup-tank-size-${s}`}>
         <Text style={[styles.chipText, size === s && styles.chipTextOn]}>{t('setup.tank.litres', { n: s.toLocaleString('en-ZA').replace(/,/g, ' ') })}</Text>
       </Pressable>)}
@@ -573,8 +579,8 @@ function TankScreen({ t, styles, register, draftFor, setDraft, setup }: ScreenPr
     <TextInput keyboardType="number-pad" value={custom} onChangeText={v => { setDraft('tank.custom', v); setDraft('tank.size', null); }} style={styles.input}
       placeholder={t('setup.tank.custom')} accessibilityLabel={t('setup.tank.custom')} testID="setup-tank-custom" />
     <Text style={styles.label}>{t('setup.tank.howFull')}</Text>
-    <View style={styles.chips} accessibilityRole="radiogroup">
-      {TANK_LEVELS.map(l => <Pressable key={l.key} accessibilityRole="radio" accessibilityState={{ checked: level === l.fraction }}
+    <View accessibilityLabel={t('setup.tank.howFull')} style={styles.chips} accessibilityRole="radiogroup">
+      {TANK_LEVELS.map(l => <Pressable key={l.key} accessibilityRole="radio" aria-checked={level === l.fraction} accessibilityState={{ checked: level === l.fraction }}
         onPress={() => setDraft('tank.level', l.fraction)} style={[styles.chip, level === l.fraction && styles.chipOn]} testID={`setup-tank-level-${l.key}`}>
         <Text style={[styles.chipText, level === l.fraction && styles.chipTextOn]}>{t(`setup.tank.${l.key}` as TranslationKey)}</Text>
       </Pressable>)}
@@ -616,17 +622,17 @@ function CropScreen({ t, styles, register, draftFor, setDraft, setup, help, help
       return <View key={z.zoneId} style={styles.card} testID={`setup-zone-${z.zoneId}`}>
         <Text style={styles.cardTitle}>{z.name}</Text>
         <Text style={styles.label}>{t('setup.zones.crop')}</Text>
-        <View style={styles.chips} accessibilityRole="radiogroup">
-          {ZONE_CROPS.map(c => <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ checked: crop === c.value }}
+        <View accessibilityLabel={t('setup.zones.crop')} style={styles.chips} accessibilityRole="radiogroup">
+          {ZONE_CROPS.map(c => <Pressable key={c.value} accessibilityRole="radio" aria-checked={crop === c.value} accessibilityState={{ checked: crop === c.value }}
             onPress={() => setDraft(`crop.${z.zoneId}`, c.value)} style={[styles.chip, crop === c.value && styles.chipOn]} testID={`setup-crop-${z.zoneId}-${c.value}`}>
             <Text style={[styles.chipText, crop === c.value && styles.chipTextOn]}>{t(`crop.${c.value}` as TranslationKey)}</Text>
           </Pressable>)}
         </View>
         <Text style={styles.label}>{t('setup.zones.plantedQ')}</Text>
-        <View style={styles.chips} accessibilityRole="radiogroup">
+        <View accessibilityLabel={t('setup.zones.plantedQ')} style={styles.chips} accessibilityRole="radiogroup">
           {WEEK_CHOICES.map(w => {
             const iso = plantedWeeksAgo(w) ?? todayIso;
-            return <Pressable key={w} accessibilityRole="radio" accessibilityState={{ checked: planted === iso }} onPress={() => setDraft(`planted.${z.zoneId}`, iso)}
+            return <Pressable key={w} accessibilityRole="radio" aria-checked={planted === iso} accessibilityState={{ checked: planted === iso }} onPress={() => setDraft(`planted.${z.zoneId}`, iso)}
               style={[styles.chip, planted === iso && styles.chipOn]} testID={`setup-planted-${z.zoneId}-${w}`}>
               <Text style={[styles.chipText, planted === iso && styles.chipTextOn]}>{w === 0 ? t('setup.zones.thisWeek') : t('setup.zones.weeks', { n: w })}</Text>
             </Pressable>;
@@ -656,8 +662,8 @@ function IrrigationScreen({ t, styles, register, draftFor, setDraft, setup, help
       const type = draftFor<string | null>(`irrigation.${z.zoneId}`, z.irrigationType ?? null);
       return <View key={z.zoneId} style={styles.card}>
         <Text style={styles.cardTitle}>{z.name}</Text>
-        <View style={styles.chips} accessibilityRole="radiogroup">
-          {IRRIGATION_TYPES.map(k => <Pressable key={k} accessibilityRole="radio" accessibilityState={{ checked: type === k }}
+        <View accessibilityLabel={t('tasks.irrigation.title')} style={styles.chips} accessibilityRole="radiogroup">
+          {IRRIGATION_TYPES.map(k => <Pressable key={k} accessibilityRole="radio" aria-checked={type === k} accessibilityState={{ checked: type === k }}
             onPress={() => setDraft(`irrigation.${z.zoneId}`, k)} style={[styles.chip, type === k && styles.chipOn]} testID={`setup-irrigation-${z.zoneId}-${k}`}>
             <Text style={[styles.chipText, type === k && styles.chipTextOn]}>{t(`setup.irrigation.${k}` as TranslationKey)}</Text>
           </Pressable>)}
@@ -685,7 +691,7 @@ function SoilTypeScreen({ t, styles, register, draftFor, setDraft, setup }: Scre
       const soil = draftFor<string>(`soil.${z.zoneId}`, z.soilType ?? 'loam');
       return <View key={z.zoneId} style={styles.card}>
         <Text style={styles.cardTitle}>{z.name}</Text>
-        <View accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
+        <View accessibilityLabel={t('tasks.soilType.title')} accessibilityRole="radiogroup" style={{ gap: Spacing.two }}>
           {SOIL_TYPES.map(s => <Choice key={s} styles={styles} on={soil === s} onPress={() => setDraft(`soil.${z.zoneId}`, s)}
             label={t(`setup.soilType.${s}` as TranslationKey)} hint={t(`setup.soilType.${s}Desc` as TranslationKey)} testID={`setup-soil-${z.zoneId}-${s}`} />)}
         </View>
@@ -722,8 +728,8 @@ function SizeScreen({ t, styles, register, draftFor, setDraft, setup, help, help
         </Text>
         <TextInput keyboardType="decimal-pad" value={value} onChangeText={v => setDraft(`size.${z.zoneId}`, v)} style={styles.input}
           accessibilityLabel={t('setup.size.label')} testID={`setup-size-value-${z.zoneId}`} />
-        <View style={styles.chips} accessibilityRole="radiogroup">
-          {(['m2', 'ha'] as const).map(u => <Pressable key={u} accessibilityRole="radio" accessibilityState={{ checked: unit === u }}
+        <View accessibilityLabel={t('tasks.size.title')} style={styles.chips} accessibilityRole="radiogroup">
+          {(['m2', 'ha'] as const).map(u => <Pressable key={u} accessibilityRole="radio" aria-checked={unit === u} accessibilityState={{ checked: unit === u }}
             onPress={() => setDraft(`sizeUnit.${z.zoneId}`, u)} style={[styles.chip, unit === u && styles.chipOn]} testID={`setup-size-unit-${z.zoneId}-${u}`}>
             <Text style={[styles.chipText, unit === u && styles.chipTextOn]}>{t(`setup.size.${u}Unit` as TranslationKey)}</Text>
           </Pressable>)}

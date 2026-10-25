@@ -74,7 +74,25 @@ WiFi MAC — see 0009_mqtt_and_device_identity.sql). Both values come back in
 the `/api/devices/claim` response and are persisted to flash (`Preferences`)
 so they survive reboots.
 
-## Topics
+## Firmware 1.7.2: the kit's own topics
+
+| Direction | Topic | Payload |
+|---|---|---|
+| kit → AgroFlow | `agroflow/{deviceId}/telemetry` | the same reading JSON as `.../sensors` below |
+| AgroFlow → kit | `agroflow/{deviceId}/cmd` | the same command JSON as `.../commands` below, and `{"id":"<uuid>","command":"unlink"}` |
+| kit → AgroFlow | `agroflow/{deviceId}/ack` | `{"id":"<command uuid>","executedAt":"2026-10-24T10:00:00Z"}` |
+| kit → AgroFlow | `agroflow/{deviceId}/status` | retained: `offline` (the last will) or `{"state":"online","firmware":"1.7.2","rssi":-61}` on every connect |
+
+The claim (`POST /api/devices/claim`) answers with these four topics, AgroFlow's existing MQTT
+login (`Mqtt__Username`/`Mqtt__Password`), `mqttHost`, `mqttPort` and `mqttTls`; the kit keeps
+them in flash. The API (`MqttConnectionService`) subscribes to `agroflow/+/telemetry`,
+`agroflow/+/ack` and `agroflow/+/status` next to the old filter, publishes every command on both
+the old and the new command topic (each kit listens on one), sets `hardware.status` and
+`status_reported_at` from `/status` (migration 0063), and ignores a device id with no active link.
+`unlink` (sent when a kit is replaced or moved) makes the kit forget its link and reopen setup.
+Kits on 1.7.1 and older keep the topics below until they are reflashed.
+
+## Topics (firmware up to 1.7.1)
 
 | Direction | Topic | Payload |
 |---|---|---|
@@ -122,6 +140,8 @@ first** on the same topic, with two extra fields:
 |---|---|
 | `recordedAt` | when the board took the reading (UTC, from NTP). Absent on a live reading. |
 | `seq` | the board's own counter, increasing by one per kept reading |
+| `rssi` | the kit's Wi-Fi signal in dBm when it sent this (firmware 1.7.1+). The API keeps the latest as `hardware.wifi_rssi` (migration 0061) for the Kit tab. |
+| `soilProbeOk` | whether the kit's last soil sample was inside the valid raw range, 200..4095 (firmware 1.7.1+). An out-of-range sample is never sent as a reading, so this is how the Kit tab can say "check the probe". Kept as `hardware.soil_probe_ok`. |
 | `backlog` | readings still waiting to upload after this one (firmware 1.7.0+, on every reading, live or kept). The API keeps the latest on the kit's record (`hardware.offline_backlog`, migration 0060). |
 
 The API (`ReadingAge`, `SensorReadingProcessor`) stores a kept reading with its

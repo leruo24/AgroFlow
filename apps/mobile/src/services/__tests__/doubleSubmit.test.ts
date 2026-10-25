@@ -22,6 +22,7 @@ import {
   saveZoneSoilType,
   createReportRequest,
   fetchZoneInsights,
+  issueFarmerKitCode,
 } from '../agroFlowApi';
 
 type Call = { url: string; method: string; body: string | undefined };
@@ -82,6 +83,16 @@ describe('double submits reach the server once', () => {
     await Promise.all([saveZoneSoilType(7, 'loam'), saveZoneSoilType(7, 'loam')]);
 
     expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('Add a kit tapped twice issues ONE enrollment code', async () => {
+    const { fn, calls } = fakeFetch();
+    globalThis.fetch = fn as unknown as typeof fetch;
+
+    await Promise.all([issueFarmerKitCode(7), issueFarmerKitCode(7)]);
+
+    const codes = calls.filter((c) => c.method === 'POST' && c.url.endsWith('/zones/7/kit-code'));
+    expect(codes).toHaveLength(1);
   });
 
   it('"Make me this report" tapped twice queues one report', async () => {

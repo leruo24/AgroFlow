@@ -23,7 +23,8 @@ import { DroughtCard } from '@/components/DroughtCard';
 import { CardList } from '@/components/ui/Card';
 import { InfoGrid } from '@/components/ui/InfoGrid';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
-import { fetchFarmToday, fetchTankStatus, type TankStatus, type TodayZone } from '@/services/agroFlowApi';
+import { fetchFarmKits, fetchFarmToday, fetchTankStatus, type KitCard, type TankStatus, type TodayZone } from '@/services/agroFlowApi';
+import { farmStateText, summariseFarm } from '@/lib/farmState';
 import { useI18n } from '@/i18n';
 import { onReconnect } from '@/lib/connectivity';
 import { FarmPostcard } from '@/components/visual/FarmPostcard';
@@ -54,12 +55,24 @@ export default function HomeScreen() {
       .catch(() => setTodayFailed(true));
   }, [farm]);
   useEffect(() => { setToday(null); loadToday(); }, [loadToday]);
+  // RET-01: each zone's kit as the server sees it (the Kit tab's source), for Drip and the summary.
+  // 'failed' is kept apart from "not loaded yet", and neither is ever read as "all good".
+  const [kits, setKits] = useState<{ farmId: string; cards: KitCard[] | 'failed' } | null>(null);
+  const loadKits = useCallback(() => {
+    if (!farm) return;
+    const farmId = farm.id;
+    fetchFarmKits(farmId).then(cards => setKits({ farmId, cards })).catch(() => setKits({ farmId, cards: 'failed' }));
+  }, [farm]);
+  useFocusEffect(loadKits);
+  const kitsNow = kits && farm && kits.farmId === farm.id ? kits.cards : null;
+  const summaryReady = kitsNow !== null && (today !== null || todayFailed);
+  const summary = summariseFarm(Array.isArray(kitsNow) ? kitsNow : null, todayFailed ? null : today);
   // Kept with the farm it belongs to (AF-22): another farm's tank is never shown, and until this
   // farm's answer arrives the card says Loading, not "not set up".
   const [tankFor, setTankFor] = useState<{ farmId: string; status: TankStatus } | null>(null);
   const [tankFailed, setTankFailed] = useState(false);
   const tank = tankFor && farm && tankFor.farmId === farm.id ? tankFor.status : null;
-  const tankLoading = !!farm && !tank && !tankFailed;
+  const tankLoading = isFarmLoading || (!!farm && !tank && !tankFailed);
   const loadTank = useCallback(() => {
     if (!farm) return;
     const farmId = farm.id;
@@ -67,7 +80,7 @@ export default function HomeScreen() {
   }, [farm]);
   useFocusEffect(loadTank);
   // Back online: swap the saved copies for live ones.
-  useEffect(() => onReconnect(() => { loadToday(); loadTank(); }), [loadToday, loadTank]);
+  useEffect(() => onReconnect(() => { loadToday(); loadTank(); loadKits(); }), [loadToday, loadTank, loadKits]);
   const pendingCommands = zones.filter(z => z.irrigation.override.active).length;
   // null usedTodayLitres means the zone has no zone_daily_water_usage row today,
   // so we only add up zones that have one instead of showing a false 0.
@@ -128,6 +141,10 @@ export default function HomeScreen() {
             : zonesError ? <DataState kind="error" title={t('home.farmStatusUnavailable')} onRetry={refreshZones} />
             : zones.length === 0 ? <DataState kind="empty" title={t('home.noZones')} description={t('home.noZonesStatus')} />
             : <>
+              {/* RET-01: the same state Drip uses; "all good" only with fresh readings, no fault and no low-confidence advice. */}
+              <Text style={styles.body} testID="home-summary" accessibilityLiveRegion="polite">
+                {summaryReady ? farmStateText(t, summary) : t('farmState.checking')}
+              </Text>
               <View style={styles.metrics}><InfoGrid testID="home-metrics" items={metrics.map(m => ({ ...m, muted: !/^\d/.test(m.value) }))} /></View>
               <Text style={styles.caption}>{pendingCommands > 0 ? t('home.commandsAccepted', { count: pendingCommands }) : ''}{t('home.noValveFeedback')}</Text>
             </>}
@@ -158,7 +175,8 @@ export default function HomeScreen() {
     <DripHelper
       zones={zones.map(z => ({ id: z.id, name: z.name }))}
       unreadAlertCount={unread}
-      ready={!isFarmLoading && !isZonesLoading && !!farm}
+      summary={summary}
+      ready={!isFarmLoading && !isZonesLoading && !!farm && summaryReady}
     />
   </SafeAreaView>;
 }

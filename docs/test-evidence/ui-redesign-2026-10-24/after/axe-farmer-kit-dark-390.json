@@ -1,0 +1,138 @@
+{
+  "violations": [
+    {
+      "id": "aria-required-children",
+      "impact": "critical",
+      "nodes": [
+        {
+          "target": [
+            "ul"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA child role not present: listitem"
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": [
+        {
+          "target": [
+            ".r-zz5t5d"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-hbpseb"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-n33kmn"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-eqwpb6 > h1"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-eqwpb6 > .r-n6v787.r-rjixqe.r-oczgib"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[data-testid=\"kit-line-1-wifi\"] > .css-g5y9jx"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[data-testid=\"kit-setup-wifi-1\"] > .r-n6v787.r-rjixqe.r-oczgib"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href=\"/\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"irrigation\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"kit\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-dnmrzs"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"alerts\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "a[href$=\"more\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "aria-prohibited-attr",
+      "targets": [
+        [
+          ".r-12vffkv"
+        ]
+      ]
+    },
+    {
+      "id": "color-contrast",
+      "targets": [
+        [
+          "a[href=\"/\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"irrigation\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"kit\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"alerts\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+        ],
+        [
+          "a[href$=\"more\"] > .r-15zeulg.r-1enofrn.r-1kfrs79"
+        ]
+      ]
+    },
+    {
+      "id": "label-content-name-mismatch",
+      "targets": [
+        [
+          ".r-1cgepjk"
+        ]
+      ]
+    }
+  ]
+}

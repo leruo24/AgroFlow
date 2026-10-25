@@ -18,9 +18,9 @@
     <!-- The FAO-56 knowledge base travels inside the assembly rather than as a
          content file, so a deployment can never end up running with the values
          missing and the Railway Docker image needs no copy step. Read by
-         Agronomy/Fao56Knowledge.cs via GetManifestResourceStream; the logical
-         resource name is AgroFlow.Domain.Agronomy.fao56-crop-knowledge.json. -->
-    <EmbeddedResource Include="Agronomy\fao56-crop-knowledge.json" />
+         IrrigationControl/Agronomy/Fao56Knowledge.cs via GetManifestResourceStream; the logical
+         resource name stays AgroFlow.Domain.Agronomy.fao56-crop-knowledge.json (LogicalName). -->
+    <EmbeddedResource Include="IrrigationControl\Agronomy\fao56-crop-knowledge.json" LogicalName="AgroFlow.Domain.Agronomy.fao56-crop-knowledge.json" />
   </ItemGroup>
 
 </Project>

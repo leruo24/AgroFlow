@@ -26,12 +26,19 @@ import {
   fetchTodayZoneInsights,
   type ZoneInsightRow,
 } from '@/services/insightsService';
+import { farmStateText, type FarmSummary } from '@/lib/farmState';
+import { translate, useI18n, type TranslationKey } from '@/i18n';
 
 type HelperZone = { id: string; name: string };
+
+type Say = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
 type Props = {
   zones: HelperZone[];
   unreadAlertCount: number;
+  // RET-01: what the kits and today's advice really say (lib/farmState.ts). Home passes it once
+  // both have loaded or failed; "all good" needs it to be "normal".
+  summary: FarmSummary;
   // Home passes true once its data has loaded, so the drop never appears over a
   // half-drawn screen.
   ready: boolean;
@@ -74,18 +81,22 @@ type Decision = {
   message: string;
   mood: DripMood;
   // Where tapping the bubble goes. null means there is nothing to open.
-  target: { kind: 'alerts' } | { kind: 'zone'; zoneId: string } | null;
+  target: { kind: 'alerts' } | { kind: 'zone'; zoneId: string } | { kind: 'kit'; zoneId?: number } | null;
   // The explanation of the insight behind the message, if any.
   explanation?: Explanation | null;
 };
 
 // The priority order: the first rule that matches wins, so the farmer sees the single
-// most important thing. setup_missing is an act-now insight but is handled by rule 4,
-// which gives it gentler wording.
+// most important thing. setup_missing is an act-now insight but is handled by rule 5,
+// which gives it gentler wording. RET-01: the kit's real state comes before any advice, and
+// "All your zones look good today" only when the summary is "normal" (fresh readings, no
+// fault, no low-confidence advice). Without a summary it is "unknown", never "all good".
 export function decideMessage(
   insights: ZoneInsightRow[],
   unreadAlertCount: number,
-  zones: HelperZone[]
+  zones: HelperZone[],
+  summary: FarmSummary = { state: 'unknown' },
+  say: Say = (key, params) => translate('en', key, params)
 ): Decision {
   const nameFor = (zoneId: string) =>
     zones.find((z) => z.id === zoneId)?.name ?? 'your zone';
@@ -109,15 +120,23 @@ export function decideMessage(
   // 2. Unread alerts.
   if (unreadAlertCount > 0) {
     return {
-      message: `You have ${unreadAlertCount} new alert${
-        unreadAlertCount === 1 ? '' : 's'
-      }. Tap to check.`,
+      message: say(unreadAlertCount === 1 ? 'drip.unreadOne' : 'drip.unread', { count: unreadAlertCount }),
       mood: 'alert',
       target: { kind: 'alerts' },
     };
   }
 
-  // 3. Water needed soon.
+  // 3. The kits: a fault, no kit yet, no readings yet, or readings that have stopped.
+  if (summary.state === 'fault' || summary.state === 'no_kit' || summary.state === 'no_readings' || summary.state === 'stale') {
+    return {
+      message: farmStateText(say, summary),
+      // No kit yet is the next step of the installation, not a fault.
+      mood: summary.state === 'no_kit' ? 'happy' : 'alert',
+      target: { kind: 'kit', zoneId: summary.zoneId },
+    };
+  }
+
+  // 4. Water needed soon.
   const waterSoon = insights.find((i) => i.insightType === 'water_soon');
   if (waterSoon) {
     return {
@@ -128,7 +147,7 @@ export function decideMessage(
     };
   }
 
-  // 4. Setup still unfinished. Advice comes either way, so this is the server's one next
+  // 5. Setup still unfinished. Advice comes either way, so this is the server's one next
   // step ("Add the planting date for ..."), not a claim that advice is waiting on it.
   const setupMissing = insights.find((i) => i.insightType === 'setup_missing');
   if (setupMissing) {
@@ -140,18 +159,29 @@ export function decideMessage(
     };
   }
 
-  // 5. Nothing to report.
+  // 6. Advice that is only a rough estimate for now.
+  if (summary.state === 'low_confidence') {
+    return {
+      message: farmStateText(say, summary),
+      mood: 'alert',
+      target: summary.zoneId != null ? { kind: 'zone', zoneId: String(summary.zoneId) } : null,
+    };
+  }
+
+  // 7. Nothing to report, and the data says so: "all good". Not known: say so plainly.
   return {
-    message: 'All your zones look good today.',
-    mood: 'happy',
+    message: farmStateText(say, summary),
+    mood: summary.state === 'normal' ? 'happy' : 'wave',
     target: null,
   };
 }
 
 // Drip: a small raindrop in the bottom-right corner that greets the farmer once per app
 // open and points at the one thing that needs them most. Every data path falls back
-// instead of failing: no insights means alerts only, no alerts means "all good".
-export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
+// instead of failing: no insights means alerts and the kits only; "all good" only when the
+// kits and today's advice say so.
+export function DripHelper({ zones, unreadAlertCount, summary, ready }: Props) {
+  const { t } = useI18n();
   const { colors } = useTheme();
   const styles = useMemo(() => createDripHelperStyles(colors), [colors]);
   const { bottom: safeAreaBottom } = useSafeAreaInsets();
@@ -206,7 +236,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
       const insights = await fetchTodayZoneInsights(zones.map((z) => z.id));
       if (!active) return;
 
-      const next = decideMessage(insights, unreadAlertCount, zones);
+      const next = decideMessage(insights, unreadAlertCount, zones, summary, t);
       setDecision(next);
       setMood('wave');
       setVisible(true);
@@ -279,7 +309,7 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
     };
     // zoneKey rather than zones: see the note above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, preferencesReady, animationDone, preferences.showRaindropHelper, zoneKey, unreadAlertCount]);
+  }, [ready, preferencesReady, animationDone, preferences.showRaindropHelper, zoneKey, unreadAlertCount, summary.state, summary.zoneId]);
 
   const hide = useCallback(() => {
     cleanupTimers.current?.();
@@ -293,6 +323,11 @@ export function DripHelper({ zones, unreadAlertCount, ready }: Props) {
 
     if (target.kind === 'alerts') {
       router.push('/alerts');
+      return;
+    }
+
+    if (target.kind === 'kit') {
+      router.push((target.zoneId != null ? `/kit?zone=${target.zoneId}` : '/kit') as never);
       return;
     }
 

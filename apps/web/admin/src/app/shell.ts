@@ -10,6 +10,7 @@ import { text as t } from "@/pages/publicCopy";
 export const SHELL_HTML = `
   <div class="app" id="appShell">
     <aside class="sidebar" id="sidebar">
+      <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Close navigation">${Icon.x}</button>
       <!-- The logo and name go Home (admin polish, item 3). -->
       <a class="brand" id="brandHome" href="#dashboard" aria-label="AgroFlow Staff - go to Overview">
         <!-- Relative path: the site is served from a sub-path on GitHub
@@ -17,9 +18,6 @@ export const SHELL_HTML = `
              beside it already says "AgroFlow" - a screen reader should not
              hear the name twice. -->
         ${brandHtml("visual-brand", t("staff"))}
-        <div>
-          <div class="sub">${t("staffBody")}</div>
-        </div>
       </a>
       <nav class="nav" id="nav"></nav>
       <!-- Driven by GET /api/admin/health, refreshed every 60 s (see
@@ -33,9 +31,13 @@ export const SHELL_HTML = `
           <i class="dot dot-unknown"></i>Checking…
         </span>
       </button>
-      <!-- Always visible (item 4); the avatar menu has the same button. -->
-      <button class="side-logout" data-logout type="button">Log out</button>
+      <div class="side-account" aria-label="Account">
+        <a class="side-account-link" href="#settings">Profile</a>
+        <button class="side-account-link" id="sidebarNotifications" type="button">Notifications</button>
+        <button class="side-logout" data-logout type="button">Log out</button>
+      </div>
     </aside>
+    <button class="sidebar-scrim" id="sidebarScrim" type="button" aria-label="Close navigation" tabindex="-1"></button>
 
     <div class="main">
       <header class="header">

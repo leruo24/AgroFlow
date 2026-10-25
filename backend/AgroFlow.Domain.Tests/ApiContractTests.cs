@@ -105,6 +105,7 @@ public class ApiContractTests : IClassFixture<ApiHost>
         "POST /api/devices/commands/{id}/executed",
         "POST /api/irrigation-events",
         "POST /api/public/enquiries",
+        "POST /api/public/welcome/{code}/open",   // the farmer's welcome page without Telegram (onboarding code)
         "POST /api/sensor-readings",
         "POST /api/telegram/webhook",
     };

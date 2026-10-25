@@ -18,7 +18,7 @@ export const HARDWARE_TYPES = [
 
 /* The crops the FAO-56 engine can give advice for. Every value resolves in
  * Fao56EngineReference.TryResolveCrop (see the Aliases table in
- * backend/AgroFlow.Domain/Agronomy/Fao56EngineReference.cs); a crop that does not resolve
+ * backend/AgroFlow.Domain/IrrigationControl/Agronomy/Fao56EngineReference.cs); a crop that does not resolve
  * gets no crop coefficient, no stages and no advice. The first six are the ones a farmer
  * can request in the mobile app, so a request and the zone made from it match. */
 export const ZONE_CROPS = [

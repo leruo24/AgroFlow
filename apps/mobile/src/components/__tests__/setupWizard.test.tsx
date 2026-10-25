@@ -266,7 +266,7 @@ beforeEach(async () => {
 // The four tasks (B3-02, AF-08). The server's journey is faked; every save is a mock.
 // ---------------------------------------------------------------------------------------------
 
-function journey(over: { done?: string[]; stage?: string; accepted?: boolean } = {}): api.Journey {
+function journey(over: { done?: string[]; stage?: string; accepted?: boolean; termsOpen?: boolean } = {}): api.Journey {
   const done = over.done ?? ['preferences'];
   return {
     farmId: 1,
@@ -282,8 +282,13 @@ function journey(over: { done?: string[]; stage?: string; accepted?: boolean } =
       ] }],
     helpRequests: [],
     terms: {
+      acceptanceEnabled: over.termsOpen ?? false,
       accepted: { all: over.accepted ?? false, termsAcceptedAt: null, privacyAcceptedAt: null },
-      documents: [
+      // Approved versions only exist once acceptance is open (a draft is never accepted, RET-02).
+      documents: over.termsOpen ? [
+        { key: 'terms', title: 'Terms of service', version: '1.0', date: '2026-11-01', status: 'approved', statusLabel: 'Approved', url: 'x' },
+        { key: 'privacy', title: 'Privacy notice', version: '1.0', date: '2026-11-01', status: 'approved', statusLabel: 'Approved', url: 'x' },
+      ] : [
         { key: 'terms', title: 'Terms of service', version: '0.1-draft', date: '2026-10-23', status: 'draft', statusLabel: 'Draft – needs approval', url: 'x' },
         { key: 'privacy', title: 'Privacy notice', version: '0.1-draft', date: '2026-10-23', status: 'draft', statusLabel: 'Draft – needs approval', url: 'x' },
       ],
@@ -366,20 +371,45 @@ describe('the four tasks', () => {
     expect(api.saveTankCapacity).not.toHaveBeenCalled();
   });
 
-  it('Before you start: the box starts unticked; acceptance is recorded only by the server', async () => {
+  it('RET-02: while acceptance is off, Before you start shows a preview with no box, and nothing is recorded', async () => {
+    mockParams = { task: 'preferences', screen: 'terms' };
+    await render(<SetupScreen />);
+    expect(await screen.findByText('Before you start')).toBeTruthy();
+    expect(screen.getByTestId('terms-status-terms')).toHaveTextContent(/Preview – not yet in effect/);
+    expect(screen.getByTestId('terms-status-privacy')).toHaveTextContent(/Preview – not yet in effect/);
+    expect(screen.getByTestId('terms-open-terms')).toBeTruthy();   // the documents can still be read
+    expect(screen.queryByTestId('terms-checkbox')).toBeNull();
+    expect(screen.getByTestId('terms-preview')).toHaveTextContent(/You do not need to accept anything now/);
+    await act(async () => { fireEvent.press(save()); });
+    expect(await screen.findByTestId('setup-screen-telegram')).toBeTruthy();
+    expect(api.acceptTerms).not.toHaveBeenCalled();
+  });
+
+  it('an older server that does not say acceptance is open is treated as a preview, never an acceptance of a draft', async () => {
+    const old = journey();
+    delete (old.terms as { acceptanceEnabled?: boolean }).acceptanceEnabled;
+    (api.fetchJourney as jest.Mock).mockResolvedValue(old);
+    mockParams = { task: 'preferences', screen: 'terms' };
+    await render(<SetupScreen />);
+    expect(await screen.findByTestId('terms-preview')).toBeTruthy();
+    expect(screen.queryByTestId('terms-checkbox')).toBeNull();
+  });
+
+  it('Before you start, once approved and switched on: the box starts unticked; acceptance is recorded only by the server', async () => {
+    (api.fetchJourney as jest.Mock).mockResolvedValue(journey({ termsOpen: true }));
     mockParams = { task: 'preferences', screen: 'terms' };
     const pending = deferred<unknown>();
     (api.acceptTerms as jest.Mock).mockReturnValueOnce(pending.promise);
     await render(<SetupScreen />);
     expect(await screen.findByText('Before you start')).toBeTruthy();
-    expect(screen.getAllByText(/Draft – needs approval/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Preview – not yet in effect/)).toBeNull();
     expect(screen.getByTestId('terms-checkbox').props.accessibilityState).toMatchObject({ checked: false });
     await act(async () => { fireEvent.press(save()); });
     expect(await screen.findByText('Tick the box to accept the terms and the privacy notice.')).toBeTruthy();
     expect(api.acceptTerms).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByTestId('terms-checkbox'));
     await act(async () => { fireEvent.press(save()); });
-    expect(api.acceptTerms).toHaveBeenCalledWith('0.1-draft', '0.1-draft');
+    expect(api.acceptTerms).toHaveBeenCalledWith('1.0', '1.0');
     // Still on the screen until the server answers.
     expect(screen.getByTestId('setup-screen-terms')).toBeTruthy();
     await act(async () => { pending.resolve({ accepted: true }); });

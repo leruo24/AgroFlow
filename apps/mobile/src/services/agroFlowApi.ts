@@ -644,7 +644,7 @@ export function fetchZoneInsights(zoneId: number) {
     insights: ZoneInsight[];
     growth: ZoneGrowth | null;
     // Optional: older APIs do not send them.
-    confidence?: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+    confidence?: { level: 'high' | 'medium' | 'low'; reason: string; code?: string; args?: Record<string, string> } | null;
     nextStep?: { field: string; ask: string } | null;
     stageAssumed?: boolean | null;
     confidenceExplanation?: Explanation | null;
@@ -675,7 +675,8 @@ export type TodayZone = {
   recommendedMinutes?: number | null;
   maxRunMinutes?: number;
   why: Explanation | null;
-  confidence: { level: 'high' | 'medium' | 'low'; reason: string } | null;
+  // code + args (RET-06): the reason in the farmer's language (lib/confidenceText.ts); reason is the English.
+  confidence: { level: 'high' | 'medium' | 'low'; reason: string; code?: string; args?: Record<string, string> } | null;
   confidenceExplanation: Explanation | null;
   nextStep: { field: string; ask: string } | null;
   setup?: ZoneSetupFacts | null;
@@ -965,6 +966,44 @@ export type ZoneHardware = {
   // Absent from an older API; null when the kit has not reported it.
   offlineBacklog?: number | null;
 };
+
+// The Kit tab (GET /api/farmer/farms/{farmId}/kits): one card per zone, with a plain status and a
+// checklist worked out by the server (KitHealth) from what the kit really reports. Each line is a
+// key and a state; the app words it in the farmer's language (kitTab.line.<key>.<state>).
+export type KitOverall = 'working' | 'needs_attention' | 'not_connected' | 'awaiting_installation';
+export type KitLine = { key: string; state: string; tone: 'ok' | 'warn' | 'bad' | 'info'; at: string | null; value: string | null };
+export type KitCard = {
+  zoneId: number;
+  zoneName: string;
+  hasKit: boolean;
+  deviceId: string | null;
+  deviceName: string | null;
+  setupNetworkName: string | null;
+  setupNetworkPassword: string | null;
+  overall: KitOverall;
+  lines: KitLine[];
+};
+
+export function fetchFarmKits(farmId: string | number) {
+  return authorizedRequest<KitCard[]>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/kits`);
+}
+
+export type FarmerKitCode = {
+  hardwareId: number;
+  code: string;
+  expiresAt: string;
+  zoneId: number;
+  zoneName: string;
+};
+
+// Starts first-time kit setup for one of the signed-in farmer's empty zones. The API refuses
+// replacement when a kit is already active; staff keep that higher-risk operation.
+export function issueFarmerKitCode(zoneId: number) {
+  return authorizedRequest<FarmerKitCode>(
+    `/api/farmer/zones/${encodeURIComponent(String(zoneId))}/kit-code`,
+    { method: 'POST', body: '{}' }
+  );
+}
 
 export function fetchZoneHardware(zoneId: number) {
   return authorizedRequest<ZoneHardware>(
@@ -1403,7 +1442,9 @@ export type LegalDocument = {
 export type Journey = {
   farmId: number;
   setupProgress: { done: number; total: number; label: string; tasks: { key: FarmerTaskKey; done: boolean; doneAt: string | null }[] };
-  installation: { stage: JourneyStage; label: string; text: string; live: boolean };
+  // RET-10: the account on its own (older servers leave it out).
+  account?: { status: AccountStatus; label: string };
+  installation: { stage: JourneyStage; label: string; text: string; live: boolean; status?: InstallationStatus };
   whereYouAreNow: {
     stage: JourneyStage; stageLabel: string; stageNumber: number; stageCount: number;
     steps: { key: string; label: string; done: boolean }[];
@@ -1416,8 +1457,12 @@ export type Journey = {
     irrigationMode: string; offerAutomatic: boolean; autoOfferAnswer: 'automatic' | 'manual' | null; installerChecks: InstallerCheck[];
   }[];
   helpRequests: { id: number; topic: HelpTopic; zoneId: number | null; status: 'open' | 'resolved'; createdAt: string; ownerName: string | null }[];
-  terms: { accepted: { all: boolean; termsAcceptedAt: string | null; privacyAcceptedAt: string | null }; documents: LegalDocument[] };
+  // acceptanceEnabled (RET-02): false, or missing on an older server, means a preview: no box, nothing recorded.
+  terms: { acceptanceEnabled?: boolean; accepted: { all: boolean; termsAcceptedAt: string | null; privacyAcceptedAt: string | null }; documents: LegalDocument[] };
 };
+
+export type AccountStatus = 'not_created' | 'needs_password' | 'needs_terms' | 'active';
+export type InstallationStatus = 'not_booked' | 'waiting_for_booking' | 'visit_booked' | 'installing' | 'commissioned';
 
 export function fetchJourney(farmId: string | number) {
   return authorizedRequest<Journey>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/journey`);
