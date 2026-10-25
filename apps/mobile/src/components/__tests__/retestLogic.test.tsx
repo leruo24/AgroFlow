@@ -32,7 +32,7 @@ jest.mock('@/lib/router', () => ({ router: { push: jest.fn(), back: jest.fn(), c
 import { render, screen } from '@testing-library/react-native';
 import { decideMessage } from '@/components/DripHelper';
 import { WhereYouAreNow } from '@/components/WhereYouAreNow';
-import { conditionKey } from '@/components/WeatherSummary';
+import { conditionKey, weatherSourceKey } from '@/components/WeatherSummary';
 import { budgetText } from '@/components/DroughtCard';
 import { summariseFarm, farmStateText, type FarmSummary } from '@/lib/farmState';
 import { confidenceText } from '@/lib/confidenceText';
@@ -115,6 +115,12 @@ describe('RET-01: the farm state, in priority order', () => {
 });
 
 describe('RET-06: message codes in the farmer\'s language', () => {
+  it('weather values identify field sensors, local weather fallback and unavailable data', () => {
+    expect(en(weatherSourceKey('field_sensor'))).toBe('Field Sensor');
+    expect(en(weatherSourceKey('local_weather'))).toBe('Local Weather');
+    expect(en(weatherSourceKey('unavailable'))).toBe('Unavailable');
+  });
+
   it('the confidence reason is built from its code, with the English as the fallback', () => {
     const af = say('af');
     expect(confidenceText(en, { level: 'low', reason: 'x', code: 'no_weather' })).toBe('Low: there is no weather for this farm yet.');

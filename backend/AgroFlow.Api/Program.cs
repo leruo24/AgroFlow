@@ -75,6 +75,7 @@ builder.Services
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpClient();
+builder.Services.AddMemoryCache();
 
 // One CORS policy: Cors:AllowedOrigins (Railway: Cors__AllowedOrigins, comma-separated) plus
 // the local dev origins, and any loopback origin in Development. See

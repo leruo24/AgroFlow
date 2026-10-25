@@ -107,15 +107,23 @@ export type CurrentWeatherResponse = {
   current?: {
     time?: string;
     temperature_2m?: number;
+    temperature_2m_source?: WeatherValueSource;
+    temperature_2m_observed_at?: string | null;
     apparent_temperature?: number;
     relative_humidity_2m?: number;
+    relative_humidity_2m_source?: WeatherValueSource;
+    relative_humidity_2m_observed_at?: string | null;
     weather_code?: number;
     wind_speed_10m?: number;
   };
   daily?: {
     precipitation_probability_max?: number[];
   };
+  field_sensor_fallback?: boolean;
+  has_weather_coordinates?: boolean;
 };
+
+export type WeatherValueSource = 'field_sensor' | 'local_weather' | 'unavailable';
 
 /* Every authorised call. Reads fall back to the copy saved on this phone when there is no
  * connection (lib/offlineCache.ts); an identical write already in flight is shared instead of

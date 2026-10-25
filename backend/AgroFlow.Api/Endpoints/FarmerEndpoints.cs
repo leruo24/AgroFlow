@@ -1,7 +1,12 @@
 using System.Security.Claims;
 using AgroFlow.Api.Services;
 using AgroFlow.Business;
+using AgroFlow.Business.Agronomy;
+using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Caching.Memory;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -37,6 +42,10 @@ public record FarmerServiceRequest(
 
 public static class FarmerEndpoints
 {
+    private readonly record struct WeatherCacheKey(long FarmId, double Latitude, double Longitude);
+    private sealed record WeatherCacheEntry(string Json, DateTimeOffset ExpiresAt);
+    private static readonly ConcurrentDictionary<WeatherCacheKey, SemaphoreSlim> WeatherCacheLocks = new();
+
     private const string FarmAccessSql = """
         exists (select 1 from farm f where f.farm_id = z.farm_id and f.owner_id = $1)
         or exists (select 1 from farm_member fm where fm.farm_id = z.farm_id and fm.profile_id = $1)
@@ -368,12 +377,13 @@ public static class FarmerEndpoints
 
 
     private static async Task<IResult> GetCurrentWeatherAsync(
-        ClaimsPrincipal user, NpgsqlDataSource dataSource, IHttpClientFactory httpClientFactory, long? farmId)
+        ClaimsPrincipal user, NpgsqlDataSource dataSource, IHttpClientFactory httpClientFactory,
+        IMemoryCache cache, long? farmId, CancellationToken ct)
     {
         if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
 
         const string sql = """
-            select f.latitude, f.longitude from farm f
+            select f.farm_id, f.latitude, f.longitude from farm f
             where (f.owner_id=$1 or exists (
               select 1 from farm_member fm where fm.farm_id=f.farm_id and fm.profile_id=$1))
               and ($2::bigint is null or f.farm_id=$2)
@@ -383,24 +393,107 @@ public static class FarmerEndpoints
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue(userId);
         command.Parameters.AddWithValue(NpgsqlDbType.Bigint, (object?)farmId ?? DBNull.Value);
-        await using var reader = await command.ExecuteReaderAsync();
+        await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync()) return Results.NotFound(new { error = "No assigned farm was found." });
-        if (reader.IsDBNull(0) || reader.IsDBNull(1))
-            return Results.BadRequest(new { error = "The assigned farm does not have weather coordinates." });
+        var selectedFarmId = reader.GetInt64(0);
+        var latitude = reader.IsDBNull(1) ? (double?)null : Convert.ToDouble(reader.GetValue(1));
+        var longitude = reader.IsDBNull(2) ? (double?)null : Convert.ToDouble(reader.GetValue(2));
+        await reader.DisposeAsync();
 
-        var latitude = Convert.ToDouble(reader.GetValue(0));
-        var longitude = Convert.ToDouble(reader.GetValue(1));
-        var latitudeText = latitude.ToString(CultureInfo.InvariantCulture);
-        var longitudeText = longitude.ToString(CultureInfo.InvariantCulture);
-        var url =
-            $"https://api.open-meteo.com/v1/forecast?latitude={latitudeText}&longitude={longitudeText}" +
-            "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m" +
-            "&daily=precipitation_probability_max&timezone=auto&forecast_days=1";
-        var client = httpClientFactory.CreateClient();
-        using var response = await client.GetAsync(url);
-        if (!response.IsSuccessStatusCode)
-            return Results.Json(new { error = "Weather provider request failed." }, statusCode: StatusCodes.Status502BadGateway);
-        return Results.Content(await response.Content.ReadAsStringAsync(), "application/json");
+        double? sensorTemperature = null, sensorHumidity = null;
+        DateTimeOffset? temperatureAt = null, humidityAt = null;
+        await using (var sensors = new NpgsqlCommand("""
+            select distinct on (r.sensor_type) r.sensor_type, r.value, r.recorded_at
+              from sensor_reading r
+              join zone z on z.id = r.zone_id
+             where z.farm_id = $1
+               and r.sensor_type in ('Temperature', 'Humidity')
+               and coalesce(r.simulated, false) = false
+             order by r.sensor_type, r.recorded_at desc
+            """, connection))
+        {
+            sensors.Parameters.AddWithValue(selectedFarmId);
+            await using var readings = await sensors.ExecuteReaderAsync(ct);
+            while (await readings.ReadAsync(ct))
+            {
+                var type = readings.GetString(0);
+                var value = Convert.ToDouble(readings.GetValue(1));
+                var at = readings.GetFieldValue<DateTimeOffset>(2);
+                if (type == "Temperature") { sensorTemperature = value; temperatureAt = at; }
+                else { sensorHumidity = value; humidityAt = at; }
+            }
+        }
+
+        var providerJson = latitude.HasValue && longitude.HasValue
+            ? await GetProviderWeatherAsync(selectedFarmId, latitude.Value, longitude.Value, httpClientFactory, cache, ct)
+            : null;
+        JsonObject root;
+        try { root = providerJson is null ? new JsonObject() : JsonNode.Parse(providerJson)?.AsObject() ?? new JsonObject(); }
+        catch (JsonException) { root = new JsonObject(); }
+
+        var current = root["current"] as JsonObject ?? new JsonObject();
+        var providerTemperature = Number(current["temperature_2m"]);
+        var providerHumidity = Number(current["relative_humidity_2m"]);
+        var now = DateTimeOffset.UtcNow;
+        var temperature = CurrentWeatherFallback.Select("Temperature", sensorTemperature, temperatureAt, providerTemperature, now);
+        var humidity = CurrentWeatherFallback.Select("Humidity", sensorHumidity, humidityAt, providerHumidity, now);
+
+        current["temperature_2m"] = temperature.Value;
+        current["temperature_2m_source"] = temperature.SourceCode;
+        current["temperature_2m_observed_at"] = temperature.ObservedAt?.ToString("O", CultureInfo.InvariantCulture);
+        current["relative_humidity_2m"] = humidity.Value;
+        current["relative_humidity_2m_source"] = humidity.SourceCode;
+        current["relative_humidity_2m_observed_at"] = humidity.ObservedAt?.ToString("O", CultureInfo.InvariantCulture);
+        root["current"] = current;
+        root["field_sensor_fallback"] =
+            temperature.Source == CurrentWeatherSource.LocalWeather || humidity.Source == CurrentWeatherSource.LocalWeather;
+        root["has_weather_coordinates"] = latitude.HasValue && longitude.HasValue;
+        return Results.Content(root.ToJsonString(), "application/json");
+    }
+
+    private static double? Number(JsonNode? node)
+    {
+        if (node is not JsonValue value || !value.TryGetValue<double>(out var number) ||
+            double.IsNaN(number) || double.IsInfinity(number)) return null;
+        return number;
+    }
+
+    private static async Task<string?> GetProviderWeatherAsync(
+        long farmId, double latitude, double longitude, IHttpClientFactory httpClientFactory,
+        IMemoryCache cache, CancellationToken ct)
+    {
+        var key = new WeatherCacheKey(farmId, latitude, longitude);
+        if (cache.TryGetValue<WeatherCacheEntry>(key, out var hit) && hit is not null && hit.ExpiresAt > DateTimeOffset.UtcNow)
+            return hit.Json;
+
+        var gate = WeatherCacheLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            if (cache.TryGetValue<WeatherCacheEntry>(key, out hit) && hit is not null && hit.ExpiresAt > DateTimeOffset.UtcNow)
+                return hit.Json;
+
+            var latitudeText = latitude.ToString(CultureInfo.InvariantCulture);
+            var longitudeText = longitude.ToString(CultureInfo.InvariantCulture);
+            var url =
+                $"https://api.open-meteo.com/v1/forecast?latitude={latitudeText}&longitude={longitudeText}" +
+                "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m" +
+                "&daily=precipitation_probability_max&timezone=auto&forecast_days=1";
+            try
+            {
+                using var response = await httpClientFactory.CreateClient().GetAsync(url, ct);
+                if (!response.IsSuccessStatusCode) return null;
+                var json = await response.Content.ReadAsStringAsync(ct);
+                cache.Set(key, new WeatherCacheEntry(json, DateTimeOffset.UtcNow.AddMinutes(10)), TimeSpan.FromMinutes(10));
+                return json;
+            }
+            catch (HttpRequestException) { return null; }
+            catch (TaskCanceledException) when (!ct.IsCancellationRequested) { return null; }
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private static async Task<IResult> UpdateProfileAsync(
