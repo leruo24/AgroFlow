@@ -773,7 +773,7 @@ type AgroFlowContextType = {//defines the structure of the AgroFlow context, inc
 
   stopManualIrrigation: (
     zoneId: string
-  ) => Promise<void>;
+  ) => Promise<string | null>;
 
   // Resolves true once the server saved it (AF-04). False: it stays unread and the screen
   // offers Try again; nothing claims a save that did not happen.
@@ -875,16 +875,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
   ] =
     useState<string | null>(null);
 
-  const manualRunTimers =
-    useRef<
-      Record<
-        string,
-        ReturnType<
-          typeof setTimeout
-        >
-      >
-    >({});
-
   const zonesRef =
     useRef<Zone[]>(
       []
@@ -897,16 +887,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
   }, [
     zones,
   ]);
-
-  useEffect(() => {
-    return () => {
-      Object.values(
-        manualRunTimers.current
-      ).forEach(
-        clearTimeout
-      );
-    };
-  }, []);
 
   useEffect(() => {//loads the authenticated farmer's accessible farms from the API.
     let isMounted =
@@ -1447,33 +1427,6 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       durationMinutes * 60
     );
 
-    setZones(//sets the irrigation status of the specified zone to "Active", turns on the relay and pump, and sets the water flow rate to 15 liters per minute. This function updates the zones state by mapping over the current zones and modifying the matching zone's properties accordingly.
-      (
-        current
-      ) =>
-        current.map(
-          (
-            item
-          ) =>
-            item.id ===
-            zoneId
-              ? {
-                  ...item,
-
-                  irrigation: {
-                    ...item.irrigation,
-                    override: {
-                      active:
-                        true,
-                      durationMinutes,
-                    },
-                  },
-
-                }
-              : item
-        )
-    );
-
     addHistoryEntry(//logs the action of starting irrigation in the history for the specific zone, providing a description and categorizing it as an "irrigation" type entry. This helps track user actions and system events related to irrigation control.
       zoneId,
       'Start Command Sent',
@@ -1488,39 +1441,11 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       'info'
     );
 
-    const existingTimer =
-      manualRunTimers.current[
-        zoneId
-      ];
-
-    if (
-      existingTimer
-    ) {
-      clearTimeout(
-        existingTimer
-      );
-    }
-
-    manualRunTimers.current[
-      zoneId
-    ] = setTimeout(
-      () => {
-        void stopManualIrrigation(
-          zoneId,
-          true
-        );
-      },
-      durationMinutes *
-        60 *
-        1000
-    );
-
     return sent?.id ?? null;
   }
 
   async function stopManualIrrigation(
-    zoneId: string,
-    endedAutomatically = false
+    zoneId: string
   ) {
     const zone =
       findZone(
@@ -1528,11 +1453,9 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       );
 
     if (
-      !zone ||
-      !zone.irrigation
-        .override.active
+      !zone
     ) {
-      return;
+      return null;
     }
 
     // Never queued either. Offline, the kit still stops by itself: every start carries its
@@ -1541,46 +1464,16 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       throw new Error(t('offline.needsConnection'));
     }
 
-    // A timed start already has its own deadline on the device. We still send an explicit
-    // stop, so there is one clear command when the user stops early or the app timer ends.
-    await sendManualIrrigationCommand(
+    // A timed start already has its own deadline on the device. An explicit stop is still
+    // available for an early stop. The UI follows this command until the kit confirms relay-off.
+    const sent = await sendManualIrrigationCommand(
       zoneId,
       'stop'
     );
 
-    setZones(
-      (
-        current
-      ) =>
-        current.map(
-          (
-            item
-          ) =>
-            item.id ===
-            zoneId
-              ? {
-                  ...item,
-
-                  irrigation: {
-                    ...item.irrigation,
-                    override: {
-                      active:
-                        false,
-                      durationMinutes:
-                        null,
-                    },
-                  },
-
-                }
-              : item
-        )
-    );
-
     addHistoryEntry(//logs the action of stopping irrigation in the history for the specific zone, providing a description and categorizing it as an "irrigation" type entry. This helps track user actions and system events related to irrigation control.
       zoneId,
-      endedAutomatically
-        ? 'Stop Command Sent'
-        : 'Stop Command Sent',
+      'Stop Command Sent',
       'A stop command was accepted for this zone.',
       'irrigation'
     );
@@ -1592,23 +1485,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       'info'
     );
 
-    const timer =
-      manualRunTimers.current[
-        zoneId
-      ];
-
-    if (
-      timer
-    ) {
-      clearTimeout(
-        timer
-      );
-
-      delete manualRunTimers
-        .current[
-          zoneId
-        ];
-    }
+    return sent?.id ?? null;
   }
 
   async function updateIrrigationMode(

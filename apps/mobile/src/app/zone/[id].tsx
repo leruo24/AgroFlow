@@ -316,7 +316,7 @@ export default function ZoneControlScreen() {
   const kitBlocked = kit === 'none' || kit === 'offline';
 
   // The last Water now from this screen, followed until the kit reports it finished.
-  const [run, setRun] = useState<{ id: string; seconds: number } | null>(null);
+  const [run, setRun] = useState<{ id: string; command: 'start' | 'stop'; seconds: number } | null>(null);
   const runStatus = useRunStatus(run?.id ?? null, run?.seconds ?? 0);
   const runState = runStatus?.state ?? null;
   const runPhase = runStatus?.phase ?? null;
@@ -449,8 +449,16 @@ export default function ZoneControlScreen() {
       .irrigation
       .override;
 
-  const isOverrideActive =
-    override.active;
+  // A command accepted by the API is not proof that the relay changed. Keep Stop available
+  // while a start may have reached the kit, but only the phase label claims confirmation.
+  // Likewise, do not show the run as stopped until the kit acknowledges the stop command.
+  const startMayBeRunning = run?.command === 'start'
+    && runState !== 'finished'
+    && runState !== 'failed';
+  const stopStillUnconfirmed = run?.command === 'stop'
+    && runPhase !== 'kit_confirmed_stop'
+    && runState !== 'failed';
+  const isOverrideActive = override.active || startMayBeRunning || stopStillUnconfirmed;
 
   // A zone has (or had) a kit when any sensor has reported; with none, every reading says so.
   const hasKit = soil.status === 'Online' || environment.status === 'Online';
@@ -629,7 +637,7 @@ ${t('run.capped', { max: run.max })}`
                 selectedZone.id,
                 duration
               );
-              if (commandId) setRun({ id: commandId, seconds: duration * 60 });
+              if (commandId) setRun({ id: commandId, command: 'start', seconds: duration * 60 });
             } catch (error: unknown) {
               Alert.alert(
                 t('zone.startFailed'),
@@ -671,9 +679,10 @@ ${t('run.capped', { max: run.max })}`
             'destructive',
           onPress: async () => {
             try {
-              await stopManualIrrigation(
+              const commandId = await stopManualIrrigation(
                 selectedZone.id
               );
+              if (commandId) setRun({ id: commandId, command: 'stop', seconds: 0 });
             } catch (error: unknown) {
               Alert.alert(
                 t('zone.stopFailed'),
