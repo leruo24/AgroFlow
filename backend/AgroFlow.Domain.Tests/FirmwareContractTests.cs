@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using AgroFlow.Api.Endpoints;
 using AgroFlow.Api.Mqtt;
+using AgroFlow.Business;
 using Xunit;
 
 namespace AgroFlow.Domain.Tests;
@@ -85,9 +86,14 @@ public class FirmwareContractTests
     public void MQTT_topics_and_payloads_match()
     {
         var sketch = Sketch();
-        Assert.Contains("FIRMWARE_VERSION = \"1.7.1\"", sketch);
-        Assert.Contains("\"/device/\" + deviceId + \"/sensors\"", sketch);
-        Assert.Contains("\"/device/\" + deviceId + \"/commands\"", sketch);
+        Assert.Contains("FIRMWARE_VERSION = \"1.7.2\"", sketch);
+        // 1.7.2: the kit's own topics, the same the server builds (KitLink.TopicsFor).
+        Assert.Contains("String base = \"agroflow/\" + getDeviceId() + \"/\";", sketch);
+        foreach (var channel in new[] { "telemetry", "cmd", "ack", "status" })
+            Assert.Contains($"base + \"{channel}\"", sketch);
+        Assert.Equal("agroflow/A1/telemetry", KitLink.TopicsFor("A1").Telemetry);
+        Assert.Equal("agroflow/A1/cmd", KitLink.TopicsFor("A1").Cmd);
+        // Kits still on 1.7.1 keep the farm topics until they are reflashed.
         Assert.Equal("agroflow/farm/+/device/+/sensors", MqttTopics.SensorTopicFilter);
         Assert.Equal("agroflow/farm/3/device/AF-1/commands", MqttTopics.CommandsTopic(3, "AF-1"));
 
@@ -154,7 +160,8 @@ public class FirmwareContractTests
         var sketch = Sketch().Replace("\r\n", "\n");
         var block = sketch[sketch.IndexOf("void printKitSetupInfo() {", StringComparison.Ordinal)..];
         block = block[..block.IndexOf("\n}", StringComparison.Ordinal)];
-        foreach (var line in new[] { "===== AgroFlow kit =====", "Device ID: %s", "Setup Wi-Fi: %s", "Password: %s", "Setup page: 192.168.4.1", "=======================" })
+        // 1.7.2: the hotspot has no password; the local pump page keeps one.
+        foreach (var line in new[] { "===== AgroFlow kit =====", "Device ID: %s", "Setup Wi-Fi: %s (no password)", "Kit page password (user agroflow): %s", "Setup page: 192.168.4.1", "=======================" })
             Assert.Contains(line, block);
         // The device token and the MQTT login are never printed.
         foreach (var secret in new[] { "deviceToken", "mqttPass", "mqttUser" }) Assert.DoesNotContain(secret, block);
@@ -180,5 +187,41 @@ public class FirmwareContractTests
     {
         Assert.Contains("doc[\"backlog\"]", Sketch());
         Assert.Contains("backlog", Fields(typeof(SensorMqttPayload)));
+    }
+
+    [Fact]
+    public void Firmware_172_links_with_an_open_hotspot_keeps_the_login_from_the_claim_and_reports_online_and_offline()
+    {
+        var sketch = Sketch().Replace("\r\n", "\n");
+        // The hotspot has no password, and the setup page shows the problem in plain words.
+        Assert.Contains("WiFi.softAP(apName().c_str());", sketch);
+        Assert.Contains("#include \"SetupPortal.h\"", sketch);
+        Assert.Contains("agroflow::joinMessage(problem)", sketch);
+        Assert.Contains("agroflow::claimMessage(httpCode, code)", sketch);
+        Assert.Contains("closeSetupPortal();   // only after success", sketch);
+        // The claim's answer: the broker, TLS and the farm and zone names for the page.
+        foreach (var f in new[] { "mqttHost", "mqttPort", "mqttTls", "farmName", "zoneName" })
+        {
+            Assert.Contains($"r[\"{f}\"]", sketch);
+            Assert.Contains(f, Fields(typeof(ClaimDeviceResponse)));
+        }
+        // Kept in flash, never printed.
+        Assert.Contains("preferences.putString(\"mqttPass\", mqttPass);", sketch);
+        Assert.DoesNotMatch(@"Serial\.print[a-z]*\([^;]*,\s*(mqttPass|mqttUser|deviceToken)", sketch);   // as an argument
+        Assert.DoesNotMatch(@"Serial\.print(ln)?\((mqttPass|mqttUser|deviceToken)", sketch);
+        // Last will "offline" (retained) and a retained online message with firmware and signal.
+        Assert.Contains("mqttStatusTopic.c_str(), 1, true, \"offline\")", sketch);
+        Assert.Contains("online[\"state\"] = \"online\";", sketch);
+        Assert.Contains("mqttClient.publish(mqttStatusTopic.c_str(), status.c_str(), true);", sketch);
+        Assert.Equal(new KitLink.StatusReport(true, "1.7.2", -60),
+            KitLink.ParseStatus("{\"state\":\"online\",\"firmware\":\"1.7.2\",\"rssi\":-60}"));
+        // Acknowledgements go over MQTT first; unlink forgets the link and reopens setup.
+        Assert.Contains("mqttClient.publish(mqttAckTopic.c_str(), ackBody.c_str())", sketch);
+        Assert.Contains("if (strcmp(command, \"unlink\") == 0) { unlinkKit(", sketch);
+        // Unchanged: change_wifi, open_setup and the power-cycle resets.
+        Assert.Contains("forgetWifiAndOpenSetup(\"change WiFi requested from the app\")", sketch);
+        Assert.Contains("openSetupPortal(\"remote open_setup command\")", sketch);
+        Assert.Contains("const int BOOTS_FOR_PORTAL = 3;", sketch);
+        Assert.Contains("const int BOOTS_FOR_FACTORY_RESET = 5;", sketch);
     }
 }

@@ -29,8 +29,12 @@ export function runLimitSeconds(command) {
 }
 
 export class FakeKit {
+  // firmwareVersion '1.7.2' behaves like the 1.7.2 sketch: it keeps the MQTT login and topics the
+  // claim answered with, uses agroflow/<deviceId>/telemetry|cmd|ack|status, leaves a retained
+  // "offline" last will, announces itself online, and acknowledges commands over MQTT.
   constructor({ apiBase, mqttUrl, deviceId, firmwareVersion = '1.7.1', log = () => {}, flash = { commandIds: [] } }) {
     Object.assign(this, { apiBase, mqttUrl, deviceId, firmwareVersion, log, flash });
+    this.kitTopics = firmwareVersion >= '1.7.2';
     this.commands = [];
     this.seq = 1;
     this.runs = [];   // every command the kit actually carried out
@@ -53,25 +57,45 @@ export class FakeKit {
     this.token = res.body.deviceToken;
     this.zoneId = res.body.zoneId;
     this.farmId = res.body.farmId;
+    this.linked = res.body;   // 1.7.2: kept like NVS (login, broker, topics)
     this.log(`claimed: zone ${this.zoneId}, farm ${this.farmId} (token held in memory only)`);
     return res.body;
   }
 
-  async connectMqtt() {
-    const creds = await this.http('GET', '/api/devices/mqtt-credentials');
-    if (creds.status !== 200) throw new Error(`mqtt-credentials: ${creds.status} ${JSON.stringify(creds.body)}`);
-    this.sensorsTopic = `agroflow/farm/${this.farmId}/device/${this.deviceId}/sensors`;
-    this.commandsTopic = `agroflow/farm/${this.farmId}/device/${this.deviceId}/commands`;
+  async connectMqtt({ rssi = -60 } = {}) {
+    let username, password, will;
+    if (this.kitTopics) {
+      ({ mqttUsername: username, mqttPassword: password } = this.linked);
+      this.sensorsTopic = this.linked.topics.telemetry;
+      this.commandsTopic = this.linked.topics.cmd;
+      will = { topic: this.linked.topics.status, payload: 'offline', retain: true, qos: 1 };
+    } else {
+      const creds = await this.http('GET', '/api/devices/mqtt-credentials');
+      if (creds.status !== 200) throw new Error(`mqtt-credentials: ${creds.status} ${JSON.stringify(creds.body)}`);
+      ({ mqttUsername: username, mqttPassword: password } = creds.body);
+      this.sensorsTopic = `agroflow/farm/${this.farmId}/device/${this.deviceId}/sensors`;
+      this.commandsTopic = `agroflow/farm/${this.farmId}/device/${this.deviceId}/commands`;
+    }
     this.client = await mqtt.connectAsync(this.mqttUrl, {
-      clientId: `agroflow-${this.deviceId}`, username: creds.body.mqttUsername, password: creds.body.mqttPassword, reconnectPeriod: 0,
+      clientId: `agroflow-${this.deviceId}`, username, password, reconnectPeriod: 0, ...(will ? { will } : {}),
     });
     await this.client.subscribeAsync(this.commandsTopic);
     this.client.on('message', (_topic, payload) => {
       const command = JSON.parse(payload.toString());
+      if (command.command === 'unlink') { this.unlinked = true; this.log('unlink received: forgetting the link'); return; }
       this.commands.push({ ...command, receivedAt: new Date() });
       this.log(`command received: ${command.command}${command.durationSeconds ? ` for ${command.durationSeconds}s` : ''} (${command.source})`);
     });
-    this.log(`MQTT connected as ${creds.body.mqttUsername}, subscribed to ${this.commandsTopic}`);
+    if (this.kitTopics)
+      await this.client.publishAsync(this.linked.topics.status,
+        JSON.stringify({ state: 'online', firmware: this.firmwareVersion, rssi }), { retain: true, qos: 1 });
+    this.log(`MQTT connected as ${username}, subscribed to ${this.commandsTopic}`);
+  }
+
+  // Power cut or Wi-Fi gone: the connection drops without a goodbye, so the broker publishes
+  // the last will ("offline", retained).
+  dropConnection() {
+    this.client?.stream?.destroy();
   }
 
   // rssi and soilProbeOk: the kit's own report on every reading from 1.7.1.
@@ -104,6 +128,8 @@ export class FakeKit {
   }
 
   ack(commandId, executedAt = new Date()) {
+    if (this.kitTopics)
+      return this.client.publishAsync(this.linked.topics.ack, JSON.stringify({ id: commandId, executedAt: executedAt.toISOString() }), { qos: 1 });
     return this.http('POST', `/api/devices/commands/${commandId}/executed`, { deviceId: this.deviceId, executedAt: executedAt.toISOString() });
   }
 

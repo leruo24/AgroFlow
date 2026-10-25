@@ -188,6 +188,10 @@ public sealed class SchemaCheck
             "select 1 from app_setting where key = 'terms.acceptance_enabled'",
             "Staff cannot switch on terms acceptance (it stays off, and the documents stay a preview)."),
 
+        new("0063", "index", "uq_hardware_device_id_active",
+            "select to_regclass('public.uq_hardware_device_id_active')::text",
+            "A kit that was linked before cannot be linked again (another zone, another farmer or a replacement)."),
+
         // Not a migration, but also applied by hand: the private storage bucket for report PDFs.
         new("storage", "bucket", "reports",
             "select 1 from storage.buckets where id = 'reports'",

@@ -61,7 +61,7 @@ public static class DeviceCommandEndpoints
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        var ownership = await ResolveCommandOwnershipAsync(connection, commandId);
+        var ownership = await ResolveCommandOwnershipAsync(connection, commandId, callerDeviceId);
         if (ownership is null)
         {
             return Results.NotFound($"No irrigation command with id {commandId}.");
@@ -88,7 +88,7 @@ public static class DeviceCommandEndpoints
         {
             // Lost a race with another ACK, or the sweep marked it 'failed'. The pump did
             // run, so report the current row instead of an error the board would retry forever.
-            var current = await ResolveCommandOwnershipAsync(connection, commandId);
+            var current = await ResolveCommandOwnershipAsync(connection, commandId, callerDeviceId);
             return Results.Ok(new CommandExecutedResponse(
                 commandId, current?.Status ?? "unknown", current?.ExecutedAt ?? executedAt));
         }
@@ -96,20 +96,34 @@ public static class DeviceCommandEndpoints
         return Results.Ok(new CommandExecutedResponse(commandId, "executed", executedAt));
     }
 
+    // The same acknowledgement arriving over MQTT (agroflow/<deviceId>/ack, firmware 1.7.2). The
+    // device id comes from the topic, which only that kit publishes to. False when the command is
+    // not this kit's to acknowledge.
+    public static async Task<bool> AcknowledgeFromKitAsync(
+        NpgsqlConnection connection, Guid commandId, string deviceId, DateTimeOffset executedAt)
+    {
+        var ownership = await ResolveCommandOwnershipAsync(connection, commandId, deviceId);
+        if (ownership is null || !DeviceCommandOwnership.MayAcknowledge(ownership.DeviceId, deviceId)) return false;
+        if (ownership.Status != "executed") await MarkExecutedAsync(connection, commandId, executedAt);
+        return true;
+    }
+
     private sealed record CommandOwnership(string? DeviceId, string Status, DateTimeOffset? ExecutedAt);
 
-    // Finds which device should run this command (irrigation_commands -> zone ->
-    // hardware). Null when the command does not exist; a null DeviceId when its zone
-    // has no active device.
+    // Finds whether this device is an active kit on the command's zone (irrigation_commands ->
+    // zone -> hardware). Null when the command does not exist; a null DeviceId when the caller is
+    // not an active kit there. A zone can briefly have two kits while one replaces the other.
     private static async Task<CommandOwnership?> ResolveCommandOwnershipAsync(
-        NpgsqlConnection connection, Guid commandId)
+        NpgsqlConnection connection, Guid commandId, string? callerDeviceId)
     {
         await using var cmd = new NpgsqlCommand(
             "select c.status, c.executed_at, h.device_id " +
             "from irrigation_commands c " +
             "left join hardware h on h.zone_id = c.zone_id and h.enrollment_status = 'active' " +
+            "  and upper(h.device_id) = upper($2) " +
             "where c.id = $1", connection);
         cmd.Parameters.AddWithValue(commandId);
+        cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Text, (object?)callerDeviceId ?? DBNull.Value);
 
         await using var reader = await cmd.ExecuteReaderAsync();
         if (!await reader.ReadAsync()) return null;

@@ -1,30 +1,35 @@
-// AgroFlow irrigation node - ESP32 firmware (v1.7.1).
+// AgroFlow irrigation node - ESP32 firmware (v1.7.2).
 //
-// WiFiManager setup portal + one-time enrollment code -> /api/devices/claim.
-// MQTT readings on agroflow/farm/{farmId}/device/{deviceId}/sensors as
-// {"sensorType","value"}; commands on .../commands; pump runs logged to
-// POST /api/irrigation-events; OTA check every 4 h. Pins: soil 32, relay 25, DHT11 27.
+// Setup hotspot (no password) with its own setup page + a 6-digit code -> /api/devices/claim.
+// MQTT readings on agroflow/{deviceId}/telemetry as {"sensorType","value"}; commands on
+// agroflow/{deviceId}/cmd; acknowledgements on agroflow/{deviceId}/ack; online/offline on
+// agroflow/{deviceId}/status. Pump runs logged to POST /api/irrigation-events; OTA check
+// every 4 h. Pins: soil 32, relay 25, DHT11 27.
 //
 // What the board can do:
-//   1. Change WiFi without opening the box. The setup page reopens when the board
-//      is power-cycled 3 times quickly (within ~10 s each), when the saved
-//      WiFi has been gone for 15 minutes, or on an {"command":"open_setup"} MQTT
-//      command. The setup network is "AgroFlow-Setup-XXXX", password "AF-" + the
-//      last 6 characters of the device ID (on the kit label). Watering keeps running.
-//   2. Factory reset: power-cycle 5 times quickly. Wipes WiFi, zone/farm and every
-//      credential, then opens setup for a new enrollment code.
-//   3. Security: no secrets in the firmware image. secrets.h only holds API_BASE_URL.
-//      The board gets its own device token from /api/devices/claim, keeps it only in
-//      flash (NVS), never prints it, and wipes it on factory reset or when the server
-//      revokes it, so one stolen board can be cut off on its own.
-//   4. The MQTT login is fetched from GET /api/devices/mqtt-credentials on every boot
-//      and kept in RAM only, so changing the MQTT password in Railway needs no reflash.
-//   5. "Change WiFi" from the app: a {"command":"change_wifi"} command forgets the WiFi
-//      and opens setup asking for WiFi only; the board keeps its farm and zone. Setup
-//      keeps reopening until a new WiFi is saved, and watering uses the offline fallback.
-//   6. The broker address can come from the server: if mqtt-credentials returns
-//      mqttHost/mqttPort the board uses them, otherwise the compiled-in
-//      MQTT_HOST/MQTT_PORT. Moving brokers is a Railway setting, not a reflash.
+//   1. Link to a farm in one go (1.7.2). Unlinked, the kit opens the Wi-Fi "AgroFlow-Setup-XXXX"
+//      with NO password; a phone joining it is shown the setup page (or open http://192.168.4.1).
+//      One form: the farm Wi-Fi (from a scan list, or typed), its password and the 6-digit code
+//      from AgroFlow. The hotspot stays up while the kit joins the Wi-Fi and calls the claim
+//      endpoint, and the page shows "Linked to <farm> - <zone>" or a clear problem (wrong Wi-Fi
+//      password, network not found / 5 GHz, code expired or used, kit linked to another farm,
+//      AgroFlow not reachable). The hotspot closes only after success. SetupPortal.h holds the
+//      words (unit-tested natively).
+//   2. Change Wi-Fi without opening the box. The setup page reopens (asking for Wi-Fi only) when
+//      the board is power-cycled 3 times quickly (within ~10 s each), when the saved Wi-Fi has
+//      been gone for 15 minutes, or on an {"command":"open_setup"} MQTT command. Watering keeps
+//      running.
+//   3. Factory reset: power-cycle 5 times quickly. Wipes Wi-Fi, zone/farm and every
+//      credential, then opens setup for a new code.
+//   4. Security: no secrets in the firmware image. secrets.h only holds API_BASE_URL.
+//      The claim returns this board's device token, AgroFlow's MQTT login and broker, and its
+//      topics; the board keeps them in flash (NVS), never prints them, and wipes them on
+//      unlink, factory reset or when the server revokes the token.
+//   5. "Change WiFi" from the app: a {"command":"change_wifi"} command forgets the Wi-Fi
+//      and opens setup asking for Wi-Fi only; the board keeps its farm and zone. Setup
+//      keeps reopening until a new Wi-Fi is saved, and watering uses the offline fallback.
+//   6. "Unlink" (1.7.2): an {"command":"unlink"} message (the kit was replaced or moved) makes the
+//      board forget its farm, zone and logins and reopen the setup hotspot for a new code.
 //   7. Offline buffer (v1.5.0, every reading since v1.7.0): while MQTT is down the
 //      board keeps each 30-second sensor reading in a bounded ring in flash (oldest
 //      dropped first, each with its time), and publishes them in order with "recordedAt" when it is
@@ -34,9 +39,9 @@
 //      natively in hardware/esp32/tests).
 //   8. Local page (v1.5.0): while the setup network is open, http://192.168.4.1/local
 //      shows the latest readings and Start/Stop pump buttons. Only on the kit's own
-//      WiFi, and it asks for the kit's local password (user "agroflow", the same
-//      password as the setup network). Runs are capped at 5 minutes like every run,
-//      and logged as manual irrigation events (uploaded on reconnect if offline).
+//      Wi-Fi, and it asks for the kit's local password (user "agroflow", "AF-" + the last 6
+//      characters of the device ID, printed at boot). Runs are capped at 5 minutes like every
+//      run, and logged as manual irrigation events (uploaded on reconnect if offline).
 //   9. The zone's mode (v1.5.1, from v1.4.1): GET /api/devices/config on boot and every
 //      10 minutes while online says whether the zone is Automatic. The offline fallback only waters
 //      when the last answer said so, kept in flash; a Manual or Scheduled zone, or a kit
@@ -56,19 +61,22 @@
 //  13. Backlog in the kit's status (v1.7.0): every published reading carries "backlog", the
 //      number of readings still waiting to upload. The API keeps it on the kit's record.
 //  14. Setup details on Serial Monitor (v1.7.1): at boot and whenever the setup page opens, the
-//      kit prints its device ID, setup Wi-Fi name and password and the setup page address, so
-//      nobody has to work them out. Every reading also carries "rssi" (the Wi-Fi signal, dBm)
-//      and "soilProbeOk" (its last soil sample was inside the valid raw range), for the farmer's
-//      Kit tab. Reporting only: nothing about watering or the setup page changes.
+//      kit prints its device ID, setup Wi-Fi name, local page password and the setup page
+//      address. Every reading also carries "rssi" (the Wi-Fi signal, dBm) and "soilProbeOk".
+//  15. Online/offline (1.7.2): the MQTT last will is "offline" on agroflow/{deviceId}/status
+//      (retained); on every connect the kit publishes {"state":"online","firmware","rssi"} there
+//      (retained), so AgroFlow shows it online or offline at once.
 //
-// Libraries: ArduinoJson 7.x, WiFiManager (tzapu), PubSubClient (knolleary),
-// DHTesp ("DHT sensor library for ESPx", beegee_tokyo).
+// Libraries: ArduinoJson 7.x, PubSubClient (knolleary), DHTesp ("DHT sensor library for
+// ESPx", beegee_tokyo). WebServer and DNSServer come with the ESP32 core. WiFiManager is no
+// longer used.
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <HTTPUpdate.h>
-#include <WiFiManager.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 #include <PubSubClient.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
@@ -78,15 +86,19 @@
 #include "OfflineBuffer.h"
 #include "CommandIds.h"
 #include "RunLimits.h"
+#include "SetupPortal.h"
 #include "secrets.h"
 
 // Config
 
+// Used only if the claim's answer has no broker (an older server).
 const char *MQTT_HOST = "853fe2eddcd24d0c8e0f4d69869c5dab.s1.eu.hivemq.cloud";
 const uint16_t MQTT_PORT = 8883;
 const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 
-const uint16_t CONFIG_PORTAL_TIMEOUT_SECONDS = 300;               // setup page stays open 5 min
+const uint16_t CONFIG_PORTAL_TIMEOUT_SECONDS = 300;               // change-Wi-Fi page stays open 5 min
+const unsigned long WIFI_JOIN_TIMEOUT_MS = 25000;                  // setup page: give up joining after this
+const unsigned long PORTAL_CLOSE_AFTER_SUCCESS_MS = 60000;         // keep showing the result this long
 const unsigned long WIFI_DOWN_PORTAL_AFTER_MS = 15UL * 60UL * 1000UL; // saved WiFi gone this long -> open setup
 const unsigned long BOOT_COUNTER_WINDOW_MS = 10000;                // power-cycle within this to count
 const int BOOTS_FOR_PORTAL = 3;
@@ -94,7 +106,7 @@ const int BOOTS_FOR_FACTORY_RESET = 5;
 const int MAX_AUTH_FAILURES = 3;                                   // consecutive 401s -> token revoked
 
 // Update this and Firmware:LatestVersion in backend/AgroFlow.Api/appsettings.json each release.
-const char *FIRMWARE_VERSION = "1.7.1";
+const char *FIRMWARE_VERSION = "1.7.2";
 const unsigned long FIRMWARE_CHECK_INTERVAL_MS = 4UL * 60UL * 60UL * 1000UL; // 4 hours
 
 long ZONE_ID = 0;
@@ -147,20 +159,24 @@ const unsigned long FALLBACK_MIN_REST_MS = 5UL * 60UL * 1000UL; // let water soa
 const unsigned long ZONE_CONFIG_INTERVAL_MS = 10UL * 60UL * 1000UL; // re-ask the zone's mode while online
 
 // State
-
 Preferences preferences;
 WiFiClientSecure mqttTlsClient;
+WiFiClient mqttPlainClient;
 PubSubClient mqttClient(mqttTlsClient);
 String mqttSensorsTopic;
 String mqttCommandsTopic;
+String mqttAckTopic;
+String mqttStatusTopic;
 unsigned long lastMqttReconnectAttemptMillis = 0;
 unsigned long lastMqttConnectedMillis = 0;
 
 DHTesp dht;
-WiFiManager wm;
+WebServer server(80);
+DNSServer dnsServer;
 
-// deviceToken: issued at claim, the only credential stored in flash (NVS), and revocable.
-// mqttUser/mqttPass: fetched from the server on every boot, kept in RAM only, never printed.
+// From the claim, kept in flash (NVS) and never printed: the device token (revocable), AgroFlow's
+// MQTT login and broker. A kit linked by older firmware has only the token; it fetches the login
+// from GET /api/devices/mqtt-credentials once and keeps it.
 String deviceToken = "";
 String mqttUser = "";
 String mqttPass = "";
@@ -168,12 +184,27 @@ int authFailures = 0;
 
 String mqttHostOverride = "";        // from the server; must outlive setServer(), so kept global
 uint16_t mqttPortOverride = 0;
+bool mqttUseTls = true;
 bool wifiForgotten = false;          // "change WiFi" requested; cleared once a new WiFi is saved
 unsigned long lastCredFetchMs = 0;
 const unsigned long CRED_FETCH_RETRY_MS = 60000;
 
+// The setup page (1. and 2. above).
+bool isLinked = false;               // has a farm, zone and token
 bool portalActive = false;
+bool portalRoutesReady = false;
 unsigned long portalStartedMs = 0;
+enum class SetupStep : uint8_t { Idle, Joining, Claiming, Done, Failed };
+SetupStep setupStep = SetupStep::Idle;
+String setupMessage = "";
+String pendingSsid = "";
+String pendingPass = "";
+String pendingCode = "";
+unsigned long joinStartedMs = 0;
+unsigned long portalCloseAtMs = 0;
+volatile int lastDisconnectReason = 0;
+String linkedFarmName = "";
+String linkedZoneName = "";
 unsigned long wifiDownSinceMs = 0;
 bool bootCounterCleared = false;
 bool timeConfigured = false;
@@ -216,13 +247,14 @@ int lastSoilRaw = -1;
 float lastSoilPercent = -1.0f;
 float lastTemperature = NAN;
 float lastHumidity = NAN;
-bool localRoutesWanted = false;
 
 void logIrrigationEvent(long zoneId, unsigned long runtimeSeconds, const String &source, time_t startedAtEpoch);
 void markCommandExecuted(const char *commandId, uint32_t ackEpoch);
 void openSetupPortal(const char *reason);
+void closeSetupPortal();
 void forgetWifiAndOpenSetup(const char *reason);
 void factoryReset(const char *reason);
+void unlinkKit(const char *reason);
 
 // Time helpers
 
@@ -370,7 +402,8 @@ String getDeviceIdSuffix() {
 
 String apName() { return "AgroFlow-Setup-" + getDeviceIdSuffix(); }
 
-// Not a secret on its own (it is on the kit label); it stops passers-by changing the WiFi.
+// The local page's password (8. above). Not a secret on its own (it is printed at boot); it stops
+// passers-by on the open setup hotspot running the pump. The hotspot itself has no password (1.7.2).
 String apPassword() {
   String id = getDeviceId();
   return "AF-" + id.substring(id.length() - 6);
@@ -382,29 +415,53 @@ String apPassword() {
 void printKitSetupInfo() {
   Serial.println("===== AgroFlow kit =====");
   Serial.printf("Device ID: %s\n", getDeviceId().c_str());
-  Serial.printf("Setup Wi-Fi: %s\n", apName().c_str());
-  Serial.printf("Password: %s\n", apPassword().c_str());
+  Serial.printf("Setup Wi-Fi: %s (no password)\n", apName().c_str());
+  Serial.printf("Kit page password (user agroflow): %s\n", apPassword().c_str());
   Serial.println("Setup page: 192.168.4.1");
   Serial.println("=======================");
 }
 
+// The kit's own topics (1.7.2): agroflow/{deviceId}/telemetry | cmd | ack | status. The claim's
+// answer names the same ones; they follow from the device ID, so a kit linked by older firmware
+// gets them too.
 void buildMqttTopics() {
-  String deviceId = getDeviceId();
-  mqttSensorsTopic  = "agroflow/farm/" + String(FARM_ID) + "/device/" + deviceId + "/sensors";
-  mqttCommandsTopic = "agroflow/farm/" + String(FARM_ID) + "/device/" + deviceId + "/commands";
+  String base = "agroflow/" + getDeviceId() + "/";
+  mqttSensorsTopic  = base + "telemetry";
+  mqttCommandsTopic = base + "cmd";
+  mqttAckTopic      = base + "ack";
+  mqttStatusTopic   = base + "status";
 }
 
-// Security: the one-time enrollment code is the only authorisation for this call,
-// so no shared key is compiled in. The API returns this board's zone/farm and its
-// own credentials, which we store in NVS only.
-bool claimDevice(const String &enrollmentCode) {
-  if (enrollmentCode.length() == 0) { Serial.println("No enrollment code entered - cannot claim device"); return false; }
-  if (WiFi.status() != WL_CONNECTED) return false;
+// The broker to use: the one the server gave (kept in flash), else the compiled-in one.
+void applyBroker() {
+  if (mqttHostOverride.length() > 0) mqttClient.setServer(mqttHostOverride.c_str(), mqttPortOverride > 0 ? mqttPortOverride : MQTT_PORT);
+  else mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+  if (mqttUseTls) mqttClient.setClient(mqttTlsClient);
+  else mqttClient.setClient(mqttPlainClient);
+}
+
+void saveMqttLogin() {
+  preferences.putString("mqttUser", mqttUser);
+  preferences.putString("mqttPass", mqttPass);
+  preferences.putString("mqttHost", mqttHostOverride);
+  preferences.putUShort("mqttPort", mqttPortOverride);
+  preferences.putBool("mqttTls", mqttUseTls);
+}
+
+// Security: the 6-digit code is the only authorisation for this call, so no shared key is
+// compiled in. The API answers with this board's zone/farm, its device token, AgroFlow's MQTT
+// login and broker, and its topics. All kept in NVS, never printed. On a refusal, problem is the
+// sentence the setup page shows (SetupPortal.h).
+bool claimDevice(const String &enrollmentCode, String &problem) {
+  problem = "";
+  if (enrollmentCode.length() == 0) { problem = agroflow::claimMessage(401, "code_invalid"); return false; }
+  if (WiFi.status() != WL_CONNECTED) { problem = agroflow::claimMessage(-1, ""); return false; }
 
   WiFiClientSecure client;
   HTTPClient http;
   deviceToken = "";   // no token yet
-  if (!beginApiRequest(client, http, String(API_BASE_URL) + "/api/devices/claim")) return false;
+  if (!beginApiRequest(client, http, String(API_BASE_URL) + "/api/devices/claim")) { problem = agroflow::claimMessage(-1, ""); return false; }
+  http.setTimeout(15000);
 
   JsonDocument doc;
   doc["deviceId"] = getDeviceId();
@@ -414,16 +471,20 @@ bool claimDevice(const String &enrollmentCode) {
   serializeJson(doc, body);
 
   int httpCode = http.POST(body);
+  String payload = httpCode > 0 ? http.getString() : "";
+  http.end();
+  JsonDocument r;
+  bool parsed = payload.length() > 0 && !deserializeJson(r, payload);
   if (httpCode < 200 || httpCode >= 300) {
-    Serial.printf("Device claim rejected, http=%d\n", httpCode);
-    http.end();
+    const char *code = parsed ? (r["code"] | "") : "";
+    Serial.printf("Device claim refused, http=%d %s\n", httpCode, code);
+    problem = agroflow::claimMessage(httpCode, code);
+    // The server's own sentence names the other farm; prefer it for that case.
+    if (parsed && strcmp(code, "kit_linked_elsewhere") == 0 && (r["error"] | "")[0] != '\0') problem = (const char *)(r["error"] | "");
     return false;
   }
-  String payload = http.getString();
-  http.end();
+  if (!parsed) { problem = agroflow::claimMessage(-1, ""); return false; }
 
-  JsonDocument r;
-  if (deserializeJson(r, payload)) return false;
   long claimedZoneId = r["zoneId"] | 0L;
   long claimedFarmId = r["farmId"] | 0L;
   const char *tok = r["deviceToken"] | "";
@@ -431,24 +492,36 @@ bool claimDevice(const String &enrollmentCode) {
   const char *mp  = r["mqttPassword"] | "";
   if (claimedZoneId <= 0 || claimedFarmId <= 0 || strlen(tok) == 0) {
     Serial.println("Claim response incomplete (needs zoneId, farmId, deviceToken)");
+    problem = agroflow::claimMessage(-1, "");
     return false;
   }
-  // The MQTT login may be missing here; fetchMqttCredentials() gets it on first connect.
 
   ZONE_ID = claimedZoneId;
   FARM_ID = claimedFarmId;
-  deviceToken = tok; mqttUser = mu; mqttPass = mp;   // mqtt values may be empty
+  deviceToken = tok; mqttUser = mu; mqttPass = mp;
+  const char *host = r["mqttHost"] | "";
+  mqttHostOverride = host;
+  mqttPortOverride = r["mqttPort"] | 0;
+  mqttUseTls = r["mqttTls"] | true;
+  linkedFarmName = (const char *)(r["farmName"] | "");
+  linkedZoneName = (const char *)(r["zoneName"] | "");
   preferences.putBool("claimed", true);
   preferences.putLong("zoneId", ZONE_ID);
   preferences.putLong("farmId", FARM_ID);
-  preferences.putString("token", deviceToken);   // MQTT login stays in RAM only
+  preferences.putString("token", deviceToken);
+  preferences.putString("farmName", linkedFarmName);
+  preferences.putString("zoneName", linkedZoneName);
+  saveMqttLogin();
   buildMqttTopics();
-  Serial.printf("Device claimed, zoneId=%ld farmId=%ld (credentials stored on device)\n", ZONE_ID, FARM_ID);
+  applyBroker();
+  isLinked = true;
+  Serial.printf("Linked to %s - %s (zone %ld, farm %ld); logins kept on the kit\n",
+                linkedFarmName.c_str(), linkedZoneName.c_str(), ZONE_ID, FARM_ID);
   return true;
 }
 
-// Ask the API for the current MQTT login. It is kept in RAM only, so a new password
-// in Railway reaches each board on its next boot or retry.
+// Ask the API for the current MQTT login: for a kit linked by older firmware (no login kept), and
+// when the broker refuses the kept one (a new password in Railway). Kept in NVS from then on.
 bool fetchMqttCredentials() {
   if (WiFi.status() != WL_CONNECTED || deviceToken.length() == 0) return false;
   lastCredFetchMs = millis();
@@ -471,10 +544,11 @@ bool fetchMqttCredentials() {
   if (strlen(host) > 0) {
     mqttHostOverride = host;
     mqttPortOverride = port > 0 ? port : MQTT_PORT;
-    mqttClient.setServer(mqttHostOverride.c_str(), mqttPortOverride);
     Serial.printf("MQTT broker from server: %s:%u\n", mqttHostOverride.c_str(), mqttPortOverride);
   }
-  Serial.println("MQTT login received from server (held in memory only)");
+  saveMqttLogin();
+  applyBroker();
+  Serial.println("MQTT login received from server (kept on the kit, never printed)");
   return true;
 }
 
@@ -707,6 +781,9 @@ void handleMqttCommand(char *topic, byte *payload, unsigned int length) {
   const char *commandId = doc["id"];
   const char *command = doc["command"];
   if (!commandId || !command) return;
+  // "unlink" (1.7.2) is not an irrigation command: AgroFlow sends it when this kit was replaced
+  // or moved, after revoking its token. Nothing to acknowledge.
+  if (strcmp(command, "unlink") == 0) { unlinkKit("AgroFlow unlinked this kit"); return; }
   bool known = strcmp(command, "start") == 0 || strcmp(command, "stop") == 0 ||
                strcmp(command, "open_setup") == 0 || strcmp(command, "change_wifi") == 0;
   if (!known) return;
@@ -773,10 +850,20 @@ void reconnectMqtt() {
 
   Serial.print("Connecting to MQTT broker...");
   String clientId = "agroflow-" + getDeviceId();
-  if (mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str())) {
+  // Last will (15. above): if the kit drops off without saying goodbye, the broker publishes
+  // "offline" on its status topic, retained.
+  if (mqttClient.connect(clientId.c_str(), mqttUser.c_str(), mqttPass.c_str(),
+                         mqttStatusTopic.c_str(), 1, true, "offline")) {
     Serial.println("connected");
     lastMqttConnectedMillis = millis();
     mqttClient.subscribe(mqttCommandsTopic.c_str());
+    JsonDocument online;
+    online["state"] = "online";
+    online["firmware"] = FIRMWARE_VERSION;
+    online["rssi"] = WiFi.RSSI();
+    String status;
+    serializeJson(online, status);
+    mqttClient.publish(mqttStatusTopic.c_str(), status.c_str(), true);
     Serial.printf("Subscribed to %s; backlog %u readings, %u pump runs to upload\n",
                   mqttCommandsTopic.c_str(), (unsigned)readingBuffer.size(), (unsigned)runBuffer.size());
     if (fallbackCycle) {
@@ -786,7 +873,7 @@ void reconnectMqtt() {
   } else {
     int rc = mqttClient.state();
     Serial.printf("failed, rc=%d\n", rc);
-    if (rc == 4 || rc == 5) { mqttUser = ""; mqttPass = ""; }   // bad/rotated login: fetch fresh
+    if (rc == 4 || rc == 5) { mqttUser = ""; mqttPass = ""; }   // bad/rotated login: ask the server again
   }
 }
 
@@ -823,17 +910,27 @@ void runOfflineFallback() {
 
 // ackEpoch: when the kit first carried the command out (0 if the clock was not set), so a
 // repeat sends the same time as the original acknowledgement.
+// Over MQTT on agroflow/{deviceId}/ack (1.7.2), or over HTTP when MQTT is not up. A lost
+// acknowledgement is safe: the API sends the command again and 12. above answers it once more.
 void markCommandExecuted(const char *commandId, uint32_t ackEpoch) {
   if (WiFi.status() != WL_CONNECTED) { Serial.println("WARN: offline, cannot ACK command - the API will redeliver it"); return; }
-  WiFiClientSecure client;
-  HTTPClient http;
-  String url = String(API_BASE_URL) + "/api/devices/commands/" + String(commandId) + "/executed";
-  if (!beginApiRequest(client, http, url)) return;
-
   JsonDocument doc;
   doc["deviceId"] = getDeviceId();
   if (ackEpoch > 0) doc["executedAt"] = isoFromEpoch((time_t)ackEpoch);
   else if (hasValidTime()) doc["executedAt"] = nowIso8601();
+  if (mqttClient.connected()) {
+    JsonDocument ack;
+    ack["id"] = commandId;
+    if (!doc["executedAt"].isNull()) ack["executedAt"] = doc["executedAt"];
+    String ackBody;
+    serializeJson(ack, ackBody);
+    if (mqttClient.publish(mqttAckTopic.c_str(), ackBody.c_str())) return;
+  }
+
+  WiFiClientSecure client;
+  HTTPClient http;
+  String url = String(API_BASE_URL) + "/api/devices/commands/" + String(commandId) + "/executed";
+  if (!beginApiRequest(client, http, url)) return;
   String body;
   serializeJson(doc, body);
   int httpCode = http.POST(body);
@@ -943,11 +1040,15 @@ load();setInterval(load,5000);
 </script></body></html>)HTML";
 
 // Security: only on the kit's own WiFi (a phone on the farm's router never reaches
-// it), and only with the kit's local password, which is also the setup network's.
+// it), and only with the kit's local password. The setup hotspot is open (1.7.2), so this
+// password is what keeps passers-by from running the pump.
 bool localRequestAllowed() {
-  WebServer &server = *wm.server;
   if (server.client().localIP() != WiFi.softAPIP()) {
     server.send(403, "text/plain", "The local page only works on the kit's own WiFi (AgroFlow-Setup-...).");
+    return false;
+  }
+  if (!isLinked) {
+    server.send(409, "text/plain", "Link the kit to a farm first.");
     return false;
   }
   if (!server.authenticate(LOCAL_PAGE_USER, apPassword().c_str())) {
@@ -960,7 +1061,7 @@ bool localRequestAllowed() {
 
 void handleLocalPage() {
   if (!localRequestAllowed()) return;
-  wm.server->send_P(200, "text/html", LOCAL_PAGE_HTML);
+  server.send_P(200, "text/html", LOCAL_PAGE_HTML);
 }
 
 void handleLocalStatus() {
@@ -989,14 +1090,13 @@ void handleLocalStatus() {
   doc["maxMinutes"] = LOCAL_MAX_RUN_MINUTES;
   String body;
   serializeJson(doc, body);
-  wm.server->send(200, "application/json", body);
+  server.send(200, "application/json", body);
 }
 
 // Start/Stop from the local page. The same rules as a command from the server: one
 // run at a time, a duration, and the local page's 5-minute cap (checkSafetyCap) on top.
 void handleLocalPump() {
   if (!localRequestAllowed()) return;
-  WebServer &server = *wm.server;
   if (server.method() != HTTP_POST) { server.send(405, "text/plain", "Use the buttons on the page."); return; }
   String action = server.arg("action");
   if (action == "stop") {
@@ -1022,61 +1122,292 @@ void handleLocalPump() {
   server.send(200, "text/plain", "Pump started for " + String(minutes) + (minutes == 1 ? " minute." : " minutes."));
 }
 
-// Called by WiFiManager each time it (re)starts its web server, before its own pages.
-void bindLocalRoutes() {
-  if (!localRoutesWanted || !wm.server) return;
-  wm.server->on("/local", HTTP_GET, handleLocalPage);
-  wm.server->on("/local/status", HTTP_GET, handleLocalStatus);
-  wm.server->on("/local/pump", handleLocalPump);
+// The setup page (1. and 2. above)
+
+// One form: the farm Wi-Fi from a scan (or typed), its password and, when the kit is not linked,
+// the 6-digit code. The script asks /state every second and shows the result in plain words.
+const char SETUP_PAGE_HTML[] PROGMEM = R"HTML(<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>AgroFlow kit setup</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#f5f6f5;color:#253126;max-width:520px}
+h1{font-size:21px;margin:0 0 4px}.card{background:#fff;border-radius:12px;padding:14px;margin:12px 0;box-shadow:0 1px 3px #0002}
+label{display:block;font-weight:600;margin:12px 0 4px}input,select{box-sizing:border-box;width:100%;font-size:18px;min-height:48px;border:1px solid #9fb799;border-radius:10px;padding:0 12px;background:#fff}
+button{width:100%;font-size:19px;min-height:52px;border:0;border-radius:10px;background:#1f7a3a;color:#fff;margin-top:16px}button:disabled{opacity:.6}
+.muted{color:#637064;font-size:14px}.ok{color:#1f7a3a;font-weight:700;font-size:19px}.bad{color:#b3261e;font-weight:600}#msg{min-height:24px;margin-top:12px}
+.show{font-size:14px;margin-top:6px;display:flex;gap:6px;align-items:center}.show input{width:auto;min-height:0}</style></head><body>
+<h1>Set up this AgroFlow kit</h1><p class="muted" id="kitname"></p>
+<form class="card" id="f">
+<label for="ssid">Farm Wi-Fi</label><select id="ssid" name="ssid"><option value="">Looking for networks...</option></select>
+<div id="otherbox" hidden><label for="other">Wi-Fi name</label><input id="other" name="other" autocomplete="off" autocapitalize="none"></div>
+<p class="muted">The kit needs a 2.4 GHz network. 5 GHz networks do not show here.</p>
+<label for="pw">Wi-Fi password</label><input id="pw" name="password" type="password" autocomplete="off">
+<div class="show"><input type="checkbox" id="sp"><span>Show password</span></div>
+<div id="codebox"><label for="code">6-digit code from AgroFlow</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="9"></div>
+<button id="go" type="submit">Link</button><div id="msg" role="status" aria-live="polite"></div></form>
+<p id="localp" hidden><a href="/local">Kit readings and pump</a></p>
+<script>
+function q(i){return document.getElementById(i)}var needCode=true,polling=null;
+fetch('/info').then(function(r){return r.json()}).then(function(i){needCode=i.needCode;q('codebox').hidden=!needCode;
+q('go').textContent=needCode?'Link':'Connect';q('kitname').textContent=i.apName+(i.linkedTo?' · linked to '+i.linkedTo:'');q('localp').hidden=!i.linked});
+function scan(){fetch('/scan').then(function(r){return r.json()}).then(function(s){if(s.scanning){setTimeout(scan,1500);return}
+var sel=q('ssid'),keep=sel.value;sel.innerHTML='<option value="">Choose your farm Wi-Fi</option>';
+s.networks.forEach(function(n){var o=document.createElement('option');o.value=n.ssid;o.textContent=n.ssid+(n.rssi>-67?' (strong)':n.rssi>-80?' (fair)':' (weak)');sel.appendChild(o)});
+var o=document.createElement('option');o.value='__other';o.textContent='Other network (type its name)';sel.appendChild(o);if(keep)sel.value=keep}).catch(function(){setTimeout(scan,3000)})}
+scan();q('ssid').onchange=function(){q('otherbox').hidden=q('ssid').value!=='__other'};q('sp').onchange=function(){q('pw').type=q('sp').checked?'text':'password'};
+function show(t,cls){q('msg').className=cls||'';q('msg').textContent=t}
+function poll(){fetch('/state').then(function(r){return r.json()}).then(function(s){
+if(s.step==='joining'){show('Joining '+s.ssid+'...')}else if(s.step==='claiming'){show('Wi-Fi works. Contacting AgroFlow...')}
+else if(s.step==='done'){clearInterval(polling);q('go').disabled=false;show('✓ '+s.message,'ok')}
+else if(s.step==='failed'){clearInterval(polling);q('go').disabled=false;show(s.message,'bad')}}).catch(function(){show('Waiting for the kit... (your phone may reconnect to AgroFlow-Setup)')})}
+q('f').onsubmit=function(e){e.preventDefault();var ssid=q('ssid').value==='__other'?q('other').value.trim():q('ssid').value;
+if(!ssid){show('Choose the farm Wi-Fi first.','bad');return}if(needCode&&q('code').value.replace(/[\s-]/g,'').length<6){show('Type the 6-digit code from AgroFlow.','bad');return}
+var b='ssid='+encodeURIComponent(ssid)+'&password='+encodeURIComponent(q('pw').value)+'&code='+encodeURIComponent(q('code').value);
+q('go').disabled=true;show('Starting...');fetch('/link',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b})
+.then(function(r){return r.json()}).then(function(s){if(!s.ok){q('go').disabled=false;show(s.message,'bad');return}polling=setInterval(poll,1000)})
+.catch(function(){q('go').disabled=false;show('The kit did not answer. Are you still on its Wi-Fi?','bad')})};
+</script></body></html>)HTML";
+
+void sendJson(int status, JsonDocument &doc) {
+  String body;
+  serializeJson(doc, body);
+  server.send(status, "application/json", body);
+}
+
+void handleSetupPage() {
+  server.sendHeader("Cache-Control", "no-store");
+  server.send_P(200, "text/html", SETUP_PAGE_HTML);
+}
+
+void handleSetupInfo() {
+  JsonDocument doc;
+  doc["needCode"] = !isLinked;
+  doc["linked"] = isLinked;
+  doc["apName"] = apName();
+  doc["deviceId"] = getDeviceId();
+  if (isLinked && linkedFarmName.length() > 0) doc["linkedTo"] = linkedFarmName + " - " + linkedZoneName;
+  sendJson(200, doc);
+}
+
+// The networks the kit can see (2.4 GHz only: the ESP32 has no 5 GHz radio). The scan runs in
+// the background; the page asks again until it is done.
+void handleSetupScan() {
+  JsonDocument doc;
+  int n = WiFi.scanComplete();
+  if (n == WIFI_SCAN_FAILED) { WiFi.scanNetworks(true); n = WIFI_SCAN_RUNNING; }
+  if (n == WIFI_SCAN_RUNNING) { doc["scanning"] = true; doc["networks"].to<JsonArray>(); sendJson(200, doc); return; }
+  JsonArray list = doc["networks"].to<JsonArray>();
+  for (int i = 0; i < n; i++) {
+    String ssid = WiFi.SSID(i);
+    if (ssid.length() == 0) continue;
+    bool seen = false;
+    for (JsonObject o : list) if (ssid == (const char *)o["ssid"]) { seen = true; break; }
+    if (seen) continue;
+    JsonObject o = list.add<JsonObject>();
+    o["ssid"] = ssid;
+    o["rssi"] = WiFi.RSSI(i);
+    if (list.size() >= 20) break;
+  }
+  doc["scanning"] = false;
+  WiFi.scanDelete();
+  sendJson(200, doc);
+}
+
+const char *stepName(SetupStep step) {
+  switch (step) {
+    case SetupStep::Joining: return "joining";
+    case SetupStep::Claiming: return "claiming";
+    case SetupStep::Done: return "done";
+    case SetupStep::Failed: return "failed";
+    default: return "idle";
+  }
+}
+
+void handleSetupState() {
+  JsonDocument doc;
+  doc["step"] = stepName(setupStep);
+  doc["message"] = setupMessage;
+  doc["ssid"] = pendingSsid;
+  sendJson(200, doc);
+}
+
+void failSetup(const String &message) {
+  setupStep = SetupStep::Failed;
+  setupMessage = message;
+  Serial.printf("Setup page: %s\n", message.c_str());
+}
+
+// Link pressed: join the farm Wi-Fi while the hotspot stays up (both radios run together).
+void handleSetupLink() {
+  JsonDocument doc;
+  if (setupStep == SetupStep::Joining || setupStep == SetupStep::Claiming) {
+    doc["ok"] = true;   // already working on it; the page just follows /state
+    sendJson(200, doc);
+    return;
+  }
+  String ssid = server.arg("ssid");
+  ssid.trim();
+  String code = server.arg("code");
+  char normalised[12];
+  if (ssid.length() == 0 || ssid.length() > 32) {
+    doc["ok"] = false; doc["message"] = "Choose the farm Wi-Fi first."; sendJson(200, doc); return;
+  }
+  if (!isLinked && !agroflow::normaliseSetupCode(code.c_str(), normalised, sizeof(normalised))) {
+    doc["ok"] = false; doc["message"] = "Type the 6-digit code from AgroFlow."; sendJson(200, doc); return;
+  }
+  pendingCode = isLinked ? "" : String(normalised);
+  bool sameNetwork = WiFi.status() == WL_CONNECTED && WiFi.SSID() == ssid && server.arg("password") == pendingPass;
+  pendingSsid = ssid;
+  pendingPass = server.arg("password");
+  setupMessage = "";
+  if (sameNetwork) {
+    setupStep = isLinked ? SetupStep::Done : SetupStep::Claiming;   // Wi-Fi already works: straight to the code
+    if (isLinked) setupMessage = "Connected to " + pendingSsid + ".";
+  } else {
+    lastDisconnectReason = 0;
+    WiFi.disconnect(false, false);
+    WiFi.begin(pendingSsid.c_str(), pendingPass.c_str());
+    joinStartedMs = millis();
+    setupStep = SetupStep::Joining;
+    Serial.printf("Setup page: joining \"%s\"\n", pendingSsid.c_str());
+  }
+  doc["ok"] = true;
+  sendJson(200, doc);
+}
+
+// Phones check a known address to find a captive portal; sending them to the setup page makes
+// the page open by itself.
+void redirectToSetup() {
+  server.sendHeader("Location", String("http://") + WiFi.softAPIP().toString() + "/", true);
+  server.send(302, "text/plain", "");
+}
+
+void registerPortalRoutes() {
+  if (portalRoutesReady) return;
+  portalRoutesReady = true;
+  server.on("/", HTTP_GET, handleSetupPage);
+  server.on("/info", HTTP_GET, handleSetupInfo);
+  server.on("/scan", HTTP_GET, handleSetupScan);
+  server.on("/state", HTTP_GET, handleSetupState);
+  server.on("/link", HTTP_POST, handleSetupLink);
+  server.on("/local", HTTP_GET, handleLocalPage);
+  server.on("/local/status", HTTP_GET, handleLocalStatus);
+  server.on("/local/pump", handleLocalPump);
+  for (const char *probe : {"/generate_204", "/gen_204", "/hotspot-detect.html", "/library/test/success.html",
+                            "/connecttest.txt", "/ncsi.txt", "/fwlink", "/redirect", "/canonical.html"})
+    server.on(probe, redirectToSetup);
+  server.onNotFound(redirectToSetup);
 }
 
 // WiFi
 
-// Opens the setup page without blocking: watering, sensors and the offline fallback
-// keep running. Saving new WiFi details reconnects automatically.
+void onWifiEvent(arduino_event_id_t event, arduino_event_info_t info) {
+  if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) lastDisconnectReason = info.wifi_sta_disconnected.reason;
+  else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) lastDisconnectReason = 0;
+}
+
+// Opens the setup hotspot (no password) and page without blocking: watering, sensors and the
+// offline fallback keep running. Unlinked, the page also asks for the 6-digit code.
 void openSetupPortal(const char *reason) {
   if (portalActive) return;
   Serial.printf("Opening setup page (%s): join WiFi \"%s\"\n", reason, apName().c_str());
   printKitSetupInfo();
-  wm.setConfigPortalBlocking(false);
-  wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_SECONDS);
-  wm.startConfigPortal(apName().c_str(), apPassword().c_str());
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(apName().c_str());
+  delay(100);
+  dnsServer.start(53, "*", WiFi.softAPIP());
+  registerPortalRoutes();
+  server.begin();
+  WiFi.scanNetworks(true);   // the list is ready by the time a phone opens the page
   portalActive = true;
   portalStartedMs = millis();
+  setupStep = SetupStep::Idle;
+  setupMessage = "";
 }
 
-// Forget the saved WiFi but keep the enrollment (farm, zone, device token), then open
-// setup, which only asks for WiFi.
+void closeSetupPortal() {
+  if (!portalActive) return;
+  server.stop();
+  dnsServer.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+  portalActive = false;
+  setupStep = SetupStep::Idle;
+  Serial.println("Setup page closed");
+}
+
+// Forget the saved WiFi but keep the link (farm, zone, token), then open setup, which only asks
+// for WiFi.
 void forgetWifiAndOpenSetup(const char *reason) {
   Serial.printf("Forgetting saved WiFi (%s)\n", reason);
   wifiForgotten = true;
   preferences.putBool("wifiForgot", true);   // survive a reboot mid-setup
   mqttClient.disconnect();
-  wm.resetSettings();                         // erases saved WiFi only; NVS "agroflow" untouched
+  WiFi.disconnect(false, true);               // erases saved WiFi only; NVS "agroflow" untouched
   openSetupPortal(reason);
 }
 
 void servicePortal() {
   if (!portalActive) return;
-  if (wm.process()) {                       // new WiFi saved and connected
-    Serial.println("Setup page: new WiFi saved, connected");
-    portalActive = false;
-    wifiDownSinceMs = 0;
-    wifiForgotten = false;
-    preferences.putBool("wifiForgot", false);
-    return;
-  }
+  dnsServer.processNextRequest();
+  server.handleClient();
   if (WiFi.softAPgetStationNum() > 0) portalStartedMs = millis();   // someone is on the kit's WiFi
+
+  switch (setupStep) {
+    case SetupStep::Joining: {
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.printf("Setup page: joined \"%s\"\n", pendingSsid.c_str());
+        wifiDownSinceMs = 0;
+        if (!timeConfigured) { configTime(0, 0, "pool.ntp.org", "time.nist.gov"); timeConfigured = true; }
+        if (isLinked) {
+          wifiForgotten = false;
+          preferences.putBool("wifiForgot", false);
+          setupStep = SetupStep::Done;
+          setupMessage = "Connected to " + pendingSsid + ". You can close this page.";
+          portalCloseAtMs = millis() + PORTAL_CLOSE_AFTER_SUCCESS_MS;
+        } else {
+          setupStep = SetupStep::Claiming;
+        }
+        return;
+      }
+      agroflow::JoinProblem problem = agroflow::joinProblemFromReason(lastDisconnectReason);
+      bool timedOut = millis() - joinStartedMs > WIFI_JOIN_TIMEOUT_MS;
+      if ((problem != agroflow::JoinProblem::None && millis() - joinStartedMs > 4000) || timedOut) {
+        if (problem == agroflow::JoinProblem::None) problem = agroflow::JoinProblem::Other;
+        WiFi.disconnect(false, false);
+        failSetup(agroflow::joinMessage(problem));
+      }
+      return;
+    }
+    case SetupStep::Claiming: {
+      server.handleClient();   // let the page see "Contacting AgroFlow" before the call blocks
+      String problem;
+      if (claimDevice(pendingCode, problem)) {
+        setupStep = SetupStep::Done;
+        setupMessage = "Linked to " + linkedFarmName + " - " + linkedZoneName + ". You can close this page.";
+        portalCloseAtMs = millis() + PORTAL_CLOSE_AFTER_SUCCESS_MS;
+        fetchZoneConfig();
+        reconnectMqtt();
+      } else {
+        failSetup(problem);   // the Wi-Fi stays joined; fix the code and press Link again
+      }
+      return;
+    }
+    case SetupStep::Done:
+      if ((long)(millis() - portalCloseAtMs) >= 0) closeSetupPortal();   // only after success
+      return;
+    default:
+      break;
+  }
+
+  // An unlinked kit keeps its hotspot until it is linked. The change-Wi-Fi page times out as
+  // before, unless the Wi-Fi was forgotten.
+  if (!isLinked) return;
   if (millis() - portalStartedMs > (unsigned long)CONFIG_PORTAL_TIMEOUT_SECONDS * 1000UL + 5000UL) {
-    wm.stopConfigPortal();
-    portalActive = false;
+    closeSetupPortal();
     if (wifiForgotten) {
-      // No saved WiFi to fall back to: keep offering setup until someone completes it.
       openSetupPortal("still waiting for a new WiFi");
       return;
     }
     Serial.println("Setup page closed (timeout) - retrying saved WiFi");
-    WiFi.mode(WIFI_STA);
     WiFi.begin();
   }
 }
@@ -1087,6 +1418,7 @@ void maintainWiFi() {
     if (!timeConfigured) { configTime(0, 0, "pool.ntp.org", "time.nist.gov"); timeConfigured = true; }
     return;
   }
+  if (!isLinked) return;   // the setup page drives the Wi-Fi until the kit is linked
   unsigned long nowMs = millis();
   if (wifiDownSinceMs == 0) wifiDownSinceMs = nowMs;
 
@@ -1111,7 +1443,21 @@ void factoryReset(const char *reason) {
   Serial.printf("FACTORY RESET (%s): wiping WiFi and all stored credentials\n", reason);
   relayWrite(false);
   preferences.clear();
-  wm.resetSettings();
+  WiFi.disconnect(true, true);
+  delay(500);
+  ESP.restart();
+}
+
+// The kit was replaced or moved (6. above): forget the farm, zone, logins and anything waiting to
+// upload for that zone, keep the Wi-Fi, and reboot into the setup page for a new code.
+void unlinkKit(const char *reason) {
+  Serial.printf("UNLINK (%s): forgetting the farm, zone and logins\n", reason);
+  stopPumpCycle();
+  relayWrite(false);
+  for (const char *key : {"claimed", "token", "zoneId", "farmId", "farmName", "zoneName", "mqttUser", "mqttPass",
+                          "mqttHost", "mqttPort", "mqttTls", "autoOk", "readbuf", "runbuf", "wifiForgot"})
+    preferences.remove(key);
+  mqttClient.disconnect();
   delay(500);
   ESP.restart();
 }
@@ -1142,8 +1488,9 @@ void setup() {
   dht.setup(DHT_PIN, DHTesp::DHT11);
 
   mqttTlsClient.setInsecure();       // TODO: pin HiveMQ root CA for production.
-  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   mqttClient.setCallback(handleMqttCommand);
+  WiFi.onEvent(onWifiEvent);
+  WiFi.persistent(true);             // the farm Wi-Fi is remembered across reboots
 
   preferences.begin("agroflow", false);
 
@@ -1159,11 +1506,18 @@ void setup() {
 
   deviceToken = preferences.getString("token", "");
   autoWateringAllowed = preferences.getBool("autoOk", false);
-  preferences.remove("mqttUser");             // v1.2.0 stored these; v1.3.0 keeps them in RAM only
-  preferences.remove("mqttPass");
+  mqttUser = preferences.getString("mqttUser", "");
+  mqttPass = preferences.getString("mqttPass", "");
+  mqttHostOverride = preferences.getString("mqttHost", "");
+  mqttPortOverride = preferences.getUShort("mqttPort", 0);
+  mqttUseTls = preferences.getBool("mqttTls", true);
+  linkedFarmName = preferences.getString("farmName", "");
+  linkedZoneName = preferences.getString("zoneName", "");
   wifiForgotten = preferences.getBool("wifiForgot", false);
   // A board claimed by older firmware has no token, so we treat it as unclaimed.
   bool isClaimed = preferences.getBool("claimed", false) && deviceToken.length() > 0;
+  buildMqttTopics();
+  applyBroker();
 
   Serial.print("AgroFlow node v");
   Serial.print(FIRMWARE_VERSION);
@@ -1172,41 +1526,17 @@ void setup() {
   printKitSetupInfo();
 
   if (!isClaimed) {
-    // First-time setup (or after factory reset): blocking portal with the enrollment code field.
-    WiFiManagerParameter enrollmentCodeParam("enrollcode", "Enrollment Code (from admin)", "", 9);
-    wm.addParameter(&enrollmentCodeParam);
-    wm.setConfigPortalBlocking(true);
-    wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_SECONDS);
-    Serial.printf("Not set up yet: join WiFi \"%s\" to enter farm WiFi + enrollment code\n", apName().c_str());
+    // First-time setup (or after unlink / factory reset): the hotspot and the setup page with the
+    // code field stay up until the kit is linked; loop() serves them.
+    isLinked = false;
     preferences.putInt("bootCount", 0);
-    if (!wm.startConfigPortal(apName().c_str(), apPassword().c_str())) {
-      Serial.println("Setup timed out - restarting to retry.");
-      delay(1000);
-      ESP.restart();
-    }
-    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-    timeConfigured = true;
-    if (!claimDevice(enrollmentCodeParam.getValue())) {
-      Serial.println("Device claim failed - wiping and restarting into setup.");
-      preferences.clear();
-      wm.resetSettings();
-      delay(1000);
-      ESP.restart();
-    }
+    Serial.printf("Not set up yet: join WiFi \"%s\" (no password) and enter the farm WiFi + 6-digit code\n", apName().c_str());
+    openSetupPortal("not linked to a farm yet");
   } else {
+    isLinked = true;
     ZONE_ID = preferences.getLong("zoneId", 0);
     FARM_ID = preferences.getLong("farmId", 0);
-    buildMqttTopics();
-    Serial.printf("Claimed: zoneId=%ld farmId=%ld\n", ZONE_ID, FARM_ID);
-
-    // The setup network also serves the local page (readings, Start/Stop pump).
-    // Its menu leaves out WiFiManager's firmware-upload page: firmware arrives by OTA.
-    localRoutesWanted = true;
-    wm.setWebServerCallback(bindLocalRoutes);
-    wm.setCustomMenuHTML("<form action='/local' method='get'><button>Kit readings and pump</button></form><br/>");
-    static const char *menu[] = {"wifi", "custom", "info", "exit"};
-    wm.setMenu(menu, 4);
-    wm.setAPClientCheck(true);   // do not time out while a phone is connected
+    Serial.printf("Linked: zoneId=%ld farmId=%ld\n", ZONE_ID, FARM_ID);
 
     // Connect to the saved WiFi without blocking, so watering starts even if the network
     // is down. maintainWiFi() handles reconnects and the 15-minute setup offer.
@@ -1229,14 +1559,17 @@ void setup() {
 
   pumpStopMillis = millis() - FALLBACK_MIN_REST_MS;
   lastMqttConnectedMillis = millis();   // offline-fallback timer starts from boot
-  fetchZoneConfig();
-  reconnectMqtt();
-  checkFirmwareUpdate();
+  if (isLinked) {
+    fetchZoneConfig();
+    reconnectMqtt();
+    checkFirmwareUpdate();
+  }
 }
 
 void loop() {
   clearBootCounterWhenStable();
   servicePortal();
+  if (!isLinked) return;             // nothing to report or water until the kit has a zone
   maintainWiFi();
   reconnectMqtt();
   mqttClient.loop();

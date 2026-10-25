@@ -28,7 +28,9 @@ public sealed class TelegramOnboardingService
     // Security: purpose (see TelegramCodePurpose) decides what redeeming does to the
     // account. The endpoint picks it, never the farmer, so a link request cannot become
     // a password reset on someone else's account.
-    // lifetime defaults to the configured TTL. The app's "Connect Telegram" button uses
+    public static readonly TimeSpan OnboardingLifetime = TimeSpan.FromHours(24);
+
+    // lifetime defaults to 24 hours for an onboarding code and the configured TTL for a link code. The app's "Connect Telegram" button uses
     // 15 minutes instead of the onboarding default of 7 days, because the farmer is
     // holding the phone, and a long window means a leaked code stays usable longer.
     public async Task<TelegramOnboardingCode> IssueCodeAsync(
@@ -38,9 +40,13 @@ public sealed class TelegramOnboardingService
         TimeSpan? lifetime = null)
     {
         var code = GenerateCode();
+        // The onboarding QR (admin-issued, carries the farmer's first sign-in) works for 24 hours
+        // and once; the admin can make a new one at any time.
         var expiresAt = lifetime.HasValue
             ? DateTimeOffset.UtcNow.Add(lifetime.Value)
-            : DateTimeOffset.UtcNow.AddDays(Math.Max(1, _options.OnboardingCodeTtlDays));
+            : purpose == TelegramCodePurpose.Onboarding
+                ? DateTimeOffset.UtcNow.Add(OnboardingLifetime)
+                : DateTimeOffset.UtcNow.AddDays(Math.Max(1, _options.OnboardingCodeTtlDays));
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -86,11 +92,12 @@ public sealed class TelegramOnboardingService
 
         Guid profileId;
         TelegramCodePurpose purpose;
+        bool webOpened;
 
         await using (var redeem = new NpgsqlCommand(
             "update telegram_onboarding_code set used_at = now() " +
             "where code = $1 and used_at is null and expires_at > now() " +
-            "returning profile_id, purpose",
+            "returning profile_id, purpose, web_opened_at is not null",
             connection, transaction))
         {
             redeem.Parameters.AddWithValue(code);
@@ -106,6 +113,7 @@ public sealed class TelegramOnboardingService
 
             profileId = reader.GetGuid(0);
             purpose = TelegramCodePurposeExtensions.FromDatabaseValue(reader.GetString(1));
+            webOpened = reader.GetBoolean(2);
 
             await reader.CloseAsync();
         }
@@ -131,8 +139,12 @@ public sealed class TelegramOnboardingService
             await detach.ExecuteNonQueryAsync(cancellationToken);
         }
 
+        // Onboarding: the farmer's alerts are switched on with the link (they can turn them off
+        // with /alerts off or in the app).
         await using (var attach = new NpgsqlCommand(
-            "update profile set telegram_chat_id = $1 where id = $2",
+            purpose == TelegramCodePurpose.Onboarding
+                ? "update profile set telegram_chat_id = $1, telegram_alerts_enabled = true where id = $2"
+                : "update profile set telegram_chat_id = $1 where id = $2",
             connection, transaction))
         {
             attach.Parameters.AddWithValue(chatId);
@@ -146,7 +158,7 @@ public sealed class TelegramOnboardingService
             "Telegram chat linked to profile {ProfileId} from a {Purpose} code.",
             profileId, purpose.ToDatabaseValue());
 
-        return new TelegramRedemption(profileId, purpose);
+        return new TelegramRedemption(profileId, purpose, webOpened);
     }
 
     // Everything the welcome message needs, read after redemption. Null if the profile
@@ -162,7 +174,8 @@ public sealed class TelegramOnboardingService
             select coalesce(nullif(p.name, ''), 'there'),
                    p.email,
                    coalesce(f.name, ''),
-                   coalesce(f.location, '')
+                   coalesce(f.location, ''),
+                   p.must_change_password
               from profile p
               left join farm f
                 on f.owner_id = p.id
@@ -183,7 +196,8 @@ public sealed class TelegramOnboardingService
             reader.GetString(0),
             reader.GetString(1),
             reader.GetString(2),
-            reader.GetString(3));
+            reader.GetString(3),
+            reader.GetBoolean(4));
     }
 
     // Security: sets the flag that makes the app force a password change at first
@@ -307,9 +321,11 @@ public static class TelegramCodePurposeExtensions
             : TelegramCodePurpose.Onboarding;
 }
 
+// WebOpened: the farmer already opened the welcome web page, which showed their password.
 public sealed record TelegramRedemption(
     Guid ProfileId,
-    TelegramCodePurpose Purpose);
+    TelegramCodePurpose Purpose,
+    bool WebOpened = false);
 
 public sealed record TelegramOnboardingCode(
     string Code,
@@ -320,4 +336,5 @@ public sealed record FarmerContext(
     string Name,
     string Email,
     string FarmName,
-    string FarmLocation);
+    string FarmLocation,
+    bool MustChangePassword = true);

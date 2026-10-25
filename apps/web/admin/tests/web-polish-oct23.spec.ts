@@ -32,7 +32,7 @@ for (const width of [390,1366]) for (const theme of ['light','dark']) {
       // Axe cannot measure offscreen carousel captions. Check computed text
       // against both theme surfaces too, including every inactive story stage.
       const contrast=await page.evaluate(()=>{
-        const selectors='.hardware-stage h3,.hardware-stage p,.hardware-stage-number,.app-shot figcaption,.app-shots-note,.landing-eyebrow';
+        const selectors='.hardware-stage h3,.hardware-stage p,.hardware-stage-number,.landing-eyebrow';
         const site=document.querySelector('.visual-site')!;
         const probe=document.createElement('span');site.append(probe);
         const rgb=(value:string)=>{probe.style.color=value;return getComputedStyle(probe).color.match(/[\d.]+/g)!.slice(0,3).map(Number);};
@@ -74,10 +74,7 @@ for (const width of [390,1366]) for (const theme of ['light','dark']) {
     await viewer.scrollIntoViewIfNeeded();
     await page.locator('[data-hardware-close]').click();
     await page.locator('[data-hardware-resume]').click();
-    await page.locator('[data-hardware-demo]').click();
-    await expect(page.locator('[data-irrigation-illustration]')).toHaveAttribute('data-demo-state','running');
-    await page.locator('[data-hardware-demo-stop]').click();
-    await expect(page.locator('[data-irrigation-illustration]')).toHaveAttribute('data-demo-state','stopped');
+    await expect(page.locator('[data-hardware-demo]')).toHaveCount(0);
   });
 }
 
@@ -115,7 +112,7 @@ test('the static controller is available when WebGL cannot start',async({page})=
   await expect(viewer).toHaveClass(/is-fallback/);
   await expect(viewer.locator('.hardware-fallback img')).toBeVisible();
   await expect(page.getByText(/Representative image/)).toBeVisible();
-  await expect(page.locator('[data-hardware-demo]')).toBeEnabled();
+  await expect(page.locator('[data-hardware-resume]')).toBeEnabled();
   fs.mkdirSync(evidence,{recursive:true});
   await page.screenshot({path:path.join(evidence,'controller-webgl-fallback.png'),fullPage:true});
 });

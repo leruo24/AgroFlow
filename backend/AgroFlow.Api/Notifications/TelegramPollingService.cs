@@ -176,6 +176,13 @@ public sealed class TelegramPollingService : BackgroundService
                 return;
             }
 
+            // "Turn on automatic watering" under "Your kit in <zone> is working".
+            if (callback.Data?.StartsWith(TelegramClient.AutoCallbackPrefix, StringComparison.Ordinal) == true)
+            {
+                await HandleAutoWateringAsync(callback.Id, callbackChat.Value, callback.Data, cancellationToken);
+                return;
+            }
+
             await _why.HandleCallbackAsync(callback.Id, callbackChat.Value, callback.Data, cancellationToken);
             return;
         }
@@ -217,6 +224,36 @@ public sealed class TelegramPollingService : BackgroundService
                 await SendHelpAsync(chatId.Value, cancellationToken);
                 break;
         }
+    }
+
+    // The farmer said yes to automatic watering from the "kit is working" message. The same rule as
+    // the app's offer: only a commissioned zone on one of this chat's farms.
+    private async Task HandleAutoWateringAsync(string callbackId, long chatId, string data, CancellationToken cancellationToken)
+    {
+        var profileId = await _onboarding.GetProfileIdForChatAsync(chatId, cancellationToken);
+        if (profileId is null || !long.TryParse(data[TelegramClient.AutoCallbackPrefix.Length..], out var zoneId))
+        {
+            await _client.AnswerCallbackQueryAsync(callbackId, null, cancellationToken);
+            return;
+        }
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        string language;
+        await using (var lang = new NpgsqlCommand("select coalesce(language, 'en') from profile where id = $1", connection))
+        {
+            lang.Parameters.AddWithValue(profileId.Value);
+            language = BotText.Normalise(await lang.ExecuteScalarAsync(cancellationToken) as string ?? "en");
+        }
+
+        var answered = await JourneyStore.AnswerAutoOfferOnAccessibleZoneAsync(connection, profileId.Value, zoneId, "automatic", cancellationToken);
+        var reply = answered is { } a
+            ? BotText.Get(language, "kit.auto.done", ("zone", a.ZoneName))
+            : BotText.Get(language, "kit.auto.failed");
+        if (answered is not null)
+            _logger.LogInformation("Automatic watering turned on for zone {ZoneId} from Telegram by {ProfileId}.", zoneId, profileId);
+
+        await _client.AnswerCallbackQueryAsync(callbackId, null, cancellationToken);
+        await _client.SendMessageAsync(chatId, reply, cancellationToken);
     }
 
     // /start: the only path that links a chat to a profile
@@ -317,7 +354,10 @@ public sealed class TelegramPollingService : BackgroundService
             string.IsNullOrWhiteSpace(farmer.FarmName) ? "your farm" : farmer.FarmName,
             string.IsNullOrWhiteSpace(farmer.FarmLocation) ? "not set" : farmer.FarmLocation,
             string.IsNullOrWhiteSpace(_apk.DownloadUrl) ? null : _apk.DownloadUrl,
-            cancellationToken);
+            cancellationToken,
+            // A farmer who already has their password (chose one, or saw it on the welcome
+            // web page) keeps it.
+            issuePassword: farmer.MustChangePassword && !redemption.WebOpened);
 
         if (!sent)
         {

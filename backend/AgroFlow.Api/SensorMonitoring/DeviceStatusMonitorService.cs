@@ -103,6 +103,7 @@ public sealed class DeviceStatusMonitorService : BackgroundService
             with activity as (
                 select h.hardware_id,
                        h.status,
+                       h.status_reported_at,
                        greatest(
                            h.last_seen,
                            coalesce(
@@ -119,7 +120,11 @@ public sealed class DeviceStatusMonitorService : BackgroundService
                 select hardware_id,
                        status,
                        last_activity,
-                       case when last_activity < now() - $1 then 'Offline' else 'Online' end as should_be
+                       -- A kit on 1.7.2 that said "offline" itself (its last will) stays Offline until
+                       -- it says it is back; older activity does not count (0063).
+                       case when last_activity < now() - $1 then 'Offline'
+                            when status = 'Offline' and status_reported_at >= last_activity then 'Offline'
+                            else 'Online' end as should_be
                   from activity
             ),
             flipped as (

@@ -93,7 +93,7 @@ public class IrrigationRunTests : IClassFixture<ApiHost>
         Assert.Contains("agroflow::lostContactShouldStop(", sketch);
         // The local page keeps its own 5 minutes.
         Assert.Matches(@"LOCAL_MAX_RUN_MS\s*=\s*5UL \* 60UL \* 1000UL", sketch);
-        Assert.Matches(@"FIRMWARE_VERSION = ""1.7.1""", sketch);
+        Assert.Matches(@"FIRMWARE_VERSION = ""1.7.2""", sketch);
     }
 
     [Fact]

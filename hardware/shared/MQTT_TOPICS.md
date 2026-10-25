@@ -74,7 +74,25 @@ WiFi MAC — see 0009_mqtt_and_device_identity.sql). Both values come back in
 the `/api/devices/claim` response and are persisted to flash (`Preferences`)
 so they survive reboots.
 
-## Topics
+## Firmware 1.7.2: the kit's own topics
+
+| Direction | Topic | Payload |
+|---|---|---|
+| kit → AgroFlow | `agroflow/{deviceId}/telemetry` | the same reading JSON as `.../sensors` below |
+| AgroFlow → kit | `agroflow/{deviceId}/cmd` | the same command JSON as `.../commands` below, and `{"id":"<uuid>","command":"unlink"}` |
+| kit → AgroFlow | `agroflow/{deviceId}/ack` | `{"id":"<command uuid>","executedAt":"2026-10-24T10:00:00Z"}` |
+| kit → AgroFlow | `agroflow/{deviceId}/status` | retained: `offline` (the last will) or `{"state":"online","firmware":"1.7.2","rssi":-61}` on every connect |
+
+The claim (`POST /api/devices/claim`) answers with these four topics, AgroFlow's existing MQTT
+login (`Mqtt__Username`/`Mqtt__Password`), `mqttHost`, `mqttPort` and `mqttTls`; the kit keeps
+them in flash. The API (`MqttConnectionService`) subscribes to `agroflow/+/telemetry`,
+`agroflow/+/ack` and `agroflow/+/status` next to the old filter, publishes every command on both
+the old and the new command topic (each kit listens on one), sets `hardware.status` and
+`status_reported_at` from `/status` (migration 0063), and ignores a device id with no active link.
+`unlink` (sent when a kit is replaced or moved) makes the kit forget its link and reopen setup.
+Kits on 1.7.1 and older keep the topics below until they are reflashed.
+
+## Topics (firmware up to 1.7.1)
 
 | Direction | Topic | Payload |
 |---|---|---|

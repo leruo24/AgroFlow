@@ -7,12 +7,10 @@ import termsDraft from "@/content/terms-draft.md?raw";
 import privacyDraft from "@/content/privacy-draft.md?raw";
 import { legalDraftHtml } from "@/ui/legalDraft";
 import { wirePublicFacts } from "@/ui/publicFacts";
-import { irrigationIllustrationHtml, wireIrrigationIllustration } from '@/features/irrigationIllustration';
 import { photoHtml } from '@/ui/agroflowImages';
 
 const routes: readonly [string, CopyKey][] = [
   ["/", "home"],
-  ["/experience", "experience"],
   ["/solutions", "solutions"],
   ["/how-it-works", "how"],
   ["/technology", "technology"],
@@ -24,7 +22,7 @@ const routes: readonly [string, CopyKey][] = [
   ["/privacy", "privacy"],
 ];
 const legacy: Record<string, string> = {
-  experience: "/experience",
+  experience: "/",
   solutions: "/solutions",
   "how-it-works": "/how-it-works",
   technology: "/technology",
@@ -40,8 +38,11 @@ const cta = () =>
 export const fieldArt = `<svg class="field-lines" viewBox="0 0 600 220" aria-hidden="true" focusable="false"><circle cx="466" cy="58" r="31" fill="currentColor" opacity=".15"/><g fill="none" stroke="currentColor" stroke-width="2" opacity=".3"><path d="M0 175Q140 80 300 156T600 132M0 191Q140 96 300 172T600 148M0 207Q140 112 300 188T600 164M0 223Q140 128 300 204T600 180"/><path d="M130 156v-50q-38-32-45-7 2 23 45 22 33-55 53-30-4 23-53 41"/></g></svg>`;
 
 // Reuse the existing enquiry, gallery and hardware components and their wiring.
-// No contact fields, API bodies or demo state transitions are replaced here.
+// No contact fields or API bodies are replaced here. The public site shows no simulated data:
+// the old /experience demo page now opens Home.
 export function renderPublicSite(original: string): string {
+  if (/^\/experience\/?$/.test(window.location.pathname))
+    history.replaceState(null, "", "/" + window.location.search);
   const fragment = window.location.hash.slice(1);
   if (window.location.pathname === "/" && legacy[fragment])
     history.replaceState(
@@ -71,7 +72,7 @@ export function renderPublicSite(original: string): string {
         hero("hero", "intro") +
         outcomes +
         photographicFeatures +
-        `<section class="visual-band"><h2>${t("receive")}</h2><p>${t("receiveBody")}</p><a href="/solutions">${t("solutions")} →</a></section><section class="visual-summary"><h2>${t("start")}</h2><p>${t("journey")}</p><a href="/how-it-works">${t("how")} →</a><a href="/service-pricing">${t("pricing")} →</a><a href="/experience">${t("experience")} →</a></section>`;
+        `<section class="visual-band"><h2>${t("receive")}</h2><p>${t("receiveBody")}</p><a href="/solutions">${t("solutions")} →</a></section><section class="visual-summary"><h2>${t("start")}</h2><p>${t("journey")}</p><a href="/how-it-works">${t("how")} →</a><a href="/service-pricing">${t("pricing")} →</a></section>`;
       break;
     case "/solutions":
       body =
@@ -94,23 +95,16 @@ export function renderPublicSite(original: string): string {
         `<section class="visual-grid about-grid">${card("purpose", "purposeBody")}${card("who", "whoBody")}${card("roles", "rolesBody")}${card("project", "projectBody")}${card("team", "teamBody")}${card("sponsor", "sponsorBody")}${card("receive", "receiveBody", "/service-pricing")}${card("start", "journey", "/how-it-works")}</section>` +
         `<section class="visual-band" data-about-contact><h2>${t("reach")}</h2><p>${t("reachBody")}</p>${cta()}</section>`;
       break;
-    case "/experience":
-      body =
-        heading("experienceTitle", "experienceBody") +
-        irrigationIllustrationHtml() + `<section class="visual-band"><p class="visual-eyebrow">${t("simulated")}</p><button type="button" class="btn" data-experience-launch>${t("launch")}</button></section>`;
-      break;
     case "/technology":
       body =
         heading("technology", "projectBody") +
         section("[data-hardware-showcase]") +
-        irrigationIllustrationHtml() +
         section("#technology");
       break;
     case "/get-the-app":
       body =
         heading("app", "intro") +
-        `<section class="visual-band">${appLinksHtml()}<p><a href="${WEB_APP_URL}">${t("signIn")}</a></p></section>` +
-        section("#the-app");
+        `<section class="visual-band">${appLinksHtml()}<p><a href="${WEB_APP_URL}">${t("signIn")}</a></p></section>`;
       break;
     case "/contact":
       body = heading("contact", "enquiryNote") + section("#enquire");
@@ -144,7 +138,6 @@ export function renderPublicSite(original: string): string {
 
 export function wirePublicSite(root: HTMLElement): void {
   root.querySelector('.visual-footer nav')?.setAttribute('aria-label', t('footerNav'));
-  wireIrrigationIllustration(root);
   root
     .querySelector("[data-catalogue-back]")
     ?.addEventListener("click", () => history.back());
@@ -195,31 +188,4 @@ export function wirePublicSite(root: HTMLElement): void {
       window.location.reload();
     });
   }
-  root.querySelectorAll<HTMLImageElement>(".app-shot img").forEach((img) => {
-    const trigger = document.createElement("button");
-    trigger.type = "button";
-    trigger.className = "gallery-trigger";
-    trigger.setAttribute("aria-label", `${t("zoom")}: ${img.alt}`);
-    img.replaceWith(trigger);
-    trigger.append(img);
-    trigger.addEventListener("click", () => {
-      const dialog = document.createElement("dialog");
-      dialog.className = "visual-gallery";
-      dialog.setAttribute("aria-label", t("gallery"));
-      const closeButton = document.createElement("button");
-      closeButton.type = "button";
-      closeButton.textContent = t("closePreview");
-      const preview = img.cloneNode() as HTMLImageElement;
-      preview.loading = "eager";
-      dialog.append(closeButton, preview);
-      document.body.append(dialog);
-      closeButton.onclick = () => dialog.close();
-      dialog.addEventListener("close", () => {
-        dialog.remove();
-        trigger.focus();
-      });
-      dialog.showModal();
-      closeButton.focus();
-    });
-  });
 }

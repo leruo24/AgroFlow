@@ -6,7 +6,7 @@ const out = path.resolve('../../../docs/test-evidence/visual-revision');
 fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch();
 try {
-  for (const name of ['enclosure', 'irrigation-demo']) {
+  for (const name of ['enclosure']) {
     const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, recordVideo: { dir: out, size: { width: 1366, height: 768 } } });
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
@@ -34,18 +34,6 @@ try {
       await page.waitForTimeout(1000);
       await page.locator('[data-hardware-reset]').click();
       await page.waitForTimeout(1000);
-    } else {
-      await page.goto('http://localhost:5183/experience');
-      const panel = page.locator('[data-irrigation-illustration]');
-      await panel.scrollIntoViewIfNeeded();
-      await page.locator('[data-demo-start]').click();
-      await page.waitForTimeout(2000);
-      await page.screenshot({ path: path.join(out, 'demo-running.png') });
-      await page.locator('[data-demo-stop]').click();
-      await page.waitForTimeout(700);
-      await page.locator('[data-demo-reset]').click();
-      await panel.locator('summary').click();
-      await page.waitForTimeout(700);
     }
     const video = page.video();
     await context.close();

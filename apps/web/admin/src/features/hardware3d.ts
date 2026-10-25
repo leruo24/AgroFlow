@@ -116,7 +116,7 @@ export function initHardwareShowcase(root: HTMLElement): void {
   sceneControls.innerHTML = scenes.map(([scene, label], i) => `<button type="button" data-hardware-scene="${scene}" aria-pressed="${i === 0}">${t(label)}</button>`).join('');
   viewer.before(sceneControls);
   const tools = document.createElement('div'); tools.className = 'hardware-demo-controls';
-  tools.innerHTML = `<button type="button" data-hardware-resume>${t('resumeGuide')}</button><button type="button" data-hardware-demo>${t('previewIrrigation')}</button><button type="button" data-hardware-demo-stop>${t('stopDemo')}</button><button type="button" data-hardware-demo-reset>${t('resetDemo')}</button>`;
+  tools.innerHTML = `<button type="button" data-hardware-resume>${t('resumeGuide')}</button>`;
   column.append(tools);
   const caption = column.querySelector('.hardware-caption');
   if (caption) caption.textContent = t('representativePhoto');
@@ -471,12 +471,6 @@ export function initHardwareShowcase(root: HTMLElement): void {
   section.querySelector<HTMLButtonElement>('[data-hardware-resume]')?.addEventListener('click', () => {
     userRotation = null; lidOverride = null; lidAnimation = null; lidVelocity = 0; syncStory();
   }, { signal: abort.signal });
-  const demoAction = (action: string) => root.querySelector<HTMLButtonElement>(`[data-irrigation-illustration] [data-demo-${action}]`)?.click();
-  section.querySelector<HTMLButtonElement>('[data-hardware-demo]')?.addEventListener('click', () => {
-    demoAction('start'); root.querySelector('[data-irrigation-illustration]')?.scrollIntoView({ block: 'center' });
-  }, { signal: abort.signal });
-  section.querySelector<HTMLButtonElement>('[data-hardware-demo-stop]')?.addEventListener('click', () => demoAction('stop'), { signal: abort.signal });
-  section.querySelector<HTMLButtonElement>('[data-hardware-demo-reset]')?.addEventListener('click', () => demoAction('reset'), { signal: abort.signal });
   section.querySelectorAll('.hardware-controls,.hardware-hotspots').forEach(group => group.setAttribute('role', 'group'));
   section.querySelectorAll<HTMLButtonElement>('[data-hardware-rotate]').forEach(button => {
     const symbol = document.createElement('span'); symbol.setAttribute('aria-hidden', 'true');

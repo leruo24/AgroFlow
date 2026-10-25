@@ -129,8 +129,12 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
             {
                 await _client!.ConnectAsync(_options, ct);
                 await _client.SubscribeAsync(MqttTopics.SensorTopicFilter, cancellationToken: ct);
+                // Firmware 1.7.2's own topics: agroflow/<deviceId>/telemetry, /ack and /status.
+                foreach (var filter in KitLink.SubscribeFilters)
+                    await _client.SubscribeAsync(filter, cancellationToken: ct);
                 _disconnectedSinceUtc = null;
-                _logger.LogInformation("MQTT connected, subscribed to {Topic}", MqttTopics.SensorTopicFilter);
+                _logger.LogInformation("MQTT connected, subscribed to {Topic} and {KitTopics}",
+                    MqttTopics.SensorTopicFilter, string.Join(", ", KitLink.SubscribeFilters));
 
                 // Only announce once the subscription is in place, so a handler that publishes
                 // straight away does not race a half-ready connection. A failing handler must
@@ -167,6 +171,12 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
     {
         try
         {
+            if (KitLink.ParseKitTopic(args.ApplicationMessage.Topic) is { } kitTopic)
+            {
+                await OnKitMessageAsync(kitTopic.DeviceId, kitTopic.Channel, args.ApplicationMessage.ConvertPayloadToString());
+                return;
+            }
+
             var parsed = MqttTopics.ParseFarmAndDevice(args.ApplicationMessage.Topic);
             if (parsed is null)
             {
@@ -198,26 +208,103 @@ public class MqttConnectionService : BackgroundService, IMqttPublisher
                 return;
             }
 
-            // This is the only place that knows which physical device sent a reading, so
-            // it updates last_seen. DeviceStatusMonitorService uses that to spot quiet devices.
-            await TouchDeviceLastSeenAsync(connection, device.Value.HardwareId, payload.Backlog, payload.Rssi, payload.SoilProbeOk);
-
-            var result = await SensorReadingProcessor.ProcessAsync(
-                connection, device.Value.ZoneId, payload.SensorType, payload.Value, _notifications,
-                recordedAt: payload.RecordedAt,
-                hardwareId: device.Value.HardwareId);
-
-            if (result.Timing == ReadingTiming.Rejected)
-            {
-                _logger.LogWarning(
-                    "Ignoring a {SensorType} reading from {DeviceId} recorded at {RecordedAt}: older than {Days} days or in the future",
-                    payload.SensorType, deviceId, payload.RecordedAt, ReadingAge.MaxBackfillAge.TotalDays);
-            }
+            await ProcessReadingAsync(connection, device.Value, deviceId, payload);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to process MQTT sensor message on topic {Topic}", args.ApplicationMessage.Topic);
         }
+    }
+
+    // One reading from either topic family, for a resolved active kit.
+    private async Task ProcessReadingAsync(
+        NpgsqlConnection connection, (long HardwareId, long ZoneId) device, string deviceId, SensorMqttPayload payload)
+    {
+        // This is the only place that knows which physical device sent a reading, so
+        // it updates last_seen. DeviceStatusMonitorService uses that to spot quiet devices.
+        await TouchDeviceLastSeenAsync(connection, device.HardwareId, payload.Backlog, payload.Rssi, payload.SoilProbeOk);
+
+        var result = await SensorReadingProcessor.ProcessAsync(
+            connection, device.ZoneId, payload.SensorType, payload.Value, _notifications,
+            recordedAt: payload.RecordedAt,
+            hardwareId: device.HardwareId);
+
+        if (result.Timing == ReadingTiming.Rejected)
+        {
+            _logger.LogWarning(
+                "Ignoring a {SensorType} reading from {DeviceId} recorded at {RecordedAt}: older than {Days} days or in the future",
+                payload.SensorType, deviceId, payload.RecordedAt, ReadingAge.MaxBackfillAge.TotalDays);
+        }
+    }
+
+    // agroflow/<deviceId>/telemetry | ack | status (firmware 1.7.2). The kit's identity is the topic.
+    // A device id with no active link is ignored, so an unlinked or replaced kit changes nothing.
+    private async Task OnKitMessageAsync(string deviceId, string channel, string payloadText)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync();
+        var device = await ResolveKitAsync(connection, deviceId);
+        if (device is null)
+        {
+            _logger.LogInformation("Ignoring {Channel} from {DeviceId}: no active link.", channel, deviceId);
+            return;
+        }
+
+        switch (channel)
+        {
+            case KitLink.Telemetry:
+            {
+                var payload = JsonSerializer.Deserialize<SensorMqttPayload>(payloadText, JsonOptions);
+                if (payload is null) return;
+                if (!SensorReadingTypes.IsValid(payload.SensorType))
+                {
+                    _logger.LogWarning("Ignoring telemetry from {DeviceId}: sensorType {SensorType} is not one of {Allowed}",
+                        deviceId, payload.SensorType, SensorReadingTypes.Describe());
+                    return;
+                }
+                await ProcessReadingAsync(connection, device.Value, deviceId, payload);
+                return;
+            }
+            case KitLink.Status:
+            {
+                var report = KitLink.ParseStatus(payloadText);
+                if (report is null) return;
+                await using var cmd = new NpgsqlCommand(
+                    "update hardware set status = $2, status_reported_at = now(), " +
+                    "last_seen = case when $3 then now() else last_seen end, " +
+                    "firmware_version = coalesce($4, firmware_version), wifi_rssi = coalesce($5, wifi_rssi) " +
+                    "where hardware_id = $1", connection);
+                cmd.Parameters.AddWithValue(device.Value.HardwareId);
+                cmd.Parameters.AddWithValue(report.Online ? "Online" : "Offline");
+                cmd.Parameters.AddWithValue(report.Online);
+                cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Text, (object?)report.Firmware ?? DBNull.Value);
+                cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Smallint, (object?)(short?)report.Rssi ?? DBNull.Value);
+                await cmd.ExecuteNonQueryAsync();
+                _logger.LogInformation("Kit {DeviceId} reports itself {State}.", deviceId, report.Online ? "online" : "offline");
+                return;
+            }
+            case KitLink.Ack:
+            {
+                using var doc = JsonDocument.Parse(payloadText);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("id", out var idProp) || idProp.ValueKind != JsonValueKind.String
+                    || !Guid.TryParse(idProp.GetString(), out var commandId)) return;
+                var executedAt = root.TryGetProperty("executedAt", out var at) && at.ValueKind == JsonValueKind.String
+                                 && DateTimeOffset.TryParse(at.GetString(), out var parsedAt) ? parsedAt : DateTimeOffset.UtcNow;
+                if (!await AgroFlow.Api.Endpoints.DeviceCommandEndpoints.AcknowledgeFromKitAsync(connection, commandId, deviceId, executedAt))
+                    _logger.LogInformation("Ignoring ack for command {CommandId} from {DeviceId}: not its command.", commandId, deviceId);
+                return;
+            }
+        }
+    }
+
+    private static async Task<(long HardwareId, long ZoneId)?> ResolveKitAsync(NpgsqlConnection connection, string deviceId)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select hardware_id, zone_id from hardware " +
+            "where upper(device_id) = upper($1) and enrollment_status = 'active' and zone_id is not null", connection);
+        cmd.Parameters.AddWithValue(deviceId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? (reader.GetInt64(0), reader.GetInt64(1)) : null;
     }
 
     // Security: check that the farmId in the topic really is this device's farm.

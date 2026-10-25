@@ -264,9 +264,13 @@ public class IrrigationCommandNotifyService : BackgroundService
         // one board (e.g. a separate pump controller).
         foreach (var (deviceId, farmId) in devices)
         {
+            // Both topic families: a kit on 1.7.1 or older listens on the farm topic, a kit on 1.7.2
+            // on agroflow/<deviceId>/cmd. Each kit subscribes to one, so nothing runs twice, and a
+            // kit keeps working on the old topics until it is reflashed.
             var topic = MqttTopics.CommandsTopic(farmId, deviceId);
             await _mqttPublisher.PublishAsync(topic, payload);
-            _logger.LogInformation("Published command {CommandId} to {Topic}", notification.Id, topic);
+            await _mqttPublisher.PublishAsync(KitLink.Topic(deviceId, KitLink.Command), payload);
+            _logger.LogInformation("Published command {CommandId} to {Topic} and the kit's own topic", notification.Id, topic);
         }
 
         // "Waiting for kit" from here on (0057). The first publish counts; a replay keeps it.

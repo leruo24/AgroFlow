@@ -43,6 +43,14 @@ public class KitClaimHost : SimDbHost
 
     public RecordingNotifications Notifications { get; } = new();
 
+    // The claim hands out the API's own MQTT login (test values here).
+    protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        builder.UseSetting("Mqtt:Username", "kit-test-user");
+        builder.UseSetting("Mqtt:Password", "kit-test-password");
+    }
+
     protected override void ConfigureDatabase(IServiceCollection services)
     {
         base.ConfigureDatabase(services);
@@ -150,8 +158,11 @@ public class KitDbTests : IClassFixture<KitClaimHost>
         Assert.DoesNotMatch("[A-HJ-NP-Z2-9]{8}", text.Replace("AgroFlow", ""));   // nothing shaped like an enrollment code
     }
 
+    // Since kit linking (October 2026) the farmer hears when the installer has commissioned the
+    // zone ("Your kit in <zone> is working"), not at the claim; and the same kit retrying the same
+    // code is answered again, while another kit is refused.
     [SimDbFact]
-    public async Task The_claim_sends_the_message_once_and_a_repeat_with_the_used_code_sends_nothing()
+    public async Task The_claim_sends_no_kit_message_and_a_retry_by_the_same_kit_is_answered_again()
     {
         var s = await SeedAsync();
         await Q("insert into hardware (device_name, device_type, zone_id, enrollment_status, enrollment_code, enrollment_code_expires_at) " +
@@ -163,9 +174,11 @@ public class KitDbTests : IClassFixture<KitClaimHost>
 
         var before = _host.Notifications.KitConnected.Count;
         Assert.Equal(HttpStatusCode.OK, await Claim());
-        Assert.Equal(HttpStatusCode.Unauthorized, await Claim());   // the code works once
-        var sent = _host.Notifications.KitConnected.Skip(before).ToList();
-        Assert.Equal(new[] { (s.KitZone, "0123456789AB") }, sent);
+        Assert.Equal(HttpStatusCode.OK, await Claim());   // the same kit, the same code: a retry
+        var other = await client.PostAsync("/api/devices/claim", new StringContent(
+            JsonSerializer.Serialize(new { deviceId = "BA9876543210", enrollmentCode = "KITCODE9" }), Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Conflict, other.StatusCode);   // another kit: the code is used
+        Assert.Empty(_host.Notifications.KitConnected.Skip(before));
     }
 
     [SimDbFact]
