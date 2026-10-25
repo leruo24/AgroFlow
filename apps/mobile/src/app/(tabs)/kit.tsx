@@ -5,7 +5,7 @@
 // setup Wi-Fi with a copy button, and Change Wi-Fi.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CircleAlert, CircleCheck, CircleX, Info } from 'lucide-react-native';
 import { router } from '@/lib/router';
@@ -21,7 +21,8 @@ import { createScreenStyles } from '@/styles/screenStyles';
 import { createIrrigationStyles } from '@/styles/irrigationStyles';
 import { copyOrShare, kitLineText } from '@/lib/kitStatus';
 import { KitHelpGuide } from '@/components/KitHelpGuide';
-import { fetchFarmKits, type KitCard, type KitLine } from '@/services/agroFlowApi';
+import { fetchFarmKits, issueFarmerKitCode, type FarmerKitCode, type KitCard, type KitLine } from '@/services/agroFlowApi';
+import { formatSast } from '@/lib/sastTime';
 import type { AppColors } from '@/constants/colors';
 import { Platform } from 'react-native';
 
@@ -94,6 +95,10 @@ function KitCardView({ card, focused, colors, styles, t, lang }: {
 }) {
   const [whenOpen, setWhenOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [enrollment, setEnrollment] = useState<FarmerKitCode | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
+  const [confirmingEnrollment, setConfirmingEnrollment] = useState(false);
   // Awaiting installation is not a fault: no red, a plain next step.
   const tone = card.overall === 'working' ? 'ok' : card.overall === 'needs_attention' ? 'warn' : card.overall === 'not_connected' ? 'bad' : 'neutral';
   const Icon = tone === 'ok' ? CircleCheck : tone === 'warn' ? CircleAlert : tone === 'bad' ? CircleX : Info;
@@ -101,6 +106,20 @@ function KitCardView({ card, focused, colors, styles, t, lang }: {
   const copy = async (what: string, text: string) => {
     const result = await copyOrShare(text);
     if (result === 'copied') { setCopied(what); setTimeout(() => setCopied(null), 2000); }
+  };
+
+  const generate = async () => {
+    if (generating) return;
+    setGenerating(true);
+    setEnrollmentError(null);
+    try {
+      setEnrollment(await issueFarmerKitCode(card.zoneId));
+    } catch (error) {
+      setEnrollmentError(error instanceof Error ? error.message : t('kitTab.enrollFailed'));
+    } finally {
+      setGenerating(false);
+      setConfirmingEnrollment(false);
+    }
   };
 
   return <Card testID={`kit-card-${card.zoneId}`} style={focused ? { borderColor: colors.action, borderWidth: 2 } : undefined}>
@@ -114,7 +133,49 @@ function KitCardView({ card, focused, colors, styles, t, lang }: {
     </View>
 
     {!card.hasKit
-      ? <Text style={[styles.body, { marginTop: 8 }]} testID={`kit-awaiting-${card.zoneId}`}>{t('kitTab.awaitingBody')}</Text>
+      ? <View style={{ marginTop: 8, gap: 12 }}>
+        <Text style={styles.body} testID={`kit-awaiting-${card.zoneId}`}>{t('kitTab.awaitingBody')}</Text>
+        {enrollment ? <View
+          style={{ gap: 8, padding: 16, borderRadius: 12, backgroundColor: colors.surfaceSecondary, alignItems: 'center' }}
+          accessibilityLiveRegion="polite"
+          testID={`kit-enrollment-${card.zoneId}`}
+        >
+          <Text style={[styles.body, { fontWeight: '700' }]}>{t('kitTab.codeLabel')}</Text>
+          <Text selectable style={{ color: colors.text, fontSize: 36, lineHeight: 44, fontWeight: '800', letterSpacing: 8 }}
+            testID={`kit-enrollment-code-${card.zoneId}`}>{enrollment.code}</Text>
+          <Text style={styles.caption} testID={`kit-enrollment-expiry-${card.zoneId}`}>
+            {t('kitTab.codeExpiry', { time: formatSast(enrollment.expiresAt) ?? enrollment.expiresAt })}
+          </Text>
+          <Text style={[styles.body, { textAlign: 'center' }]}>{t('kitTab.codeSteps')}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('kitTab.copyCode')}
+            onPress={() => { void copy('enrollment', enrollment.code); }} style={styles.secondaryButton}
+            testID={`kit-copy-code-${card.zoneId}`}>
+            <Text style={styles.buttonText}>{copied === 'enrollment' ? t('kitTab.copied') : copyLabel}</Text>
+          </Pressable>
+        </View> : null}
+        {enrollmentError ? <Text style={{ color: colors.error }} accessibilityLiveRegion="assertive"
+          testID={`kit-enrollment-error-${card.zoneId}`}>{enrollmentError}</Text> : null}
+        {confirmingEnrollment ? <View style={{ gap: 8 }} testID={`kit-enrollment-confirm-${card.zoneId}`}>
+          <Text style={[styles.body, { fontWeight: '700' }]}>{t('kitTab.addTitle', { zone: card.zoneName })}</Text>
+          <Text style={styles.caption}>{t('kitTab.addWarning')}</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Pressable accessibilityRole="button" disabled={generating} onPress={() => setConfirmingEnrollment(false)}
+              style={[styles.secondaryButton, { flex: 1 }]} testID={`kit-add-cancel-${card.zoneId}`}>
+              <Text style={styles.buttonText}>{t('common.cancel')}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityState={{ disabled: generating }} disabled={generating}
+              onPress={() => { void generate(); }} style={[styles.secondaryButton, { flex: 1 }, generating && { opacity: 0.6 }]}
+              testID={`kit-add-confirm-${card.zoneId}`}>
+              {generating
+                ? <ActivityIndicator color={colors.primaryDark} />
+                : <Text style={styles.buttonText}>{enrollment ? t('kitTab.generateAgain') : t('kitTab.add')}</Text>}
+            </Pressable>
+          </View>
+        </View> : <Pressable accessibilityRole="button" onPress={() => setConfirmingEnrollment(true)}
+          style={styles.secondaryButton} testID={`kit-add-${card.zoneId}`}>
+          <Text style={styles.buttonText}>{enrollment ? t('kitTab.generateAgain') : t('kitTab.add')}</Text>
+        </Pressable>}
+      </View>
       : <>
         <View style={{ marginTop: 12, gap: 8 }} accessibilityRole="list">
           {card.lines.map(line => {

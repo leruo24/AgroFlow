@@ -79,6 +79,13 @@ public class KitDbTests : IClassFixture<KitClaimHost>
         return await cmd.ExecuteScalarAsync();
     }
 
+    private async Task<HttpResponseMessage> AsFarmerAsync(Guid farmer, HttpMethod method, string path)
+    {
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Add(ApiHost.TestAuth.Header, farmer.ToString());
+        return await _host.CreateClient().SendAsync(request);
+    }
+
     private static readonly SemaphoreSlim Gate = new(1, 1);
     private static (long FarmId, long KitZone, long EmptyZone)? _seeded;
 
@@ -131,6 +138,65 @@ public class KitDbTests : IClassFixture<KitClaimHost>
     private sealed class Factory(HttpMessageHandler handler) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    [SimDbFact]
+    public async Task A_farmer_can_issue_and_regenerate_a_six_digit_code_only_for_an_empty_zone_and_the_audit_never_contains_it()
+    {
+        var s = await SeedAsync();
+        var zone = (long)(await Q(
+            "insert into zone (farm_id, name, crop_type, irrigation_mode) values ($1, 'Self setup', 'spinach', 'manual') returning id",
+            s.FarmId))!;
+
+        async Task<JsonElement> Issue()
+        {
+            var response = await AsFarmerAsync(Owner, HttpMethod.Post, $"/api/farmer/zones/{zone}/kit-code");
+            var text = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, text);
+            return JsonDocument.Parse(text).RootElement.Clone();
+        }
+
+        var first = await Issue();
+        var firstCode = first.GetProperty("code").GetString()!;
+        Assert.Matches("^[0-9]{6}$", firstCode);
+        Assert.InRange(
+            (first.GetProperty("expiresAt").GetDateTimeOffset() - DateTimeOffset.UtcNow).TotalMinutes,
+            29,
+            30.1);
+
+        var second = await Issue();
+        Assert.Equal(first.GetProperty("hardwareId").GetInt64(), second.GetProperty("hardwareId").GetInt64());
+        Assert.Equal(
+            second.GetProperty("code").GetString(),
+            await Q("select enrollment_code from hardware where hardware_id = $1", second.GetProperty("hardwareId").GetInt64()));
+
+        var auditDetails = (string)(await Q(
+            "select details::text from admin_audit_log where action = 'enrollment_code.created' and entity_id = $1 order by created_at desc limit 1",
+            second.GetProperty("hardwareId").GetInt64().ToString()))!;
+        Assert.Contains("farmer_self_service", auditDetails);
+        Assert.DoesNotContain(firstCode, auditDetails);
+        Assert.DoesNotContain(second.GetProperty("code").GetString()!, auditDetails);
+    }
+
+    [SimDbFact]
+    public async Task Farmer_kit_codes_hide_other_farm_ids_and_never_replace_an_active_kit()
+    {
+        var s = await SeedAsync();
+        var zone = (long)(await Q(
+            "insert into zone (farm_id, name, crop_type, irrigation_mode) values ($1, 'Protected setup', 'spinach', 'manual') returning id",
+            s.FarmId))!;
+
+        var inaccessible = await AsFarmerAsync(Stranger, HttpMethod.Post, $"/api/farmer/zones/{zone}/kit-code");
+        Assert.Equal(HttpStatusCode.NotFound, inaccessible.StatusCode);
+        Assert.Equal(0L, await Q("select count(*) from hardware where zone_id = $1", zone));
+
+        await Q("insert into hardware (device_name, device_type, zone_id, device_id, enrollment_status, status) " +
+                "values ('Existing kit', 'ESP32', $1, '40CBBBABC31C', 'active', 'Online')", zone);
+        var replacement = await AsFarmerAsync(Owner, HttpMethod.Post, $"/api/farmer/zones/{zone}/kit-code");
+        Assert.Equal(HttpStatusCode.Conflict, replacement.StatusCode);
+        var body = JsonDocument.Parse(await replacement.Content.ReadAsStringAsync()).RootElement;
+        Assert.Equal("kit_already_active", body.GetProperty("reason").GetString());
+        Assert.Equal(0L, await Q("select count(*) from hardware where zone_id = $1 and enrollment_status = 'enrolled'", zone));
     }
 
     [SimDbFact]

@@ -28,7 +28,7 @@ jest.mock('@/lib/router', () => ({ router: { push: (...a: unknown[]) => mockPush
 jest.mock('expo-router', () => ({ useLocalSearchParams: () => ({}), useFocusEffect: () => undefined }));
 let mockAgro: Record<string, unknown> = {};
 jest.mock('@/context/AgroFlowContext', () => ({ useAgroFlow: () => mockAgro }));
-jest.mock('@/services/agroFlowApi', () => ({ fetchFarmKits: jest.fn() }));
+jest.mock('@/services/agroFlowApi', () => ({ fetchFarmKits: jest.fn(), issueFarmerKitCode: jest.fn() }));
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import * as api from '@/services/agroFlowApi';
@@ -74,6 +74,13 @@ beforeEach(() => {
   jest.spyOn(Date, 'now').mockReturnValue(NOW);
   mockAgro = { farm: { id: '1', name: 'Alpha' }, farms: [{ id: '1', name: 'Alpha' }], selectFarm: jest.fn() };
   (api.fetchFarmKits as jest.Mock).mockResolvedValue(FIXTURES);
+  (api.issueFarmerKitCode as jest.Mock).mockResolvedValue({
+    hardwareId: 50,
+    code: '418205',
+    expiresAt: '2026-10-23T08:30:00Z',
+    zoneId: 5,
+    zoneName: 'Bed 5',
+  });
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -123,9 +130,26 @@ describe('the Kit tab', () => {
   it('a zone with no kit is Awaiting installation, with the next step and no fault lines', async () => {
     await render(<KitTabScreen />);
     expect(await screen.findByTestId('kit-overall-5')).toHaveTextContent('Awaiting installation');
-    expect(screen.getByTestId('kit-awaiting-5')).toHaveTextContent(/your installer connects the kit/);
+    expect(screen.getByTestId('kit-awaiting-5')).toHaveTextContent(/you can connect it yourself now/);
     expect(screen.queryByTestId('kit-line-5-connection')).toBeNull();
     expect(screen.queryByTestId('kit-setup-wifi-5')).toBeNull();
+  });
+
+  it('an empty zone warns first, then shows a readable code, expiry and Copy or share', async () => {
+    await render(<KitTabScreen />);
+    const add = await screen.findByTestId('kit-add-5');
+    expect(add).toHaveTextContent('Add a kit');
+
+    await fireEvent.press(add);
+    expect(api.issueFarmerKitCode).not.toHaveBeenCalled();
+    expect(screen.getByTestId('kit-enrollment-confirm-5')).toHaveTextContent(/invalidates any earlier unclaimed code/);
+    await fireEvent.press(screen.getByTestId('kit-add-confirm-5'));
+
+    expect(await screen.findByTestId('kit-enrollment-code-5')).toHaveTextContent('418205');
+    expect(screen.getByTestId('kit-enrollment-expiry-5')).toHaveTextContent(/expires after 30 minutes/);
+    expect(screen.getByTestId('kit-copy-code-5')).toHaveTextContent(/Copy/);
+    expect(screen.getByTestId('kit-add-5')).toHaveTextContent('Generate a new code');
+    expect(api.issueFarmerKitCode).toHaveBeenCalledWith(5);
   });
 
   it('never shows what the kit cannot measure', async () => {

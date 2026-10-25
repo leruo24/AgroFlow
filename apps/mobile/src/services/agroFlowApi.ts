@@ -988,6 +988,23 @@ export function fetchFarmKits(farmId: string | number) {
   return authorizedRequest<KitCard[]>(`/api/farmer/farms/${encodeURIComponent(String(farmId))}/kits`);
 }
 
+export type FarmerKitCode = {
+  hardwareId: number;
+  code: string;
+  expiresAt: string;
+  zoneId: number;
+  zoneName: string;
+};
+
+// Starts first-time kit setup for one of the signed-in farmer's empty zones. The API refuses
+// replacement when a kit is already active; staff keep that higher-risk operation.
+export function issueFarmerKitCode(zoneId: number) {
+  return authorizedRequest<FarmerKitCode>(
+    `/api/farmer/zones/${encodeURIComponent(String(zoneId))}/kit-code`,
+    { method: 'POST', body: '{}' }
+  );
+}
+
 export function fetchZoneHardware(zoneId: number) {
   return authorizedRequest<ZoneHardware>(
     `/api/farmer/zones/${zoneId}/hardware`
