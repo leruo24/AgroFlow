@@ -268,7 +268,11 @@ public class KitDbTests : IClassFixture<KitClaimHost>
         var response = await _host.CreateClient().SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var cards = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.EnumerateArray().ToList();
-        Assert.Equal(2, cards.Count);
+        // Other tests in this class may have added setup zones to the same seeded farm. The
+        // contract is one card for every current zone, not that this shared farm forever has two.
+        var zoneCount = Convert.ToInt32(await Q("select count(*) from zone where farm_id = $1", s.FarmId));
+        Assert.Equal(zoneCount, cards.Count);
+        Assert.Equal(zoneCount, cards.Select(c => c.GetProperty("zoneId").GetInt64()).Distinct().Count());
 
         var kit = cards.Single(c => c.GetProperty("zoneId").GetInt64() == s.KitZone);
         Assert.Equal("working", kit.GetProperty("overall").GetString());

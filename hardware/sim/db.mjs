@@ -3,6 +3,7 @@
 // when it stops.
 import EmbeddedPostgres from 'embedded-postgres';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,9 +11,25 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, '..', '..');
 
-export async function startDatabase({ port = 54329 } = {}) {
+async function freeLoopbackPort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const port = server.address().port;
+  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  return port;
+}
+
+export async function startDatabase({ port } = {}) {
+  port ??= await freeLoopbackPort();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agroflow-sim-pg-'));
-  const pg = new EmbeddedPostgres({ databaseDir: dir, user: 'postgres', password: 'sim-only', port, persistent: false, onLog: () => {} });
+  const verbose = message => { if (process.env.SIM_VERBOSE) process.stderr.write(`[postgres] ${String(message)}`); };
+  const pg = new EmbeddedPostgres({
+    databaseDir: dir, user: 'postgres', password: 'sim-only', port, persistent: false,
+    onLog: verbose, onError: verbose,
+  });
   await pg.initialise();
   await pg.start();
   await pg.createDatabase('agroflow');

@@ -37,7 +37,9 @@ export class FakeKit {
     this.kitTopics = firmwareVersion >= '1.7.2';
     this.commands = [];
     this.seq = 1;
-    this.runs = [];   // every command the kit actually carried out
+    this.runs = [];   // every start command the kit actually carried out
+    this.stops = [];  // every stop command the kit actually carried out
+    this.pumpRunning = false;
   }
 
   async http(method, path, body, withToken = true) {
@@ -147,9 +149,19 @@ export class FakeKit {
     const ackedAt = new Date();
     this.flash.commandIds.push({ id: command.id, ackedAt });
     if (this.flash.commandIds.length > RECENT_COMMAND_IDS) this.flash.commandIds.shift();
-    this.runs.push({ id: command.id, seconds: runLimitSeconds(command), at: ackedAt });
+    if (command.command === 'start') {
+      // The firmware acknowledges a second distinct start while running, but does not energise
+      // the relay twice or replace the active run.
+      if (!this.pumpRunning) {
+        this.pumpRunning = true;
+        this.runs.push({ id: command.id, seconds: runLimitSeconds(command), at: ackedAt });
+      }
+    } else if (command.command === 'stop') {
+      this.pumpRunning = false;
+      this.stops.push({ id: command.id, at: ackedAt });
+    }
     if (!loseAck) await this.ack(command.id, ackedAt);
-    return { repeated: false, ackedAt };
+    return { repeated: false, ackedAt, pumpRunning: this.pumpRunning };
   }
 
   reportRun({ runtimeSeconds, triggerSource, startedAt, syncStatus = 'synced' }) {

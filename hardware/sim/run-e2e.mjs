@@ -195,6 +195,15 @@ try {
     return by.SoilMoisture >= 3 && by.Temperature >= 3 && by.Humidity >= 3 ? by : null;
   });
   check('live readings are stored', !!stored, JSON.stringify(stored));
+  // ResolveDeviceAsync must verify both identifiers in the old topic family. A valid device id
+  // sent through another farm's topic must not be accepted.
+  const beforeWrongTopic = (await q('select count(*)::int n from sensor_reading where zone_id = $1', [zoneId])).rows[0].n;
+  await kit.client.publishAsync(
+    `agroflow/farm/${Number(farmId) + 999}/device/${DEVICE_ID}/sensors`,
+    JSON.stringify({ sensorType: 'SoilMoisture', value: 99 }));
+  await sleep(1000);
+  const afterWrongTopic = (await q('select count(*)::int n from sensor_reading where zone_id = $1', [zoneId])).rows[0].n;
+  check("a reading on the right device's wrong-farm topic is ignored", afterWrongTopic === beforeWrongTopic);
   const hw = (await q("select hardware_id, status, enrollment_status, last_seen > now() - interval '1 minute' as recent from hardware where device_id = $1", [DEVICE_ID])).rows[0];
   check('kit shows online', hw?.status === 'Online' && hw?.enrollment_status === 'active' && hw?.recent === true, JSON.stringify(hw));
 
@@ -315,9 +324,22 @@ try {
     manual ? `${manual.command} ${manual.durationSeconds}s` : 'not delivered');
   check("the command carries the zone's maximum run time (default 5 min)", manual?.maxRunSeconds === 300,
     `maxRunSeconds ${manual?.maxRunSeconds}`);
-  const ack = manual ? await kit.ack(manual.id) : { status: 0 };
+  const acted = manual ? await kit.carryOut(manual) : null;
   const executed = (await q('select status from irrigation_commands where id = $1', [manualId])).rows[0]?.status;
-  check('the kit acknowledges it', ack.status === 200 && executed === 'executed', `ACK ${ack.status}, status ${executed}`);
+  check('the simulated relay turns ON and the kit acknowledges start', acted?.pumpRunning === true && executed === 'executed',
+    `relay ${kit.pumpRunning ? 'ON' : 'OFF'}, status ${executed}`);
+
+  const stopId = (await q(
+    "insert into irrigation_commands (zone_id, command, source) values ($1, 'stop', 'manual') returning id", [zoneId])).rows[0].id;
+  const stop = await kit.waitForCommand(c => String(c.id) === String(stopId)).catch(() => null);
+  const stopped = stop ? await kit.carryOut(stop) : null;
+  const stopStatus = (await q('select status from irrigation_commands where id = $1', [stopId])).rows[0]?.status;
+  check('a manual stop reaches the same kit, the simulated relay turns OFF, and the kit acknowledges stop',
+    stop?.command === 'stop' && stopped?.pumpRunning === false && stopStatus === 'executed' && kit.stops.length === 1,
+    `received ${stop?.command ?? 'none'}, relay ${kit.pumpRunning ? 'ON' : 'OFF'}, status ${stopStatus}`);
+  if (stop) await kit.carryOut(stop);
+  check('a duplicate stop is acknowledged again without operating the relay twice',
+    kit.stops.length === 1 && kit.pumpRunning === false);
   const startedAt = manual?.receivedAt ?? new Date();
   startedAt.setMilliseconds(0);
   const run = await kit.reportRun({ runtimeSeconds: 60, triggerSource: 'manual', startedAt });
@@ -609,7 +631,7 @@ try {
   check('scenario, moderation: staff hide a report with a reason and it stops notifying; reports expire',
     passedTest('Staff_hide_a_report_with_a_reason_it_stops_notifying_and_reports_expire'));
 } catch (error) {
-  check('simulation ran to the end', false, error.message);
+  check('simulation ran to the end', false, error?.stack ?? error?.message ?? String(error));
 } finally {
   if (process.env.SIM_VERBOSE) console.log(apiLogText().slice(-6000));
   await cleanup();
