@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AgroFlow.Api.Services;
 using AgroFlow.Business;
 using System.Globalization;
 using Npgsql;
@@ -52,8 +53,72 @@ public static class FarmerEndpoints
 
         group.MapPost("/requests", CreateFarmerServiceRequestAsync);
         group.MapPut("/zones/{zoneId:long}/settings", UpdateZoneSettingsAsync);
+        group.MapPost("/zones/{zoneId:long}/kit-code", IssueKitCodeAsync);
         group.MapPost("/zones/{zoneId:long}/commands", CreateManualCommandAsync);
         group.MapPost("/alerts/{alertId:long}/read", MarkAlertReadAsync);
+    }
+
+    // A farmer may prepare an empty zone for its first kit. Replacing an active kit remains a
+    // staff operation: it can move hardware and history, so it needs the admin linking workflow.
+    // The ownership predicate is applied before KitCodes.IssueAsync because that helper only
+    // verifies that the zone exists. Inaccessible ids deliberately look exactly like missing ids.
+    private static async Task<IResult> IssueKitCodeAsync(
+        long zoneId,
+        ClaimsPrincipal user,
+        NpgsqlDataSource dataSource,
+        AuditLog audit,
+        CancellationToken ct)
+    {
+        if (!TryGetUserId(user, out var userId)) return Results.Unauthorized();
+
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        string zoneName;
+        long farmId;
+        bool hasActiveKit;
+        await using (var zone = new NpgsqlCommand($"""
+            select coalesce(nullif(z.name, ''), 'Zone ' || z.id), z.farm_id,
+                   exists (select 1 from hardware h
+                            where h.zone_id = z.id and h.enrollment_status = 'active')
+              from zone z
+             where z.id = $2 and ({FarmAccessSql})
+            """, connection))
+        {
+            zone.Parameters.AddWithValue(userId);
+            zone.Parameters.AddWithValue(zoneId);
+            await using var reader = await zone.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct))
+                return Results.NotFound(new { error = "No such zone." });
+
+            zoneName = reader.GetString(0);
+            farmId = reader.GetInt64(1);
+            hasActiveKit = reader.GetBoolean(2);
+        }
+
+        if (hasActiveKit)
+        {
+            return Results.Conflict(new
+            {
+                error = "This zone already has a kit. Ask AgroFlow staff if it needs to be replaced.",
+                reason = "kit_already_active",
+            });
+        }
+
+        var issued = await KitCodes.IssueAsync(
+            connection, zoneId, $"{zoneName} kit", EnrollableKitTypes.Default, null, ct);
+        if (issued is null) return Results.NotFound(new { error = "No such zone." });
+
+        var (hardwareId, code, expiresAt) = issued.Value;
+        // The code is a live credential. Record its creation and expiry, never its value.
+        await audit.WriteAsync(
+            user,
+            AuditActions.EnrollmentCodeCreated,
+            "hardware",
+            hardwareId.ToString(CultureInfo.InvariantCulture),
+            farmId,
+            new { zoneId, expiresAt, source = "farmer_self_service" },
+            ct);
+
+        return Results.Ok(new { hardwareId, code, expiresAt, zoneId, zoneName });
     }
 
     // AF-04: the app shows an alert as read only after this succeeds. Only an alert on the caller's
