@@ -37,6 +37,13 @@ import timer from "lucide-static/icons/timer.svg?raw";
 import pause from "lucide-static/icons/pause.svg?raw";
 import menu from "lucide-static/icons/menu.svg?raw";
 import x from "lucide-static/icons/x.svg?raw";
+import globe from "lucide-static/icons/globe-2.svg?raw";
+import smartphone from "lucide-static/icons/smartphone.svg?raw";
+import chevronDown from "lucide-static/icons/chevron-down.svg?raw";
+import panelLeftClose from "lucide-static/icons/panel-left-close.svg?raw";
+import panelLeftOpen from "lucide-static/icons/panel-left-open.svg?raw";
+import userRound from "lucide-static/icons/user-round.svg?raw";
+import logOut from "lucide-static/icons/log-out.svg?raw";
 
 export const Icon = {
   layoutDashboard,
@@ -71,4 +78,11 @@ export const Icon = {
   pause,
   menu,
   x,
+  globe,
+  smartphone,
+  chevronDown,
+  panelLeftClose,
+  panelLeftOpen,
+  userRound,
+  logOut,
 } as const;

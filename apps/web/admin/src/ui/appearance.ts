@@ -47,7 +47,7 @@ export function appearanceHtml(
   ],
 ): string {
   const option = (value: Appearance, label: string, icon: string) =>
-    `<button type="button" data-appearance-choice="${value}" data-appearance-label="${label}" aria-label="${labels[0]}: ${label}" aria-pressed="false">${icon}<span>${label}</span></button>`;
+    `<button type="button" data-appearance-choice="${value}" data-appearance-label="${label}" aria-label="${labels[0]}: ${label}" title="${label}" aria-pressed="false">${icon}<span>${label}</span></button>`;
   return `<fieldset class="appearance-control"><legend>${labels[0]}</legend><div class="appearance-options" role="group" aria-label="${labels[0]}">${option("light", labels[2], sun)}${option("system", labels[1], systemIcon)}${option("dark", labels[3], rain)}</div><span class="sr-only" role="status" aria-live="polite" data-appearance-status></span></fieldset>`;
 }
 export function wireAppearance(root: ParentNode): void {

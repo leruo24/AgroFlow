@@ -21,29 +21,27 @@ import { esc } from "@/lib/format";
 import { Icon } from "@/lib/icons";
 import { plainError } from "@/lib/plainError";
 
-/* The sidebar, grouped as the design brief proposes (section 10): Overview / Enquiries /
- * Farmers & farms / Installations / Support & requests / Reports / Drought & community /
- * Settings, each mapped to pages that exist. Enquiries and Support & requests are the two
- * tabs of the Requests page (#enquiries, #requests). A group of one page is shown as that
- * page alone. Irrigation data and MQTT logins are not in the sidebar but keep their routes
- * (see PAGES and REDIRECTS), so old links still work. */
+/* Flat, compact navigation sections. Irrigation data and MQTT logins are not in the sidebar
+ * but keep their routes (see PAGES and REDIRECTS), so old links still work. */
 export const NAV_GROUPS: NavGroup[] = [
-  { label: "Overview", items: [{ id: "dashboard", label: "Overview", icon: Icon.layoutDashboard }] },
-  { label: "Enquiries", items: [{ id: "enquiries", label: "Enquiries", icon: Icon.headphones }] },
-  { label: "Farmers & farms", items: [
+  { label: "General", items: [
+    { id: "dashboard", label: "Overview", icon: Icon.layoutDashboard },
+    { id: "enquiries", label: "Enquiries", icon: Icon.headphones },
+  ] },
+  { label: "Farm management", items: [
     { id: "users", label: "Farmers", icon: Icon.users },
     { id: "farms", label: "Farms & zones", icon: Icon.tractor },
   ] },
   // Installation visits and the installer checklist live in each farm's case (Farms & zones).
-  { label: "Installations", items: [
+  { label: "Operations", items: [
     { id: "hardware", label: "Kits", icon: Icon.radio },
     { id: "maintenance", label: "Maintenance", icon: Icon.wrench },
   ] },
-  { label: "Support & requests", items: [
+  { label: "Support", items: [
     { id: "requests", label: "Requests", icon: Icon.inbox },
     { id: "alerts", label: "Alerts", icon: Icon.bell },
   ] },
-  { label: "Reports", items: [
+  { label: "Analytics", items: [
     { id: "reports", label: "Reports", icon: Icon.barChart },
     { id: "activity", label: "Activity", icon: Icon.activity },
   ] },
@@ -260,10 +258,9 @@ export function initNav(): void {
   const nav = document.getElementById("nav");
   if (!nav) return;
   const button = (n: NavItem): string =>
-    `<button data-page="${esc(n.id)}"><span class="nav-ico">${n.icon}</span>${esc(n.label)}</button>`;
-  nav.innerHTML = NAV_GROUPS.map((g, i) => g.items.length === 1
-    ? button(g.items[0]!)
-    : `<details class="nav-group" role="group" aria-labelledby="navGroup${i}" open><summary><span class="nav-group-label" id="navGroup${i}">${esc(g.label)}</span><span class="nav-group-chevron" aria-hidden="true">⌄</span></summary>${g.items.map(button).join("")}</details>`,
+    `<button data-page="${esc(n.id)}" aria-label="${esc(n.label)}" title="${esc(n.label)}" data-tooltip="${esc(n.label)}"><span class="nav-ico">${n.icon}</span><span class="nav-label">${esc(n.label)}</span></button>`;
+  nav.innerHTML = NAV_GROUPS.map((g, i) =>
+    `<section class="nav-group" role="group" aria-labelledby="navGroup${i}"><h2 class="nav-group-label" id="navGroup${i}">${esc(g.label)}</h2>${g.items.map(button).join("")}</section>`,
   ).join("");
   // One delegated listener on the nav for every button in it. The nav is created new with
   // each signed-in shell (app/shell.ts), so listeners cannot pile up across sign-ins.

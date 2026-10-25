@@ -146,7 +146,7 @@ export const copy = {
   app: ["Get the app", "Kry die toepassing", "Bona tiriso"],
   contact: ["Contact", "Kontak", "Ikgolaganye"],
   pricing: ["Service & pricing", "Diens en pryse", "Tirelo le ditlhwatlhwa"],
-  ourService: ["Our service", "Ons diens", "Tirelo ya rona"],
+  ourService: ["Our services", "Ons dienste", "Ditirelo tsa rona"],
   terms: ["Terms", "Bepalings", "Melawana"],
   privacy: ["Privacy", "Privaatheid", "Sephiri"],
   menu: ["Menu", "Kieslys", "Lenane"],

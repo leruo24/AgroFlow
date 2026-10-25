@@ -4340,7 +4340,7 @@ export function updateHeaderIdentity(): void {
   const profile = getAdminProfile();
   const btn = document.getElementById("avatarBtn");
   const nameEl = document.querySelector<HTMLElement>("#avatarMenu .menu-head b");
-  if (!profile || !btn || !nameEl) return;
+  if (!profile) return;
 
   const initials = profile.name
     .split(/\s+/)
@@ -4350,9 +4350,28 @@ export function updateHeaderIdentity(): void {
     .join("")
     .toUpperCase() || profile.email[0]?.toUpperCase() || "?";
 
-  btn.textContent = initials;
-  btn.title = profile.name || profile.email;
-  nameEl.textContent = profile.name || profile.email;
+  const displayName = profile.name || profile.email;
+  const role = profile.role
+    ? profile.role
+        .split("_")
+        .filter(Boolean)
+        .map((part) => part[0]?.toUpperCase() + part.slice(1))
+        .join(" ")
+    : "Staff";
+
+  if (btn) {
+    btn.textContent = initials;
+    btn.title = displayName;
+  }
+  if (nameEl) nameEl.textContent = displayName;
+  const headerRole = document.querySelector<HTMLElement>("#avatarMenu .menu-head span");
+  if (headerRole) headerRole.textContent = role;
+  const sidebarAvatar = document.getElementById("sidebarAvatar");
+  const sidebarName = document.getElementById("sidebarStaffName");
+  const sidebarRole = document.getElementById("sidebarStaffRole");
+  if (sidebarAvatar) sidebarAvatar.textContent = initials;
+  if (sidebarName) sidebarName.textContent = displayName;
+  if (sidebarRole) sidebarRole.textContent = role;
 }
 
 /* One action on an alert, a job or a request, sent to the API. The actor is never sent:

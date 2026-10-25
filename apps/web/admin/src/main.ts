@@ -19,6 +19,7 @@ import { toast } from "@/lib/toast";
 import { WELCOME_HTML, wireWelcome } from "@/pages/welcome";
 import { mountPublicNavigation } from "@/pages/publicNavigation";
 import { startHealthPolling, stopHealthPolling } from "@/app/health";
+import { Icon } from "@/lib/icons";
 
 declare global {
   interface Window {
@@ -158,16 +159,95 @@ function render(state: ViewState): void {
   wireAppearance(root);
   const sidebar = document.getElementById("sidebar");
   const sidebarToggle = document.getElementById("sidebarToggle");
+  const sidebarCollapse = document.getElementById("sidebarCollapse");
+  const sidebarTooltip = document.getElementById("sidebarTooltip");
+  const main = root.querySelector<HTMLElement>(".main");
+  const mobileSidebar = matchMedia("(max-width: 860px)");
+  const collapseKey = "agroflow_staff_sidebar_collapsed";
+  let sidebarCollapsed = false;
+  try {
+    sidebarCollapsed = localStorage.getItem(collapseKey) === "true";
+  } catch {
+    /* Keep the expanded default when storage is unavailable. */
+  }
+  const syncSidebarCollapse = () => {
+    const collapsed = sidebarCollapsed && !mobileSidebar.matches;
+    sidebar?.classList.toggle("is-collapsed", collapsed);
+    sidebarCollapse?.setAttribute("aria-expanded", String(!collapsed));
+    sidebarCollapse?.setAttribute("aria-label", collapsed ? "Expand navigation" : "Collapse navigation");
+    sidebarCollapse?.setAttribute("title", collapsed ? "Expand navigation" : "Collapse navigation");
+    sidebarCollapse?.setAttribute("data-tooltip", collapsed ? "Expand navigation" : "Collapse navigation");
+    if (sidebarCollapse)
+      sidebarCollapse.innerHTML = collapsed ? Icon.panelLeftOpen : Icon.panelLeftClose;
+    if (!collapsed && sidebarTooltip) sidebarTooltip.hidden = true;
+    if (mobileSidebar.matches && !sidebar?.classList.contains("open"))
+      sidebar?.setAttribute("aria-hidden", "true");
+    else
+      sidebar?.removeAttribute("aria-hidden");
+  };
+  syncSidebarCollapse();
+  sidebarCollapse?.addEventListener("click", () => {
+    sidebarCollapsed = !sidebarCollapsed;
+    try {
+      localStorage.setItem(collapseKey, String(sidebarCollapsed));
+    } catch {
+      /* Keep the preference for this session. */
+    }
+    syncSidebarCollapse();
+  });
+  const showSidebarTooltip = (target: HTMLElement) => {
+    if (!sidebar?.classList.contains("is-collapsed") || !sidebarTooltip) return;
+    const label = target.dataset["tooltip"];
+    if (!label) return;
+    const bounds = target.getBoundingClientRect();
+    sidebarTooltip.textContent = label;
+    sidebarTooltip.style.left = `${bounds.right + 10}px`;
+    sidebarTooltip.style.top = `${bounds.top + bounds.height / 2}px`;
+    sidebarTooltip.hidden = false;
+    target.setAttribute("aria-describedby", "sidebarTooltip");
+  };
+  const hideSidebarTooltip = (target?: HTMLElement | null) => {
+    target?.removeAttribute("aria-describedby");
+    if (sidebarTooltip) sidebarTooltip.hidden = true;
+  };
+  sidebar?.addEventListener("pointerover", (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("[data-tooltip]")
+      : null;
+    if (target) showSidebarTooltip(target);
+  });
+  sidebar?.addEventListener("pointerout", (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("[data-tooltip]")
+      : undefined;
+    hideSidebarTooltip(target);
+  });
+  sidebar?.addEventListener("focusin", (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("[data-tooltip]")
+      : null;
+    if (target) showSidebarTooltip(target);
+  });
+  sidebar?.addEventListener("focusout", (event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("[data-tooltip]")
+      : undefined;
+    hideSidebarTooltip(target);
+  });
   const closeSidebar = (restoreFocus = false) => {
     sidebar?.classList.remove("open");
     sidebarToggle?.setAttribute("aria-expanded", "false");
     document.body.classList.remove("sidebar-open");
+    main?.removeAttribute("inert");
+    if (mobileSidebar.matches) sidebar?.setAttribute("aria-hidden", "true");
     if (restoreFocus) sidebarToggle?.focus();
   };
   const openSidebar = () => {
     sidebar?.classList.add("open");
+    sidebar?.removeAttribute("aria-hidden");
     sidebarToggle?.setAttribute("aria-expanded", "true");
     document.body.classList.add("sidebar-open");
+    main?.setAttribute("inert", "");
     document.getElementById("sidebarClose")?.focus();
   };
   sidebarToggle?.setAttribute("aria-controls", "sidebar");
@@ -196,12 +276,35 @@ function render(state: ViewState): void {
       document.getElementById("bellBtn")?.click();
     });
   const onSidebarKeydown = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && sidebar?.classList.contains("open"))
+    if (event.key === "Escape" && sidebar?.classList.contains("open")) {
       closeSidebar(true);
+      return;
+    }
+    if (event.key !== "Tab" || !sidebar?.classList.contains("open")) return;
+    const focusable = [...sidebar.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((element) => element.offsetParent !== null);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   };
   window.addEventListener("keydown", onSidebarKeydown);
-  removeSidebarKeyHandler = () =>
+  const onSidebarViewportChange = () => {
+    if (!mobileSidebar.matches) closeSidebar();
+    syncSidebarCollapse();
+  };
+  mobileSidebar.addEventListener("change", onSidebarViewportChange);
+  removeSidebarKeyHandler = () => {
     window.removeEventListener("keydown", onSidebarKeydown);
+    mobileSidebar.removeEventListener("change", onSidebarViewportChange);
+  };
   initNav();
   initHeader();
   // Log out, in the sidebar footer and the avatar menu: ends the Supabase session, then shows

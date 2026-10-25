@@ -8,6 +8,7 @@ import privacyDraft from "@/content/privacy-draft.md?raw";
 import { legalDraftHtml } from "@/ui/legalDraft";
 import { wirePublicFacts } from "@/ui/publicFacts";
 import { photoHtml } from '@/ui/agroflowImages';
+import { Icon } from "@/lib/icons";
 
 const routes: readonly [string, CopyKey][] = [
   ["/", "home"],
@@ -139,11 +140,12 @@ export function renderPublicSite(original: string): string {
     ["/solutions", "/how-it-works", "/technology", "/service-pricing"].includes(href),
   );
   const primaryRoutes = routes.filter(([href]) =>
-    ["/", "/about", "/get-the-app", "/contact"].includes(href),
+    ["/", "/about", "/contact"].includes(href),
   );
   const onServiceRoute = serviceRoutes.some(([href]) => href === path);
   const nav = `${link(primaryRoutes[0]!)}<details class="public-service-menu${onServiceRoute ? " is-current" : ""}" data-service-menu><summary>${t("ourService")}</summary><div>${serviceRoutes.map(link).join("")}</div></details>${primaryRoutes.slice(1).map(link).join("")}`;
-  return `<div class="landing visual-site"><a class="visual-skip" href="#publicContent">${t("skip")}</a><header class="visual-header"><a href="/" aria-label="AgroFlow">${brandHtml()}</a><button type="button" data-public-menu aria-controls="publicNav" aria-expanded="false">${t("menu")} ☰</button><nav id="publicNav" aria-label="${t("nav")}"><button type="button" class="public-menu-close" data-public-menu-close>${t("close")} ×</button>${nav}</nav><div class="visual-preferences">${appearanceHtml([t("theme"), t("system"), t("light"), t("dark")])}<label>${t("language")}<select data-public-language><option value="en">English</option><option value="af">Afrikaans</option><option value="tn">Setswana</option></select></label></div></header><main class="visual-content" id="publicContent" tabindex="-1">${body}<aside class="visual-final"><h2>${t("eyebrow")}</h2>${cta()}${WEB_APP_URL ? `<a href="${WEB_APP_URL}">${t("signIn")}</a>` : ""}</aside></main><footer class="visual-footer">${brandHtml()}<nav aria-label="${t("footerNav")}">${routes.map(link).join("")}</nav></footer></div>`;
+  const languageCode = publicLanguage().toUpperCase();
+  return `<div class="landing visual-site"><a class="visual-skip" href="#publicContent">${t("skip")}</a><header class="visual-header"><div class="visual-header-inner"><a class="public-brand" href="/" aria-label="AgroFlow home">${brandHtml()}</a><button class="public-menu-toggle" type="button" data-public-menu aria-controls="publicNav" aria-expanded="false">${Icon.menu}<span class="sr-only">${t("menu")}</span></button><div class="public-menu-panel" id="publicNav"><button type="button" class="public-menu-close" data-public-menu-close>${Icon.x}<span>${t("close")}</span></button><nav class="public-primary-nav" aria-label="${t("nav")}">${nav}</nav><div class="visual-preferences">${appearanceHtml([t("theme"), t("system"), t("light"), t("dark")])}<label class="public-language" title="${t("language")}">${Icon.globe}<span class="public-language-code" aria-hidden="true">${languageCode}</span>${Icon.chevronDown}<select data-public-language aria-label="${t("language")}"><option value="en">English</option><option value="af">Afrikaans</option><option value="tn">Setswana</option></select></label><a class="public-app-cta" href="/get-the-app" ${path === "/get-the-app" ? 'aria-current="page"' : ""}>${Icon.smartphone}<span>${t("app")}</span></a></div></div></div></header><main class="visual-content" id="publicContent" tabindex="-1">${body}<aside class="visual-final"><h2>${t("eyebrow")}</h2>${cta()}${WEB_APP_URL ? `<a href="${WEB_APP_URL}">${t("signIn")}</a>` : ""}</aside></main><footer class="visual-footer">${brandHtml()}<nav aria-label="${t("footerNav")}">${routes.map(link).join("")}</nav></footer></div>`;
 }
 
 export function wirePublicSite(root: HTMLElement): void {
@@ -158,13 +160,13 @@ export function wirePublicSite(root: HTMLElement): void {
   const close = () => {
     button?.setAttribute("aria-expanded", "false");
     nav?.classList.remove("is-open");
-    if (button) button.textContent = `${t("menu")} ☰`;
+    document.body.classList.remove("public-menu-open");
   };
   button?.addEventListener("click", () => {
     const open = button.getAttribute("aria-expanded") !== "true";
     button.setAttribute("aria-expanded", String(open));
     nav?.classList.toggle("is-open", open);
-    button.textContent = `${t("menu")} ☰`;
+    document.body.classList.toggle("public-menu-open", open);
     if (open)
       window.requestAnimationFrame(() =>
         nav
@@ -185,6 +187,21 @@ export function wirePublicSite(root: HTMLElement): void {
     ) {
       close();
       button.focus();
+      return;
+    }
+    if (event.key !== "Tab" || button?.getAttribute("aria-expanded") !== "true" || !nav) return;
+    const focusable = [...nav.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
+    )].filter((element) => element.offsetParent !== null);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
   });
   root.addEventListener("focusout", (event) => {

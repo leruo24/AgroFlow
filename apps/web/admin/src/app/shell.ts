@@ -5,39 +5,42 @@
 import { Icon } from "@/lib/icons";
 import { brandHtml } from "@/ui/brand";
 import { appearanceHtml } from "@/ui/appearance";
-import { text as t } from "@/pages/publicCopy";
 
 export const SHELL_HTML = `
   <div class="app" id="appShell">
     <aside class="sidebar" id="sidebar">
       <button class="sidebar-close" id="sidebarClose" type="button" aria-label="Close navigation">${Icon.x}</button>
-      <!-- The logo and name go Home (admin polish, item 3). -->
-      <a class="brand" id="brandHome" href="#dashboard" aria-label="AgroFlow Staff - go to Overview">
-        <!-- Relative path: the site is served from a sub-path on GitHub
-             Pages, not a domain root. alt is empty because the wordmark
-             beside it already says "AgroFlow" - a screen reader should not
-             hear the name twice. -->
-        ${brandHtml("visual-brand", t("staff"))}
-      </a>
+      <div class="sidebar-brand-row">
+        <a class="brand" id="brandHome" href="#dashboard" aria-label="AgroFlow Staff Console - go to Overview" data-tooltip="Overview">
+          ${brandHtml("visual-brand", "AgroFlow")}
+          <span class="staff-console-label">Staff Console</span>
+        </a>
+        <button class="sidebar-collapse" id="sidebarCollapse" type="button" aria-label="Collapse navigation" aria-expanded="true" data-tooltip="Collapse navigation">${Icon.panelLeftClose}</button>
+      </div>
       <nav class="nav" id="nav"></nav>
       <!-- Driven by GET /api/admin/health, refreshed every 60 s (see
            app/health.ts). Starts as "Checking…" rather than an assumed
            state: claiming everything is fine before anything has been
            checked is worse than saying nothing. Clicking it opens the
            System health card on Home. -->
-      <button class="side-foot" id="platformStatus" data-act="open-health" type="button">
-        <b>Platform status</b>
+      <button class="side-foot" id="platformStatus" data-act="open-health" type="button" aria-label="Platform status" data-tooltip="Platform status">
+        <b><span class="side-foot-dot dot dot-unknown" aria-hidden="true"></span><span class="side-foot-label">Platform status</span></b>
         <span class="side-foot-state" id="platformStatusText">
-          <i class="dot dot-unknown"></i>Checking…
+          <i class="dot dot-unknown"></i><span>Checking…</span>
         </span>
       </button>
       <div class="side-account" aria-label="Account">
-        <a class="side-account-link" href="#settings">Profile</a>
-        <button class="side-account-link" id="sidebarNotifications" type="button">Notifications</button>
-        <button class="side-logout" data-logout type="button">Log out</button>
+        <div class="side-account-identity" data-tooltip="Account">
+          <span class="side-account-avatar" id="sidebarAvatar" aria-hidden="true">··</span>
+          <span class="side-account-copy"><strong id="sidebarStaffName">—</strong><small id="sidebarStaffRole">Staff</small></span>
+        </div>
+        <a class="side-account-link" href="#settings" aria-label="Profile and settings" data-tooltip="Settings">${Icon.settings}<span>Profile &amp; settings</span></a>
+        <button class="side-account-link" id="sidebarNotifications" type="button" aria-label="Notifications" data-tooltip="Notifications">${Icon.bell}<span>Notifications</span></button>
+        <button class="side-logout" data-logout type="button" aria-label="Log out" data-tooltip="Log out">${Icon.logOut}<span>Log out</span></button>
       </div>
     </aside>
     <button class="sidebar-scrim" id="sidebarScrim" type="button" aria-label="Close navigation" tabindex="-1"></button>
+    <div class="sidebar-tooltip" id="sidebarTooltip" role="tooltip" hidden></div>
 
     <div class="main">
       <header class="header">

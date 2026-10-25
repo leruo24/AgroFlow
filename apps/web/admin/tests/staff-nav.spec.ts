@@ -4,11 +4,11 @@ import { mockBackend, captureErrors } from "./mockBackend";
 /* The staff sidebar in the design brief's grouping (section 10), mapped to the pages that
    exist. Mocked backend only. */
 
-const GROUPS = ["Farmers & farms", "Installations", "Support & requests", "Reports"];
+const GROUPS = ["General", "Farm management", "Operations", "Support", "Analytics", "Drought & community", "Settings"];
 const ORDER = ["Overview", "Enquiries", "Farmers", "Farms & zones", "Kits", "Maintenance", "Requests", "Alerts",
   "Reports", "Activity", "Drought & community", "Settings"];
 
-test("the sidebar reads Overview / Enquiries / Farmers & farms / Installations / Support & requests / Reports / Drought & community / Settings", async ({ page }) => {
+test("the sidebar uses flat, labelled sections without losing any route", async ({ page }) => {
   const errors = captureErrors(page);
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
   await page.goto("/staff/#dashboard");
@@ -17,8 +17,9 @@ test("the sidebar reads Overview / Enquiries / Farmers & farms / Installations /
   expect(await words("#nav button[data-page]")).toEqual(ORDER);
   // textContent: the labels are capitalised by CSS only.
   expect((await page.locator("#nav .nav-group-label").allTextContents()).map((s) => s.trim())).toEqual(GROUPS);
-  // A group is a named group for assistive technology; its pages are inside it.
-  await expect(page.getByRole("group", { name: "Installations" }).getByRole("button", { name: "Kits" })).toBeVisible();
+  // A section is a named group for assistive technology; its pages are flat inside it.
+  await expect(page.getByRole("group", { name: "Operations" }).getByRole("button", { name: "Kits" })).toBeVisible();
+  await expect(page.locator("#nav details")).toHaveCount(0);
   await expect(page.locator("#headerTitle")).toHaveText("Overview");
   expect(errors).toEqual([]);
 });
@@ -42,10 +43,23 @@ test("Enquiries and Support & requests open the two tabs of Requests, each with 
   await expect(page.getByRole("tab", { name: /Enquiries/ })).toHaveAttribute("aria-selected", "true", { timeout: 15000 });
 });
 
-test("sidebar groups collapse and the phone drawer has close and Escape behaviour", async ({ page }) => {
+test("desktop sidebar collapse persists and the phone drawer traps focus, closes and scrolls", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 1200, height: 800 });
   await page.goto("/staff/#dashboard");
+  const collapse = page.locator("#sidebarCollapse");
+  await collapse.click();
+  await expect(page.locator("#sidebar")).toHaveClass(/is-collapsed/);
+  await expect(page.locator("#sidebar")).toHaveCSS("width", "72px");
+  await expect(collapse).toHaveAttribute("aria-label", "Expand navigation");
+  await page.locator('#nav button[data-page="dashboard"]').focus();
+  await expect(page.locator("#sidebarTooltip")).toBeVisible();
+  await expect(page.locator("#sidebarTooltip")).toHaveText("Overview");
+  await page.reload();
+  await expect(page.locator("#sidebar")).toHaveClass(/is-collapsed/);
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(page.locator("#sidebar")).not.toHaveClass(/is-collapsed/);
 
   const toggle = page.locator("#sidebarToggle");
   await toggle.click();
@@ -60,13 +74,10 @@ test("sidebar groups collapse and the phone drawer has close and Escape behaviou
   await expect(toggle).toBeFocused();
 
   await toggle.click();
-  const group = page.getByRole("group", { name: "Installations" });
-  await group.locator("summary").click();
-  await expect(group).not.toHaveAttribute("open", "");
-  await group.locator("summary").click();
-  await expect(group).toHaveAttribute("open", "");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator(".sidebar [data-logout]")).toBeFocused();
   await expect(page.locator(".sidebar .sub")).toHaveCount(0);
-  await expect(page.locator(".side-account")).toContainText("Profile");
+  await expect(page.locator(".side-account")).toContainText("Profile & settings");
   await expect(page.locator(".side-account")).toContainText("Notifications");
   await expect(page.locator(".side-account")).toContainText("Log out");
 

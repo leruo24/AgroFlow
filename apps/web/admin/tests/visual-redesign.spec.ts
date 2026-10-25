@@ -59,8 +59,8 @@ test("public deep links refresh independently, redirect Experience and preserve 
     ).toBe(true);
   }
   await page.goto("/experience");
-  await expect(page).toHaveURL(/\/get-the-app$/);
-  await expect(page.locator("#publicTitle")).toHaveText("Get the app");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("#publicTitle")).toHaveText("Smart irrigation for small farms.");
   await expect(page.getByRole("link", { name: "Experience", exact: true })).toHaveCount(0);
   await page.goto("/about");
   await page.locator("[data-service-menu] summary").click();
@@ -91,6 +91,28 @@ test("phone menu opens with keyboard, focuses a destination and closes with Esca
   await page.keyboard.press("Escape");
   await expect(menu).toHaveAttribute("aria-expanded", "false");
   await expect(menu).toBeFocused();
+});
+test("public header keeps routes and preferences in one responsive navigation bar", async ({ page }) => {
+  await publicMocks(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const header = page.locator(".visual-header");
+  await expect(header.getByRole("link", { name: "Home", exact: true })).toBeVisible();
+  await expect(header.getByText("Our services", { exact: true })).toBeVisible();
+  await expect(header.getByRole("link", { name: "About", exact: true })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Contact", exact: true })).toBeVisible();
+  await expect(header.getByRole("link", { name: "Get the app", exact: true })).toHaveAttribute("href", "/get-the-app");
+  await expect(page.locator("[data-public-menu]")).toBeHidden();
+  await expect(page.locator(".visual-header-inner")).toHaveCSS("min-height", "76px");
+  await expect(page.locator(".visual-header .appearance-control legend")).toHaveCSS("position", "absolute");
+
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(page.locator("[data-public-menu]")).toBeVisible();
+  await page.locator("[data-public-menu]").click();
+  await expect(page.locator("#publicNav")).toHaveClass(/is-open/);
+  await expect(page.locator("[data-public-language]")).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });
 test("theme persists locally, follows System and honours reduced motion", async ({
   page,
@@ -211,7 +233,8 @@ test("staff theme and phone drawer keep existing routes", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/staff/#dashboard");
-  await expect(page.locator(".sidebar")).toContainText("AgroFlow Staff");
+  await expect(page.locator(".sidebar")).toContainText("AgroFlow");
+  await expect(page.locator(".sidebar")).toContainText("Staff Console");
   await page.locator("#avatarBtn").click();
   await page.locator('[data-appearance-choice="dark"]').click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
