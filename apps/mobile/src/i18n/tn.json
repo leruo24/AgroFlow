@@ -1257,6 +1257,8 @@
     "kitTab.overall.awaiting_installation": "Se emetse go tsenngwa",
     "kitTab.awaitingBody": "Ga go ise go nne le sediriswa se se golaganngwang le karolo e. Fa sediriswa sa gago se siametse, o ka se golaganya ka bowena jaanong.",
     "kitTab.add": "Tsenya sediriswa",
+    "kitTab.startIrrigation": "Simolola go nosetsa",
+    "kitTab.stopIrrigation": "Emisa go nosetsa",
     "kitTab.addTitle": "Tsenya sediriswa mo {zone}?",
     "kitTab.addWarning": "Go dira khoutu e ntšha go fedisa khoutu nngwe le nngwe ya pele e e iseng e dirisiwe ya karolo e. Tswelela fa o le fa sedirisiweng mme o siametse go se golaganya.",
     "kitTab.generateAgain": "Dira khoutu e ntšha",

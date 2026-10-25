@@ -42,8 +42,10 @@ export function useRunStatus(commandId: string | null, durationSeconds: number):
       if (cancelled) return;
       const next = runStateFrom(status, sentAt, Date.now());
       setState(current => ({ state: next, phase: status?.phase ?? current?.phase ?? null }));
-      // A started run that never reports back keeps saying "started"; polling stops anyway.
-      if (DONE.includes(next) || Date.now() > giveUpAt) return;
+      // A confirmed stop is complete as soon as the kit acknowledges relay-off. There is no
+      // later run report belonging to the stop command, so polling it for three more minutes
+      // only leaves the UI looking busy after the pump is already confirmed off.
+      if (DONE.includes(next) || status?.phase === 'kit_confirmed_stop' || Date.now() > giveUpAt) return;
       timer = setTimeout(poll, RUN_POLL_MS);
     };
 

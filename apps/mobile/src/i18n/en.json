@@ -1257,6 +1257,8 @@
     "kitTab.overall.awaiting_installation": "Awaiting installation",
     "kitTab.awaitingBody": "No kit is connected to this zone yet. If your kit is ready, you can connect it yourself now.",
     "kitTab.add": "Add a kit",
+    "kitTab.startIrrigation": "Start Irrigation",
+    "kitTab.stopIrrigation": "Stop Irrigation",
     "kitTab.addTitle": "Add a kit to {zone}?",
     "kitTab.addWarning": "Generating a new code invalidates any earlier unclaimed code for this zone. Continue when you are beside the kit and ready to connect it.",
     "kitTab.generateAgain": "Generate a new code",

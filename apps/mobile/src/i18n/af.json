@@ -1257,6 +1257,8 @@
     "kitTab.overall.awaiting_installation": "Wag op installasie",
     "kitTab.awaitingBody": "Nog geen stel is aan hierdie sone gekoppel nie. As jou stel gereed is, kan jy dit nou self koppel.",
     "kitTab.add": "Voeg 'n stel by",
+    "kitTab.startIrrigation": "Begin besproeiing",
+    "kitTab.stopIrrigation": "Stop besproeiing",
     "kitTab.addTitle": "Voeg 'n stel by {zone}?",
     "kitTab.addWarning": "As jy 'n nuwe kode skep, verval enige vorige ongebruikte kode vir hierdie sone. Gaan voort wanneer jy by die stel is en gereed is om dit te koppel.",
     "kitTab.generateAgain": "Skep 'n nuwe kode",

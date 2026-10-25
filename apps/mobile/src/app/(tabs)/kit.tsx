@@ -5,7 +5,7 @@
 // setup Wi-Fi with a copy button, and Change Wi-Fi.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CircleAlert, CircleCheck, CircleX, Info } from 'lucide-react-native';
 import { router } from '@/lib/router';
@@ -13,7 +13,8 @@ import { FarmSelector } from '@/components/FarmSelector';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { DataState } from '@/components/DataState';
 import { Card, CardList } from '@/components/ui/Card';
-import { useAgroFlow } from '@/context/AgroFlowContext';
+import { InfoGrid } from '@/components/ui/InfoGrid';
+import { useAgroFlow, type IrrigationMode, type Zone } from '@/context/AgroFlowContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useI18n, type TranslationKey } from '@/i18n';
 import { useBottomPadding } from '@/hooks/useScreenPadding';
@@ -21,10 +22,27 @@ import { createScreenStyles } from '@/styles/screenStyles';
 import { createIrrigationStyles } from '@/styles/irrigationStyles';
 import { copyOrShare, kitLineText } from '@/lib/kitStatus';
 import { KitHelpGuide } from '@/components/KitHelpGuide';
-import { fetchFarmKits, issueFarmerKitCode, type FarmerKitCode, type KitCard, type KitLine } from '@/services/agroFlowApi';
+import {
+  ApiHttpError,
+  fetchFarmKits,
+  fetchZoneCommands,
+  issueFarmerKitCode,
+  sendManualIrrigationCommand,
+  type CommandPhase,
+  type CommandStatus,
+  type FarmerKitCode,
+  type KitCard,
+  type KitLine,
+} from '@/services/agroFlowApi';
 import { formatSast } from '@/lib/sastTime';
 import type { AppColors } from '@/constants/colors';
-import { Platform } from 'react-native';
+import { AppAlert as Alert } from '@/components/AppAlert';
+import { CommandPhaseLabel } from '@/components/visual/CommandPhaseLabel';
+import { useRunStatus } from '@/hooks/useRunStatus';
+import { useConnectivity } from '@/lib/connectivity';
+import { effectiveRunMinutes } from '@/lib/schedule';
+import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
+import { soilReadingText } from '@/lib/moistureDisplay';
 
 type State =
   | { status: 'loading' }
@@ -32,7 +50,7 @@ type State =
   | { status: 'error'; cards: KitCard[] | null };
 
 export default function KitTabScreen() {
-  const { farm } = useAgroFlow();
+  const { farm, zones, refreshZones, updateIrrigationMode } = useAgroFlow();
   const { colors } = useTheme();
   const { t, lang } = useI18n();
   const bottom = useBottomPadding();
@@ -56,7 +74,12 @@ export default function KitTabScreen() {
 
   useEffect(() => { void load(); }, [load]);
   useFocusEffect(useCallback(() => { void load(); }, [load]));
-  const onRefresh = useCallback(async () => { setRefreshing(true); await load(); setRefreshing(false); }, [load]);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    refreshZones();
+    await load();
+    setRefreshing(false);
+  }, [load, refreshZones]);
 
   const value: State = state.farmId === farmId ? state.value : { status: 'loading' };
   const cards = value.status === 'loading' ? null : value.cards;
@@ -75,7 +98,9 @@ export default function KitTabScreen() {
             {cards && cards.length === 0
               ? <DataState kind="empty" title={t('kitTab.noZones')} description={t('kitTab.noZonesBody')} />
               : <CardList>{(cards ?? []).map(card =>
-                <KitCardView key={card.zoneId} card={card} focused={card.zoneId === focusZone} colors={colors} styles={styles} t={t} lang={lang} />)}</CardList>}
+                <KitCardView key={card.zoneId} card={card} zone={(zones ?? []).find(zone => Number(zone.id) === card.zoneId) ?? null}
+                  focused={card.zoneId === focusZone} colors={colors} styles={styles} t={t} lang={lang}
+                  updateIrrigationMode={updateIrrigationMode} reload={load} />)}</CardList>}
           </>}
     </ScrollView>
   </SafeAreaView>;
@@ -83,15 +108,41 @@ export default function KitTabScreen() {
 
 type T = ReturnType<typeof useI18n>['t'];
 // The shared screen styles plus the Irrigation tab's buttons.
-const kitStyles = (colors: AppColors) => ({ ...createScreenStyles(colors), ...createIrrigationStyles(colors) });
+const kitStyles = (colors: AppColors) => ({
+  ...createScreenStyles(colors),
+  ...createIrrigationStyles(colors),
+  controlPanel: { marginTop: 16, gap: 12, padding: 16, borderRadius: 12, backgroundColor: colors.surfaceSecondary },
+  modeRow: { flexDirection: 'row' as const, gap: 8 },
+  modeButton: { flex: 1, minHeight: 48, alignItems: 'center' as const, justifyContent: 'center' as const,
+    borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  modeButtonSelected: { backgroundColor: colors.action, borderColor: colors.action },
+  modeText: { color: colors.text, fontSize: 16, fontWeight: '600' as const },
+  modeTextSelected: { color: colors.white },
+  durationInput: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 8,
+    paddingHorizontal: 12, backgroundColor: colors.surface, color: colors.text, fontSize: 18 },
+  startButton: { minHeight: 58, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const,
+    backgroundColor: colors.success },
+  stopButton: { minHeight: 58, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const,
+    backgroundColor: colors.dangerAction },
+  controlButtonText: { color: colors.white, fontSize: 18, fontWeight: '800' as const },
+  disabledButton: { opacity: 0.55 },
+});
 type Styles = ReturnType<typeof kitStyles>;
 
 function toneColor(colors: AppColors, tone: KitLine['tone'] | 'neutral') {
   return tone === 'ok' ? colors.success : tone === 'warn' ? colors.warning : tone === 'bad' ? colors.error : colors.textSecondary;
 }
 
-function KitCardView({ card, focused, colors, styles, t, lang }: {
-  card: KitCard; focused: boolean; colors: AppColors; styles: Styles; t: T; lang: ReturnType<typeof useI18n>['lang'];
+function KitCardView({ card, zone, focused, colors, styles, t, lang, updateIrrigationMode, reload }: {
+  card: KitCard;
+  zone: Zone | null;
+  focused: boolean;
+  colors: AppColors;
+  styles: Styles;
+  t: T;
+  lang: ReturnType<typeof useI18n>['lang'];
+  updateIrrigationMode: (zoneId: string, mode: IrrigationMode) => Promise<void>;
+  reload: () => Promise<void>;
 }) {
   const [whenOpen, setWhenOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -99,6 +150,54 @@ function KitCardView({ card, focused, colors, styles, t, lang }: {
   const [generating, setGenerating] = useState(false);
   const [enrollmentError, setEnrollmentError] = useState<string | null>(null);
   const [confirmingEnrollment, setConfirmingEnrollment] = useState(false);
+  const { online: phoneOnline } = useConnectivity();
+  const connectionLine = card.lines.find(line => line.key === 'connection');
+  const kitOnline = connectionLine?.state === 'online';
+  const maxRunMinutes = zoneMaxRunMinutes(zone?.maxRunMinutes);
+  const [manualDuration, setManualDuration] = useState(String(defaultRunMinutes(maxRunMinutes)));
+  const [latestCommand, setLatestCommand] = useState<CommandStatus | null>(null);
+  const [trackedCommand, setTrackedCommand] = useState<{ id: string; command: 'start' | 'stop'; seconds: number } | null>(null);
+  const [lastPhase, setLastPhase] = useState<CommandPhase | null>(null);
+  const [commandBusy, setCommandBusy] = useState(false);
+  const [modeBusy, setModeBusy] = useState(false);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const runStatus = useRunStatus(trackedCommand?.id ?? null, trackedCommand?.seconds ?? 0);
+
+  const loadLatestCommand = useCallback(async () => {
+    if (!card.hasKit) return;
+    try {
+      const commands = await fetchZoneCommands(card.zoneId, 1);
+      setLatestCommand(commands[0] ?? null);
+    } catch {
+      // The kit card itself still has independently loaded connection/sensor facts. A command
+      // history failure must not turn those facts into an apparent kit failure.
+    }
+  }, [card.hasKit, card.zoneId]);
+
+  useEffect(() => { void loadLatestCommand(); }, [loadLatestCommand]);
+  useEffect(() => {
+    setManualDuration(current => Number(current) > maxRunMinutes ? String(defaultRunMinutes(maxRunMinutes)) : current);
+  }, [maxRunMinutes]);
+  useEffect(() => {
+    if (!runStatus?.phase) return;
+    setLastPhase(runStatus.phase);
+    if (runStatus.phase === 'kit_confirmed_start' || runStatus.phase === 'kit_confirmed_stop' || runStatus.phase === 'finished') {
+      void loadLatestCommand();
+      void reload();
+    }
+  }, [loadLatestCommand, reload, runStatus?.phase]);
+
+  // lastPhase changes immediately when a new command is accepted. Prefer it over the hook's
+  // previous-command value during the one render before useRunStatus resets for the new id.
+  const displayedPhase = lastPhase ?? runStatus?.phase ?? latestCommand?.phase ?? null;
+  const displayedState = runStatus?.state ?? latestCommand?.state ?? null;
+  const displayedCommand = trackedCommand?.command ?? latestCommand?.command ?? null;
+  const startStillUnresolved = displayedCommand === 'start' && displayedState !== 'finished' && displayedState !== 'failed'
+    && displayedPhase !== 'kit_confirmed_stop';
+  const stopStillUnresolved = displayedCommand === 'stop' && displayedPhase !== 'kit_confirmed_stop'
+    && displayedState !== 'failed';
+  const showStop = startStillUnresolved || stopStillUnresolved;
+  const controlsDisabled = commandBusy || !phoneOnline || !kitOnline;
   // Awaiting installation is not a fault: no red, a plain next step.
   const tone = card.overall === 'working' ? 'ok' : card.overall === 'needs_attention' ? 'warn' : card.overall === 'not_connected' ? 'bad' : 'neutral';
   const Icon = tone === 'ok' ? CircleCheck : tone === 'warn' ? CircleAlert : tone === 'bad' ? CircleX : Info;
@@ -119,6 +218,73 @@ function KitCardView({ card, focused, colors, styles, t, lang }: {
     } finally {
       setGenerating(false);
       setConfirmingEnrollment(false);
+    }
+  };
+
+  const commandErrorText = (error: unknown) => {
+    if (error instanceof ApiHttpError && error.status === 409) {
+      return error.message.startsWith('No kit connected to this zone:') ? t('zone.kitOffline') : t('zone.noKit');
+    }
+    return error instanceof Error && error.message ? error.message : t('zone.commandFailed');
+  };
+
+  const sendCommand = async (command: 'start' | 'stop', seconds?: number) => {
+    if (commandBusy) return;
+    if (!phoneOnline) { setCommandError(t('offline.needsConnection')); return; }
+    if (!kitOnline) { setCommandError(t('zone.kitOffline')); return; }
+    setCommandBusy(true);
+    setCommandError(null);
+    try {
+      const sent = await sendManualIrrigationCommand(String(card.zoneId), command, seconds);
+      const effectiveSeconds = sent.durationSeconds ?? seconds ?? 0;
+      setTrackedCommand({ id: sent.id, command, seconds: effectiveSeconds });
+      setLastPhase(command === 'start' ? 'request_sent' : 'stop_requested');
+      await reload();
+    } catch (error) {
+      setCommandError(commandErrorText(error));
+    } finally {
+      setCommandBusy(false);
+    }
+  };
+
+  const startIrrigation = () => {
+    const requested = Number(manualDuration);
+    if (!Number.isFinite(requested) || requested < 1) {
+      Alert.alert(t('zone.invalidDurationTitle'), t('zone.invalidDuration', { max: maxRunMinutes }));
+      return;
+    }
+    const run = effectiveRunMinutes(requested, maxRunMinutes);
+    Alert.alert(
+      t('zone.startConfirmTitle', { zone: card.zoneName }),
+      `${t('zone.startConfirmBody', { minutes: run.minutes })}${run.capped ? `\n${t('run.capped', { max: run.max })}` : ''}`,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('zone.start'), onPress: () => { void sendCommand('start', run.minutes * 60); } },
+      ]
+    );
+  };
+
+  const stopIrrigation = () => {
+    Alert.alert(
+      t('zone.stopConfirmTitle', { zone: card.zoneName }),
+      t('zone.stopConfirmBody', { mode: t('zone.modeManual').toLowerCase() }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('zone.stop'), style: 'destructive', onPress: () => { void sendCommand('stop'); } },
+      ]
+    );
+  };
+
+  const chooseMode = async (mode: IrrigationMode) => {
+    if (!zone || modeBusy || zone.irrigation.mode === mode) return;
+    setModeBusy(true);
+    setCommandError(null);
+    try {
+      await updateIrrigationMode(zone.id, mode);
+    } catch (error) {
+      setCommandError(commandErrorText(error));
+    } finally {
+      setModeBusy(false);
     }
   };
 
@@ -188,6 +354,61 @@ function KitCardView({ card, focused, colors, styles, t, lang }: {
               </View>
             </View>;
           })}
+        </View>
+
+        <View style={styles.controlPanel} testID={`kit-controls-${card.zoneId}`}>
+          <Text accessibilityRole="header" style={[styles.title, { fontSize: 19 }]}>{t('zone.irrigationControl')}</Text>
+          {zone ? <InfoGrid items={[
+            { label: t('zone.soilMoisture'), value: soilReadingText(zone.sensors.soilMoisture, t('empty.noReading')),
+              muted: zone.sensors.soilMoisture.status !== 'Online' },
+            { label: t('sensor.temperature'), value: zone.sensors.temperatureHumidity.status === 'Online'
+              ? `${zone.sensors.temperatureHumidity.temperature}${zone.sensors.temperatureHumidity.temperatureUnit}` : t('empty.noReading'),
+              muted: zone.sensors.temperatureHumidity.status !== 'Online' },
+            { label: t('zone.humidity'), value: zone.sensors.temperatureHumidity.status === 'Online'
+              ? `${zone.sensors.temperatureHumidity.humidity}${zone.sensors.temperatureHumidity.humidityUnit}` : t('empty.noReading'),
+              muted: zone.sensors.temperatureHumidity.status !== 'Online' },
+            { label: t('zone.relay'), value: displayedPhase
+              ? t(`visual.phase.${displayedPhase}` as TranslationKey)
+              : kitLineText(lang, card.lines.find(line => line.key === 'pump') ?? { key: 'pump', state: 'never', tone: 'info', at: null, value: null }) },
+          ]} /> : <Text style={styles.caption}>{t('empty.noReading')}</Text>}
+
+          {zone ? <>
+            <Text style={[styles.body, { fontWeight: '700' }]}>{t('zone.irrigationMode')}</Text>
+            <View style={styles.modeRow}>
+              {(['manual', 'automatic'] as const).map(mode => {
+                const selected = zone.irrigation.mode === mode;
+                return <Pressable key={mode} accessibilityRole="button" accessibilityState={{ selected, disabled: modeBusy }}
+                  disabled={modeBusy} onPress={() => { void chooseMode(mode); }}
+                  style={[styles.modeButton, selected && styles.modeButtonSelected]} testID={`kit-mode-${card.zoneId}-${mode}`}>
+                  <Text style={[styles.modeText, selected && styles.modeTextSelected]}>
+                    {t(mode === 'manual' ? 'zone.modeManual' : 'zone.modeAutomatic')}
+                  </Text>
+                </Pressable>;
+              })}
+            </View>
+          </> : null}
+
+          {!showStop ? <>
+            <Text style={[styles.body, { fontWeight: '700' }]}>{t('zone.duration')}</Text>
+            <TextInput value={manualDuration} onChangeText={setManualDuration} keyboardType="number-pad" maxLength={4}
+              editable={!commandBusy} style={styles.durationInput} testID={`kit-duration-${card.zoneId}`}
+              accessibilityLabel={t('zone.duration')} />
+          </> : null}
+
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: controlsDisabled }} disabled={controlsDisabled}
+            onPress={showStop ? stopIrrigation : startIrrigation}
+            style={[showStop ? styles.stopButton : styles.startButton, controlsDisabled && styles.disabledButton]}
+            testID={`kit-irrigate-${card.zoneId}`}>
+            {commandBusy ? <ActivityIndicator color={colors.white} />
+              : <Text style={styles.controlButtonText}>{t(showStop ? 'kitTab.stopIrrigation' : 'kitTab.startIrrigation')}</Text>}
+          </Pressable>
+
+          {displayedPhase ? <CommandPhaseLabel phase={displayedPhase} testID={`kit-command-phase-${card.zoneId}`} /> : null}
+          {!phoneOnline ? <Text style={[styles.caption, { color: colors.warning }]}>{t('offline.needsConnection')}</Text> : null}
+          {phoneOnline && !kitOnline ? <Text style={[styles.caption, { color: colors.warning }]}>{t('zone.kitOffline')}</Text> : null}
+          {commandError ? <Text style={{ color: colors.error }} accessibilityLiveRegion="assertive"
+            testID={`kit-command-error-${card.zoneId}`}>{commandError}</Text> : null}
+          <Text style={styles.caption}>{t('kitTab.pumpNote')}</Text>
         </View>
 
         {/* The setup Wi-Fi: always shown, online or not, because it is needed exactly when the

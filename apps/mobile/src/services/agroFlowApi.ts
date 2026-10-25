@@ -363,6 +363,14 @@ export function fetchCommandStatus(commandId: string) {
   return authorizedRequest<CommandStatus>(`/api/farmer/commands/${encodeURIComponent(commandId)}`);
 }
 
+// The Kit page uses the latest real command to recover pump state after a reload. This is
+// farmer-scoped by the API: another farm's zone returns no command data.
+export function fetchZoneCommands(zoneId: string | number, limit = 5) {
+  return authorizedRequest<CommandStatus[]>(
+    `/api/farmer/zones/${encodeURIComponent(String(zoneId))}/commands?limit=${Math.max(1, Math.min(50, limit))}`
+  );
+}
+
 export function updateZoneThroughApi(
   zoneId: string,
   settings: Record<string, unknown>

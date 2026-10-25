@@ -23,14 +23,20 @@ jest.mock('lucide-react-native', () =>
   new Proxy({}, { get: (_target, name) => (name === '__esModule' ? false : () => null) })
 );
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null, profile: null, signOut: jest.fn(), isLoading: false }) }));
+const mockAlert = jest.fn();
+jest.mock('@/components/AppAlert', () => ({ AppAlert: { alert: (...args: unknown[]) => mockAlert(...args) } }));
 const mockPush = jest.fn();
 jest.mock('@/lib/router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a), back: jest.fn(), canGoBack: () => false, navigate: jest.fn() } }));
 jest.mock('expo-router', () => ({ useLocalSearchParams: () => ({}), useFocusEffect: () => undefined }));
 let mockAgro: Record<string, unknown> = {};
 jest.mock('@/context/AgroFlowContext', () => ({ useAgroFlow: () => mockAgro }));
-jest.mock('@/services/agroFlowApi', () => ({ fetchFarmKits: jest.fn(), issueFarmerKitCode: jest.fn() }));
+jest.mock('@/services/agroFlowApi', () => ({
+  ApiHttpError: class ApiHttpError extends Error { status: number; constructor(message: string, status: number) { super(message); this.status = status; } },
+  fetchFarmKits: jest.fn(), fetchZoneCommands: jest.fn(), fetchCommandStatus: jest.fn(),
+  issueFarmerKitCode: jest.fn(), sendManualIrrigationCommand: jest.fn(),
+}));
 
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import * as api from '@/services/agroFlowApi';
 import KitTabScreen from '@/app/(tabs)/kit';
 import type { KitCard, KitLine } from '@/services/agroFlowApi';
@@ -54,6 +60,23 @@ const card = (zoneId: number, overall: KitCard['overall'], lines: KitLine[], has
   setupNetworkName: hasKit ? 'AgroFlow-Setup-89AB' : null, setupNetworkPassword: hasKit ? 'AF-6789AB' : null, overall, lines,
 });
 const swap = (lines: KitLine[], replacement: KitLine) => lines.map(l => (l.key === replacement.key ? replacement : l));
+const zone = (id: number) => ({
+  id: String(id), farmId: '1', name: `Bed ${id}`, location: 'Field', crop: 'maize', plantingDate: null,
+  healthStatus: 'Healthy', maxRunMinutes: 5, waterSavedLitres: null, size: { value: 1, unit: 'ha' },
+  sensors: {
+    soilMoisture: { value: 42, unit: '%', status: 'Online', moistureStatus: 'Optimal', calibrated: true },
+    temperatureHumidity: { temperature: 24, temperatureUnit: '°C', humidity: 61, humidityUnit: '%', status: 'Online' },
+  },
+  irrigation: {
+    status: 'Off', mode: 'manual', lastIrrigation: { date: 'Never', time: '', durationMinutes: 0 },
+    schedule: { enabled: false, days: [], startTime: '', durationMinutes: 0 },
+    automation: { enabled: false, moistureThreshold: 30, desiredMoisture: 60, weatherAdjustment: true },
+    override: { active: false, durationMinutes: null },
+  },
+  relay: { status: 'Unknown' }, pump: { status: 'Unknown' },
+  water: { usedTodayLitres: null, latestCycleLitres: 0, flowRateLpm: 0, monthLitres: null },
+  weather: { availability: 'missing', rainExpected: null, precipitationMm: null, fetchedAt: null, message: null }, alerts: [],
+});
 
 const FIXTURES: KitCard[] = [
   card(1, 'working', healthyLines()),
@@ -72,8 +95,14 @@ const text = (testID: string) => {
 
 beforeEach(() => {
   jest.spyOn(Date, 'now').mockReturnValue(NOW);
-  mockAgro = { farm: { id: '1', name: 'Alpha' }, farms: [{ id: '1', name: 'Alpha' }], selectFarm: jest.fn() };
+  mockAgro = {
+    farm: { id: '1', name: 'Alpha' }, farms: [{ id: '1', name: 'Alpha' }], selectFarm: jest.fn(),
+    zones: FIXTURES.map(c => zone(c.zoneId)), refreshZones: jest.fn(), updateIrrigationMode: jest.fn(() => Promise.resolve()),
+  };
   (api.fetchFarmKits as jest.Mock).mockResolvedValue(FIXTURES);
+  (api.fetchZoneCommands as jest.Mock).mockResolvedValue([]);
+  (api.fetchCommandStatus as jest.Mock).mockResolvedValue(null);
+  (api.sendManualIrrigationCommand as jest.Mock).mockResolvedValue({ id: 'command-1', durationSeconds: 300 });
   (api.issueFarmerKitCode as jest.Mock).mockResolvedValue({
     hardwareId: 50,
     code: '418205',
@@ -101,6 +130,26 @@ describe('the Kit tab', () => {
     expect(text('kit-line-text-1-safety')).toBe('Safety: each run stops after 5 min at most, and the kit stops by itself if it loses connection for 3 minutes');
     // The pump line says it confirms the switch, not water flow.
     expect(screen.getAllByText('This confirms the switch, not water flow: the kit has no flow meter.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('42%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('24°C').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('61%').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('kit-irrigate-1')).toHaveTextContent('Start Irrigation');
+  });
+
+  it('starts and stops through the real command API and stays pending until the kit answers', async () => {
+    await render(<KitTabScreen />);
+    await fireEvent.press(await screen.findByTestId('kit-irrigate-1'));
+    const start = (mockAlert.mock.calls.at(-1)![2] as { onPress?: () => void }[]).find(button => button.onPress)!;
+    await act(async () => { start.onPress!(); });
+    expect(api.sendManualIrrigationCommand).toHaveBeenCalledWith('1', 'start', 300);
+    expect(screen.getByTestId('kit-command-phase-1')).toHaveTextContent('Request sent');
+    expect(screen.getByTestId('kit-irrigate-1')).toHaveTextContent('Stop Irrigation');
+
+    await fireEvent.press(screen.getByTestId('kit-irrigate-1'));
+    const stop = (mockAlert.mock.calls.at(-1)![2] as { onPress?: () => void }[]).find(button => button.onPress)!;
+    await act(async () => { stop.onPress!(); });
+    expect(api.sendManualIrrigationCommand).toHaveBeenCalledWith('1', 'stop', undefined);
+    expect(screen.getByTestId('kit-command-phase-1')).toHaveTextContent('Stop requested');
   });
 
   it('a soil probe out of range needs attention and says to check the probe', async () => {
@@ -115,6 +164,8 @@ describe('the Kit tab', () => {
     expect(text('kit-line-text-3-connection')).toBe('Not connected · last seen 3 h ago');
     expect(text('kit-line-text-3-soil')).toBe('Soil sensor: not known while the kit is not connected');
     expect(text('kit-setup-wifi-text-3')).toBe("Your kit's setup Wi-Fi: AgroFlow-Setup-89AB, password AF-6789AB");
+    expect(screen.getByTestId('kit-irrigate-3').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByTestId('kit-controls-3')).toHaveTextContent(/power and WiFi/);
     await fireEvent.press(screen.getByTestId('kit-when-3'));
     expect(screen.getByText(/Only if you change your Wi-Fi/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('kit-change-wifi-3'));
