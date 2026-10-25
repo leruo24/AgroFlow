@@ -1,0 +1,218 @@
+{
+  "violations": [
+    {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": [
+        {
+          "target": [
+            ".r-iphfwy > .r-13awgt0.css-g5y9jx"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-8rbrzk.r-cnw61z.r-1um3lj4:nth-child(4)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-8rbrzk.r-cnw61z.r-1um3lj4:nth-child(5)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[data-testid=\"representative-photo\"]"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[data-testid=\"sensor-readings\"] > .r-1ssbvtb.r-18u37iz.r-1awozwy > .css-g5y9jx:nth-child(1)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[data-testid=\"sensor-readings\"] > .r-1i6dfp5.r-1w6e6rj.r-1wtj0ep"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[data-testid=\"water-usage\"]"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-18u37iz.r-1awozwy > h1"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(2)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(3)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(4)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(5)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(6)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(7)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(8)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1ssbvtb.r-11f147o.r-qklmqi:nth-child(9)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-ndvcnb"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1actvb9.r-nsbfu8.r-rs99b7 > .r-1i10wst.r-1kfrs79.r-15zakd9"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-rjixqe.r-n6v787.r-oczgib"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "input[placeholder=\"pH, e.g. 6.8\"]"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "input[maxlength=\"500\"]"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1yadl64.r-eqwpb6.r-zapowp:nth-child(13) > .r-3o4zer.r-1pl7oy7.r-1ssbvtb"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1oszu61"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-5oul0u.r-b88u0q.r-n6v787"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-15zivkp"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-h3s6tt"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-kzbkwu > .r-1i6wzkk.r-lrvibr.r-1pl7oy7"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1yadl64.r-eqwpb6.r-zapowp:nth-child(14) > .r-3o4zer.r-1pl7oy7.r-1ssbvtb > .r-b88u0q.r-13awgt0.r-15zakd9"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-9aw3ui.r-18u37iz.r-1awozwy > .r-n6v787.r-1kfrs79.r-15zakd9"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1yadl64.r-eqwpb6.r-zapowp:nth-child(14) > .r-3pj75a.css-g5y9jx"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1yadl64.r-eqwpb6.r-zapowp:nth-child(15)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "aria-prohibited-attr",
+      "targets": [
+        [
+          "div[aria-label=\"Soil Moisture, No reading yet\"]"
+        ],
+        [
+          "div[aria-label=\"Temperature, No reading yet\"]"
+        ],
+        [
+          "div[aria-label=\"Humidity, No reading yet\"]"
+        ],
+        [
+          "div[data-testid=\"sensor-tile-tank\"]"
+        ],
+        [
+          "div[aria-label=\"Flow, No watering yet\"]"
+        ]
+      ]
+    }
+  ]
+}

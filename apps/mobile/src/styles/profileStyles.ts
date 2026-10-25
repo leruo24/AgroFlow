@@ -59,14 +59,14 @@ export function createProfileStyles(
       fontSize: Type.display,
       lineHeight: 30,
       color:
-        colors.navigationText,
+        colors.primary,
     },
 
     backText: {
       fontSize: Type.caption,
       fontWeight: '600',
       color:
-        colors.navigationText,
+        colors.primary,
     },
 
     editButton: {

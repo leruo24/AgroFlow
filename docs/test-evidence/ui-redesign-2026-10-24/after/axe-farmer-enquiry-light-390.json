@@ -1,0 +1,179 @@
+{
+  "violations": [
+    {
+      "id": "aria-required-attr",
+      "impact": "critical",
+      "nodes": [
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(1)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(2)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(3)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(4)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(5)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(6)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(7)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(8)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-14lw9ot.r-t4w6jl[role=\"checkbox\"]:nth-child(9)"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        },
+        {
+          "target": [
+            ".r-150rngu > .css-g5y9jx > .r-14lw9ot.r-t4w6jl[role=\"checkbox\"]"
+          ],
+          "summary": "Fix any of the following:\n  Required ARIA attribute not present: aria-checked"
+        }
+      ]
+    },
+    {
+      "id": "label-content-name-mismatch",
+      "impact": "serious",
+      "nodes": [
+        {
+          "target": [
+            ".r-11mg6pl"
+          ],
+          "summary": "Fix any of the following:\n  Text inside the element is not included in the accessible name"
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": [
+        {
+          "target": [
+            "h1"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1nqh75p"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-150rngu > .css-g5y9jx > .css-g5y9jx:nth-child(1)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-150rngu > .css-g5y9jx > .css-g5y9jx:nth-child(2)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-150rngu > .css-g5y9jx > .css-g5y9jx:nth-child(3)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1kfrs79.css-146c3p1.r-ksidj5:nth-child(4)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[aria-label=\"Province *\"]"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-150rngu > .css-g5y9jx > .css-g5y9jx:nth-child(6)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-150rngu > .css-g5y9jx > .css-g5y9jx:nth-child(7)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1kfrs79.css-146c3p1.r-ksidj5:nth-child(8)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1w6e6rj.r-18u37iz.r-1cmwbt1:nth-child(9)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-1kfrs79.css-146c3p1.r-ksidj5:nth-child(10)"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "div[aria-label=\"Best time to call *\"]"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            "textarea"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        },
+        {
+          "target": [
+            ".r-150rngu > .css-g5y9jx > .r-14lw9ot.r-t4w6jl[role=\"checkbox\"]"
+          ],
+          "summary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+        }
+      ]
+    }
+  ],
+  "incomplete": []
+}

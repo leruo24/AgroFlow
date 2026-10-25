@@ -190,7 +190,11 @@ function setNavigationChrome(id: PageId, title: HTMLElement | null): void {
   document.querySelectorAll<HTMLButtonElement>("#nav button").forEach((b) => {
     const active = b.dataset["page"] === id;
     b.classList.toggle("active", active);
-    if (active) b.setAttribute("aria-current", "page");
+    if (active) {
+      b.setAttribute("aria-current", "page");
+      const group = b.closest<HTMLDetailsElement>("details.nav-group");
+      if (group) group.open = true;
+    }
     else b.removeAttribute("aria-current");
   });
 }
@@ -259,7 +263,7 @@ export function initNav(): void {
     `<button data-page="${esc(n.id)}"><span class="nav-ico">${n.icon}</span>${esc(n.label)}</button>`;
   nav.innerHTML = NAV_GROUPS.map((g, i) => g.items.length === 1
     ? button(g.items[0]!)
-    : `<div class="nav-group" role="group" aria-labelledby="navGroup${i}"><span class="nav-group-label" id="navGroup${i}">${esc(g.label)}</span>${g.items.map(button).join("")}</div>`,
+    : `<details class="nav-group" role="group" aria-labelledby="navGroup${i}" open><summary><span class="nav-group-label" id="navGroup${i}">${esc(g.label)}</span><span class="nav-group-chevron" aria-hidden="true">⌄</span></summary>${g.items.map(button).join("")}</details>`,
   ).join("");
   // One delegated listener on the nav for every button in it. The nav is created new with
   // each signed-in shell (app/shell.ts), so listeners cannot pile up across sign-ins.

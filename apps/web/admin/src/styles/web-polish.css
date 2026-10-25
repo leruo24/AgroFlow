@@ -33,7 +33,7 @@
   .hardware-scenes button::after { transition: opacity .2s ease-out; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hardware-scenes button::after,.demo-start::after { display: none; }
+  .hardware-scenes button::after,.demo-start::after,.visual-site .btn::after { display: none; }
 }
 @media (max-width: 760px) {
   .visual-site .hardware-showcase { padding: 16px; }

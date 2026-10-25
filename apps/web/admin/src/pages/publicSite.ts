@@ -52,6 +52,12 @@ export function renderPublicSite(original: string): string {
         window.location.search +
         (fragment === "enquire" ? "#enquire" : ""),
     );
+  if (window.location.pathname.replace(/\/$/, "") === "/experience")
+    history.replaceState(
+      null,
+      "",
+      "/get-the-app" + window.location.search + window.location.hash,
+    );
   const path = window.location.pathname.replace(/\/$/, "") || "/";
   const route = routes.find(([href]) => href === path);
   const label = route?.[1] ?? "missing";
@@ -127,13 +133,17 @@ export function renderPublicSite(original: string): string {
           : heading("missing", "missingBody");
   }
   body = body.replace(/href="#enquire"/g, 'href="/contact#enquire"');
-  const nav = routes
-    .map(
-      ([href, key]) =>
-        `<a href="${href}" ${href === path ? 'aria-current="page"' : ""}>${t(key)}</a>`,
-    )
-    .join("");
-  return `<div class="landing visual-site"><a class="visual-skip" href="#publicContent">${t("skip")}</a><header class="visual-header"><a href="/" aria-label="AgroFlow">${brandHtml()}</a><button type="button" data-public-menu aria-controls="publicNav" aria-expanded="false">${t("menu")} ☰</button><nav id="publicNav" aria-label="${t("nav")}">${nav}</nav><div class="visual-preferences">${appearanceHtml([t("theme"), t("system"), t("light"), t("dark")])}<label>${t("language")}<select data-public-language><option value="en">English</option><option value="af">Afrikaans</option><option value="tn">Setswana</option></select></label></div></header><main class="visual-content" id="publicContent" tabindex="-1">${body}<aside class="visual-final"><h2>${t("eyebrow")}</h2>${cta()}${WEB_APP_URL ? `<a href="${WEB_APP_URL}">${t("signIn")}</a>` : ""}</aside></main><footer class="visual-footer">${brandHtml()}<nav aria-label="${t("nav")}">${routes.map(([href, key]) => `<a href="${href}">${t(key)}</a>`).join("")}</nav></footer></div>`;
+  const link = ([href, key]: readonly [string, CopyKey]) =>
+    `<a href="${href}" ${href === path ? 'aria-current="page"' : ""}>${t(key)}</a>`;
+  const serviceRoutes = routes.filter(([href]) =>
+    ["/solutions", "/how-it-works", "/technology", "/service-pricing"].includes(href),
+  );
+  const primaryRoutes = routes.filter(([href]) =>
+    ["/", "/about", "/get-the-app", "/contact"].includes(href),
+  );
+  const onServiceRoute = serviceRoutes.some(([href]) => href === path);
+  const nav = `${link(primaryRoutes[0]!)}<details class="public-service-menu${onServiceRoute ? " is-current" : ""}" data-service-menu><summary>${t("ourService")}</summary><div>${serviceRoutes.map(link).join("")}</div></details>${primaryRoutes.slice(1).map(link).join("")}`;
+  return `<div class="landing visual-site"><a class="visual-skip" href="#publicContent">${t("skip")}</a><header class="visual-header"><a href="/" aria-label="AgroFlow">${brandHtml()}</a><button type="button" data-public-menu aria-controls="publicNav" aria-expanded="false">${t("menu")} ☰</button><nav id="publicNav" aria-label="${t("nav")}"><button type="button" class="public-menu-close" data-public-menu-close>${t("close")} ×</button>${nav}</nav><div class="visual-preferences">${appearanceHtml([t("theme"), t("system"), t("light"), t("dark")])}<label>${t("language")}<select data-public-language><option value="en">English</option><option value="af">Afrikaans</option><option value="tn">Setswana</option></select></label></div></header><main class="visual-content" id="publicContent" tabindex="-1">${body}<aside class="visual-final"><h2>${t("eyebrow")}</h2>${cta()}${WEB_APP_URL ? `<a href="${WEB_APP_URL}">${t("signIn")}</a>` : ""}</aside></main><footer class="visual-footer">${brandHtml()}<nav aria-label="${t("footerNav")}">${routes.map(link).join("")}</nav></footer></div>`;
 }
 
 export function wirePublicSite(root: HTMLElement): void {
@@ -154,9 +164,20 @@ export function wirePublicSite(root: HTMLElement): void {
     const open = button.getAttribute("aria-expanded") !== "true";
     button.setAttribute("aria-expanded", String(open));
     nav?.classList.toggle("is-open", open);
-    button.textContent = open ? `${t("close")} ×` : `${t("menu")} ☰`;
-    if (open) nav?.querySelector("a")?.focus();
+    button.textContent = `${t("menu")} ☰`;
+    if (open)
+      window.requestAnimationFrame(() =>
+        nav
+          ?.querySelector<HTMLButtonElement>("[data-public-menu-close]")
+          ?.focus(),
+      );
   });
+  root
+    .querySelector<HTMLButtonElement>("[data-public-menu-close]")
+    ?.addEventListener("click", () => {
+      close();
+      button?.focus();
+    });
   root.addEventListener("keydown", (event) => {
     if (
       event.key === "Escape" &&

@@ -146,6 +146,7 @@ export const copy = {
   app: ["Get the app", "Kry die toepassing", "Bona tiriso"],
   contact: ["Contact", "Kontak", "Ikgolaganye"],
   pricing: ["Service & pricing", "Diens en pryse", "Tirelo le ditlhwatlhwa"],
+  ourService: ["Our service", "Ons diens", "Tirelo ya rona"],
   terms: ["Terms", "Bepalings", "Melawana"],
   privacy: ["Privacy", "Privaatheid", "Sephiri"],
   menu: ["Menu", "Kieslys", "Lenane"],
@@ -220,9 +221,9 @@ export const copy = {
     "Go tswa mo puisanong go ya kwa palong ya ntlha.",
   ],
   journey: [
-    "Request contact → Site assessment → Your farm details → Installation → Handover & support",
-    "Versoek kontak → Terreinbesoek → Jou plaasbesonderhede → Installasie → Oorhandiging en ondersteuning",
-    "Kopa puisano → Tlhatlhobo ya lefelo → Dintlha tsa polase → Go tsenya → Go neelana le tshegetso",
+    "Enquiry → Site visit and service agreement → Farmer account → Installation and handover → Ongoing support",
+    "Navraag → Terreinbesoek en diensooreenkoms → Boerrekening → Installasie en oorhandiging → Deurlopende ondersteuning",
+    "Potso → Ketelo ya lefelo le tumelano ya tirelo → Akhaonto ya molemi → Go tsenya le go neelana → Tshegetso e e tswelelang",
   ],
   requirements: [
     "Before installation",

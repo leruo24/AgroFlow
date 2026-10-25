@@ -1,0 +1,309 @@
+{
+  "results": [
+    {
+      "route": "/login",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/enquiry",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/forgot-password",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/irrigation",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/kit",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/alerts",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/more",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/settings",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/history",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/zone/1",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/zone/3",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/tank",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/forecast",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/reports",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/community",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/profile",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/setup",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/legal?doc=terms",
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/login",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/enquiry",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/forgot-password",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/irrigation",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/kit",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/alerts",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/more",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/settings",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/history",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/zone/1",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/zone/3",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/tank",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/forecast",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/reports",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/community",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/profile",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/setup",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    },
+    {
+      "route": "/legal?doc=terms",
+      "width": 1366,
+      "theme": "dark",
+      "overflow": false,
+      "contrast": [],
+      "imageAlt": []
+    }
+  ],
+  "pageErrors": []
+}

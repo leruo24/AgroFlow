@@ -191,7 +191,7 @@ test.each([lightColors, darkColors])(
   },
 );
 
-test.each(['#176B45', '#104B38'])('selected dock gradient stop %s has readable white icons', (stop) => {
+test.each(['#126B91', '#0B4F6C', '#073F58'])('selected dock gradient stop %s has readable white icons', (stop) => {
   expect(contrast('#FFFFFF', stop)).toBeGreaterThanOrEqual(4.5);
 });
 test('dock background and selected chip have distinct SVG gradient identities', async () => {
@@ -207,5 +207,5 @@ test('selected dock icon paints above its decorative SVG background', async () =
 });
 test.each([lightColors, darkColors])('muted labels remain readable on supporting panels', colors => {
   expect(contrast(colors.textSecondary, colors.surfaceSecondary)).toBeGreaterThanOrEqual(4.5);
-  expect(contrast(colors.textMuted, colors.tabBarSurface)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(colors.navigationMuted, colors.tabBarSurface)).toBeGreaterThanOrEqual(4.5);
 });

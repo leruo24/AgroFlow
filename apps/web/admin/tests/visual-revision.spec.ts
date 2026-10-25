@@ -14,14 +14,16 @@ test('public first load needs no auth or branded gate; header survives Back and 
   await expect(page.locator('#agroflow-splash')).toHaveCount(0);
   await page.locator('.visual-header').evaluate(node => node.setAttribute('data-review-identity', 'same-node'));
   const origin = await page.evaluate(() => performance.timeOrigin);
-  for (const route of ['/about', '/technology', '/contact', '/get-the-app']) {
+  for (const route of ['/about', '/technology', '/get-the-app']) {
+    if (route === '/technology')
+      await page.locator('[data-service-menu] summary').click();
     await page.locator(`.visual-header a[href="${route}"]`).click();
     await expect(page).toHaveURL(new RegExp(route + '$'));
     await expect(page.locator('#publicTitle')).toBeVisible();
     await expect(page.locator('.visual-header')).toHaveAttribute('data-review-identity', 'same-node');
     expect(await page.evaluate(() => performance.timeOrigin)).toBe(origin);
   }
-  await page.goBack(); await expect(page).toHaveURL(/\/contact$/);
+  await page.goBack(); await expect(page).toHaveURL(/\/technology$/);
   await page.goForward(); await expect(page).toHaveURL(/\/get-the-app$/);
   await page.goto('/not-a-real-page');
   await expect(page.locator('#publicTitle')).toHaveText('Page not found');
@@ -53,7 +55,7 @@ for (const language of ['en', 'af', 'tn']) for (const theme of ['light', 'dark']
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const forbidden: string[] = [];
       page.on('request', request => { const url = new URL(request.url()); if (url.pathname.startsWith('/api/') || (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1')) forbidden.push(request.url()); });
-      for (const [name, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology']]) {
+      for (const [name, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology'], ['get-the-app', '/get-the-app']]) {
         await page.goto(route);
         await expect(page.locator('#publicTitle')).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

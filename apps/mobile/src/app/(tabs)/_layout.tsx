@@ -70,11 +70,11 @@ export default function TabsLayout() {//creates layout component
         headerShown: false,//hiding auto header
         tabBarHideOnKeyboard: true,
 
-        // Aqua identifies the selected tab against the forest-green bar.
-        tabBarActiveTintColor: colors.primaryDark,
+        // White labels and a brighter water-blue chip identify the selected tab on navy.
+        tabBarActiveTintColor: colors.navigationText,
 
-        // Inactive icons and labels stay readable on forest green.
-        tabBarInactiveTintColor: colors.textMuted,
+        // Inactive icons and labels stay readable on the blue/navy gradient.
+        tabBarInactiveTintColor: colors.navigationMuted,
 
         tabBarStyle,
         tabBarBackground: () => <DockSurface />,

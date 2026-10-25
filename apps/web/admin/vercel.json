@@ -1,10 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
+  "redirects": [
     {
       "source": "/experience",
-      "destination": "/index.html"
-    },
+      "destination": "/get-the-app",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
     {
       "source": "/solutions",
       "destination": "/index.html"
