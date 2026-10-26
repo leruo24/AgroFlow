@@ -29,15 +29,16 @@ const FARMER_SESSION = {
 };
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.mp4': 'video/mp4', '.ttf': 'font/ttf', '.svg': 'image/svg+xml' };
-const server = http.createServer((req, res) => {
+const externalBase = process.env.FARMER_APP_ORIGIN?.replace(/\/$/, '');
+const server = externalBase ? null : http.createServer((req, res) => {
   const url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   let file = path.join(buildDir, url);
   if (!file.startsWith(buildDir) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(buildDir, 'index.html');
   res.writeHead(200, { 'Content-Type': types[path.extname(file)] ?? 'application/octet-stream' });
   fs.createReadStream(file).pipe(res);
 });
-await new Promise(r => server.listen(5194, r));
-const BASE = 'http://localhost:5194';
+if (server) await new Promise(r => server.listen(5194, r));
+const BASE = externalBase || 'http://localhost:5194';
 
 const now = new Date();
 const farmRow = { farm_id: 1, owner_id: FARMER, name: 'Nkosi Farm', location: 'Philippi, Cape Town', total_area: 0.5, status: 'Active', latitude: -34.0, longitude: 18.55 };
@@ -273,4 +274,4 @@ for (const [tag, viewport] of [['390', { width: 390, height: 844 }], ['1366', { 
 }
 console.log(JSON.stringify({ errors, commandRequests }));
 await browser.close();
-server.close();
+server?.close();
