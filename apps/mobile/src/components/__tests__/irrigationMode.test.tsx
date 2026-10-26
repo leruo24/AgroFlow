@@ -146,7 +146,7 @@ describe('zone screen', () => {
   it('a one-off run is offered in every mode, capped at the kit’s 5 minutes', async () => {
     mockAgro = agro('automatic');
     await render(<ZoneControlScreen />);
-    expect(await screen.findByText('Water now')).toBeTruthy();
+    expect(await screen.findByText('Start Irrigation')).toBeTruthy();
     expect(screen.getByDisplayValue('5')).toBeTruthy();
     expect(updateIrrigationMode).not.toHaveBeenCalled();   // seeing it changes nothing
   });

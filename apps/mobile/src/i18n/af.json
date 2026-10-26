@@ -1259,6 +1259,7 @@
     "kitTab.add": "Voeg 'n stel by",
     "kitTab.startIrrigation": "Begin besproeiing",
     "kitTab.stopIrrigation": "Stop besproeiing",
+    "zone.stopUnavailable": "Stop word beskikbaar nadat 'n natmaakversoek gestuur is.",
     "kitTab.addTitle": "Voeg 'n stel by {zone}?",
     "kitTab.addWarning": "As jy 'n nuwe kode skep, verval enige vorige ongebruikte kode vir hierdie sone. Gaan voort wanneer jy by die stel is en gereed is om dit te koppel.",
     "kitTab.generateAgain": "Skep 'n nuwe kode",

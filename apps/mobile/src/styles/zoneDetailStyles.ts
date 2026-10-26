@@ -253,6 +253,9 @@ content: {
     },
     // Start/Stop are the most important controls here, so they get the filled button style at
     // a large touch height for outdoor use.
+    irrigationButtonGroup: {
+      gap: Space.sm,
+    },
     primaryButton: {
       minHeight: 56,
       paddingHorizontal: Spacing.three,

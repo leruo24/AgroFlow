@@ -1656,30 +1656,42 @@ ${t('run.capped', { max: run.max })}`
                     </>
                   )}
 
-                  <TouchableOpacity
-                    style={[
-                      styles.primaryButton,
-                      isOverrideActive &&
+                  {/* Keep both safety-critical actions visible. Previously this was one button
+                      that changed labels after Start, which made Stop impossible to discover
+                      before a run. Stop becomes available as soon as a Start request may have
+                      reached the kit; neither button claims that the relay changed. */}
+                  <View style={styles.irrigationButtonGroup}>
+                    <TouchableOpacity
+                      style={[
+                        styles.primaryButton,
+                        (!online || kitBlocked || isOverrideActive) && styles.primaryButtonDisabled,
+                      ]}
+                      disabled={!online || kitBlocked || isOverrideActive}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !online || kitBlocked || isOverrideActive }}
+                      accessibilityHint={!online ? t('offline.needsConnection') : kitBlocked ? t(kit === 'none' ? 'zone.noKit' : 'zone.kitOffline') : undefined}
+                      testID="irrigate-button"
+                      onPress={handleStartManualRun}
+                    >
+                      <Text style={styles.primaryButtonText}>{t('kitTab.startIrrigation')}</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.primaryButton,
                         styles.stopButton,
-                      (!online || (kitBlocked && !isOverrideActive)) && styles.primaryButtonDisabled,
-                    ]}
-                    disabled={!online || (kitBlocked && !isOverrideActive)}
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: !online || (kitBlocked && !isOverrideActive) }}
-                    accessibilityHint={!online ? t('offline.needsConnection') : kitBlocked && !isOverrideActive ? t(kit === 'none' ? 'zone.noKit' : 'zone.kitOffline') : undefined}
-                    testID="irrigate-button"
-                    onPress={
-                      isOverrideActive
-                        ? handleStopManualRun
-                        : handleStartManualRun
-                    }
-                  >
-                    <Text style={styles.primaryButtonText}>
-                      {isOverrideActive
-                        ? t('zone.stopRun')
-                        : t('zone.startRun')}
-                    </Text>
-                  </TouchableOpacity>
+                        (!online || !isOverrideActive) && styles.primaryButtonDisabled,
+                      ]}
+                      disabled={!online || !isOverrideActive}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !online || !isOverrideActive }}
+                      accessibilityHint={!online ? t('offline.needsConnection') : !isOverrideActive ? t('zone.stopUnavailable') : undefined}
+                      testID="stop-irrigation-button"
+                      onPress={handleStopManualRun}
+                    >
+                      <Text style={styles.primaryButtonText}>{t('kitTab.stopIrrigation')}</Text>
+                    </TouchableOpacity>
+                  </View>
                   {!online ? (
                     <Text style={styles.offlineNote} accessibilityLiveRegion="polite">
                       {t('offline.needsConnection')}

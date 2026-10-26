@@ -163,10 +163,10 @@ describe('offline banner', () => {
 });
 
 describe('Irrigate needs a connection', () => {
-  it('online: Water now starts the pump after the confirm', async () => {
+  it('online: Start Irrigation starts the pump after the confirm', async () => {
     await render(<ZoneControlScreen />);
     const button = await screen.findByTestId('irrigate-button');
-    expect(screen.getByText('Water now')).toBeTruthy();
+    expect(screen.getByText('Start Irrigation')).toBeTruthy();
     await fireEvent.press(button);
     await waitFor(() => expect(startManualIrrigation).toHaveBeenCalledWith('7', 5));   // the 5-minute default
     expect(mockAlerts[0].title).toBe('Water Bed 1 now?');

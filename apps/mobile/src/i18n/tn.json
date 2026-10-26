@@ -1259,6 +1259,7 @@
     "kitTab.add": "Tsenya sediriswa",
     "kitTab.startIrrigation": "Simolola go nosetsa",
     "kitTab.stopIrrigation": "Emisa go nosetsa",
+    "zone.stopUnavailable": "Stop e nna teng fa kopo ya go nosetsa e sena go romelwa.",
     "kitTab.addTitle": "Tsenya sediriswa mo {zone}?",
     "kitTab.addWarning": "Go dira khoutu e ntšha go fedisa khoutu nngwe le nngwe ya pele e e iseng e dirisiwe ya karolo e. Tswelela fa o le fa sedirisiweng mme o siametse go se golaganya.",
     "kitTab.generateAgain": "Dira khoutu e ntšha",

@@ -104,6 +104,7 @@ describe('no kit connected', () => {
     await render(<ZoneControlScreen />);
     expect((await screen.findByTestId('irrigate-no-kit')).props.children).toBe('No kit connected to this zone');
     expect(screen.getByTestId('irrigate-button').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByTestId('stop-irrigation-button').props.accessibilityState).toMatchObject({ disabled: true });
   });
 
   it('a kit not heard from in 5 minutes: Irrigate is off, with what to check', async () => {
@@ -119,6 +120,9 @@ describe('no kit connected', () => {
     await waitFor(() => expect(hardware).toHaveBeenCalledWith(7));
     expect(screen.queryByTestId('irrigate-no-kit')).toBeNull();
     expect(screen.getByTestId('irrigate-button').props.accessibilityState).toMatchObject({ disabled: false });
+    expect(screen.getByTestId('stop-irrigation-button').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByText('Start Irrigation')).toBeTruthy();
+    expect(screen.getByText('Stop Irrigation')).toBeTruthy();
   });
 
   it("the server's 409 reads as \"No kit connected to this zone\", not a generic failure", async () => {
@@ -162,6 +166,8 @@ describe('after Irrigate', () => {
     status.mockResolvedValueOnce(answer('sent')).mockResolvedValueOnce(answer('started')).mockResolvedValue(answer('finished'));
     jest.useFakeTimers();
     await pressStart();
+    expect(screen.getByTestId('irrigate-button').props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByTestId('stop-irrigation-button').props.accessibilityState).toMatchObject({ disabled: false });
     expect(screen.getByTestId('run-status').props.children).toBe('Sending…');
     await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });
     await act(async () => { jest.advanceTimersByTime(RUN_POLL_MS); });

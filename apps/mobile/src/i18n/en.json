@@ -1259,6 +1259,7 @@
     "kitTab.add": "Add a kit",
     "kitTab.startIrrigation": "Start Irrigation",
     "kitTab.stopIrrigation": "Stop Irrigation",
+    "zone.stopUnavailable": "Stop becomes available after a watering request is sent.",
     "kitTab.addTitle": "Add a kit to {zone}?",
     "kitTab.addWarning": "Generating a new code invalidates any earlier unclaimed code for this zone. Continue when you are beside the kit and ready to connect it.",
     "kitTab.generateAgain": "Generate a new code",

@@ -17,6 +17,16 @@ const { chromium } = require(path.join(path.resolve(adminDir), 'node_modules', '
 const FAKE_SUPABASE = 'https://testproject.supabase.co';
 const FAKE_API = 'https://api.agroflow.test';
 const FARMER = '00000000-0000-4000-8000-0000000000fa';
+const SESSION_EXP = Math.floor(Date.now() / 1000) + 3600 * 24 * 365;
+const SESSION_TOKEN = `${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({ sub: FARMER, exp: SESSION_EXP, role: 'authenticated' })).toString('base64url')}.test-signature`;
+const FARMER_SESSION = {
+  access_token: SESSION_TOKEN,
+  refresh_token: 'test-refresh-token',
+  token_type: 'bearer',
+  expires_in: 3600 * 24 * 365,
+  expires_at: SESSION_EXP,
+  user: { id: FARMER, aud: 'authenticated', role: 'authenticated', email: 'thandi@example.org', app_metadata: {}, user_metadata: { name: 'Thandi Nkosi' }, created_at: new Date().toISOString() },
+};
 
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.ico': 'image/x-icon', '.mp4': 'video/mp4', '.ttf': 'font/ttf', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
@@ -52,9 +62,23 @@ const today = {
 
 let kit = 'online';            // 'online' | 'none'
 let commandStates = [];         // what GET /api/farmer/commands/{id} answers, in turn
-function apiAnswer(method, p) {
+let stopCommandStates = [];
+const commandRequests = [];
+function nextCommandState(states, fallback = 'sent') {
+  const answer = states.length > 1 ? states.shift() : states[0] ?? fallback;
+  return typeof answer === 'string' ? { state: answer, phase: undefined } : answer;
+}
+function apiAnswer(method, p, requestBody) {
   if (p === '/api/farmer/dashboard') return dashboard();
   if (p === '/api/farmer/farms/1/today') return today;
+  if (p === '/api/farmer/farms/1/journey') return {
+    farmId: 1,
+    setupProgress: { done: 4, total: 4, label: 'Your details: 4 of 4', tasks: [] },
+    installation: { stage: 'commissioned', label: 'Ready', text: 'Installation complete', live: true, status: 'commissioned' },
+    whereYouAreNow: { stage: 'commissioned', stageLabel: 'Ready', stageNumber: 8, stageCount: 8, steps: [], done: [], stillToDo: [], nextAction: 'Manage irrigation', whoActsNext: 'you', whoActsNextLabel: 'You', knownDate: null, dateLabel: 'Ready now' },
+    zones: [], helpRequests: [], terms: { accepted: { all: true, termsAcceptedAt: now.toISOString(), privacyAcceptedAt: now.toISOString() }, documents: [] },
+  };
+  if (p === '/api/farmer/farms/1/drought') return { enabled: false, reason: null, budget: null, zones: [], honesty: null };
   if (p === '/api/telegram/me') return { linked: true, alertsEnabled: true };
   if (p.startsWith('/api/farmer/weather/current')) return { current: { temperature_2m: 22, weather_code: 1 }, daily: { precipitation_probability_max: [10] } };
   if (p.startsWith('/api/farmer/farms/1/tank')) return { farmId: 1, capacityLitres: null, estimatedRemainingLitres: null };
@@ -66,10 +90,18 @@ function apiAnswer(method, p) {
   if (/\/api\/farmer\/zones\/\d+\/soil-ph$/.test(p)) return { zoneId: 7, entries: [] };
   if (/\/api\/farmer\/zones\/\d+\/insights$/.test(p)) return { insights: [], growth: null };
   if (/\/api\/farmer\/zones\/\d+\/recommended$/.test(p)) return { available: false };
-  if (method === 'POST' && /\/api\/farmer\/zones\/\d+\/commands$/.test(p)) return { id: 'cmd-1' };
-  if (p === '/api/farmer/commands/cmd-1') {
-    const state = commandStates.length > 1 ? commandStates.shift() : commandStates[0] ?? 'sent';
-    return { id: 'cmd-1', zoneId: 7, command: 'start', source: 'manual', state, label: state, durationSeconds: 300, createdAt: now.toISOString(), startedAt: null, finishedAt: null };
+  if (method === 'POST' && /\/api\/farmer\/zones\/\d+\/commands$/.test(p)) {
+    const body = JSON.parse(requestBody || '{}');
+    commandRequests.push({ path: p, body });
+    return { id: body.command === 'stop' ? 'cmd-stop' : 'cmd-start', durationSeconds: body.durationSeconds ?? null };
+  }
+  if (p === '/api/farmer/commands/cmd-start') {
+    const { state, phase } = nextCommandState(commandStates);
+    return { id: 'cmd-start', zoneId: 7, command: 'start', source: 'manual', state, phase, label: state, durationSeconds: 300, createdAt: now.toISOString(), startedAt: null, finishedAt: null };
+  }
+  if (p === '/api/farmer/commands/cmd-stop') {
+    const { state, phase } = nextCommandState(stopCommandStates);
+    return { id: 'cmd-stop', zoneId: 7, command: 'stop', source: 'manual', state, phase, label: state, durationSeconds: null, createdAt: now.toISOString(), startedAt: null, finishedAt: null };
   }
   return method === 'GET' ? [] : {};
 }
@@ -77,6 +109,7 @@ function apiAnswer(method, p) {
 const browser = await chromium.launch();
 fs.mkdirSync(outDir, { recursive: true });
 const errors = [];
+const networkRequests = [];
 
 async function newPage(viewport) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: viewport.width < 500 ? 2 : 1, locale: 'en-ZA', timezoneId: 'Africa/Johannesburg', reducedMotion: 'reduce' });
@@ -84,20 +117,24 @@ async function newPage(viewport) {
     window.localStorage.setItem('agroflow_language', 'en');
     if (window.localStorage.getItem('sb-testproject-auth-token')) return;
     const exp = Math.floor(Date.now() / 1000) + 3600 * 24 * 365;
+    const token = `${btoa('{"alg":"HS256","typ":"JWT"}').replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_')}.${btoa(JSON.stringify({ sub: id, exp, role: 'authenticated' })).replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_')}.test-signature`;
     window.localStorage.setItem('sb-testproject-auth-token', JSON.stringify({
-      access_token: 'test-access-token', refresh_token: 'test-refresh-token', token_type: 'bearer', expires_in: 3600 * 24 * 365, expires_at: exp,
+      access_token: token, refresh_token: 'test-refresh-token', token_type: 'bearer', expires_in: 3600 * 24 * 365, expires_at: exp,
       user: { id, aud: 'authenticated', role: 'authenticated', email: 'thandi@example.org', app_metadata: {}, user_metadata: { name: 'Thandi Nkosi' }, created_at: new Date().toISOString() },
     }));
   }, { id: FARMER });
   await context.route('**/*', async route => {
     const url = new URL(route.request().url());
+    networkRequests.push({ method: route.request().method(), url: route.request().url() });
     const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+    const json = body => route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     if (url.origin === BASE) return route.continue();
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
-    const json = body => route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    if (url.origin === FAKE_API) return json(apiAnswer(route.request().method(), url.pathname));
+    if (url.pathname === '/auth/v1/token') return json(FARMER_SESSION);
+    if (url.pathname === '/rest/v1/profile') return json({ must_change_password: false });
+    if (url.pathname.startsWith('/auth/v1/') || url.pathname.startsWith('/rest/v1/')) return json([]);
+    if (url.pathname.startsWith('/api/')) return json(apiAnswer(route.request().method(), url.pathname, route.request().postData()));
     if (url.origin === FAKE_SUPABASE) {
-      if (url.pathname === '/rest/v1/profile') return json({ must_change_password: false });
       return json([]);
     }
     return route.abort();
@@ -109,6 +146,18 @@ async function newPage(viewport) {
 }
 
 const settle = page => page.waitForTimeout(2500);
+
+async function gotoAuthenticated(page, pathname) {
+  await page.goto(BASE + pathname);
+  await page.waitForTimeout(1500);
+  if (await page.getByRole('button', { name: 'Sign in', exact: true }).isVisible().catch(() => false)) {
+    await page.getByLabel('Email address').fill('thandi@example.org');
+    await page.getByLabel('Password', { exact: true }).fill('fixture-password');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForTimeout(1000);
+    await page.goto(BASE + pathname);
+  }
+}
 
 // Drip's greeting floats over the content for a few seconds; close it for a clear shot.
 async function closeDrip(page) {
@@ -139,8 +188,11 @@ for (const [tag, viewport] of [['390', { width: 390, height: 844 }], ['1366', { 
   // Home, online: the over-limit advice note.
   kit = 'online';
   let page = await newPage(viewport);
-  await page.goto(BASE + '/');
-  await page.getByTestId('today-over-limit-7').first().waitFor({ timeout: 30000 });
+  await gotoAuthenticated(page, '/');
+  if (!(await waitOrDebug(page, page.getByTestId('today-over-limit-7').first(), `${tag}-home-online`))) {
+    const stored = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
+    throw new Error(`Home fixture did not load: ${await page.locator('body').innerText()}\nStorage: ${JSON.stringify(stored)}\nErrors: ${JSON.stringify(errors)}\nRequests: ${JSON.stringify(networkRequests.slice(-20))}`);
+  }
   await settle(page);
   await closeDrip(page);
   await page.getByTestId('today-over-limit-7').first().scrollIntoViewIfNeeded();
@@ -157,7 +209,7 @@ for (const [tag, viewport] of [['390', { width: 390, height: 844 }], ['1366', { 
   // Zone screen: no kit connected.
   kit = 'none';
   page = await newPage(viewport);
-  await page.goto(BASE + '/zone/7');
+  await gotoAuthenticated(page, '/zone/7');
   if (await waitOrDebug(page, page.getByTestId('irrigate-no-kit').first(), `${tag}-zone-no-kit`)) {
     await settle(page);
     await closeDrip(page);
@@ -166,26 +218,50 @@ for (const [tag, viewport] of [['390', { width: 390, height: 844 }], ['1366', { 
   }
   await page.context().close();
 
-  // Zone screen: Sending… -> Kit started watering -> Finished.
+  // Zone screen: both controls are visible, Start is acknowledged, then Stop is acknowledged.
   kit = 'online';
-  commandStates = ['sent', 'sent', 'started', 'started', 'finished'];
+  commandStates = [
+    { state: 'sent', phase: 'request_sent' },
+    { state: 'sent', phase: 'waiting_for_kit' },
+    { state: 'started', phase: 'kit_confirmed_start' },
+  ];
+  stopCommandStates = [
+    { state: 'sent', phase: 'stop_requested' },
+    { state: 'finished', phase: 'kit_confirmed_stop' },
+  ];
   page = await newPage(viewport);
-  await page.goto(BASE + '/zone/7');
+  await gotoAuthenticated(page, '/zone/7');
   await page.getByTestId('irrigate-button').first().waitFor({ timeout: 30000 });
+  await page.getByTestId('stop-irrigation-button').first().waitFor({ timeout: 30000 });
   await settle(page);
+  if (!(await page.getByText('Start Irrigation', { exact: true }).isVisible()) || !(await page.getByText('Stop Irrigation', { exact: true }).isVisible())) {
+    throw new Error('Both irrigation controls must be visible on the zone screen');
+  }
   await pressStart(page);
   const status = page.getByTestId('run-status').first();
-  for (const [file, text] of [['zone-sending', 'Sending…'], ['zone-started', 'Kit started watering'], ['zone-finished', 'Finished']]) {
+  for (const [file, text] of [['zone-sending', 'Request sent'], ['zone-started', 'Kit confirmed start']]) {
     await page.getByText(text, { exact: true }).first().waitFor({ timeout: 30000 });
     await status.scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(outDir, `${tag}-${file}.png`) });
+  }
+  page.once('dialog', d => d.accept());
+  await page.getByTestId('stop-irrigation-button').first().click();
+  await page.getByText('Stop requested', { exact: true }).first().waitFor({ timeout: 30000 });
+  await page.getByText('Kit confirmed stop', { exact: true }).first().waitFor({ timeout: 30000 });
+  if (await page.getByTestId('irrigate-button').first().isDisabled()) throw new Error('Start must re-enable after the kit confirms stop');
+  if (!(await page.getByTestId('stop-irrigation-button').first().isDisabled())) throw new Error('Stop must disable after the kit confirms stop');
+  await status.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(outDir, `${tag}-zone-stopped.png`) });
+  const latest = commandRequests.slice(-2);
+  if (latest[0]?.body?.command !== 'start' || latest[0]?.body?.durationSeconds !== 300 || latest[1]?.body?.command !== 'stop') {
+    throw new Error(`Incorrect irrigation request bodies: ${JSON.stringify(latest)}`);
   }
   await page.context().close();
 
   // Zone screen: the kit never answers.
   commandStates = ['no_response'];
   page = await newPage(viewport);
-  await page.goto(BASE + '/zone/7');
+  await gotoAuthenticated(page, '/zone/7');
   await page.getByTestId('irrigate-button').first().waitFor({ timeout: 30000 });
   await settle(page);
   await pressStart(page);
@@ -195,6 +271,6 @@ for (const [tag, viewport] of [['390', { width: 390, height: 844 }], ['1366', { 
   await page.context().close();
   console.log('done', tag);
 }
-console.log(JSON.stringify({ errors }));
+console.log(JSON.stringify({ errors, commandRequests }));
 await browser.close();
 server.close();
