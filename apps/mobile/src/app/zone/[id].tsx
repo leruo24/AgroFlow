@@ -9,7 +9,7 @@ import { ZoneGrowthBar } from '@/components/ZoneGrowthBar';
 import { ResetRecommendedButton } from '@/components/ResetRecommendedButton';
 import { SoilPhPanel } from '@/components/SoilPhPanel';
 import { fetchZoneInsights, type ZoneGrowth } from '@/services/agroFlowApi';
-import { useConnectivity } from '@/lib/connectivity';
+import { NetworkError, useConnectivity } from '@/lib/connectivity';
 import { useZoneKit } from '@/hooks/useZoneKit';
 import { defaultRunMinutes, zoneMaxRunMinutes } from '@/lib/runLimit';
 import { effectiveRunMinutes, scheduleState } from '@/lib/schedule';
@@ -120,6 +120,13 @@ function getErrorMessage(
   fallback: string
 ) {
   console.error('Zone action failed:', error);
+  // The server's own sentence for a refusal (400/404/409: "not commissioned", bad moisture
+  // range, no access) and the offline text are already written for the farmer; show them
+  // instead of a generic line that blames Supabase for everything.
+  if (error instanceof ApiHttpError && error.status < 500 && error.message.trim()) {
+    return error.message;
+  }
+  if (error instanceof NetworkError) return error.message;
   return fallback;
 }
 

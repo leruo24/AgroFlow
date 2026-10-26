@@ -1580,6 +1580,15 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     const cleanedCrop =
       settings.crop.trim();
 
+    // Only send the automation switch when the farmer changed it. The API refuses it (409) on
+    // a zone that is not commissioned yet, and that must not block saving the name, crop or
+    // moisture range of a new zone.
+    const currentAutomation =
+      zones.find(
+        (zone) =>
+          zone.id === zoneId
+      )?.irrigation.automation.enabled;
+
     await updateZoneThroughApi(
       zoneId,
       {
@@ -1592,7 +1601,9 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
           plantingDate:
             settings.plantingDate,
           automationEnabled:
-            settings.automationEnabled,
+            settings.automationEnabled === currentAutomation
+              ? undefined
+              : settings.automationEnabled,
           moistureThreshold:
             settings.moistureThreshold,
           desiredMoisture:
