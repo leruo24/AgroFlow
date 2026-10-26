@@ -57,6 +57,7 @@ for (const width of [390,1366]) for (const theme of ['light','dark']) {
     await page.locator('[data-hardware-toggle]').click();
     for(let i=0;i<27;i++) await page.locator('[data-hardware-rotate="right"]').click();
     await expect(viewer).toHaveAttribute('data-rotation','6.4800');
+    await viewer.scrollIntoViewIfNeeded();
     const canvas = await page.locator('[data-hardware-canvas]').boundingBox();
     await page.mouse.move(canvas!.x+20,canvas!.y+20); await page.mouse.down();
     await page.mouse.move(canvas!.x+80,canvas!.y+20,{steps:5}); await page.mouse.up();

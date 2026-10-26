@@ -626,15 +626,15 @@ img {
   gap: 7px;
   min-height: 40px;
   padding: 8px 14px;
-  border: 1px solid #31a66a;
+  border: 1px solid #1f7047;
   border-radius: 10px;
-  background: #31a66a;
+  background: #1f7047;
   color: #fff;
   font-weight: 750;
   text-decoration: none;
   white-space: nowrap;
 }
-.visual-header .public-app-cta:hover { background: #278b58; border-color: #278b58; }
+.visual-header .public-app-cta:hover { background: #185b39; border-color: #185b39; }
 .public-app-cta svg,
 .public-menu-toggle svg,
 .public-menu-close svg { width: 18px; height: 18px; stroke: currentColor; }
