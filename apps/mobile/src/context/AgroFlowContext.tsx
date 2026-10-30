@@ -35,6 +35,7 @@ import {
 } from '@/lib/moistureDisplay';
 
 import { isOnline, onReconnect } from '@/lib/connectivity';
+import { mergeSavedAlerts, mergeServerAlerts } from '@/lib/alertState';
 import { zoneMaxRunMinutes } from '@/lib/runLimit';
 import { weatherStatus, type WeatherAvailability, type WeatherTodayRow } from '@/lib/weatherStatus';
 import { t, type TranslationKey } from '@/i18n';
@@ -880,6 +881,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
       []
     );
   const zonesRequestId = useRef(0);
+  const alertFarmsLoadedFromServer = useRef(new Set<string>());
 
   useEffect(() => {
     zonesRef.current =
@@ -1088,19 +1090,8 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
               ...current.filter((entry) => !entry.id.startsWith('database-event-')),
             ]);
 
-            setAlerts((current) => {
-              const existingById = new Map(current.map((alert) => [alert.id, alert]));
-              const databaseIds = new Set(snapshot.alerts.map((alert) => alert.id));
-              return [
-                // A database alert reads as read only when the server says so (AF-04); only
-                // phone-only alerts keep their local state.
-                ...snapshot.alerts.map((alert) => ({
-                  ...alert,
-                  read: alert.id.startsWith('database-') ? alert.read : existingById.get(alert.id)?.read ?? alert.read,
-                })),
-                ...current.filter((alert) => !databaseIds.has(alert.id) && (alert.farmId !== farm.id || !alert.id.startsWith('database-alert-'))),
-              ];
-            });
+            alertFarmsLoadedFromServer.current.add(farm.id);
+            setAlerts((current) => mergeServerAlerts(current, snapshot.alerts, farm.id));
           }
         )
         .catch(
@@ -1169,6 +1160,7 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
     if (isAuthLoading) return;
     setHistory([]);
     setAlerts([]);
+    alertFarmsLoadedFromServer.current.clear();
     setHydratedUserId(null);
     if (!user) return;
     let active = true;
@@ -1203,17 +1195,11 @@ export function AgroFlowProvider({//provides the AgroFlow context to its child c
           savedAlerts
         ) {
           const parsedAlerts = JSON.parse(savedAlerts) as AlertEntry[];
-          setAlerts((current) => {
-            const savedById = new Map(parsedAlerts.map((alert) => [alert.id, alert]));
-            const currentIds = new Set(current.map((alert) => alert.id));
-            return [
-              ...current.map((alert) => ({
-                ...alert,
-                read: alert.id.startsWith('database-') ? alert.read : savedById.get(alert.id)?.read ?? alert.read,
-              })),
-              ...parsedAlerts.filter((alert) => !currentIds.has(alert.id)),
-            ];
-          });
+          setAlerts((current) => mergeSavedAlerts(
+            current,
+            parsedAlerts,
+            alertFarmsLoadedFromServer.current,
+          ));
         }
       } catch (
         error

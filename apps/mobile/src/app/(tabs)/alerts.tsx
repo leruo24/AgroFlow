@@ -14,6 +14,7 @@ import { createScreenStyles } from '@/styles/screenStyles';
 import { Layout } from '@/constants/colors';
 import { useI18n } from '@/i18n';
 import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { WhyLink } from '@/components/WhySheet';
 import { fetchAlertExplanations } from '@/services/insightsService';
 import {
@@ -35,6 +36,12 @@ export default function AlertsScreen() {
   const loading = isFarmLoading || isZonesLoading;
   const error = farmError || zonesError;
   const ordered = [...alerts].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+
+  // Alerts are produced by backend workers and devices while the farmer uses other screens.
+  // Refresh on focus so returning to this tab shows those events without an app reload.
+  useFocusEffect(useCallback(() => {
+    refreshZones();
+  }, [refreshZones]));
 
   // Each alert's "Why am I seeing this?", read once per set of alerts.
   const alertKeyList = alerts.map(a => a.id).join(',');

@@ -27,6 +27,10 @@ jest.mock('lucide-react-native', () =>
 );
 jest.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: null, profile: null, signOut: jest.fn(), isLoading: false }) }));
 jest.mock('@/lib/router', () => ({ router: { push: jest.fn(), back: jest.fn() } }));
+jest.mock('expo-router', () => {
+  const React = jest.requireActual('react');
+  return { useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]) };
+});
 
 let mockAgro: Record<string, unknown> = {};
 jest.mock('@/context/AgroFlowContext', () => ({ useAgroFlow: () => mockAgro }));
@@ -79,6 +83,12 @@ describe('dismissal keys', () => {
 });
 
 describe('Alerts', () => {
+  it('refreshes backend alerts whenever the tab receives focus', async () => {
+    mockAgro = { ...base, alerts: [] };
+    await render(<AlertsScreen />);
+    await waitFor(() => expect(base.refreshZones).toHaveBeenCalled());
+  });
+
   it('dismisses with ×, and Undo restores', async () => {
     await render(<AlertsScreen />);
     expect(screen.queryByRole('button', { name: 'Dismiss: Watering started' })).toBeNull();   // local notice
