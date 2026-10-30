@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AgroFlow.Domain.Tests;
 
-// Telegram is for farmers only (docs/telegram-farmers-only.md): staff never link it and are
+// Telegram is for farmers only (docs/features/telegram-farmers-only.md): staff never link it and are
 // never messaged there; their notices are on the admin site's Home and bell.
 public class StaffTelegramTests
 {

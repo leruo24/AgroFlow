@@ -17,7 +17,7 @@ hardware/
 └── sim/                              End-to-end kit simulation: local Postgres + MQTT + the real API
 ```
 
-Bringing up a new kit, step by step: [`docs/hardware-bringup.md`](../docs/hardware-bringup.md).
+Bringing up a new kit, step by step: [`docs/features/hardware-bringup.md`](../docs/features/hardware-bringup.md).
 
 Each device type gets its own sketch folder, grouped under its MCU family
 (`esp32/`, and any future `<mcu-family>/` sibling for a different platform).

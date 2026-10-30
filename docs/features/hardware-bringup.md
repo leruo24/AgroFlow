@@ -4,7 +4,7 @@ Step by step, from a bare ESP32 to a kit that reports readings, waters on comman
 in the admin console. Every value here comes from firmware **1.7.1** in this repository. If something
 on screen does not match, the
 repository is the source of truth: the sketch is
-[`hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino`](../hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino).
+[`hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino`](../../hardware/esp32/AgroFlowIrrigationNode/AgroFlowIrrigationNode.ino).
 
 You need: an ESP32 dev board (ESP32-WROOM-32, "ESP32 Dev Module"), a USB data cable, a
 YL-69 resistive soil probe with its comparator board, a DHT11, a 5 V single-channel relay
@@ -228,4 +228,4 @@ Tick each one.
 `hardware/sim/run-e2e.mjs` runs the real API against a local Postgres (every migration) and
 a local MQTT broker, with a pretend kit that follows the firmware's contract: claim with a
 one-time code, readings, a manual 1-minute command with its ACK and irrigation event, and
-readings kept offline. See [`hardware/sim/README.md`](../hardware/sim/README.md).
+readings kept offline. See [`hardware/sim/README.md`](../../hardware/sim/README.md).

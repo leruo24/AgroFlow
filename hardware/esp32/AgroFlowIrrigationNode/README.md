@@ -9,7 +9,7 @@ safety cap on every run and a simple offline fallback.
 The comment block at the top of `AgroFlowIrrigationNode.ino` is the full
 picture. MQTT topics and payloads: [`../../shared/MQTT_TOPICS.md`](../../shared/MQTT_TOPICS.md).
 Step-by-step bring-up of a new kit (board settings, wiring, enrollment, what the
-Serial Monitor should say): [`docs/hardware-bringup.md`](../../../docs/hardware-bringup.md).
+Serial Monitor should say): [`docs/features/hardware-bringup.md`](../../../docs/features/hardware-bringup.md).
 
 ## Flash firmware 1.7.2
 

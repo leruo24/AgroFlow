@@ -274,7 +274,7 @@ export const api = {
    * Farmers page and farmer counts must not include staff. getAdministrators() is the other half. */
   async getFarmerAccounts(): Promise<User[]> {
     // Farmers only: staff (admins and field officers) are not farmer accounts, and never use
-    // Telegram (docs/telegram-farmers-only.md).
+    // Telegram (docs/features/telegram-farmers-only.md).
     return (await api.getUsers()).filter((u) => !isStaffRole(u.role));
   },
 

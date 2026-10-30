@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mockBackend, captureErrors, ADMIN_ID } from "./mockBackend";
 
-/* Telegram is for farmers only (docs/telegram-farmers-only.md). Staff notices that went to
+/* Telegram is for farmers only (docs/features/telegram-farmers-only.md). Staff notices that went to
  * Telegram are under the bell (and on Home), staff have Change password in the account menu,
  * Settings has no staff Telegram, and staff are not listed or linkable as farmers.
  * Everything is mocked. */

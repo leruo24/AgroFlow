@@ -15,7 +15,7 @@ This maps every package in `docs/diagrams/package-diagram-v2.drawio` to the fold
 | External | Weather API (Open-Meteo) (+Forecast, +Reference ET₀) | `backend/AgroFlow.Api/IrrigationControl/WeatherCollectionService.cs`, `backend/AgroFlow.Domain/IrrigationControl/Agronomy/OpenMeteoDailyParser.cs`. Open-Meteo gives temperature, humidity, wind and rain; ET₀ is calculated by AgroFlow (`PenmanMonteithEto.cs`, see docs/diagrams/CHECK.md) |
 | External | HiveMQ (MQTT broker) (+sensors topic, +commands topic) | `backend/AgroFlow.Api/SensorMonitoring/MqttTopics.cs`, `MqttConnectionService.cs`, `backend/AgroFlow.Api/IrrigationControl/IrrigationCommandNotifyService.cs`, firmware `AgroFlowIrrigationNode.ino`, topics in `hardware/shared/MQTT_TOPICS.md` |
 | External | Telegram (+Bot API) | `backend/AgroFlow.Api/Notifications/TelegramClient.cs`, `TelegramPollingService.cs`, `backend/AgroFlow.Api/Endpoints/TelegramWebhookEndpoints.cs` |
-| External | Arduino IDE (+Firmware compiler, +ESP32 board package, +USB flash tool) | `hardware/esp32/AgroFlowIrrigationNode/README.md` and `docs/hardware-bringup.md` (esp32 core 3.3.11, ESP32 Dev Module, DHTesp library) |
+| External | Arduino IDE (+Firmware compiler, +ESP32 board package, +USB flash tool) | `hardware/esp32/AgroFlowIrrigationNode/README.md` and `docs/features/hardware-bringup.md` (esp32 core 3.3.11, ESP32 Dev Module, DHTesp library) |
 
 Files that serve every package stay where they were: `backend/AgroFlow.Api/Services/` (CorsSetup, LegalDocuments, OnboardingAccounts, PasswordResetFlow, StartupConfigurationDiagnostics, EnquiryRateLimiter, TemporaryPasswordGenerator) and the shared domain records in `backend/AgroFlow.Domain/` (User, Admin, FarmUser, Farm, Journey, EnquiryRules, SignInRules, Report*).
 

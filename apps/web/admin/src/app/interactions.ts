@@ -3111,7 +3111,7 @@ async function runComparison(): Promise<void> {
 export async function refreshMyTelegramStatus(): Promise<void> {
   const host = document.getElementById("myTelegramStatus");
   if (!host) return;
-  // Telegram is for farmers only (docs/telegram-farmers-only.md): staff have nothing to link.
+  // Telegram is for farmers only (docs/features/telegram-farmers-only.md): staff have nothing to link.
   host.innerHTML = `<p class="muted">Telegram is for farmers only. You get every notice on Home and under the bell at the top of the page.</p>`;
 }
 

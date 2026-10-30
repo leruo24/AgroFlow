@@ -137,7 +137,7 @@ test("the landing page has no 'Who made this' section and no staff sign-in link"
 
 /* ------------------------------ 6. Settings ------------------------------ */
 
-// Telegram is for farmers only (docs/telegram-farmers-only.md): staff get a note, no Connect.
+// Telegram is for farmers only (docs/features/telegram-farmers-only.md): staff get a note, no Connect.
 test("Settings has only My account: profile, password, and a farmers-only Telegram note", async ({ page }) => {
   await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
   await page.goto("/staff/#settings");
