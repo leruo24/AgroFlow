@@ -46,7 +46,7 @@ public class HealthDbTests : IClassFixture<SimDbHost>
     }
 
     // Production has Supabase Storage with the private "reports" bucket; the replay's stand-in
-    // is the same empty table docs/test-evidence/migration-replay/replay.mjs uses.
+    // is the same empty table supabase/scripts/replay-migrations.mjs uses.
     private static Task WithStorageBucketAsync() => ExecAsync(
         "create schema if not exists storage; " +
         "create table if not exists storage.buckets (id text primary key, name text, public boolean); " +

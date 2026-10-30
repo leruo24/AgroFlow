@@ -4,9 +4,8 @@ using Xunit;
 
 namespace AgroFlow.Domain.Tests;
 
-// The analysis model's object-oriented parts (docs/code-evaluation-script.md, steps 2.1 and 2.2):
-// an abstract User with Admin and FarmUser, a Hardware hierarchy whose subclasses override
-// ReadValue and IsWorking, and a Farm composed of Zones.
+// The analysis model's object-oriented parts: an abstract User with Admin and FarmUser, a
+// Hardware hierarchy whose subclasses override ReadValue and IsWorking, and a Farm composed of Zones.
 public class DomainModelTests
 {
     [Fact]

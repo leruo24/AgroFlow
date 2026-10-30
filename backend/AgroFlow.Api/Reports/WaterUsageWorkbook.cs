@@ -4,7 +4,7 @@ using Sheet = AgroFlow.Api.Reports.XlsxWriter.Sheet;
 
 namespace AgroFlow.Api.Reports;
 
-/// The water usage report as a workbook (docs/agroflow-data-template.xlsx).
+/// The water usage report as a workbook.
 /// The PDF is for reading; this is for working with the numbers (charting months,
 /// pasting into a funding application). Both render from the same
 /// WaterUsageReportModel, so their totals match.

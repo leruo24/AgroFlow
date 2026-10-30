@@ -1,10 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { stepHinge, ENCLOSURE_OPEN_RADIANS } from '../src/features/enclosureHinge';
-import path from 'node:path';
-import fs from 'node:fs';
 
 test.describe.configure({ mode: 'parallel' });
-const evidence = path.resolve('../../../docs/test-evidence/visual-revision');
 
 test('public first load needs no auth or branded gate; header survives Back and Forward', async ({ page }) => {
   const external: string[] = [];
@@ -46,7 +43,7 @@ test('hinge is bounded and reverses continuously, opening outward', () => {
 
 for (const language of ['en', 'af', 'tn']) for (const theme of ['light', 'dark'])
   for (const width of [320, 390, 768, 1366]) {
-    test(`public evidence ${language} ${theme} ${width}`, async ({ page }) => {
+    test(`public pages fit ${language} ${theme} ${width}`, async ({ page }) => {
       await page.setViewportSize({ width, height: width === 768 ? 1024 : width === 1366 ? 768 : 844 });
       await page.addInitScript(({ language, theme }) => {
         localStorage.setItem('agroflow_public_language', language);
@@ -55,11 +52,10 @@ for (const language of ['en', 'af', 'tn']) for (const theme of ['light', 'dark']
       await page.emulateMedia({ reducedMotion: 'reduce' });
       const forbidden: string[] = [];
       page.on('request', request => { const url = new URL(request.url()); if (url.pathname.startsWith('/api/') || (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1')) forbidden.push(request.url()); });
-      for (const [name, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology'], ['get-the-app', '/get-the-app']]) {
+      for (const [, route] of [['home', '/'], ['about', '/about'], ['technology', '/technology'], ['get-the-app', '/get-the-app']]) {
         await page.goto(route);
         await expect(page.locator('#publicTitle')).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-        await page.screenshot({ path: path.join(evidence, `${name}-${language}-${theme}-${width}.png`), fullPage: true });
       }
       expect(forbidden).toEqual([]);
     });
@@ -90,5 +86,4 @@ test('doubled public text retains menu and content', async ({ page }) => {
   await page.addStyleTag({ content: 'html {font-size:200%} .visual-site :is(p,a,button,select,summary,label){font-size:1rem;line-height:1.5}' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await expect(page.locator('[data-public-menu]')).toBeVisible();
-  await page.screenshot({ path: path.join(evidence, 'technology-en-light-320-text200.png'), fullPage: true });
 });

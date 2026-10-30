@@ -1,8 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { FAKE_API, FAKE_SUPABASE, mockBackend } from "./mockBackend";
-import path from "node:path";
 test.describe.configure({ mode: "parallel" });
-const evidence = path.resolve("../../../docs/test-evidence/visual-redesign");
 const routes = [
   "/",
   "/solutions",
@@ -44,10 +42,6 @@ test("public deep links refresh independently, redirect Experience and preserve 
     if (route === "/terms" || route === "/privacy") {
       await expect(page.locator(".legal-document")).toContainText("0.1-draft");
       await page.locator("#agroflow-splash").waitFor({ state: "detached" });
-      await page.screenshot({
-        path: path.join(evidence, `public-${route.slice(1)}-en-1366.png`),
-        fullPage: true,
-      });
     }
     expect(
       await page
@@ -168,7 +162,7 @@ for (const lang of ["en", "af", "tn"])
     { width: 768, height: 1024 },
     { width: 1366, height: 768 },
   ]) {
-    test(`visual evidence ${lang} ${viewport.width}`, async ({ page }) => {
+    test(`public pages fit at 100% and 200% text ${lang} ${viewport.width}`, async ({ page }) => {
       test.setTimeout(90000);
       await publicMocks(page);
       await page.setViewportSize(viewport);
@@ -185,13 +179,6 @@ for (const lang of ["en", "af", "tn"])
             () => document.documentElement.scrollWidth <= innerWidth + 1,
           ),
         ).toBe(true);
-        await page.screenshot({
-          path: path.join(
-            evidence,
-            `public-${route.slice(1) || "home"}-${lang}-${viewport.width}.png`,
-          ),
-          fullPage: true,
-        });
       }
       await page.goto("/");
       await page.locator("#agroflow-splash").waitFor({ state: "detached" });
@@ -220,13 +207,6 @@ for (const lang of ["en", "af", "tn"])
           () => document.documentElement.scrollWidth <= innerWidth + 1,
         ),
       ).toBe(true);
-      await page.screenshot({
-        path: path.join(
-          evidence,
-          `public-home-${lang}-${viewport.width}-text200.png`,
-        ),
-        fullPage: true,
-      });
     });
   }
 test("staff theme and phone drawer keep existing routes", async ({ page }) => {
@@ -250,10 +230,6 @@ test("staff theme and phone drawer keep existing routes", async ({ page }) => {
     "color",
     "rgb(237, 246, 250)",
   );
-  await page.screenshot({
-    path: path.join(evidence, "staff-390-dark.png"),
-    fullPage: true,
-  });
 });
 for (const lang of ["en", "af", "tn"])
   for (const viewport of [
@@ -262,7 +238,7 @@ for (const lang of ["en", "af", "tn"])
     { width: 768, height: 1024 },
     { width: 1366, height: 768 },
   ]) {
-    test(`staff evidence ${lang} ${viewport.width}`, async ({ page }) => {
+    test(`staff dashboard and onboarding fit ${lang} ${viewport.width}`, async ({ page }) => {
       test.setTimeout(60000);
       await mockBackend(page, { minDelayMs: 5, maxDelayMs: 20 });
       await page.setViewportSize(viewport);
@@ -273,13 +249,6 @@ for (const lang of ["en", "af", "tn"])
       await page.goto("/staff/#dashboard");
       await expect(page.locator("#appShell")).toBeVisible();
       await page.locator("#agroflow-splash").waitFor({ state: "detached" });
-      await page.screenshot({
-        path: path.join(
-          evidence,
-          `staff-dashboard-${lang}-${viewport.width}.png`,
-        ),
-        fullPage: true,
-      });
       await page.goto("/staff/#onboarding");
       await expect(page.locator(".onboarding-panel").first()).toBeVisible();
       expect(
@@ -287,12 +256,5 @@ for (const lang of ["en", "af", "tn"])
           () => document.documentElement.scrollWidth <= innerWidth + 1,
         ),
       ).toBe(true);
-      await page.screenshot({
-        path: path.join(
-          evidence,
-          `staff-onboarding-${lang}-${viewport.width}.png`,
-        ),
-        fullPage: true,
-      });
     });
   }

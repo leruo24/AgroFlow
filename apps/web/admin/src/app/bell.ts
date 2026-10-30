@@ -1,4 +1,4 @@
-/* The notification bell in the header. Staff never use Telegram (docs/telegram-farmers-only.md),
+/* The notification bell in the header. Staff never use Telegram (docs/features/telegram-farmers-only.md),
  * so the notices that used to go to their Telegram are here instead, and on Home's
  * "Needs attention" list, which counts the same things:
  *   - a new farm or zone request         (was a Telegram message to every admin)

@@ -1,4 +1,4 @@
-// Reusable modal sheet (see docs/ui_reference): a scrim dims the content behind, and the
+// Reusable modal sheet: a scrim dims the content behind, and the
 // sheet has a solid surface, a bold left-aligned title and a top-right close control.
 // Do not add expo-blur here: its blur layer crashed the app natively on startup in Expo
 // Go (SDK 57) on iOS and Android with no JS error. The scrim needs no native module and

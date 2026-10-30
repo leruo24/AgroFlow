@@ -3,7 +3,7 @@ using Npgsql;
 
 namespace AgroFlow.Api.Services;
 
-// Telegram is for farmers only (docs/telegram-farmers-only.md). AgroFlow staff (admin,
+// Telegram is for farmers only (docs/features/telegram-farmers-only.md). AgroFlow staff (admin,
 // field_officer) never link Telegram and are never messaged there: every notice for staff is
 // on the admin site's Home "needs attention" list and its notification bell. Farmers keep
 // Telegram onboarding, alerts, reports and Forgot password.

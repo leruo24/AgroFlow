@@ -1,11 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { mockBackend } from './mockBackend';
-import path from 'node:path';
-import fs from 'node:fs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const axePath = require.resolve('axe-core/axe.min.js');
-const evidence = path.resolve('../../../docs/test-evidence/web-polish-oct23');
 test.describe.configure({ mode: 'parallel' });
 
 for (const width of [390,1366]) for (const theme of ['light','dark']) {
@@ -25,8 +22,6 @@ for (const width of [390,1366]) for (const theme of ['light','dark']) {
       await expect(page.locator('#publicTitle')).toBeVisible();
       await page.addScriptTag({ path:axePath });
       const result=await page.evaluate(async()=> (window as any).axe.run(document,{rules:{'color-contrast':{enabled:true}}}));
-      fs.mkdirSync(evidence,{recursive:true});
-      fs.writeFileSync(path.join(evidence,`axe-${route.slice(1)}-${theme}-${width}.json`),JSON.stringify(result,null,2));
       expect(result.violations.map((violation:any)=>({id:violation.id,nodes:violation.nodes.map((node:any)=>node.target)}))).toEqual([]);
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
       // Axe cannot measure offscreen carousel captions. Check computed text
@@ -45,8 +40,6 @@ for (const width of [390,1366]) for (const theme of ['light','dark']) {
         });probe.remove();return results;
       });
       for(const item of contrast) expect(item.ratio,item.text).toBeGreaterThanOrEqual(4.5);
-      fs.writeFileSync(path.join(evidence,`contrast-${route.slice(1)}-${theme}-${width}.json`),JSON.stringify(contrast,null,2));
-      await page.screenshot({path:path.join(evidence,`${route.slice(1)}-${theme}-${width}.png`),fullPage:true});
     }
     await page.goto('/technology');
     const viewer=page.locator('[data-hardware-viewer]');
@@ -85,12 +78,10 @@ test('RET-14 staff titles follow authentication and routes',async({page})=>{
   await expect(page).toHaveTitle('Overview – AgroFlow Staff');
   await page.goto('/staff/#users'); await expect(page).toHaveTitle('Farmers – AgroFlow Staff');
   await page.goto('/staff/#hardware'); await expect(page).toHaveTitle('Kits – AgroFlow Staff');
-  fs.mkdirSync(evidence,{recursive:true});
   for(const theme of ['light','dark']) {
     await page.evaluate(theme=>localStorage.setItem('agroflow_appearance',theme),theme);
     await page.goto('/staff/#dashboard'); await page.reload();
     await expect(page).toHaveTitle('Overview – AgroFlow Staff');
-    await page.screenshot({path:path.join(evidence,`staff-overview-${theme}-1366.png`),fullPage:true});
   }
 });
 
@@ -114,8 +105,6 @@ test('the static controller is available when WebGL cannot start',async({page})=
   await expect(viewer.locator('.hardware-fallback img')).toBeVisible();
   await expect(page.getByText(/Representative image/)).toBeVisible();
   await expect(page.locator('[data-hardware-resume]')).toBeEnabled();
-  fs.mkdirSync(evidence,{recursive:true});
-  await page.screenshot({path:path.join(evidence,'controller-webgl-fallback.png'),fullPage:true});
 });
 
 test('the fitted envelope contains the complete swing at every rotation',async({page})=>{

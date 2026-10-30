@@ -1,8 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {mockBackend} from './mockBackend';
-import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';
+import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),axePath=require.resolve('axe-core/axe.min.js');
-const out=path.resolve('../../../docs/test-evidence/premium-visuals');
 const publicRoutes=['/','/solutions','/how-it-works','/technology','/about','/get-the-app','/contact','/service-pricing','/terms','/privacy'];
 const staffRoutes=['dashboard','users','farms','hardware','maintenance','reports','alerts','activity','requests','enquiries','settings','droughtCommunity','onboarding','mqttLogins'];
 async function scan(page:any,name:string,width:number,theme:string) {
@@ -10,10 +9,8 @@ async function scan(page:any,name:string,width:number,theme:string) {
   const result=await page.evaluate(async()=>{const result=await (window as any).axe.run(document);return {
     violations:result.violations.map((v:any)=>({id:v.id,impact:v.impact,nodes:v.nodes.map((n:any)=>({target:n.target,summary:n.failureSummary}))})),
     incomplete:result.incomplete.map((v:any)=>({id:v.id,targets:v.nodes.map((n:any)=>n.target)}))};});
-  fs.mkdirSync(out,{recursive:true});fs.writeFileSync(path.join(out,`axe-${name}-${theme}-${width}.json`),JSON.stringify(result,null,2));
   expect(result.violations.filter((v:any)=>v.id==='color-contrast'),`${name} ${theme}`).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),name+' page overflow').toBe(true);
-  await page.screenshot({path:path.join(out,`${name}-${theme}-${width}.png`),fullPage:true});
 }
 for(const width of [390,1366]) for(const theme of ['light','dark']) {
   test(`premium public all pages ${width} ${theme}`,async({page})=>{

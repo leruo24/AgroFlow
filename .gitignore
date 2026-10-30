@@ -27,6 +27,10 @@ supabase/.temp/
 dist/
 test-results/
 playwright-report/
+# Screenshot specs/scripts and the admin Playwright HTML report write here; local only.
+docs/test-evidence/
+# SecurityDbTests saves its probe output here on every run.
+docs/audit/evidence/
 *.log
 
 # Video and archives. The loading animations are app assets and stay tracked.

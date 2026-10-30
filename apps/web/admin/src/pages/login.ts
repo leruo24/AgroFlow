@@ -150,7 +150,7 @@ export function wireLogin(root: HTMLElement): void {
 }
 
 /* Forgot password: same card, swapped. This console is for staff, and staff never use
- * Telegram (docs/telegram-farmers-only.md), so it is always Supabase's email: a link back to
+ * Telegram (docs/features/telegram-farmers-only.md), so it is always Supabase's email: a link back to
  * this site's ?reset=1 page. The answer is the same whether or not the email has an account,
  * so the form cannot be used to find out who has one. */
 function wireForgot(root: HTMLElement, loginForm: HTMLFormElement, loginEmail: HTMLInputElement): void {

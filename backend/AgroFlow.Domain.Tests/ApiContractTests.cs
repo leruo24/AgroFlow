@@ -194,7 +194,7 @@ public class ApiContractTests : IClassFixture<ApiHost>
                 : IsAdminArea(r.Pattern) ? "admins only (403 for a farmer)" : "any signed-in user, their own data only";
             lines.Add($"| {r.Method} | `{r.Pattern}` | {who} |");
         }
-        File.WriteAllLines(Path.Combine(RepoRoot(), "docs", "test-evidence", "api-routes.md"), lines);
+        File.WriteAllLines(Path.Combine(RepoRoot(), "docs", "api-routes.md"), lines);
     }
 
     private static string RepoRoot()
