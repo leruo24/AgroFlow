@@ -27,7 +27,7 @@ public class SecurityDbTests : IClassFixture<SimDbHost>
     private readonly ITestOutputHelper _out;
     public SecurityDbTests(SimDbHost host, ITestOutputHelper output) { _host = host; _out = output; }
 
-    // Each probe line is also saved under docs/audit/evidence, for the fix report.
+    // Each probe line is also saved under docs/audit/evidence (git-ignored), to read after a run.
     private readonly List<string> _lines = new();
     private void Log(string line) { _out.WriteLine(line); _lines.Add(line); }
     private void Save(string name)
