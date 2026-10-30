@@ -29,5 +29,6 @@ cited from `backend/AgroFlow.Domain/IrrigationControl/Agronomy/fao56-crop-knowle
 `reports/actionable/baseline.md` is read by a test, which also uses that folder
 to find the repository root.
 
-Screenshot runs and the admin Playwright HTML report write to
+The admin Playwright HTML report, and the screenshots two specs
+(`drought-community`, `location-picker`) take, are written to
 `docs/test-evidence/`, which is git-ignored.
