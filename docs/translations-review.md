@@ -970,7 +970,7 @@ Still English on purpose: the draft terms and privacy notice themselves (transla
 
 ## Release, 23 October 2026 (merge/oct23-release)
 
-New strings from wiring the redesign to the real contracts (Settings → Terms & privacy, and the Help and documents heading). Afrikaans and Setswana are drafts. Codex's own `visual.*` strings (PR #3) are drafts too; Codex lists them in docs/visual-revision.md.
+New strings from wiring the redesign to the real contracts (Settings → Terms & privacy, and the Help and documents heading). Afrikaans and Setswana are drafts. Codex's own `visual.*` strings (PR #3) are drafts too.
 
 | Key | English | Afrikaans (draft) | Setswana (draft) |
 |---|---|---|---|
@@ -1067,7 +1067,7 @@ Check: the app already calls the kit "stel" in Afrikaans (`kit.*`) and "sedirisw
 | `tabs.more` | More | Meer | Tse dingwe |
 | `kit.connected` (Telegram, BotText.cs) | Your AgroFlow kit for {zone} is connected. If you ever change your Wi-Fi, its setup network is {name}, password {password}. Open the app → Kit for the steps. | Jou AgroFlow-stel vir {zone} is gekoppel. As jy ooit jou Wi-Fi verander, is sy opstelnetwerk {name}, wagwoord {password}. Maak die toepassing oop → Stel vir die stappe. | Sediriswa sa gago sa AgroFlow sa {zone} se golaganye. Fa o ka fetola Wi-Fi ya gago, neteweke ya sone ya go baakanya ke {name}, lefoko la sephiri {password}. Bula tiriso → Sediriswa go bona dikgato. |
 
-## Reconnect or reset your kit, 24 October 2026 (docs/kit-help)
+## Reconnect or reset your kit, 24 October 2026
 
 The guide on the Kit tab and in the pocket field guide. Afrikaans and Setswana are drafts. The printable one-page guide (`public/guides/reconnect-or-reset-your-kit.html`, the same file on both sites) is English only for now; it needs Afrikaans and Setswana copies once these drafts are reviewed. Please check "registrasiekode" (enrollment code) and "simolodisa sesha" (reset), which are new words in the app.
 

@@ -40,7 +40,7 @@ export const Spacing = {
 } as const;
 
 // Named text sizes, so hierarchy comes from which step is used, not from boxes around text.
-// Based on docs/ui_reference (the Webex screenshots): label ~11sp small-caps, caption
+// Based on the Webex app's type scale: label ~11sp small-caps, caption
 // ~12-13sp, body ~15-16sp, title ~17-18sp. `display` is the one large number per screen
 // (a stat or a temperature).
 export const Type = {

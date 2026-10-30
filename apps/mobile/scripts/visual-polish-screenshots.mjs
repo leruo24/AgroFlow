@@ -1,4 +1,4 @@
-// BEFORE / AFTER screenshots for the visual polish pass (docs/overnight-report-2026-10-21.md),
+// BEFORE / AFTER screenshots for the visual polish pass,
 // at 390x844: every farmer screen, top and scrolled to the end, plus the soil-feel sheet. The
 // real `expo export --platform web` build, served locally; Supabase and the API are fake
 // hosts answered here, with the simulated Mahikeng farm. Usage (from apps/mobile):

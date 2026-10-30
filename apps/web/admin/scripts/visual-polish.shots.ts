@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { mockBackend, ADMIN_ID } from "../tests/mockBackend";
 
 /* Visual polish screenshots of the public site and the admin console at 1366x768 and 390x844
- * (docs/overnight-report-2026-10-21.md), before (dev) and after (fix/visual-polish):
+ * before (dev) and after (fix/visual-polish):
  *   VP_OUT=before VP_CONSOLE=/ VP_SIGNIN=/#/admin npx playwright test --config scripts/screenshots.config.ts visual-polish
  *   VP_OUT=after  (defaults: the console at /staff/)
  * Everything is mocked; the only farms are the simulated Mahikeng and Ottoshoop. */

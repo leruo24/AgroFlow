@@ -57,5 +57,3 @@ changed any time, applied at once, kept on the phone and on the profile (0049) s
 messages follow it. All wizard text is in `apps/mobile/src/i18n/{en,af,tn}.json`; Afrikaans and
 Setswana are drafts (`needs_review`), listed in `docs/translations-review.md`.
 
-Screenshots: `docs/test-evidence/setup-wizard/` (every step and Home's card at 390×844 and
-1366×768, Settings in the three languages).

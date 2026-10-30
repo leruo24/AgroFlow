@@ -7,7 +7,7 @@ using Xunit;
 
 namespace AgroFlow.Domain.Tests;
 
-// The live web retest of 23 October 2026 (docs/audit/AgroFlow-Web-Journey-Retest-2026-10-23.pdf):
+// Findings from the live web retest of 23 October 2026:
 // RET-02 (no acceptance of a draft), RET-06 (the confidence reason as a message code) and RET-10
 // (account, details and installation apart), as rules without a database.
 public class RetestLogicTests

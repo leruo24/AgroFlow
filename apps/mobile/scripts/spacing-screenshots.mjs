@@ -1,4 +1,4 @@
-// BEFORE / AFTER screenshots for the spacing and layout pass (docs/app-spacing.md): every screen
+// BEFORE / AFTER screenshots for the spacing and layout pass: every screen
 // at 320x568, 390x844, 430x932 and 1366x768, once at the top and once scrolled to the bottom
 // (where the floating tab bar used to cover the last button). The real `expo export --platform
 // web` build, served locally; Supabase and the API are fake hosts answered here. The demo farm

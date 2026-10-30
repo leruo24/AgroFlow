@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
-/* "Reconnect or reset your kit" (docs/kit-help): the guide opens from the Kit tab and from the
+/* "Reconnect or reset your kit": the guide opens from the Kit tab and from the
  * pocket field guide; it says what firmware 1.7.1 really does; the printable page is the same file
  * on both sites and never holds a kit's own password or an enrollment code. */
 

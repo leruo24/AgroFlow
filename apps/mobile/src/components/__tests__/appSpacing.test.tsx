@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 // See services/__tests__/doubleSubmit.test.ts for why this reference is per file.
 
-/* The spacing and layout pass (docs/app-spacing.md): database values always reach the screen
+/* The spacing and layout pass: database values always reach the screen
  * as friendly, translated labels; one empty-state wording; the bottom padding clears the
  * floating tab bar; the shared Card / InfoGrid / StatsRow look the same everywhere
  * (snapshots); and the Irrigation and zone screens show none of "leafy_veg", "Unknown",

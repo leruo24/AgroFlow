@@ -11,7 +11,7 @@ namespace AgroFlow.Business;
 // docs/audit/ui-contracts.md lists the words.
 public static class Journey
 {
-    // The stages, in order (docs/audit/agroflow-ui-service-design-brief-2026-10-22.md, section 7).
+    // The stages, in the order a case moves through them.
     public const string Enquiry = "enquiry";
     public const string Details = "details";
     public const string ServiceAgreed = "service_agreed";
