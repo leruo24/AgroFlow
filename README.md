@@ -53,7 +53,7 @@ that needs the service role.
 
 | Part | URL | Hosted on |
 |---|---|---|
-| Public site and admin console | https://agroflow.vercel.app (the console is at `/staff/`) | Vercel, built from `apps/web/admin` |
+| Public site and admin console | https://agro-flow-gules.vercel.app (the console is at `/staff/`) | Vercel, built from `apps/web/admin` |
 | Farmer web app | https://agroflow-mobile.vercel.app | Vercel, an Expo web export of `apps/mobile` |
 | API | https://agroflow-production-998d.up.railway.app | Railway, built from the root `Dockerfile` |
 | Database and auth | Supabase project `zcoalyxzvemiumnipufz` | Supabase |
